@@ -181,6 +181,158 @@ func (s *integrationSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*
 	})
 }
 
+func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_RealActivity() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		fmt.Println(wtHandlerCalls)
+		switch wtHandlerCalls {
+		case 1:
+			fmt.Println(s.formatHistory(history))
+			// Schedule activity.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID("1"),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			fmt.Println(s.formatHistory(history))
+			return nil, nil
+		case 3:
+			fmt.Println(s.formatHistory(history))
+			commands := s.acceptUpdateCommands(tv, "1")
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID("2"),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			})
+			return commands, nil
+		case 4:
+			fmt.Println(s.formatHistory(history))
+			commands := s.completeUpdateCommands(tv, "1")
+			return commands, nil
+		case 5:
+			fmt.Println(s.formatHistory(history))
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+			}}, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	var updRequestMsg *protocolpb.Message
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			return nil, nil
+		case 3:
+			updRequestMsg = task.Messages[0]
+			// s.EqualValues(5, updRequestMsg.GetEventId())
+			return s.acceptUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 4:
+			return s.completeUpdateMessages(tv, updRequestMsg, "1"), nil
+		case 5:
+			return nil, nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString(tv.String("activity-result")), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Schedule activity.
+	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+
+	// Drain 2nd WT.
+	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
+	s.NoError(err)
+	s.EqualValues(0, wt1Resp.ResetHistoryEventId)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+	time.Sleep(500 * time.Millisecond)
+
+	err = poller.PollAndProcessActivityTask(false)
+	s.NoError(err)
+
+	// Process update in workflow.
+	_, wt3Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+	s.EqualValues(0, wt3Resp.ResetHistoryEventId)
+	wt4Resp, err := poller.HandlePartialWorkflowTask(wt3Resp.GetWorkflowTask(), true)
+	s.NoError(err)
+
+	updateResult := <-updateResultCh
+	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues(0, wt4Resp.ResetHistoryEventId)
+
+	// Complete workflow.
+	completeWorkflowResp, err := poller.HandlePartialWorkflowTask(wt4Resp.GetWorkflowTask(), true)
+	s.NoError(err)
+	s.NotNil(completeWorkflowResp)
+	s.Nil(completeWorkflowResp.GetWorkflowTask())
+	s.EqualValues(0, completeWorkflowResp.ResetHistoryEventId)
+
+	s.Equal(5, wtHandlerCalls)
+	s.Equal(5, msgHandlerCalls)
+
+	s.printWorkflowHistory(s.namespace, tv.WorkflowExecution())
+	// 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	//
+	// 	s.EqualHistoryEvents(`
+	//   1 WorkflowExecutionStarted
+	//   2 WorkflowTaskScheduled
+	//   3 WorkflowTaskStarted
+	//   4 WorkflowTaskCompleted
+	//   5 WorkflowTaskScheduled // Was speculative WT...
+	//   6 WorkflowTaskStarted
+	//   7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.
+	//   8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
+	//   9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
+	//  10 WorkflowTaskScheduled
+	//  11 WorkflowTaskStarted
+	//  12 WorkflowTaskCompleted
+	//  13 WorkflowExecutionCompleted
+	// `, events)
+}
+
 func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
