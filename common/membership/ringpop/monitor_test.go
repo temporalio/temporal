@@ -53,8 +53,9 @@ func (s *RpoSuite) SetupTest() {
 
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", true)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
+	testService.startMonitors()
 
 	rpm := testService.rings[0]
 
@@ -134,7 +135,7 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 
 func (s *RpoSuite) TestWhoAmIWithoutStart() {
 	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", false)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
 	_, err := testService.rings[0].GetReachableMembers()

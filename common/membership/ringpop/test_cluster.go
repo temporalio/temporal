@@ -52,6 +52,12 @@ type testCluster struct {
 	seedNode     string
 }
 
+func (tc *testCluster) startMonitors() {
+	for i := range tc.rings {
+		tc.rings[i].Start()
+	}
+}
+
 // newTestCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
@@ -63,7 +69,6 @@ func newTestCluster(
 	seed string,
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
-	startMonitors bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
@@ -167,9 +172,6 @@ func newTestCluster(
 			mockMgr,
 			resolver,
 		)
-		if startMonitors {
-			cluster.rings[i].Start()
-		}
 	}
 	return cluster
 }
