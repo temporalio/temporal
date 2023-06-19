@@ -113,7 +113,17 @@ func (s *Service) Start() {
 	// that we own. Ideally, then, we would start the GRPC server, and only then
 	// join membership. That's not possible with the GRPC interface, though, hence
 	// we start membership in a goroutine.
-	go s.membershipMonitor.Start()
+	go func() {
+		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
+			// In some situations, like rolling upgrades of the history service,
+			// pausing before joining membership can help separate the shard movement
+			// caused by another history instance terminating with this instance starting.
+			logger.Info("history start: delaying before membership start",
+				tag.NewDurationTag("startupMembershipJoinDelay", delay))
+			time.Sleep(delay)
+		}
+		s.membershipMonitor.Start()
+	}()
 
 	logger.Info("Starting to serve on history listener")
 	if err := s.server.Serve(s.grpcListener); err != nil {
