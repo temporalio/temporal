@@ -117,21 +117,6 @@ func (mr *MockMonitorMockRecorder) WaitUntilInitialized(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilInitialized", reflect.TypeOf((*MockMonitor)(nil).WaitUntilInitialized), arg0)
 }
 
-// WhoAmI mocks base method.
-func (m *MockMonitor) WhoAmI() (HostInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WhoAmI")
-	ret0, _ := ret[0].(HostInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WhoAmI indicates an expected call of WhoAmI.
-func (mr *MockMonitorMockRecorder) WhoAmI() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WhoAmI", reflect.TypeOf((*MockMonitor)(nil).WhoAmI))
-}
-
 // MockServiceResolver is a mock of ServiceResolver interface.
 type MockServiceResolver struct {
 	ctrl     *gomock.Controller
@@ -273,18 +258,4 @@ func (m *MockHostInfoProvider) HostInfo() HostInfo {
 func (mr *MockHostInfoProviderMockRecorder) HostInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostInfo", reflect.TypeOf((*MockHostInfoProvider)(nil).HostInfo))
-}
-
-// Start mocks base method.
-func (m *MockHostInfoProvider) Start() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockHostInfoProviderMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockHostInfoProvider)(nil).Start))
 }

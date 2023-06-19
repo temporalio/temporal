@@ -179,13 +179,11 @@ func newTestRingpopFactory(
 	dc *dynamicconfig.Collection,
 ) *factory {
 	return &factory{
-		factoryParams: factoryParams{
-			ServiceName: serviceName,
-			Logger:      logger,
-			RPCConfig:   rpcConfig,
-			TLSFactory:  tlsProvider,
-			DC:          dc,
-		},
+		ServiceName: serviceName,
+		Logger:      logger,
+		RPCConfig:   rpcConfig,
+		TLSFactory:  tlsProvider,
+		DC:          dc,
 	}
 }
 

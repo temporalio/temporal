@@ -336,28 +336,6 @@ func (rpo *monitor) Stop() {
 	rpo.rp.stop()
 }
 
-// WhoAmI returns the HostInfo for the service.
-func (rpo *monitor) WhoAmI() (membership.HostInfo, error) {
-	address, err := rpo.broadcastHostPortResolver()
-	if err != nil {
-		return nil, err
-	}
-
-	servicePort, ok := rpo.services[rpo.serviceName]
-	if !ok {
-		return nil, membership.ErrUnknownService
-	}
-
-	// The broadcastHostPortResolver returns the host:port used to listen for
-	// ringpop messages. We use a different port for the service, so we
-	// replace that portion.
-	serviceAddress, err := replaceServicePort(address, servicePort)
-	if err != nil {
-		return nil, err
-	}
-	return membership.NewHostInfoFromAddress(serviceAddress), nil
-}
-
 func (rpo *monitor) EvictSelf() error {
 	return rpo.rp.SelfEvict()
 }

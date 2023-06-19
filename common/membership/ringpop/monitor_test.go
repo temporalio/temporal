@@ -25,7 +25,6 @@
 package ringpop
 
 import (
-	"net"
 	"testing"
 	"time"
 
@@ -55,7 +54,6 @@ func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
 	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
-	testService.startMonitors()
 
 	rpm := testService.rings[0]
 
@@ -131,22 +129,6 @@ func (s *RpoSuite) verifyMemberDiff(curr []string, new []string, expectedDiff []
 		}
 		s.ElementsMatch(expectedDiff, diff)
 	}
-}
-
-func (s *RpoSuite) TestWhoAmIWithoutStart() {
-	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1")
-	s.NotNil(testService, "Failed to create test service")
-
-	_, err := testService.rings[0].GetReachableMembers()
-	s.Error(err, "expected ringpop call to fail since it hasn't started")
-
-	hostInfo, err := testService.rings[0].WhoAmI()
-	s.NoError(err)
-	ipstr, portstr, err := net.SplitHostPort(hostInfo.GetAddress())
-	s.NoError(err)
-	s.Equal("127.0.0.1", ipstr)
-	s.NotEmpty(portstr)
 }
 
 func drainChannel[T any](ch <-chan T) {
