@@ -84,6 +84,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -5010,8 +5011,12 @@ retry:
 					RequestId:         requestId,
 				},
 			})
+			var comlpetionErr = consts.ErrWorkflowCompleted
+			var completionErrPtr = &comlpetionErr
 			if err == nil {
 				break retry
+			} else if !errors.As(err, &completionErrPtr) {
+				return err
 			}
 
 		case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
