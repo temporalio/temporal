@@ -3920,7 +3920,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_ReloadShard_DifferentStartedId_Rejected() {
+func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ReloadShard_DifferentStartedId_Rejected() {
 	/*
 		Test scenario:
 		An update triggered a speculative WFT and the task is dispatched to worker.
@@ -3986,7 +3986,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the speculative wft
 	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4019,7 +4018,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// before handle the new speculative WFT, we handle the activity, this will convert the speculative wft to normal wft
 	err = poller.PollAndProcessActivityTask(false)
@@ -4098,7 +4096,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_ReloadShard_SameStartedId_SameUpdateId_Accepted() {
+func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ReloadShard_SameStartedId_SameUpdateId_Accepted() {
 	/*
 		Test scenario:
 		An update triggered a speculative WFT and the task is dispatched to worker.
@@ -4162,7 +4160,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the speculative wft
 	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4195,7 +4192,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the new wft (not speculative anymore)
 	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4227,7 +4223,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 		Messages:              s.acceptUpdateMessages(tv, wft1.Messages[0], "1"),
 		ReturnNewWorkflowTask: true,
 	})
-	s.NoError(err) // Staled speculative WFT should be accepted because it has same scheduled_id / started_id and the accepted message is valid (same update_id)
+	s.NoError(err) // Stale speculative WFT should be accepted because it has same scheduled_id / started_id and the accepted message is valid (same update_id)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
@@ -4247,7 +4243,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Relo
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_ClearMutableState_Accepted() {
+func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearMutableState_Accepted() {
 	/*
 		Test scenario:
 		An update triggered a speculative WFT and the task is dispatched to worker.
@@ -4314,7 +4310,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Clea
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the speculative wft
 	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4339,7 +4334,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Clea
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the new wft (it is still speculative)
 	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4446,7 +4440,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Clea
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_SameStartedId_DifferentUpdateId_Rejected() {
+func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameStartedId_DifferentUpdateId_Rejected() {
 	/*
 		Test scenario:
 		An update triggered a speculative WFT and the task is dispatched to worker.
@@ -4511,7 +4505,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 	go func() {
 		_, _ = s.sendUpdate(tv, "1")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the speculative wft
 	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4544,7 +4537,6 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 	go func() {
 		_, _ = s.sendUpdate(tv, "2")
 	}()
-	time.Sleep(time.Second) // to make sure update reached server
 
 	// poll the new wft (it is still speculative)
 	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
