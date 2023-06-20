@@ -563,6 +563,8 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// The branch
 		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
