@@ -3974,7 +3974,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Diff
 
 	// send update wf request, this will trigger speculative wft
 	go func() {
-		s.sendUpdate(tv, "1")
+		_, _ = s.sendUpdate(tv, "1")
 	}()
 
 	// Get shardId so we can unload the shard later
@@ -4006,7 +4006,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Diff
 
 	// send another update wf request (with SAME updateId), this will trigger a new speculative wft
 	go func() {
-		s.sendUpdate(tv, "1")
+		_, _ = s.sendUpdate(tv, "1")
 	}()
 	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
 
@@ -4150,7 +4150,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 
 	// send update wf request, this will trigger speculative wft
 	go func() {
-		s.sendUpdate(tv, "1")
+		_, _ = s.sendUpdate(tv, "1")
 	}()
 
 	// poll the speculative wft
@@ -4173,7 +4173,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 
 	// send another update wf request (with SAME updateId), this will trigger a new speculative wft
 	go func() {
-		s.sendUpdate(tv, "1")
+		_, _ = s.sendUpdate(tv, "1")
 	}()
 	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
 
@@ -4290,7 +4290,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 
 	// send update wf request, this will trigger speculative wft
 	go func() {
-		s.sendUpdate(tv, "1")
+		_, _ = s.sendUpdate(tv, "1")
 	}()
 
 	// poll the speculative wft
@@ -4313,7 +4313,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_Same
 
 	// send another update wf request (with DIFFERENT updateId), this will trigger a new speculative wft
 	go func() {
-		s.sendUpdate(tv, "2")
+		_, _ = s.sendUpdate(tv, "2")
 	}()
 	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
 
