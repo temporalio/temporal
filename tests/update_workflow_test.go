@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -3917,4 +3918,472 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
  14 WorkflowExecutionCompleted`, events)
 		})
 	}
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_DifferentStartedId_Rejected() {
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+
+	testCtx := NewContext()
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Schedule activity.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID("5"),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			return nil, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString(tv.String("activity-result")), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// First WFT, will schedule activity. Also force create a new WFT.
+	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+
+	// Drain 2nd WFT (which is force created as requested) to make all events seem by SDK so following update can be speculative.
+	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
+	s.NoError(err)
+	s.EqualValues(0, wt1Resp.ResetHistoryEventId)
+
+	// send update wf request, this will trigger speculative wft
+	go func() {
+		s.sendUpdate(tv, "1")
+	}()
+
+	// Get shardId so we can unload the shard later
+	ms, err := s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
+	shardId, err := strconv.Atoi(ms.ShardId)
+	s.NoError(err)
+
+	// poll the speculative wft
+	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err1)
+	s.NotNil(wft1)
+	s.True(len(wft1.TaskToken) > 0) // has valid task token
+	s.True(len(wft1.Messages) > 0)  // has valid message
+	s.Equal(int64(10), wft1.StartedEventId)
+	s.Equal(int64(9), wft1.Messages[0].GetEventId())
+
+	// unload the shard, this will make the speculative wft disappear.
+	_, err = s.adminClient.CloseShard(testCtx, &adminservice.CloseShardRequest{
+		ShardId: int32(shardId),
+	})
+	s.NoError(err)
+
+	// send another update wf request (with SAME updateId), this will trigger a new speculative wft
+	go func() {
+		s.sendUpdate(tv, "1")
+	}()
+	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
+
+	// before handle the new speculative WFT, we handle the activity, this will convert the speculative wft to normal wft
+	err = poller.PollAndProcessActivityTask(false)
+	s.NoError(err)
+
+	// poll the new wft (not speculative anymore)
+	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err2)
+	s.NotNil(wft2)
+	s.True(len(wft2.TaskToken) > 0) // has valid task token
+	s.True(len(wft2.Messages) > 0)  // has valid message
+	s.Equal(int64(12), wft2.StartedEventId)
+	s.Equal(int64(11), wft2.Messages[0].GetEventId())
+
+	// now try to complete 1st speculative wft, it should fail
+	commands := s.acceptUpdateCommands(tv, "1")
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             tv.ActivityID("13"),
+			ActivityType:           tv.ActivityType(),
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+		}},
+	})
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:             s.namespace,
+		TaskToken:             wft1.TaskToken,
+		Commands:              commands,
+		Messages:              s.acceptUpdateMessages(tv, wft1.Messages[0], "1"),
+		ReturnNewWorkflowTask: true,
+	})
+	s.Error(err) // this should fail with NotFound
+	s.Contains(err.Error(), "Workflow task not found")
+
+	// complete wft2 should succeed
+	commands = s.acceptUpdateCommands(tv, "1")
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             tv.ActivityID("15"),
+			ActivityType:           tv.ActivityType(),
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+		}},
+	})
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:             s.namespace,
+		TaskToken:             wft2.TaskToken,
+		Commands:              commands,
+		Messages:              s.acceptUpdateMessages(tv, wft2.Messages[0], "1"),
+		ReturnNewWorkflowTask: true,
+	})
+	s.NoError(err)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 ActivityTaskScheduled
+	6 WorkflowTaskScheduled
+	7 WorkflowTaskStarted
+	8 WorkflowTaskCompleted
+	9 WorkflowTaskScheduled
+	10 ActivityTaskStarted
+	11 ActivityTaskCompleted
+	12 WorkflowTaskStarted
+	13 WorkflowTaskCompleted
+	14 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":11}
+	15 ActivityTaskScheduled
+	`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_SameStartedId_SameUpdateId_Accepted() {
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+
+	testCtx := NewContext()
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Schedule activity.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID("5"),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			return nil, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString(tv.String("activity-result")), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// First WFT, will schedule activity. Also force create a new WFT.
+	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+
+	// Drain 2nd WFT (which is force created as requested) to make all events seem by SDK so following update can be speculative.
+	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
+	s.NoError(err)
+	s.EqualValues(0, wt1Resp.ResetHistoryEventId)
+
+	// Get shardId so we can unload the shard later
+	ms, err := s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
+	shardId, err := strconv.Atoi(ms.ShardId)
+	s.NoError(err)
+
+	// send update wf request, this will trigger speculative wft
+	go func() {
+		s.sendUpdate(tv, "1")
+	}()
+
+	// poll the speculative wft
+	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err1)
+	s.NotNil(wft1)
+	s.True(len(wft1.TaskToken) > 0) // has valid task token
+	s.True(len(wft1.Messages) > 0)  // has valid message
+	s.Equal(int64(10), wft1.StartedEventId)
+	s.Equal(int64(9), wft1.Messages[0].GetEventId())
+
+	// unload the shard, this will make last speculative wft disappear from server
+	_, err = s.adminClient.CloseShard(testCtx, &adminservice.CloseShardRequest{
+		ShardId: int32(shardId),
+	})
+	s.NoError(err)
+
+	// send another update wf request (with SAME updateId), this will trigger a new speculative wft
+	go func() {
+		s.sendUpdate(tv, "1")
+	}()
+	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
+
+	// poll the new wft (not speculative anymore)
+	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err2)
+	s.NotNil(wft2)
+	s.True(len(wft2.TaskToken) > 0) // has valid task token
+	s.True(len(wft2.Messages) > 0)  // has valid message
+	s.Equal(int64(10), wft2.StartedEventId)
+	s.Equal(int64(9), wft2.Messages[0].GetEventId())
+
+	// now try to complete 1st speculative wft, it should succeed
+	commands := s.acceptUpdateCommands(tv, "1")
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             tv.ActivityID("13"),
+			ActivityType:           tv.ActivityType(),
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+		}},
+	})
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:             s.namespace,
+		TaskToken:             wft1.TaskToken,
+		Commands:              commands,
+		Messages:              s.acceptUpdateMessages(tv, wft1.Messages[0], "1"),
+		ReturnNewWorkflowTask: true,
+	})
+	s.NoError(err) // Staled speculative WFT should be accepted because it has same scheduled_id / started_id and the accepted message is valid (same update_id)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 ActivityTaskScheduled
+	6 WorkflowTaskScheduled
+	7 WorkflowTaskStarted
+	8 WorkflowTaskCompleted
+	9 WorkflowTaskScheduled
+	10 WorkflowTaskStarted
+	11 WorkflowTaskCompleted
+	12 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":9}
+	13 ActivityTaskScheduled
+	`, events)
+}
+
+func (s *integrationSuite) TestUpdateWorkflow_StaledSpeculativeWorkflowTask_SameStartedId_DifferentUpdateId_Rejected() {
+	tv := testvars.New(s.T().Name())
+	tv = s.startWorkflow(tv)
+
+	testCtx := NewContext()
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Schedule activity.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:             tv.ActivityID("5"),
+					ActivityType:           tv.ActivityType(),
+					TaskQueue:              tv.TaskQueue(),
+					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+				}},
+			}}, nil
+		case 2:
+			return nil, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	atHandler := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
+		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
+		return payloads.EncodeString(tv.String("activity-result")), false, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: atHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// First WFT, will schedule activity. Also force create a new WFT.
+	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	s.NoError(err)
+
+	// Drain 2nd WFT (which is force created as requested) to make all events seem by SDK so following update can be speculative.
+	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
+	s.NoError(err)
+	s.EqualValues(0, wt1Resp.ResetHistoryEventId)
+
+	// Get shardId so we can unload the shard
+	ms, err := s.adminClient.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: tv.WorkflowExecution(),
+	})
+	s.NoError(err)
+	shardId, err := strconv.Atoi(ms.ShardId)
+	s.NoError(err)
+
+	// send update wf request, this will trigger speculative wft
+	go func() {
+		s.sendUpdate(tv, "1")
+	}()
+
+	// poll the speculative wft
+	wft1, err1 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err1)
+	s.NotNil(wft1)
+	s.True(len(wft1.TaskToken) > 0) // has valid task token
+	s.True(len(wft1.Messages) > 0)  // has valid message
+	s.Equal(int64(10), wft1.StartedEventId)
+	s.Equal(int64(9), wft1.Messages[0].GetEventId())
+
+	// unload the shard, this will make last speculative wft disappear from server
+	_, err = s.adminClient.CloseShard(testCtx, &adminservice.CloseShardRequest{
+		ShardId: int32(shardId),
+	})
+	s.NoError(err)
+
+	// send another update wf request (with DIFFERENT updateId), this will trigger a new speculative wft
+	go func() {
+		s.sendUpdate(tv, "2")
+	}()
+	time.Sleep(time.Second) // sleep 1s to make sure update reached to server
+
+	// poll the new wft (it is still speculative)
+	wft2, err2 := s.engine.PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err2)
+	s.NotNil(wft2)
+	s.True(len(wft2.TaskToken) > 0) // has valid task token
+	s.True(len(wft2.Messages) > 0)  // has valid message
+	s.Equal(int64(10), wft2.StartedEventId)
+	s.Equal(int64(9), wft2.Messages[0].GetEventId())
+
+	// now try to complete 1st speculative wft, it should fail
+	commands := s.acceptUpdateCommands(tv, "1")
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             tv.ActivityID("13"),
+			ActivityType:           tv.ActivityType(),
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+		}},
+	})
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:             s.namespace,
+		TaskToken:             wft1.TaskToken,
+		Commands:              commands,
+		Messages:              s.acceptUpdateMessages(tv, wft1.Messages[0], "1"),
+		ReturnNewWorkflowTask: true,
+	})
+	s.Error(err) // Fail because UpdateId is not_found. (If shard was not reload, and the update still exists in registry, then it could be accepted)
+	s.Contains(err.Error(), "BadUpdateWorkflowExecutionMessage")
+	s.Contains(err.Error(), "not found")
+
+	// complete wft2 should also fail, because the previous attempt already mark the WFT as failed.
+	commands = s.acceptUpdateCommands(tv, "1")
+	commands = append(commands, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             tv.ActivityID("15"),
+			ActivityType:           tv.ActivityType(),
+			TaskQueue:              tv.TaskQueue(),
+			ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+		}},
+	})
+	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:             s.namespace,
+		TaskToken:             wft2.TaskToken,
+		Commands:              commands,
+		Messages:              s.acceptUpdateMessages(tv, wft2.Messages[0], "1"),
+		ReturnNewWorkflowTask: true,
+	})
+	s.Error(err)
+	s.Contains(err.Error(), "Workflow task not found")
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 ActivityTaskScheduled
+	6 WorkflowTaskScheduled
+	7 WorkflowTaskStarted
+	8 WorkflowTaskCompleted
+	9 WorkflowTaskScheduled
+	10 WorkflowTaskStarted
+	11 WorkflowTaskFailed
+	`, events)
 }

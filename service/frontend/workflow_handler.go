@@ -965,6 +965,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 			WorkflowId:       taskToken.GetWorkflowId(),
 			RunId:            taskToken.GetRunId(),
 			ScheduledEventId: histResp.StartedResponse.GetScheduledEventId(),
+			StartedEventId:   histResp.StartedResponse.GetStartedEventId(),
 			Attempt:          histResp.StartedResponse.GetAttempt(),
 		}
 		token, err := wh.tokenSerializer.Serialize(taskToken)

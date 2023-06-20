@@ -1308,6 +1308,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			WorkflowId:       task.event.Data.GetWorkflowId(),
 			RunId:            task.event.Data.GetRunId(),
 			ScheduledEventId: historyResponse.GetScheduledEventId(),
+			StartedEventId:   historyResponse.GetStartedEventId(),
 			Attempt:          historyResponse.GetAttempt(),
 			Clock:            historyResponse.GetClock(),
 		}
