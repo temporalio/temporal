@@ -4971,6 +4971,13 @@ func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, 
 		return err
 	}
 
+	// The code below enquire about the workflow state and depending on whether it's running or completed,
+	// it will either signal or start a new workflow with the same ID and parameters as the completed one.
+	// The loop protects against a race condition where the state of workflow changes in between checking the state
+	// of workflow and sending the signal or starting a new workflow.
+	// TODO: However, there is still a rare race condition left which cannot be fixed without having a notion of atomic
+	// workflow start. That is if the state changes from completed(describe stage)->running->completed(start workflow),
+	// where the workflow will be started with stale info acquired from the describe stage.
 retry:
 	for {
 		executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, namespaceName, namespaceID)
