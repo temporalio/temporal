@@ -3038,6 +3038,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	runningWorkflows := make([]*commonpb.WorkflowExecution, 0, len(queryResponse.GetInfo().GetRunningWorkflows()))
 	// for all running workflows started by the schedule, we should check that they're
 	// still running, and if not, remove them from the list of workflows in the response
+	needsRefresh := false
 	for _, ex := range queryResponse.GetInfo().GetRunningWorkflows() {
 
 		// we'll usually have just zero or one of these so we can just do them sequentially
@@ -3058,7 +3059,26 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			// if there is a running execution of this workflow id, and it is
 			// part of the chain that we started, add it to the list of running workflows
 			runningWorkflows = append(runningWorkflows, ex)
+		} else if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			// if schedule workflow is running but the child workflow is not running
+			// inidcate that we want to send a signal to refresh the schedule workflow
+			needsRefresh = true
 		}
+	}
+
+	if needsRefresh {
+		// This is a send and forget effort to refresh the schedule workflow
+		// errors are ignored
+		wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: execution,
+				SignalName:        scheduler.SignalNameRefresh,
+				Identity:          "internal refresh from describe request",
+				RequestId:         uuid.New(),
+			},
+		})
 	}
 
 	queryResponse.Info.RunningWorkflows = runningWorkflows
