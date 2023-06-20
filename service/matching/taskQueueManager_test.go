@@ -32,10 +32,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -44,11 +46,13 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -116,6 +120,75 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
+	tlm.taskReader.gorogrp.Cancel()
+	tlm.taskReader.gorogrp.Wait()
+}
+
+func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
+
+	scope := tally.NewTestScope("test", nil)
+	tlm.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
+
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			VersionDirective: &taskqueue.TaskVersionDirective{
+				Value: &taskqueue.TaskVersionDirective_BuildId{BuildId: "asdf"},
+			},
+		},
+	}
+
+	tlm.initializedError.Set(struct{}{}, nil)
+	tlm.userDataInitialFetch.Set(struct{}{}, nil)
+	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
+
+	time.Sleep(3 * taskReaderOfferThrottleWait)
+
+	// count retries with this metric
+	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
+	require.NotNil(t, errCount, "nil counter probably means dispatch did not get error and blocked trying to load new tqm")
+	require.GreaterOrEqual(t, errCount.Value(), int64(2))
+
+	tlm.taskReader.gorogrp.Cancel()
+	tlm.taskReader.gorogrp.Wait()
+}
+
+func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
+
+	scope := tally.NewTestScope("test", nil)
+	tlm.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
+
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			VersionDirective: &taskqueue.TaskVersionDirective{
+				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+			},
+		},
+	}
+
+	tlm.initializedError.Set(struct{}{}, nil)
+	tlm.userDataInitialFetch.Set(struct{}{}, nil)
+	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
+
+	time.Sleep(taskReaderOfferThrottleWait)
+
+	// should be no retries
+	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
+	require.Nil(t, errCount)
+
 	tlm.taskReader.gorogrp.Cancel()
 	tlm.taskReader.gorogrp.Wait()
 }
@@ -531,6 +604,40 @@ func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
+	tq.Stop()
+}
+
+func TestTQMLoadsUserDataFromPersistenceOnInitOnlyOnceWhenNoData(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = tqId
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tm := tq.engine.taskManager.(*testTaskManager)
+
+	require.Equal(t, 0, tm.getGetUserDataCount(tqId))
+
+	tq.Start()
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Nil(t, userData)
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
+	userData, _, err = tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Nil(t, userData)
+
+	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
+
 	tq.Stop()
 }
 

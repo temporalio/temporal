@@ -2254,7 +2254,7 @@ func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_Silently
 		Name: "test",
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
 
 	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: namespaceId,
@@ -2278,7 +2278,7 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 		Name: "test",
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
 
 	_, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
 		NamespaceId: namespaceId,
@@ -2293,27 +2293,6 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
 		},
 	})
-	s.Require().NoError(err)
-}
-
-func (s *matchingEngineSuite) TestDispatchSpooledTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
-	namespaceId := namespace.ID(uuid.New())
-	tqId, err := newTaskQueueID(namespaceId, "foo", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.Require().NoError(err)
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
-
-	err = s.matchingEngine.DispatchSpooledTask(context.Background(), &internalTask{
-		event: &genericTaskInfo{
-			&persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{
-					VersionDirective: &taskqueue.TaskVersionDirective{
-						Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
-					},
-				},
-			},
-			func(ati *persistencespb.AllocatedTaskInfo, err error) {},
-		},
-	}, tqId, stickyInfo{})
 	s.Require().NoError(err)
 }
 
@@ -2420,12 +2399,13 @@ func (m *testTaskManager) getTaskQueueManager(id *taskQueueID) *testTaskQueueMan
 
 type testTaskQueueManager struct {
 	sync.Mutex
-	rangeID         int64
-	ackLevel        int64
-	createTaskCount int
-	getTasksCount   int
-	tasks           *treemap.Map
-	userData        *persistencespb.VersionedTaskQueueUserData
+	rangeID          int64
+	ackLevel         int64
+	createTaskCount  int
+	getTasksCount    int
+	getUserDataCount int
+	tasks            *treemap.Map
+	userData         *persistencespb.VersionedTaskQueueUserData
 }
 
 func (m *testTaskQueueManager) RangeID() int64 {
@@ -2680,6 +2660,14 @@ func (m *testTaskManager) getGetTasksCount(taskQueue *taskQueueID) int {
 	return tlm.getTasksCount
 }
 
+// getGetUserDataCount returns how many times GetUserData was called
+func (m *testTaskManager) getGetUserDataCount(taskQueue *taskQueueID) int {
+	tlm := m.getTaskQueueManager(taskQueue)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.getUserDataCount
+}
+
 func (m *testTaskManager) String() string {
 	m.Lock()
 	defer m.Unlock()
@@ -2708,6 +2696,9 @@ func (m *testTaskManager) String() string {
 // GetTaskQueueData implements persistence.TaskManager
 func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+	tlm.Lock()
+	defer tlm.Unlock()
+	tlm.getUserDataCount++
 	return &persistence.GetTaskQueueUserDataResponse{
 		UserData: tlm.userData,
 	}, nil
@@ -2716,6 +2707,8 @@ func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *per
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+	tlm.Lock()
+	defer tlm.Unlock()
 	newData := *request.UserData
 	newData.Version++
 	tlm.userData = &newData

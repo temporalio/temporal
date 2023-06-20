@@ -212,7 +212,9 @@ func (ns *Namespace) FailoverVersion() int64 {
 	return ns.failoverVersion
 }
 
-// IsGlobalNamespace return whether the namespace is a global namespace
+// IsGlobalNamespace returns whether the namespace is a global namespace.
+// Being a global namespace doesn't necessarily mean that there are multiple registered clusters for it, only that it
+// has a failover version. To determine whether operations should be replicated for a namespace, see ReplicationPolicy.
 func (ns *Namespace) IsGlobalNamespace() bool {
 	return ns.isGlobalNamespace
 }

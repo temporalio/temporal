@@ -232,10 +232,6 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 
 // bulkAfterAction is triggered after bulk processor commit
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
-	// Record how long the Elasticsearch took to process the bulk request.
-	p.metricsHandler.Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).
-		Record(time.Duration(response.Took) * time.Millisecond)
-
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
@@ -260,6 +256,10 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
 		return
 	}
+
+	// Record how long the Elasticsearch took to process the bulk request.
+	p.metricsHandler.Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).
+		Record(time.Duration(response.Took) * time.Millisecond)
 
 	responseIndex := p.buildResponseIndex(response)
 	for i, request := range requests {

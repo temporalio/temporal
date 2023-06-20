@@ -35,8 +35,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// MetricsHandler is an event.Handler for OpenTelemetry metrics.
-// Its Event method handles Metric events and ignores all others.
+// otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
 type otelMetricsHandler struct {
 	l           log.Logger
 	tags        []Tag
@@ -54,8 +53,8 @@ func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConf
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
-// Tags are merged with registered Tags from the source MetricsHandler
+// WithTags creates a new Handler with the provided Tag list.
+// Tags are merged with the existing tags.
 func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &otelMetricsHandler{
 		provider:    omp.provider,
@@ -64,11 +63,12 @@ func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	}
 }
 
-// Counter obtains a counter for the given name and MetricOptions.
+// Counter obtains a counter for the given name.
 func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	c, err := omp.provider.GetMeter().Int64Counter(counter)
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
+		return CounterFunc(func(i int64, t ...Tag) {})
 	}
 
 	return CounterFunc(func(i int64, t ...Tag) {
@@ -77,11 +77,12 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	})
 }
 
-// Gauge obtains a gauge for the given name and MetricOptions.
+// Gauge obtains a gauge for the given name.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge)
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		return GaugeFunc(func(i float64, t ...Tag) {})
 	}
 
 	return GaugeFunc(func(i float64, t ...Tag) {
@@ -91,16 +92,17 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 			return nil
 		}, c)
 		if err != nil {
-			omp.l.Fatal("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+			omp.l.Error("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 		}
 	})
 }
 
-// Timer obtains a timer for the given name and MetricOptions.
+// Timer obtains a timer for the given name.
 func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, metric.WithUnit(Milliseconds))
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		return TimerFunc(func(i time.Duration, t ...Tag) {})
 	}
 
 	return TimerFunc(func(i time.Duration, t ...Tag) {
@@ -109,14 +111,15 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
 	})
 }
 
-// Histogram obtains a histogram for the given name and MetricOptions.
+// Histogram obtains a histogram for the given name.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, metric.WithUnit(string(unit)))
 	if err != nil {
-		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
+		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
+		return HistogramFunc(func(i int64, t ...Tag) {})
 	}
 
-	return CounterFunc(func(i int64, t ...Tag) {
+	return HistogramFunc(func(i int64, t ...Tag) {
 		option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 		c.Record(context.Background(), i, option)
 	})

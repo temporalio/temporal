@@ -834,12 +834,10 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
 		_, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID,
-			&updatepb.Acceptance{
-				AcceptedRequestMessageId:         fmt.Sprintf("%s-%d", acceptedMsgID, i),
-				AcceptedRequestSequencingEventId: 1,
-				AcceptedRequest: &updatepb.Request{
-					Meta: &updatepb.Meta{UpdateId: updateID},
-				},
+			fmt.Sprintf("%s-%d", acceptedMsgID, i),
+			1,
+			&updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: updateID},
 			},
 		)
 		s.Require().NoError(err)
@@ -1152,8 +1150,8 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 		stamp           func(buildId string) *commonpb.WorkerVersionStamp
 	}
 	matrix := []testCase{
-		{name: "versioned", searchAttribute: versionedSearchAttribute, stamp: versioned},
 		{name: "unversioned", searchAttribute: unversionedSearchAttribute, stamp: unversioned},
+		{name: "versioned", searchAttribute: versionedSearchAttribute, stamp: versioned},
 	}
 	for _, c := range matrix {
 		s.T().Run(c.name, func(t *testing.T) {
@@ -1163,29 +1161,29 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxTrackedBuildIds: 0})
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxSearchAttributeValueSize: 0})
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 			s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 			s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxTrackedBuildIds: 2})
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 			s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())

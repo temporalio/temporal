@@ -25,7 +25,6 @@
 package migration
 
 import (
-	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -220,10 +219,10 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 
 func validateAndSetNamespaceHandoverParams(params *NamespaceHandoverParams) error {
 	if len(params.Namespace) == 0 {
-		return errors.New("InvalidArgument: Namespace is required")
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 	if len(params.RemoteCluster) == 0 {
-		return errors.New("InvalidArgument: RemoteCluster is required")
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: RemoteCluster is required", "InvalidArgument", nil)
 	}
 	if params.AllowedLaggingSeconds <= minimumAllowedLaggingSeconds {
 		params.AllowedLaggingSeconds = minimumAllowedLaggingSeconds

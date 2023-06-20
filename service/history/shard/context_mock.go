@@ -685,6 +685,20 @@ func (mr *MockContextMockRecorder) UpdateRemoteClusterInfo(cluster, ackTaskID, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteClusterInfo", reflect.TypeOf((*MockContext)(nil).UpdateRemoteClusterInfo), cluster, ackTaskID, ackTimestamp)
 }
 
+// UpdateRemoteReaderInfo mocks base method.
+func (m *MockContext) UpdateRemoteReaderInfo(readerID, ackTaskID int64, ackTimestamp time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRemoteReaderInfo", readerID, ackTaskID, ackTimestamp)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateRemoteReaderInfo indicates an expected call of UpdateRemoteReaderInfo.
+func (mr *MockContextMockRecorder) UpdateRemoteReaderInfo(readerID, ackTaskID, ackTimestamp interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemoteReaderInfo", reflect.TypeOf((*MockContext)(nil).UpdateRemoteReaderInfo), readerID, ackTaskID, ackTimestamp)
+}
+
 // UpdateReplicationQueueReaderState mocks base method.
 func (m *MockContext) UpdateReplicationQueueReaderState(readerID int64, readerState *v13.QueueReaderState) error {
 	m.ctrl.T.Helper()

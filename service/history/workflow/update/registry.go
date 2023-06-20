@@ -59,7 +59,7 @@ type (
 
 		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
-		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
+		ReadOutgoingMessages(startedEventID int64) []*protocolpb.Message
 
 		// TerminateUpdates terminates all existing updates in the registry
 		// and notifies update aPI callers with corresponding error.
@@ -91,8 +91,6 @@ type (
 
 	regOpt func(*RegistryImpl)
 )
-
-//revive:disable:unexported-return I *want* it to be unexported
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
@@ -132,8 +130,6 @@ func WithTracerProvider(t trace.TracerProvider) regOpt {
 		r.instrumentation.tracer = t.Tracer(libraryName)
 	}
 }
-
-//revive:enable:unexported-return
 
 var _ Registry = (*RegistryImpl)(nil)
 
@@ -204,27 +200,25 @@ func (r *RegistryImpl) HasOutgoing() bool {
 }
 
 func (r *RegistryImpl) ReadOutgoingMessages(
-	startedEventID int64,
-) ([]*protocolpb.Message, error) {
+	workflowTaskStartedEventID int64,
+) []*protocolpb.Message {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []*protocolpb.Message
-	for _, upd := range r.updates {
-		upd.ReadOutgoingMessages(&out)
-	}
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
-	// event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
-	// and process messages (specifically, updates) after event with that ID.
-	// In the future, sequencing_id could point to some specific event
-	// (specifically, signal) after which the update should be processed.
-	// Currently, it is not possible due to buffered events reordering on server
-	// and events reordering in some SDKs.
-	sequencingEventID := startedEventID - 1
-	for _, msg := range out {
-		msg.SequencingId = &protocolpb.Message_EventId{EventId: sequencingEventID}
+	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
+	//  and process messages (specifically, updates) after event with that ID.
+	//  In the future, sequencing_id could point to some specific event
+	//  (specifically, signal) after which the update should be processed.
+	//  Currently, it is not possible due to buffered events reordering on server
+	//  and events reordering in some SDKs.
+	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
+
+	for _, upd := range r.updates {
+		upd.ReadOutgoingMessages(&out, sequencingEventID)
 	}
-	return out, nil
+	return out
 }
 
 func (r *RegistryImpl) Len() int {

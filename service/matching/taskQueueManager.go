@@ -97,6 +97,7 @@ type (
 		taskInfo      *persistencespb.TaskInfo
 		source        enumsspb.TaskSource
 		forwardedFrom string
+		baseTqm       taskQueueManager
 	}
 
 	stickyInfo struct {
@@ -127,6 +128,8 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
+		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged chan struct{}) error
@@ -309,11 +312,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	if c.shouldFetchUserData() {
-		c.goroGroup.Go(c.fetchUserDataLoop)
-	} else {
-		c.userDataInitialFetch.Set(struct{}{}, nil)
-	}
+	c.goroGroup.Go(c.fetchUserData)
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -356,15 +355,6 @@ func (c *taskQueueManagerImpl) Stop() {
 // of a single matching node.
 func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.taskQueueID.VersionSet() != ""
-}
-
-// shouldFetchUserData consolidates the logic for when to fetch user data from another task
-// queue or (maybe) read it from the db. We set the userDataInitialFetch future from two
-// places, so they need to agree on which one should set it.
-func (c *taskQueueManagerImpl) shouldFetchUserData() bool {
-	// 1. If the db stores it, then we definitely should not be fetching.
-	// 2. Additionally, we should not fetch for "versioned" tqms.
-	return c.config.LoadUserData() && !c.db.DbStoresUserData() && !c.managesSpecificVersionSet()
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -414,12 +404,28 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, errRemoteSyncMatchFailed
 	}
 
-	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	// Ensure that tasks with the "default" versioning directive get spooled in the unversioned queue as they not
+	// associated with any version set until their execution is touched by a version specific worker.
+	// "compatible" tasks OTOH are associated with a specific version set and should be stored along with all tasks for
+	// that version set.
+	// The task queue default set is dynamic and applies only at dispatch time. Putting "default" tasks into version set
+	// specific queues could cause them to get stuck behind "compatible" tasks when they should be able to progress
+	// independently.
+	if taskInfo.VersionDirective.GetUseDefault() != nil {
+		err = params.baseTqm.SpoolTask(params)
+	} else {
+		err = c.SpoolTask(params)
+	}
+	return false, err
+}
+
+func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
+	_, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
 		c.taskReader.Signal()
 	}
-	return false, err
+	return err
 }
 
 // GetTask blocks waiting for a task.
@@ -490,7 +496,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 		return nil, nil, errNoUserDataOnVersionedTQM
 	}
 	if !c.config.LoadUserData() {
-		return nil, nil, nil
+		return nil, nil, errUserDataDisabled
 	}
 	return c.db.GetUserData(ctx)
 }
@@ -498,7 +504,7 @@ func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
 	if !c.config.LoadUserData() {
-		return serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
+		return errUserDataDisabled
 	}
 	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
@@ -514,7 +520,7 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	if !ns.IsGlobalNamespace() {
+	if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
 		return nil
 	}
 
@@ -751,8 +757,31 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 	return parent.FullName(), nil
 }
 
-func (c *taskQueueManagerImpl) fetchUserDataLoop(ctx context.Context) error {
+func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
+
+	if !c.config.LoadUserData() {
+		// if disabled, mark ready now
+		c.userDataInitialFetch.Set(struct{}{}, nil)
+		return nil
+	}
+	if c.managesSpecificVersionSet() {
+		// tqm for specific version set doesn't have its own user data
+		c.userDataInitialFetch.Set(struct{}{}, nil)
+		return nil
+	}
+	if c.db.DbStoresUserData() {
+		// root workflow partition "owns" user data, read it from db
+		err := c.db.loadUserData(ctx)
+		c.userDataInitialFetch.Set(struct{}{}, err)
+		if err != nil {
+			// We can't recover from here without starting over, so unload the whole task queue
+			c.unloadFromEngine()
+		}
+		return err
+	}
+
+	// otherwise fetch from parent partition
 
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
