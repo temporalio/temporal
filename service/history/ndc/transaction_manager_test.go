@@ -28,7 +28,6 @@ import (
 	"context"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -115,29 +114,27 @@ func (s *transactionMgrSuite) TearDownTest() {
 
 func (s *transactionMgrSuite) TestCreateWorkflow() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 	targetWorkflow := NewMockWorkflow(s.controller)
 
 	s.mockCreateMgr.EXPECT().dispatchForNewWorkflow(
-		ctx, now, targetWorkflow,
+		ctx, targetWorkflow,
 	).Return(nil)
 
-	err := s.transactionMgr.createWorkflow(ctx, now, targetWorkflow)
+	err := s.transactionMgr.createWorkflow(ctx, targetWorkflow)
 	s.NoError(err)
 }
 
 func (s *transactionMgrSuite) TestUpdateWorkflow() {
 	ctx := context.Background()
-	now := time.Now().UTC()
 	isWorkflowRebuilt := true
 	targetWorkflow := NewMockWorkflow(s.controller)
 	newWorkflow := NewMockWorkflow(s.controller)
 
 	s.mockUpdateMgr.EXPECT().dispatchForExistingWorkflow(
-		ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow,
+		ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow,
 	).Return(nil)
 
-	err := s.transactionMgr.updateWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	err := s.transactionMgr.updateWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
 }
 

@@ -29,7 +29,6 @@ package ndc
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -42,7 +41,6 @@ type (
 	transactionMgrForExistingWorkflow interface {
 		dispatchForExistingWorkflow(
 			ctx context.Context,
-			now time.Time,
 			isWorkflowRebuilt bool,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
@@ -67,7 +65,6 @@ func newNDCTransactionMgrForExistingWorkflow(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	ctx context.Context,
-	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -84,7 +81,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		// update to current record, since target workflow is pointed by current record
 		return r.dispatchWorkflowUpdateAsCurrent(
 			ctx,
-			now,
 			isWorkflowRebuilt,
 			targetWorkflow,
 			newWorkflow,
@@ -120,7 +116,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		// update to current record, since target workflow is pointed by current record
 		return r.dispatchWorkflowUpdateAsCurrent(
 			ctx,
-			now,
 			isWorkflowRebuilt,
 			targetWorkflow,
 			newWorkflow,
@@ -147,7 +142,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		// target workflow is older than current workflow, need to suppress the target workflow
 		return r.dispatchWorkflowUpdateAsZombie(
 			ctx,
-			now,
 			isWorkflowRebuilt,
 			currentWorkflow,
 			targetWorkflow,
@@ -159,7 +153,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	// will set target workflow using snapshot
 	return r.executeTransaction(
 		ctx,
-		now,
 		nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent,
 		currentWorkflow,
 		targetWorkflow,
@@ -169,7 +162,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurrent(
 	ctx context.Context,
-	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -178,7 +170,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 	if !isWorkflowRebuilt {
 		return r.executeTransaction(
 			ctx,
-			now,
 			nDCTransactionPolicyUpdateAsCurrent,
 			nil,
 			targetWorkflow,
@@ -188,7 +179,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 
 	return r.executeTransaction(
 		ctx,
-		now,
 		nDCTransactionPolicyConflictResolveAsCurrent,
 		nil,
 		targetWorkflow,
@@ -198,7 +188,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombie(
 	ctx context.Context,
-	now time.Time,
 	isWorkflowRebuilt bool,
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
@@ -208,7 +197,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 	if !isWorkflowRebuilt {
 		return r.executeTransaction(
 			ctx,
-			now,
 			nDCTransactionPolicyUpdateAsZombie,
 			currentWorkflow,
 			targetWorkflow,
@@ -218,7 +206,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 
 	return r.executeTransaction(
 		ctx,
-		now,
 		nDCTransactionPolicyConflictResolveAsZombie,
 		currentWorkflow,
 		targetWorkflow,
@@ -228,7 +215,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 	ctx context.Context,
-	now time.Time,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
@@ -246,7 +232,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	ctx context.Context,
-	now time.Time,
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -319,7 +304,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCurrent(
 	ctx context.Context,
-	now time.Time,
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -364,7 +348,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 	ctx context.Context,
-	now time.Time,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
@@ -390,7 +373,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	ctx context.Context,
-	now time.Time,
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -462,7 +444,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	ctx context.Context,
-	now time.Time,
 	transactionPolicy nDCTransactionPolicy,
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
@@ -482,7 +463,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	case nDCTransactionPolicyUpdateAsCurrent:
 		return r.updateAsCurrent(
 			ctx,
-			now,
 			targetWorkflow,
 			newWorkflow,
 		)
@@ -490,7 +470,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	case nDCTransactionPolicyUpdateAsZombie:
 		return r.updateAsZombie(
 			ctx,
-			now,
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
@@ -499,7 +478,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	case nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent:
 		return r.suppressCurrentAndUpdateAsCurrent(
 			ctx,
-			now,
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
@@ -508,7 +486,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	case nDCTransactionPolicyConflictResolveAsCurrent:
 		return r.conflictResolveAsCurrent(
 			ctx,
-			now,
 			targetWorkflow,
 			newWorkflow,
 		)
@@ -516,7 +493,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	case nDCTransactionPolicyConflictResolveAsZombie:
 		return r.conflictResolveAsZombie(
 			ctx,
-			now,
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
