@@ -85,6 +85,7 @@ type (
 	MapPropertyFnWithNamespaceFilter           func(namespace string) map[string]any
 	StringPropertyFn                           func() string
 	StringPropertyFnWithNamespaceFilter        func(namespace string) string
+	StringPropertyFnWithNamespaceIDFilter      func(namespaceID string) string
 )
 
 const (
@@ -342,6 +343,19 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 			key,
 			defaultValue,
 			namespacePrecedence(namespace),
+			convertString,
+		)
+	}
+}
+
+// GetStringPropertyFnWithNamespaceIDFilter gets property with namespace ID filter and asserts that it's a string
+func (c *Collection) GetStringPropertyFnWithNamespaceIDFilter(key Key, defaultValue any) StringPropertyFnWithNamespaceIDFilter {
+	return func(namespaceID string) string {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespaceIDPrecedence(namespaceID),
 			convertString,
 		)
 	}

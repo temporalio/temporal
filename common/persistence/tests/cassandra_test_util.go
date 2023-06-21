@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/gocql/gocql"
@@ -241,10 +242,11 @@ func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
 // NewCassandraConfig returns a new Cassandra config for test
 func NewCassandraConfig() *config.Cassandra {
 	return &config.Cassandra{
-		User:     testCassandraUser,
-		Password: testCassandraPassword,
-		Hosts:    environment.GetCassandraAddress(),
-		Port:     environment.GetCassandraPort(),
-		Keyspace: testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
+		User:           testCassandraUser,
+		Password:       testCassandraPassword,
+		Hosts:          environment.GetCassandraAddress(),
+		Port:           environment.GetCassandraPort(),
+		Keyspace:       testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
+		ConnectTimeout: 30 * time.Second,
 	}
 }
