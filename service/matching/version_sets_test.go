@@ -41,8 +41,7 @@ import (
 func mkNewSet(id string, clock clockspb.HybridLogicalClock) *persistencespb.CompatibleVersionSet {
 	return &persistencespb.CompatibleVersionSet{
 		SetIds:                      []string{hashBuildId(id)},
-		BuildIds:                    []*persistencespb.BuildId{{Id: id, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-		DefaultUpdateTimestamp:      &clock,
+		BuildIds:                    []*persistencespb.BuildId{{Id: id, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 		QueueDefaultUpdateTimestamp: &clock,
 	}
 }
@@ -123,20 +122,17 @@ func TestNewDefaultUpdate(t *testing.T) {
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			{
 				SetIds:                      []string{hashBuildId("0")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds:                      []string{hashBuildId("2")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
-				DefaultUpdateTimestamp:      &nextClock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock, SetDefaultUpdateTimestamp: &nextClock}},
 				QueueDefaultUpdateTimestamp: &nextClock,
 			},
 		},
@@ -162,8 +158,7 @@ func TestNewDefaultSetUpdateOfEmptyData(t *testing.T) {
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock}},
-				DefaultUpdateTimestamp:      &nextClock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock, SetDefaultUpdateTimestamp: &nextClock}},
 				QueueDefaultUpdateTimestamp: &nextClock,
 			},
 		},
@@ -186,17 +181,15 @@ func TestNewDefaultSetUpdateCompatWithCurDefault(t *testing.T) {
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			{
 				SetIds:                      []string{hashBuildId("0")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
-					{Id: "1.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+					{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock},
+					{Id: "1.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock, SetDefaultUpdateTimestamp: &nextClock},
 				},
-				DefaultUpdateTimestamp:      &nextClock,
 				QueueDefaultUpdateTimestamp: &nextClock,
 			},
 		},
@@ -219,17 +212,15 @@ func TestNewDefaultSetUpdateCompatWithNonDefaultSet(t *testing.T) {
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock, SetDefaultUpdateTimestamp: &nextClock},
 				},
-				DefaultUpdateTimestamp:      &nextClock,
 				QueueDefaultUpdateTimestamp: &nextClock,
 			},
 		},
@@ -253,16 +244,14 @@ func TestNewCompatibleWithVerInOlderSet(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &nextClock, SetDefaultUpdateTimestamp: &nextClock},
 				},
-				DefaultUpdateTimestamp:      &nextClock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock}},
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 		},
@@ -293,17 +282,15 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
-					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1, SetDefaultUpdateTimestamp: &clock1},
+					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2, SetDefaultUpdateTimestamp: &clock2},
 				},
-				DefaultUpdateTimestamp:      &clock2,
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 		},
@@ -321,18 +308,16 @@ func TestNewCompatibleWithNonDefaultSetUpdate(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
-					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
-					{Id: "0.3", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock3},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1, SetDefaultUpdateTimestamp: &clock1},
+					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2, SetDefaultUpdateTimestamp: &clock2},
+					{Id: "0.3", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock3, SetDefaultUpdateTimestamp: &clock3},
 				},
-				DefaultUpdateTimestamp:      &clock3,
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 		},
@@ -368,21 +353,18 @@ func TestMakeExistingSetDefault(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0},
 				},
-				DefaultUpdateTimestamp:      &clock0,
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("2")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock1,
 			},
 		},
@@ -400,23 +382,20 @@ func TestMakeExistingSetDefault(t *testing.T) {
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			{
 				SetIds:                      []string{hashBuildId("2")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock1,
 			},
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2, SetDefaultUpdateTimestamp: &clock2},
 				},
-				DefaultUpdateTimestamp:      &clock2,
 				QueueDefaultUpdateTimestamp: &clock2,
 			},
 		},
@@ -486,17 +465,15 @@ func TestPromoteWithinVersion(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0},
-					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1},
+					{Id: "0", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0},
+					{Id: "0.2", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock2, SetDefaultUpdateTimestamp: &clock2},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock1, SetDefaultUpdateTimestamp: &clock3},
 				},
-				DefaultUpdateTimestamp:      &clock3,
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
-				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0}},
-				DefaultUpdateTimestamp:      &clock0,
+				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock0, SetDefaultUpdateTimestamp: &clock0}},
 				QueueDefaultUpdateTimestamp: &clock0,
 			},
 		},
@@ -633,10 +610,9 @@ func TestToBuildIdOrderingResponseOmitsDeleted(t *testing.T) {
 			{
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
-					{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: &clock},
-					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock},
+					{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock},
+					{Id: "0.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock, SetDefaultUpdateTimestamp: &clock},
 				},
-				DefaultUpdateTimestamp:      &clock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 		},
@@ -660,13 +636,11 @@ func TestGetBuildIdDeltas(t *testing.T) {
 			{
 				SetIds:                      []string{hashBuildId("0")},
 				BuildIds:                    []*persistencespb.BuildId{{Id: "0", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: &clock}, {Id: "0.1", State: persistencespb.STATE_ACTIVE}},
-				DefaultUpdateTimestamp:      &clock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
 				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 		},
@@ -676,13 +650,11 @@ func TestGetBuildIdDeltas(t *testing.T) {
 			{
 				SetIds:                      []string{hashBuildId("0")},
 				BuildIds:                    []*persistencespb.BuildId{{Id: "0.1", State: persistencespb.STATE_ACTIVE}},
-				DefaultUpdateTimestamp:      &clock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 			{
 				SetIds:                      []string{hashBuildId("1")},
 				BuildIds:                    []*persistencespb.BuildId{{Id: "1", State: persistencespb.STATE_DELETED, StateUpdateTimestamp: &clock}, {Id: "1.1", State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &clock}},
-				DefaultUpdateTimestamp:      &clock,
 				QueueDefaultUpdateTimestamp: &clock,
 			},
 		},
@@ -712,36 +684,36 @@ func Test_RemoveBuildIds_PutsTombstonesOnSuppliedBuildIds(t *testing.T) {
 				SetIds: []string{hashBuildId("0")},
 				BuildIds: []*persistencespb.BuildId{
 					{
-						Id:                   "0",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c1,
+						Id:                        "0",
+						State:                     persistencespb.STATE_DELETED,
+						StateUpdateTimestamp:      &c1,
+						SetDefaultUpdateTimestamp: &c0,
 					},
 				},
-				DefaultUpdateTimestamp:      &c0,
 				QueueDefaultUpdateTimestamp: &c0,
 			},
 			{
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
 					{
-						Id:                   "1",
-						State:                persistencespb.STATE_DELETED,
-						StateUpdateTimestamp: &c1,
+						Id:                        "1",
+						State:                     persistencespb.STATE_DELETED,
+						StateUpdateTimestamp:      &c1,
+						SetDefaultUpdateTimestamp: &c0,
 					},
 				},
-				DefaultUpdateTimestamp:      &c0,
 				QueueDefaultUpdateTimestamp: &c0,
 			},
 			{
 				SetIds: []string{hashBuildId("2")},
 				BuildIds: []*persistencespb.BuildId{
 					{
-						Id:                   "2",
-						State:                persistencespb.STATE_ACTIVE,
-						StateUpdateTimestamp: &c0,
+						Id:                        "2",
+						State:                     persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp:      &c0,
+						SetDefaultUpdateTimestamp: &c0,
 					},
 				},
-				DefaultUpdateTimestamp:      &c0,
 				QueueDefaultUpdateTimestamp: &c0,
 			},
 		},
@@ -764,41 +736,42 @@ func Test_ClearTombstones(t *testing.T) {
 					SetIds: []string{hashBuildId("0")},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "0",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c0,
+							Id:                        "0",
+							State:                     persistencespb.STATE_DELETED,
+							StateUpdateTimestamp:      &c0,
+							SetDefaultUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp:      &c0,
 					QueueDefaultUpdateTimestamp: &c0,
 				},
 				{
 					SetIds: []string{hashBuildId("1")},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "1",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c0,
+							Id:                        "1",
+							State:                     persistencespb.STATE_DELETED,
+							StateUpdateTimestamp:      &c0,
+							SetDefaultUpdateTimestamp: &c0,
 						},
 						{
-							Id:                   "1.1",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                        "1.1",
+							State:                     persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:      &c0,
+							SetDefaultUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp:      &c0,
 					QueueDefaultUpdateTimestamp: &c0,
 				},
 				{
 					SetIds: []string{hashBuildId("2")},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "2",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                        "2",
+							State:                     persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:      &c0,
+							SetDefaultUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp:      &c0,
 					QueueDefaultUpdateTimestamp: &c0,
 				},
 			},
@@ -810,24 +783,24 @@ func Test_ClearTombstones(t *testing.T) {
 				SetIds: []string{hashBuildId("1")},
 				BuildIds: []*persistencespb.BuildId{
 					{
-						Id:                   "1.1",
-						State:                persistencespb.STATE_ACTIVE,
-						StateUpdateTimestamp: &c0,
+						Id:                        "1.1",
+						State:                     persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp:      &c0,
+						SetDefaultUpdateTimestamp: &c0,
 					},
 				},
-				DefaultUpdateTimestamp:      &c0,
 				QueueDefaultUpdateTimestamp: &c0,
 			},
 			{
 				SetIds: []string{hashBuildId("2")},
 				BuildIds: []*persistencespb.BuildId{
 					{
-						Id:                   "2",
-						State:                persistencespb.STATE_ACTIVE,
-						StateUpdateTimestamp: &c0,
+						Id:                        "2",
+						State:                     persistencespb.STATE_ACTIVE,
+						StateUpdateTimestamp:      &c0,
+						SetDefaultUpdateTimestamp: &c0,
 					},
 				},
-				DefaultUpdateTimestamp:      &c0,
 				QueueDefaultUpdateTimestamp: &c0,
 			},
 		},
@@ -844,6 +817,8 @@ func TestMergeSets(t *testing.T) {
 	clock := hlc.Zero(1)
 	clockQueueDefault := hlc.Next(clock, commonclock.NewRealTimeSource())
 	initialData := mkInitialData(4, clock)
+
+	// Make sure the clocks are incrementing per version set for the merge to be predictable
 	initialData.VersionSets[1].QueueDefaultUpdateTimestamp = hlc.Ptr(hlc.Next(clock, commonclock.NewRealTimeSource()))
 	initialData.VersionSets[2].QueueDefaultUpdateTimestamp = hlc.Ptr(hlc.Next(*initialData.VersionSets[1].QueueDefaultUpdateTimestamp, commonclock.NewRealTimeSource()))
 	initialData.VersionSets[3].QueueDefaultUpdateTimestamp = hlc.Ptr(hlc.Next(*initialData.VersionSets[2].QueueDefaultUpdateTimestamp, commonclock.NewRealTimeSource()))
@@ -863,12 +838,11 @@ func TestMergeSets(t *testing.T) {
 	bothSetIds := mergeSetIDs([]string{hashBuildId("1")}, []string{hashBuildId("2")})
 	assert.Equal(t, bothSetIds, updatedData.GetVersionSets()[1].GetSetIds())
 	assert.Equal(t, initialData.GetVersionSets()[2].QueueDefaultUpdateTimestamp, updatedData.GetVersionSets()[1].QueueDefaultUpdateTimestamp)
-	assert.Equal(t, nextClock, *updatedData.GetVersionSets()[1].DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock, *updatedData.VersionSets[1].BuildIds[len(updatedData.VersionSets[1].BuildIds)-1].SetDefaultUpdateTimestamp)
 	// Initial data should not have changed
 	assert.Equal(t, 4, len(initialData.VersionSets))
 	for _, set := range initialData.VersionSets {
 		assert.Equal(t, 1, len(set.GetSetIds()))
-		assert.Equal(t, clock, *set.DefaultUpdateTimestamp)
 	}
 
 	// Same merge request must be idempotent
@@ -881,7 +855,7 @@ func TestMergeSets(t *testing.T) {
 	assert.Equal(t, "2", updatedData2.GetVersionSets()[1].GetBuildIds()[0].Id)
 	assert.Equal(t, initialData.GetVersionSets()[2].QueueDefaultUpdateTimestamp, updatedData2.GetVersionSets()[1].QueueDefaultUpdateTimestamp)
 	// Clock shouldn't have changed
-	assert.Equal(t, nextClock, *updatedData2.GetVersionSets()[1].DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock, *updatedData2.VersionSets[1].BuildIds[len(updatedData.VersionSets[1].BuildIds)-1].SetDefaultUpdateTimestamp)
 
 	// Verify merging into the current default maintains that set as the default
 	req = mkMergeSet("3", "0")
@@ -894,7 +868,7 @@ func TestMergeSets(t *testing.T) {
 	assert.Equal(t, "1", updatedData3.GetVersionSets()[0].GetBuildIds()[1].Id)
 	assert.Equal(t, "2", updatedData3.GetVersionSets()[0].GetBuildIds()[0].Id)
 	assert.Equal(t, initialData.GetVersionSets()[3].QueueDefaultUpdateTimestamp, updatedData3.GetVersionSets()[1].QueueDefaultUpdateTimestamp)
-	assert.Equal(t, nextClock3, *updatedData3.GetVersionSets()[1].DefaultUpdateTimestamp)
+	assert.Equal(t, nextClock3, *updatedData3.VersionSets[1].BuildIds[len(updatedData.VersionSets[1].BuildIds)-1].SetDefaultUpdateTimestamp)
 }
 
 func TestMergeInvalidTargets(t *testing.T) {
