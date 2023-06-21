@@ -143,3 +143,12 @@ func FilterSlice[T any](in []T, predicate func(T) bool) []T {
 	}
 	return out
 }
+
+// ReduceSliceInitial reduces a slice using given reducer function and initial value.
+func ReduceSliceInitial[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
+	acc := initializer
+	for _, val := range in {
+		acc = reducer(acc, val)
+	}
+	return acc
+}

@@ -1062,7 +1062,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		mergedData := MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
 
 		for _, buildId := range buildIdsToRevive {
-			setIdx, buildIdIdx := findVersion(mergedData, buildId)
+			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
 			if setIdx == -1 {
 				continue
 			}
