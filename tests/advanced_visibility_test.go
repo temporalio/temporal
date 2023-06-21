@@ -98,6 +98,8 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
 		dynamicconfig.BuildIdScavengerEnabled:                    true,
+		// Allow the scavenger to remove any build id regardless of when it was last default for a set.
+		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
 
 	switch TestFlags.PersistenceDriver {

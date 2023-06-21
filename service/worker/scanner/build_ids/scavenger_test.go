@@ -86,6 +86,9 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	a := &Activities{
 		logger:            log.NewCLILogger(),
 		visibilityManager: visiblityManager,
+		removableBuildIdDurationSinceDefault: func() time.Duration {
+			return time.Hour
+		},
 	}
 
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
@@ -107,6 +110,8 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	})
 
 	c0 := hlc.Zero(0)
+	c1 := hlc.Clock{WallClock: time.Now().UnixMilli(), Version: 0, ClusterId: 0}
+
 	userData := &persistencespb.TaskQueueUserData{
 		Clock: &c0,
 		VersioningData: &persistencespb.VersioningData{
@@ -169,7 +174,20 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 					SetIds: []string{"v4"},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                     "v4.0",
+							Id:                   "v4.0",
+							State:                persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp: &c0,
+							// This one may have been used recently, it should not be deleted
+							BecameDefaultTimestamp: &c1,
+						},
+					},
+					BecameDefaultTimestamp: &c0,
+				},
+				{
+					SetIds: []string{"v5"},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:                     "v5.0",
 							State:                  persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp:   &c0,
 							BecameDefaultTimestamp: &c0,
@@ -221,7 +239,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 		taskManager:       taskManager,
 		namespaceRegistry: namespaceRegistry,
 		matchingClient:    matchingClient,
-		removableBuildIdMinAge: func() time.Duration {
+		removableBuildIdDurationSinceDefault: func() time.Duration {
 			return time.Hour
 		},
 		currentClusterName: "test-cluster",
