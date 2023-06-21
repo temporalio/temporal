@@ -55,6 +55,7 @@ message WorkflowExecutionInfo {
     temporal.api.workflow.v1.ResetPoints auto_reset_points = 12;
     int64 state_transition_count = 13;
     int64 history_size_bytes = 14;
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 15;
 }
 
 message PendingActivityInfo {

@@ -96,8 +96,8 @@ type (
 
 	// ResetParams is the parameters for reseting workflow
 	ResetParams struct {
-		ResetType         enumspb.ResetType
-		ResetReapplytType enumspb.ResetReapplyType
+		ResetType        enumspb.ResetType
+		ResetReapplyType enumspb.ResetReapplyType
 	}
 
 	// BatchParams is the parameters for batch operation workflow

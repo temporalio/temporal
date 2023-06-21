@@ -1901,8 +1901,8 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
-		limit := ms.config.MaxTrackedBuildIds(string(ms.namespaceEntry.Name()))
-		if err := ms.addBuildIdWithNoVisibilityTask(worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId), limit); err != nil {
+		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
+		if err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
 			return err
 		}
 	}
@@ -2096,27 +2096,18 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	eventID int64,
 	limits WorkflowTaskCompletionLimits,
 ) error {
-	buildIds, err := ms.loadBuildIds()
-	if err != nil {
-		return err
-	}
-	anyAdded := false
+	var toAdd []string
 	if !version.GetUseVersioning() {
-		var added bool
-		// Make sure unversioned workflow tasks are easily locatable with just the prefix
-		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, worker_versioning.UnversionedSearchAttribute, limits.MaxTrackedBuildIds)
-		anyAdded = anyAdded || added
+		toAdd = append(toAdd, worker_versioning.UnversionedSearchAttribute)
 	}
 	if version.GetBuildId() != "" {
-		var added bool
 		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
-		buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, worker_versioning.VersionStampToBuildIdSearchAttribute(version), limits.MaxTrackedBuildIds)
-		anyAdded = anyAdded || added
+		toAdd = append(toAdd, worker_versioning.VersionStampToBuildIdSearchAttribute(version))
 	}
-	if !anyAdded {
+	if len(toAdd) == 0 {
 		return nil
 	}
-	if err := ms.saveBuildIds(buildIds); err != nil {
+	if err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
@@ -2143,55 +2134,67 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	}
 }
 
-// Takes a list of loaded build IDs from a search attribute and added a new build ID to it while respecting provided limits.
-// Returns a potentially modified list and a flag indicating whether it was modified.
-func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(searchAttributeValues []string, searchAttributeValue string, maxTrackedBuildIds int) ([]string, bool) {
-	if maxTrackedBuildIds < 1 {
-		// Can't track this build ID
-		return searchAttributeValues, false
-	}
-	for _, exisitingValue := range searchAttributeValues {
-		if exisitingValue == searchAttributeValue {
-			return searchAttributeValues, false
+// Takes a list of loaded build IDs from a search attribute and adds new build IDs to it. Returns a potentially modified
+// list and a flag indicating whether it was modified.
+func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(existingValues []string, newValues []string) ([]string, bool) {
+	var added []string
+	for _, newValue := range newValues {
+		found := false
+		for _, exisitingValue := range existingValues {
+			if exisitingValue == newValue {
+				found = true
+				break
+			}
+		}
+		if !found {
+			added = append(added, newValue)
 		}
 	}
-	if len(searchAttributeValues) >= maxTrackedBuildIds {
-		hasUnversioned := searchAttributeValues[0] == worker_versioning.UnversionedSearchAttribute
-		searchAttributeValues = searchAttributeValues[len(searchAttributeValues)-maxTrackedBuildIds+1:]
-		// Make sure not to lose the unversioned value, it's required for the reachability API
-		if hasUnversioned {
-			searchAttributeValues[0] = worker_versioning.UnversionedSearchAttribute
-		}
+	if len(added) == 0 {
+		return existingValues, false
 	}
-	return append(searchAttributeValues, searchAttributeValue), true
+	return append(existingValues, added...), true
 }
 
-func (ms *MutableStateImpl) saveBuildIds(buildIds []string) error {
+func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeValueSize int) error {
 	searchAttributes := ms.executionInfo.SearchAttributes
 	if searchAttributes == nil {
 		searchAttributes = make(map[string]*commonpb.Payload, 1)
 		ms.executionInfo.SearchAttributes = searchAttributes
 	}
 
-	saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
-	if err != nil {
-		return err
+	hasUnversioned := buildIds[0] == worker_versioning.UnversionedSearchAttribute
+	for {
+		saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+		if err != nil {
+			return err
+		}
+		if len(buildIds) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
+			searchAttributes[searchattribute.BuildIds] = saPayload
+			break
+		}
+		if len(buildIds) == 1 {
+			buildIds = make([]string, 0)
+		} else if hasUnversioned {
+			// Make sure to maintain the unversioned sentinel, it's required for the reachability API
+			buildIds = append(buildIds[:1], buildIds[2:]...)
+		} else {
+			buildIds = buildIds[1:]
+		}
 	}
-	searchAttributes[searchattribute.BuildIds] = saPayload
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdWithNoVisibilityTask(searchAttributeValue string, maxTrackedBuildIds int) error {
-	buildIds, err := ms.loadBuildIds()
+func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) error {
+	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return err
 	}
-	var added bool
-	buildIds, added = ms.addBuildIdToLoadedSearchAttribute(buildIds, searchAttributeValue, maxTrackedBuildIds)
+	modifiedBuildIds, added := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildIds)
 	if !added {
 		return nil
 	}
-	return ms.saveBuildIds(buildIds)
+	return ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -2806,8 +2809,8 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command, newExecutionRunID)
-	if err := ms.ReplicateWorkflowExecutionFailedEvent(workflowTaskCompletedEventID, event); err != nil {
+	event, batchID := ms.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command, newExecutionRunID)
+	if err := ms.ReplicateWorkflowExecutionFailedEvent(batchID, event); err != nil {
 		return nil, err
 	}
 	// TODO merge active & passive task generation

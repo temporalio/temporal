@@ -458,7 +458,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 	retryState enumspb.RetryState,
 	command *commandpb.FailWorkflowExecutionCommandAttributes,
 	newExecutionRunID string,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
 		WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -469,8 +469,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 		},
 	}
 
-	event, _ = b.appendEvents(event)
-	return event
+	return b.appendEvents(event)
 }
 
 func (b *HistoryBuilder) AddTimeoutWorkflowEvent(

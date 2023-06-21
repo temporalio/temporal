@@ -320,18 +320,16 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	shouldDrop, err := e.shouldDropTask(origTaskQueue, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
-	} else if shouldDrop {
-		return true, nil
-	}
-
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
+		if errors.Is(err, errUserDataDisabled) {
+			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
+			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
+			err = nil
+		}
 		return false, err
 	}
 
@@ -364,11 +362,16 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
 	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
+		baseTqm:       baseTqm,
 	})
 }
 
@@ -387,18 +390,16 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	shouldDrop, err := e.shouldDropTask(origTaskQueue, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
-	} else if shouldDrop {
-		return true, nil
-	}
-
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
 	if err != nil {
+		if errors.Is(err, errUserDataDisabled) {
+			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
+			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
+			err = nil
+		}
 		return false, err
 	}
 
@@ -426,11 +427,17 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
+
 	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
 		forwardedFrom: addRequest.GetForwardedSource(),
+		baseTqm:       baseTqm,
 	})
 }
 
@@ -448,16 +455,15 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		shouldDrop, err := e.shouldDropTask(unversionedOrigTaskQueue, directive)
-		if err != nil {
-			return err
-		} else if shouldDrop {
-			return nil
-		}
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
 			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
 		if err != nil {
-			return err
+			// Return error for tasks with compatiblity constraints when user data is disabled so they can be retried later.
+			// "default" directive tasks become unversioned.
+			if !errors.Is(err, errUserDataDisabled) || directive.GetBuildId() != "" {
+				return err
+			}
+			err = nil
 		}
 		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
@@ -689,16 +695,14 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	shouldDrop, err := e.shouldDropTask(origTaskQueue, queryRequest.VersionDirective)
-	if err != nil {
-		return nil, err
-	} else if shouldDrop {
-		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-	}
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
 	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
 	if err != nil {
+		if errors.Is(err, errUserDataDisabled) {
+			// Rewrite to nicer error message
+			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
+		}
 		return nil, err
 	}
 
@@ -1216,6 +1220,10 @@ func (e *matchingEngineImpl) getTask(
 		stickyInfo,
 	)
 	if err != nil {
+		if errors.Is(err, errUserDataDisabled) {
+			// Rewrite to nicer error message
+			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
+		}
 		return nil, err
 	}
 	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
@@ -1300,6 +1308,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			WorkflowId:       task.event.Data.GetWorkflowId(),
 			RunId:            task.event.Data.GetRunId(),
 			ScheduledEventId: historyResponse.GetScheduledEventId(),
+			StartedEventId:   historyResponse.GetStartedEventId(),
 			Attempt:          historyResponse.GetAttempt(),
 			Clock:            historyResponse.GetClock(),
 		}
@@ -1467,26 +1476,6 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
 	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
 }
 
-// When user data loading is disabled, we intentionally drop tasks for versioned workflows to avoid breaking versioning
-// semantics and dispatching tasks to the wrong workers.
-func (e *matchingEngineImpl) shouldDropTask(taskQueue *taskQueueID, directive *taskqueuespb.TaskVersionDirective) (bool, error) {
-	isVersioned := false
-	switch directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseDefault,
-		*taskqueuespb.TaskVersionDirective_BuildId:
-		isVersioned = true
-	}
-	if !isVersioned {
-		return false, nil
-	}
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
-	if err != nil {
-		return false, err
-	}
-	shouldDrop := !e.config.LoadUserData(namespaceEntry.Name().String(), taskQueue.BaseNameString(), taskQueue.taskType)
-	return shouldDrop, nil
-}
-
 func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	ctx context.Context,
 	taskQueue *taskQueueID,
@@ -1504,14 +1493,15 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 		return taskQueue, nil, nil
 	}
 
-	// Have to look up versioning data.
 	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Have to look up versioning data.
 	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
-		return nil, nil, err
+		return taskQueue, userDataChanged, err
 	}
 	data := userData.GetData().GetVersioningData()
 

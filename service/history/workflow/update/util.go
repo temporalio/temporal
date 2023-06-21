@@ -81,6 +81,11 @@ func (i *instrumentation) CountResponseMsg() {
 	i.countMessage(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.GetMetricName())
 }
 
+// CountInvalidStateTransition counter adds 1 to invalid update state machine transition counter
+func (i *instrumentation) CountInvalidStateTransition() {
+	i.countMessage(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.GetMetricName())
+}
+
 func (i *instrumentation) countMessage(ctrName string) {
 	i.metrics.Counter(ctrName).Record(1)
 }

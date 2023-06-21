@@ -98,6 +98,7 @@ var (
 	// The replication queue is used to propagate critical failover messages and this mapping prevents flooding the
 	// queue and delaying failover.
 	NamespaceReplicationInducingAPIToPriority = map[string]int{
+		"RegisterNamespace":                0,
 		"UpdateNamespace":                  0,
 		"UpdateWorkerBuildIdCompatibility": 1,
 	}
@@ -109,7 +110,6 @@ var (
 		"GetSystemInfo":       0,
 		"GetSearchAttributes": 0,
 
-		"RegisterNamespace":  0,
 		"DescribeNamespace":  0,
 		"ListNamespaces":     0,
 		"DeprecateNamespace": 0,

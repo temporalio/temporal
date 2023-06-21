@@ -61,6 +61,7 @@ message Task {
     string workflow_type = 7;
     string activity_type = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
+    int64 started_event_id = 10;
 }
 
 message QueryTask {

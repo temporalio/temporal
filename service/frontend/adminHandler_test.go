@@ -155,6 +155,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMembershipMonitor(),
+		s.mockResource.GetHostInfoProvider(),
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetNamespaceRegistry(),
@@ -1152,7 +1153,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	var clusterId = uuid.New()
 	clusterName := s.mockMetadata.GetCurrentClusterName()
-	s.mockResource.MembershipMonitor.EXPECT().WhoAmI().Return(membership.NewHostInfoFromAddress("test"), nil)
+	s.mockResource.HostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("test"))
 	s.mockResource.MembershipMonitor.EXPECT().GetReachableMembers().Return(nil, nil)
 	s.mockResource.HistoryServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.HistoryServiceResolver.EXPECT().MemberCount().Return(0)
@@ -1191,7 +1192,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockResource.MembershipMonitor.EXPECT().WhoAmI().Return(membership.NewHostInfoFromAddress("test"), nil)
+	s.mockResource.HostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("test"))
 	s.mockResource.MembershipMonitor.EXPECT().GetReachableMembers().Return(nil, nil)
 	s.mockResource.HistoryServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.HistoryServiceResolver.EXPECT().MemberCount().Return(0)

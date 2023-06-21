@@ -58,7 +58,6 @@ type (
 	// Monitor provides membership information for all temporal services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
-		WhoAmI() (HostInfo, error)
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
@@ -91,7 +90,6 @@ type (
 	}
 
 	HostInfoProvider interface {
-		Start() error
 		HostInfo() HostInfo
 	}
 )
