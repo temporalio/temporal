@@ -64,16 +64,16 @@ func mkBuildIds(buildIDs ...*persistencespb.BuildId) []*persistencespb.BuildId {
 
 func mkSet(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.CompatibleVersionSet {
 	return &persistencespb.CompatibleVersionSet{
-		SetIds:                 []string{setID},
-		BuildIds:               mkBuildIds(buildIDs...),
-		DefaultUpdateTimestamp: buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
+		SetIds:                      []string{setID},
+		BuildIds:                    mkBuildIds(buildIDs...),
+		DefaultUpdateTimestamp:      buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
+		QueueDefaultUpdateTimestamp: buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
 	}
 }
 
 func mkSingleSetData(setID string, buildIDs ...*persistencespb.BuildId) *persistencespb.VersioningData {
 	return &persistencespb.VersioningData{
-		VersionSets:            []*persistencespb.CompatibleVersionSet{mkSet(setID, buildIDs...)},
-		DefaultUpdateTimestamp: buildIDs[len(buildIDs)-1].StateUpdateTimestamp,
+		VersionSets: []*persistencespb.CompatibleVersionSet{mkSet(setID, buildIDs...)},
 	}
 }
 
@@ -115,14 +115,12 @@ func TestDataMerge_PrefersNewerDefaultAndMergesDefault(t *testing.T) {
 			mkSet("0.1", buildID(2, "0.1")),
 			mkSet("1.0", buildID(3, "1.0")),
 		},
-		DefaultUpdateTimestamp: fromWallClock(3),
 	}
 	b := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("1.0", buildID(3, "1.0")),
 			mkSet("0.1", buildID(2, "0.1"), buildID(4, "0.2")),
 		},
-		DefaultUpdateTimestamp: fromWallClock(4),
 	}
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
@@ -133,11 +131,11 @@ func TestSetMerge_DifferentSetIDs_MergesSetIDs(t *testing.T) {
 	b := mkSingleSetData("0.2", buildID(3, "0.2"))
 	expected := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{{
-			SetIds:                 []string{"0.1", "0.2"},
-			BuildIds:               mkBuildIds(buildID(1, "0.1"), buildID(6, "0.2")),
-			DefaultUpdateTimestamp: fromWallClock(6),
+			SetIds:                      []string{"0.1", "0.2"},
+			BuildIds:                    mkBuildIds(buildID(1, "0.1"), buildID(6, "0.2")),
+			DefaultUpdateTimestamp:      fromWallClock(6),
+			QueueDefaultUpdateTimestamp: fromWallClock(6),
 		}},
-		DefaultUpdateTimestamp: fromWallClock(6),
 	}
 	assert.Equal(t, expected, MergeVersioningData(a, b))
 	assert.Equal(t, expected, MergeVersioningData(b, a))
@@ -157,15 +155,14 @@ func TestSetMerge_MultipleMatches_MergesSets(t *testing.T) {
 			mkSet("0.1", buildID(1, "0.1")),
 			mkSet("0.2", buildID(2, "0.2")),
 		},
-		DefaultUpdateTimestamp: fromWallClock(2),
 	}
 	expected := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{{
-			SetIds:                 []string{"0.1", "0.2"},
-			BuildIds:               mkBuildIds(buildID(1, "0.1"), buildID(3, "0.2")),
-			DefaultUpdateTimestamp: fromWallClock(3),
+			SetIds:                      []string{"0.1", "0.2"},
+			BuildIds:                    mkBuildIds(buildID(1, "0.1"), buildID(3, "0.2")),
+			DefaultUpdateTimestamp:      fromWallClock(3),
+			QueueDefaultUpdateTimestamp: fromWallClock(3),
 		}},
-		DefaultUpdateTimestamp: fromWallClock(3),
 	}
 	assert.Equal(t, expected, MergeVersioningData(a, b))
 	assert.Equal(t, expected, MergeVersioningData(b, a))
@@ -181,19 +178,19 @@ func TestSetMerge_BuildIdPromoted_PreservesSetDefault(t *testing.T) {
 }
 
 func TestSetMerge_SetPromoted_PreservesGlobalDefault(t *testing.T) {
+	set01 := mkSet("0.1", buildID(1, "0.1"))
+	set01.QueueDefaultUpdateTimestamp = fromWallClock(3)
 	a := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.2", buildID(2, "0.2")),
-			mkSet("0.1", buildID(1, "0.1")),
+			set01,
 		},
-		DefaultUpdateTimestamp: fromWallClock(3),
 	}
 	b := &persistencespb.VersioningData{
 		VersionSets: []*persistencespb.CompatibleVersionSet{
 			mkSet("0.2", buildID(2, "0.2")),
-			mkSet("0.1", buildID(1, "0.1")),
+			set01,
 		},
-		DefaultUpdateTimestamp: fromWallClock(3),
 	}
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
