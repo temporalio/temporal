@@ -44,7 +44,7 @@ const (
 type (
 	HealthSignalAggregator interface {
 		common.Daemon
-		Record(callerSegment int32, latency time.Duration, err error)
+		Record(callerSegment int32, namespace string, latency time.Duration, err error)
 		AverageLatency() float64
 		ErrorRatio() float64
 	}
@@ -53,16 +53,18 @@ type (
 		status     int32
 		shutdownCh chan struct{}
 
-		requestsPerShard map[int32]int64
-		requestsLock     sync.Mutex
+		// map of shardID -> map of namespace -> request count
+		requestCounts map[int32]map[string]int64
+		requestsLock  sync.Mutex
 
 		aggregationEnabled bool
 		latencyAverage     aggregate.MovingWindowAverage
 		errorRatio         aggregate.MovingWindowAverage
 
-		metricsHandler       metrics.Handler
-		emitMetricsTimer     *time.Ticker
-		perShardRPSWarnLimit dynamicconfig.IntPropertyFn
+		metricsHandler            metrics.Handler
+		emitMetricsTimer          *time.Ticker
+		perShardRPSWarnLimit      dynamicconfig.IntPropertyFn
+		perShardPerNsRPSWarnLimit dynamicconfig.IntPropertyFn
 
 		logger log.Logger
 	}
@@ -74,12 +76,13 @@ func NewHealthSignalAggregatorImpl(
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
+	perShardPerNsRPSWarnLimit dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	ret := &HealthSignalAggregatorImpl{
 		status:               common.DaemonStatusInitialized,
 		shutdownCh:           make(chan struct{}),
-		requestsPerShard:     make(map[int32]int64),
+		requestCounts:        make(map[int32]map[string]int64),
 		metricsHandler:       metricsHandler,
 		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
 		perShardRPSWarnLimit: perShardRPSWarnLimit,
@@ -113,7 +116,7 @@ func (s *HealthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
+func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, namespace string, latency time.Duration, err error) {
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
 
@@ -125,7 +128,7 @@ func (s *HealthSignalAggregatorImpl) Record(callerSegment int32, latency time.Du
 	}
 
 	if callerSegment != CallerSegmentMissing {
-		s.incrementShardRequestCount(callerSegment)
+		s.incrementShardRequestCount(callerSegment, namespace)
 	}
 }
 
@@ -137,10 +140,10 @@ func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
 	return s.errorRatio.Average()
 }
 
-func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32) {
+func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
-	s.requestsPerShard[shardID]++
+	s.requestCounts[shardID][namespace]++
 }
 
 func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
@@ -150,12 +153,21 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 			return
 		case <-s.emitMetricsTimer.C:
 			s.requestsLock.Lock()
-			requestCounts := s.requestsPerShard
-			s.requestsPerShard = make(map[int32]int64, len(requestCounts))
+			requestCounts := s.requestCounts
+			s.requestCounts = make(map[int32]map[string]int64, len(requestCounts))
 			s.requestsLock.Unlock()
 
-			for shardID, count := range requestCounts {
-				shardRPS := int64(float64(count) / emitMetricsInterval.Seconds())
+			for shardID, requestCountPerNS := range requestCounts {
+				shardRequestCount := int64(0)
+				for namespace, count := range requestCountPerNS {
+					shardRequestCount += count
+					shardRPSPerNS := int64(float64(count) / emitMetricsInterval.Seconds())
+					if shardRPSPerNS > int64(s.perShardPerNsRPSWarnLimit()) {
+						s.logger.Warn("Per shard per namespace RPS warn limit exceeded", tag.ShardID(shardID), tag.WorkflowNamespace(namespace))
+					}
+				}
+
+				shardRPS := int64(float64(shardRequestCount) / emitMetricsInterval.Seconds())
 				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS)
 				if shardRPS > int64(s.perShardRPSWarnLimit()) {
 					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID))

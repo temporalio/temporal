@@ -125,6 +125,7 @@ func HealthSignalAggregatorProvider(
 			dynamicCollection.GetIntProperty(dynamicconfig.PersistenceHealthSignalBufferSize, 5000)(),
 			metricsHandler,
 			dynamicCollection.GetIntProperty(dynamicconfig.ShardRPSWarnLimit, 50),
+			dynamicCollection.GetIntProperty(dynamicconfig.ShardPerNsRPSWarnLimit, 50),
 			logger,
 		)
 	}
