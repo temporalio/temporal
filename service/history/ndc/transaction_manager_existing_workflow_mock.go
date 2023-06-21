@@ -31,7 +31,6 @@ package ndc
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -60,15 +59,15 @@ func (m *MocktransactionMgrForExistingWorkflow) EXPECT() *MocktransactionMgrForE
 }
 
 // dispatchForExistingWorkflow mocks base method.
-func (m *MocktransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, now time.Time, isWorkflowRebuilt bool, targetWorkflow, newWorkflow Workflow) error {
+func (m *MocktransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, isWorkflowRebuilt bool, targetWorkflow, newWorkflow Workflow) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // dispatchForExistingWorkflow indicates an expected call of dispatchForExistingWorkflow.
-func (mr *MocktransactionMgrForExistingWorkflowMockRecorder) dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow interface{}) *gomock.Call {
+func (mr *MocktransactionMgrForExistingWorkflowMockRecorder) dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForExistingWorkflow", reflect.TypeOf((*MocktransactionMgrForExistingWorkflow)(nil).dispatchForExistingWorkflow), ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForExistingWorkflow", reflect.TypeOf((*MocktransactionMgrForExistingWorkflow)(nil).dispatchForExistingWorkflow), ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 }

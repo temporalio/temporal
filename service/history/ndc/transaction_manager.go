@@ -28,7 +28,6 @@ package ndc
 
 import (
 	"context"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -117,12 +116,10 @@ type (
 	transactionMgr interface {
 		createWorkflow(
 			ctx context.Context,
-			now time.Time,
 			targetWorkflow Workflow,
 		) error
 		updateWorkflow(
 			ctx context.Context,
-			now time.Time,
 			isWorkflowRebuilt bool,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
@@ -204,20 +201,17 @@ func newTransactionMgr(
 
 func (r *transactionMgrImpl) createWorkflow(
 	ctx context.Context,
-	now time.Time,
 	targetWorkflow Workflow,
 ) error {
 
 	return r.createMgr.dispatchForNewWorkflow(
 		ctx,
-		now,
 		targetWorkflow,
 	)
 }
 
 func (r *transactionMgrImpl) updateWorkflow(
 	ctx context.Context,
-	now time.Time,
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
@@ -225,7 +219,6 @@ func (r *transactionMgrImpl) updateWorkflow(
 
 	return r.updateMgr.dispatchForExistingWorkflow(
 		ctx,
-		now,
 		isWorkflowRebuilt,
 		targetWorkflow,
 		newWorkflow,
