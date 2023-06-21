@@ -80,14 +80,15 @@ func NewHealthSignalAggregatorImpl(
 	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	ret := &HealthSignalAggregatorImpl{
-		status:               common.DaemonStatusInitialized,
-		shutdownCh:           make(chan struct{}),
-		requestCounts:        make(map[int32]map[string]int64),
-		metricsHandler:       metricsHandler,
-		emitMetricsTimer:     time.NewTicker(emitMetricsInterval),
-		perShardRPSWarnLimit: perShardRPSWarnLimit,
-		logger:               logger,
-		aggregationEnabled:   aggregationEnabled,
+		status:                    common.DaemonStatusInitialized,
+		shutdownCh:                make(chan struct{}),
+		requestCounts:             make(map[int32]map[string]int64),
+		metricsHandler:            metricsHandler,
+		emitMetricsTimer:          time.NewTicker(emitMetricsInterval),
+		perShardRPSWarnLimit:      perShardRPSWarnLimit,
+		perShardPerNsRPSWarnLimit: perShardPerNsRPSWarnLimit,
+		logger:                    logger,
+		aggregationEnabled:        aggregationEnabled,
 	}
 
 	if aggregationEnabled {
@@ -143,6 +144,9 @@ func (s *HealthSignalAggregatorImpl) ErrorRatio() float64 {
 func (s *HealthSignalAggregatorImpl) incrementShardRequestCount(shardID int32, namespace string) {
 	s.requestsLock.Lock()
 	defer s.requestsLock.Unlock()
+	if s.requestCounts[shardID] == nil {
+		s.requestCounts[shardID] = make(map[string]int64)
+	}
 	s.requestCounts[shardID][namespace]++
 }
 
