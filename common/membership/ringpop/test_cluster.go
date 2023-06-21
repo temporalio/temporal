@@ -146,8 +146,9 @@ func newTestCluster(
 		}).AnyTimes()
 
 	for i := 0; i < size; i++ {
+		node := i
 		resolver := func() (string, error) {
-			return buildBroadcastHostPort(cluster.channels[i].PeerInfo(), broadcastAddress)
+			return buildBroadcastHostPort(cluster.channels[node].PeerInfo(), broadcastAddress)
 		}
 
 		ringPop, err := ringpop.New(ringPopApp, ringpop.Channel(cluster.channels[i]), ringpop.AddressResolverFunc(resolver))
