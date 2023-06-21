@@ -541,6 +541,7 @@ func (s *Starter) generateResponse(
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		ScheduledEventId: workflowTaskInfo.ScheduledEventID,
+		StartedEventId:   workflowTaskInfo.StartedEventID,
 		Attempt:          workflowTaskInfo.Attempt,
 		Clock:            clock,
 	}
