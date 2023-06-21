@@ -130,7 +130,8 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 							StateUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					DefaultUpdateTimestamp:      &c0,
+					QueueDefaultUpdateTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v2"},
@@ -141,7 +142,8 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 							StateUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					DefaultUpdateTimestamp:      &c0,
+					QueueDefaultUpdateTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v3"},
@@ -157,7 +159,8 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 							StateUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					DefaultUpdateTimestamp:      &c0,
+					QueueDefaultUpdateTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v4"},
@@ -168,10 +171,10 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 							StateUpdateTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					DefaultUpdateTimestamp:      &c0,
+					QueueDefaultUpdateTimestamp: &c0,
 				},
 			},
-			DefaultUpdateTimestamp: &c0,
 		},
 	}
 
