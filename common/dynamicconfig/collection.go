@@ -348,7 +348,7 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 	}
 }
 
-// GetStringPropertyFnWithNamespaceIDFilter gets property with namespace filter and asserts that it's a string
+// GetStringPropertyFnWithNamespaceIDFilter gets property with namespace ID filter and asserts that it's a string
 func (c *Collection) GetStringPropertyFnWithNamespaceIDFilter(key Key, defaultValue any) StringPropertyFnWithNamespaceIDFilter {
 	return func(namespaceID string) string {
 		return matchAndConvert(
