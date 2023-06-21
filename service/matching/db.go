@@ -74,6 +74,8 @@ var (
 	// This is an internal error when requesting user data on a TQM created for a specific
 	// version set. This indicates a bug in the server since nothing should be using this data.
 	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
+
+	errUserDataDisabled = serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
 )
 
 // newTaskQueueDB returns an instance of an object that represents

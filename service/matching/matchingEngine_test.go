@@ -1257,6 +1257,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 					WorkflowId:       workflowID,
 					RunId:            runID,
 					ScheduledEventId: scheduledEventID,
+					StartedEventId:   startedEventID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1585,6 +1586,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 					WorkflowId:       workflowID,
 					RunId:            runID,
 					ScheduledEventId: scheduledEventID,
+					StartedEventId:   startedEventID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -2254,7 +2256,7 @@ func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_Silently
 		Name: "test",
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
 
 	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: namespaceId,
@@ -2278,7 +2280,7 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 		Name: "test",
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
+	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
 
 	_, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
 		NamespaceId: namespaceId,
@@ -2293,27 +2295,6 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
 		},
 	})
-	s.Require().NoError(err)
-}
-
-func (s *matchingEngineSuite) TestDispatchSpooledTask_ForVersionedWorkflows_SilentlyDroppedWhenDisablingLoadingUserData() {
-	namespaceId := namespace.ID(uuid.New())
-	tqId, err := newTaskQueueID(namespaceId, "foo", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.Require().NoError(err)
-	s.matchingEngine.config.LoadUserData = func(string, string, enumspb.TaskQueueType) bool { return false }
-
-	err = s.matchingEngine.DispatchSpooledTask(context.Background(), &internalTask{
-		event: &genericTaskInfo{
-			&persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{
-					VersionDirective: &taskqueue.TaskVersionDirective{
-						Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
-					},
-				},
-			},
-			func(ati *persistencespb.AllocatedTaskInfo, err error) {},
-		},
-	}, tqId, stickyInfo{})
 	s.Require().NoError(err)
 }
 

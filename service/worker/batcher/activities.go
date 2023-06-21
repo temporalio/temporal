@@ -284,7 +284,7 @@ func startTaskProcessor(
 							Reason:                    batchParams.Reason,
 							WorkflowTaskFinishEventId: eventId,
 							RequestId:                 uuid.New(),
-							ResetReapplyType:          batchParams.ResetParams.ResetReapplytType,
+							ResetReapplyType:          batchParams.ResetParams.ResetReapplyType,
 						})
 						return err
 					})

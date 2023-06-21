@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -66,9 +67,16 @@ type factoryParams struct {
 	DC              *dynamicconfig.Collection
 }
 
-// factory provides a membership.Monitor
+// factory provides ringpop based membership objects
 type factory struct {
-	factoryParams
+	Config          *config.Membership
+	ServiceName     primitives.ServiceName
+	ServicePortMap  config.ServicePortMap
+	Logger          log.Logger
+	MetadataManager persistence.ClusterMetadataManager
+	RPCConfig       *config.RPC
+	TLSFactory      encryption.TLSConfigProvider
+	DC              *dynamicconfig.Collection
 
 	channel *tchannel.Channel
 	monitor *monitor
@@ -90,13 +98,19 @@ func newFactory(params factoryParams) (*factory, error) {
 	}
 
 	return &factory{
-		factoryParams: params,
+		Config:          params.Config,
+		ServiceName:     params.ServiceName,
+		ServicePortMap:  params.ServicePortMap,
+		Logger:          params.Logger,
+		MetadataManager: params.MetadataManager,
+		RPCConfig:       params.RPCConfig,
+		TLSFactory:      params.TLSFactory,
+		DC:              params.DC,
 	}, nil
 }
 
-// getMonitor return a membership monitor
-func (factory *factory) getMonitor() (*monitor, error) {
-	var err error
+// getMonitor returns a membership monitor
+func (factory *factory) getMonitor() *monitor {
 	factory.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
 		defer cancel()
@@ -126,7 +140,7 @@ func (factory *factory) getMonitor() (*monitor, error) {
 		}
 	})
 
-	return factory.monitor, err
+	return factory.monitor
 }
 
 func (factory *factory) broadcastAddressResolver() (string, error) {
@@ -229,4 +243,27 @@ func (factory *factory) closeTChannel() {
 		factory.getTChannel().Close()
 		factory.channel = nil
 	}
+}
+
+func (factory *factory) getHostInfoProvider() (membership.HostInfoProvider, error) {
+	address, err := factory.broadcastAddressResolver()
+	if err != nil {
+		return nil, err
+	}
+
+	servicePort, ok := factory.ServicePortMap[factory.ServiceName]
+	if !ok {
+		return nil, membership.ErrUnknownService
+	}
+
+	// The broadcastAddressResolver returns the host:port used to listen for
+	// ringpop messages. We use a different port for the service, so we
+	// replace that portion.
+	serviceAddress, err := replaceServicePort(address, servicePort)
+	if err != nil {
+		return nil, err
+	}
+
+	hostInfo := membership.NewHostInfoFromAddress(serviceAddress)
+	return membership.NewHostInfoProvider(hostInfo), nil
 }

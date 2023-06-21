@@ -29,6 +29,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -56,24 +57,33 @@ func invalidArgf(tmpl string, args ...any) error {
 	return serviceerror.NewInvalidArgument(fmt.Sprintf(tmpl, args...))
 }
 
-// CountRequestMessage adds 1 to the update request message counter
+func internalErrorf(tmpl string, args ...any) error {
+	return serviceerror.NewInternal(fmt.Sprintf(tmpl, args...))
+}
+
+// CountRequestMsg adds 1 to the update request message counter
 func (i *instrumentation) CountRequestMsg() {
 	i.countMessage(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.GetMetricName())
 }
 
-// CountAcceptanceMessage adds 1 to the update acceptance message counter
+// CountAcceptanceMsg adds 1 to the update acceptance message counter
 func (i *instrumentation) CountAcceptanceMsg() {
 	i.countMessage(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.GetMetricName())
 }
 
-// CountRejectionmessage counter adds 1 to the update rejection message counter
+// CountRejectionMsg counter adds 1 to the update rejection message counter
 func (i *instrumentation) CountRejectionMsg() {
 	i.countMessage(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.GetMetricName())
 }
 
-// CountResponsemessage counter adds 1 to the update response message counter
+// CountResponseMsg counter adds 1 to the update response message counter
 func (i *instrumentation) CountResponseMsg() {
 	i.countMessage(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.GetMetricName())
+}
+
+// CountInvalidStateTransition counter adds 1 to invalid update state machine transition counter
+func (i *instrumentation) CountInvalidStateTransition() {
+	i.countMessage(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.GetMetricName())
 }
 
 func (i *instrumentation) countMessage(ctrName string) {

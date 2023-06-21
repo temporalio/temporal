@@ -591,6 +591,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	forkEventVersion int64,
 ) (*historypb.HistoryEvent, error) {
 
+	// IMPORTANT: returned event can be nil under some circumstances. Specifically, if WT is transient.
+
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
