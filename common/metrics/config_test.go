@@ -204,9 +204,9 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 
 			handler, err := MetricsHandlerFromConfig(logger, c.cfg)
 			require.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				handler.Stop(logger)
-			}()
+			})
 			assert.IsType(t, c.expectedType, handler)
 		})
 	}

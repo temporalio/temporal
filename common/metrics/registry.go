@@ -42,10 +42,10 @@ type (
 )
 
 var (
-	// globalRegistry is tracks metrics defined via the New*Def methods. We use a global variable here so that clients
-	// may continue to refer to package-level metrics like metrics.ServiceRequests, while still allowing us to iterate
-	// over all metrics defined in the package to register them with the metrics system. The sequence through which
-	// metrics are registered, sampled and scraped is as follows:
+	// globalRegistry tracks metrics defined via the New*Def methods. We use a global variable here so that clients may
+	// continue to refer to package-level metrics like metrics.ServiceRequests, while still allowing us to iterate over
+	// all metrics defined in the package to register them with the metrics system. The sequence through which metrics
+	// are registered, sampled and scraped is as follows:
 	//
 	// 1. When the metrics package is initialized, statements calling New*Def are executed to define metrics,
 	// which adds them metric to the global registry.
