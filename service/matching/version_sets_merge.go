@@ -74,6 +74,7 @@ type buildIDInfo struct {
 	stateUpdateTimestamp hlc.Clock
 	setIDs               []string
 	madeDefaultAt        hlc.Clock
+	setMadeDefaultAt     hlc.Clock
 }
 
 func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
@@ -98,6 +99,7 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 					stateUpdateTimestamp: stateUpdateTimestamp,
 					setIDs:               mergeSetIDs(info.setIDs, set.SetIds),
 					madeDefaultAt:        madeDefaultAt,
+					setMadeDefaultAt:     hlc.Max(*set.QueueDefaultUpdateTimestamp, info.setMadeDefaultAt),
 				}
 			} else {
 				// A build ID was seen for the first time, track it
@@ -110,6 +112,7 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 					stateUpdateTimestamp: *buildID.StateUpdateTimestamp,
 					setIDs:               set.SetIds,
 					madeDefaultAt:        madeDefaultAt,
+					setMadeDefaultAt:     *set.QueueDefaultUpdateTimestamp,
 				}
 			}
 		}
@@ -117,16 +120,16 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 	return buildIDToInfo
 }
 
-func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []string) []*persistencespb.CompatibleVersionSet {
+func intoVersionSets(buildIDToInfo map[string]buildIDInfo) []*persistencespb.CompatibleVersionSet {
 	sets := make([]*persistencespb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
-			defaultTimestamp := hlc.Zero(0)
 			set = &persistencespb.CompatibleVersionSet{
-				SetIds:                 info.setIDs,
-				BuildIds:               make([]*persistencespb.BuildId, 0),
-				DefaultUpdateTimestamp: &defaultTimestamp,
+				SetIds:                      info.setIDs,
+				BuildIds:                    make([]*persistencespb.BuildId, 0),
+				DefaultUpdateTimestamp:      hlc.Ptr(hlc.Zero(0)),
+				QueueDefaultUpdateTimestamp: hlc.Ptr(hlc.Zero(0)),
 			}
 			sets = append(sets, set)
 		} else {
@@ -139,6 +142,7 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 			StateUpdateTimestamp: &timestamp,
 		}
 		defaultTimestamp := info.madeDefaultAt
+		set.QueueDefaultUpdateTimestamp = hlc.Ptr(hlc.Max(info.setMadeDefaultAt, *set.QueueDefaultUpdateTimestamp))
 
 		// Insert the build ID in the right order based on whether it is the default or by its update timestamp
 		if hlc.Greater(*set.DefaultUpdateTimestamp, defaultTimestamp) {
@@ -158,21 +162,15 @@ func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []strin
 		}
 	}
 	// Sort the sets based on their default update timestamp, ensuring the default set comes last
-	sortSets(sets, defaultSetIds)
+	sortSets(sets)
 	return sets
 }
 
-func sortSets(sets []*persistencespb.CompatibleVersionSet, defaultSetIds []string) {
+func sortSets(sets []*persistencespb.CompatibleVersionSet) {
 	sort.Slice(sets, func(i, j int) bool {
 		si := sets[i]
 		sj := sets[j]
-		if setContainsSetIDs(si, defaultSetIds) {
-			return false
-		}
-		if setContainsSetIDs(sj, defaultSetIds) {
-			return true
-		}
-		return hlc.Less(*si.DefaultUpdateTimestamp, *sj.DefaultUpdateTimestamp)
+		return hlc.Less(*si.QueueDefaultUpdateTimestamp, *sj.QueueDefaultUpdateTimestamp)
 	})
 }
 
@@ -190,19 +188,10 @@ func MergeVersioningData(a *persistencespb.VersioningData, b *persistencespb.Ver
 
 	// Collect information about each build ID from both sources
 	buildIDToInfo := collectBuildIdInfo(append(a.VersionSets, b.VersionSets...))
-
-	maxDefaultTimestamp := hlc.Max(*b.DefaultUpdateTimestamp, *a.DefaultUpdateTimestamp)
-
-	defaultSetIds := a.VersionSets[len(a.VersionSets)-1].SetIds
-	if hlc.Equal(maxDefaultTimestamp, *b.DefaultUpdateTimestamp) {
-		defaultSetIds = b.VersionSets[len(b.VersionSets)-1].SetIds
-	}
-
 	// Build the merged compatible sets using collected build ID information
-	sets := intoVersionSets(buildIDToInfo, defaultSetIds)
+	sets := intoVersionSets(buildIDToInfo)
 
 	return &persistencespb.VersioningData{
-		VersionSets:            sets,
-		DefaultUpdateTimestamp: &maxDefaultTimestamp,
+		VersionSets: sets,
 	}
 }
