@@ -85,7 +85,7 @@ type (
 	MapPropertyFnWithNamespaceFilter           func(namespace string) map[string]any
 	StringPropertyFn                           func() string
 	StringPropertyFnWithNamespaceFilter        func(namespace string) string
-	StringPropertyFnWithNamespaceIDFilter      func(namespace string) string
+	StringPropertyFnWithNamespaceIDFilter      func(namespaceID string) string
 )
 
 const (
