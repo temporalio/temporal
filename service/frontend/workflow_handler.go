@@ -47,6 +47,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -3070,7 +3072,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	if needsRefresh {
 		// This is a send and forget effort to refresh the schedule workflow
 		// errors are ignored
-		wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+		_, _ = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 			NamespaceId: namespaceID.String(),
 			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         request.Namespace,
@@ -4990,7 +4992,8 @@ func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	operationName := strings.Title(signalName + "Schedule")
+
+	operationName := cases.Title(language.English).String(signalName + "Schedule")
 	err = wh.checkEventBlobSizeLimit(ctx, workflowID, namespaceName, namespaceID, signalInputPayloads.Size(), operationName)
 	if err != nil {
 		return err
@@ -5003,7 +5006,6 @@ func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, 
 	// TODO: However, there is still a rare race condition left which cannot be fixed without having a notion of atomic
 	// workflow start. That is if the state changes from completed(describe stage)->running->completed(start workflow),
 	// where the workflow will be started with stale info acquired from the describe stage.
-retry:
 	for {
 		executionInfo, startScheduleArgs, err := wh.getScheduleExecutionInfoAndArgs(ctx, workflowID, namespaceName, namespaceID)
 		if err != nil {
@@ -5019,8 +5021,7 @@ retry:
 			return err
 		}
 
-		switch executionInfo.GetStatus() {
-		case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
 				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -5032,15 +5033,15 @@ retry:
 					RequestId:         requestId,
 				},
 			})
-			var comlpetionErr = consts.ErrWorkflowCompleted
-			var completionErrPtr = &comlpetionErr
+			var notFoundErr *serviceerror.NotFound
 			if err == nil {
-				break retry
-			} else if !errors.As(err, &completionErrPtr) {
+				break
+			}
+			if !errors.As(err, &notFoundErr) && err.Error() == consts.ErrWorkflowCompleted.Error() {
 				return err
 			}
 
-		case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		} else if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 			_, err = wh.historyClient.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
@@ -5057,15 +5058,15 @@ retry:
 				},
 			})
 			if err == nil {
-				break retry
-			} else {
-				switch err.(type) {
-				case *serviceerror.WorkflowExecutionAlreadyStarted:
-				default:
-					return err
-				}
+				break
 			}
-		default:
+			switch err.(type) {
+			case *serviceerror.WorkflowExecutionAlreadyStarted:
+			default:
+				return err
+			}
+
+		} else {
 			return serviceerror.NewNotFound("schedule not found")
 		}
 	}
