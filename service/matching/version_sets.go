@@ -101,6 +101,9 @@ func gatherBuildIds(data *persistencespb.VersioningData) map[string]struct{} {
 	return buildIds
 }
 
+// RemoveBuildIds removes given buildIds from versioning data.
+// Assumes that build ids are safe to remove, ex: a set default is never removed unless it is a single set member and
+// that set is not default for the queue.
 func RemoveBuildIds(clock hlc.Clock, versioningData *persistencespb.VersioningData, buildIds []string) *persistencespb.VersioningData {
 	buildIdsMap := make(map[string]struct{}, len(buildIds))
 	for _, buildId := range buildIds {
@@ -113,9 +116,10 @@ func RemoveBuildIds(clock hlc.Clock, versioningData *persistencespb.VersioningDa
 		for buildIdIdx, buildId := range set.BuildIds {
 			if _, found := buildIdsMap[buildId.Id]; found {
 				set.BuildIds[buildIdIdx] = &persistencespb.BuildId{
-					Id:                   buildId.Id,
-					State:                persistencespb.STATE_DELETED,
-					StateUpdateTimestamp: &clock,
+					Id:                     buildId.Id,
+					State:                  persistencespb.STATE_DELETED,
+					StateUpdateTimestamp:   &clock,
+					BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 				}
 			}
 		}
@@ -158,10 +162,9 @@ func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistenc
 
 func shallowCloneVersionSet(set *persistencespb.CompatibleVersionSet) *persistencespb.CompatibleVersionSet {
 	clone := &persistencespb.CompatibleVersionSet{
-		SetIds:                      set.SetIds,
-		BuildIds:                    make([]*persistencespb.BuildId, len(set.BuildIds)),
-		DefaultUpdateTimestamp:      set.DefaultUpdateTimestamp,
-		QueueDefaultUpdateTimestamp: set.QueueDefaultUpdateTimestamp,
+		SetIds:                 set.SetIds,
+		BuildIds:               make([]*persistencespb.BuildId, len(set.BuildIds)),
+		BecameDefaultTimestamp: set.BecameDefaultTimestamp,
 	}
 	copy(clone.BuildIds, set.BuildIds)
 	return clone
@@ -297,21 +300,13 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 		}
 		// Merge the sets together, preserving the primary set's default by making it have the most recent timestamp.
 		primarySet := data.VersionSets[targetSetIdx]
+		primaryBuildId := primarySet.BuildIds[len(primarySet.BuildIds)-1]
+		primaryBuildId.BecameDefaultTimestamp = &timestamp
 		justPrimaryData := &persistencespb.VersioningData{
-			VersionSets: []*persistencespb.CompatibleVersionSet{{
-				SetIds:                      primarySet.SetIds,
-				BuildIds:                    primarySet.BuildIds,
-				DefaultUpdateTimestamp:      &timestamp,
-				QueueDefaultUpdateTimestamp: primarySet.QueueDefaultUpdateTimestamp,
-			}},
+			VersionSets: []*persistencespb.CompatibleVersionSet{primarySet},
 		}
 		secondarySet := data.VersionSets[secondarySetIdx]
-		data.VersionSets[secondarySetIdx] = &persistencespb.CompatibleVersionSet{
-			SetIds:                      mergeSetIDs(primarySet.SetIds, secondarySet.SetIds),
-			BuildIds:                    secondarySet.BuildIds,
-			DefaultUpdateTimestamp:      secondarySet.DefaultUpdateTimestamp,
-			QueueDefaultUpdateTimestamp: secondarySet.QueueDefaultUpdateTimestamp,
-		}
+		secondarySet.SetIds = mergeSetIDs(primarySet.SetIds, secondarySet.SetIds)
 		data = MergeVersioningData(justPrimaryData, data)
 	}
 
@@ -349,7 +344,7 @@ func findVersion(data *persistencespb.VersioningData, buildID string) (setIndex,
 
 func makeDefaultSet(data *persistencespb.VersioningData, setIx int, timestamp *hlc.Clock) {
 	set := data.VersionSets[setIx]
-	set.QueueDefaultUpdateTimestamp = timestamp
+	set.BecameDefaultTimestamp = timestamp
 
 	if setIx < len(data.VersionSets)-1 {
 		// Move the set to the end and shift all the others down
@@ -359,16 +354,16 @@ func makeDefaultSet(data *persistencespb.VersioningData, setIx int, timestamp *h
 }
 
 func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, versionIx int, timestamp *hlc.Clock) {
-	data.VersionSets[setIx].DefaultUpdateTimestamp = timestamp
 	setVersions := data.VersionSets[setIx].BuildIds
+	buildId := setVersions[versionIx]
+	buildId.BecameDefaultTimestamp = timestamp
 	if len(setVersions) <= 1 {
 		return
 	}
 	if versionIx < len(setVersions)-1 {
 		// Move the build ID to the end and shift all the others down
-		moveMe := setVersions[versionIx]
 		copy(setVersions[versionIx:], setVersions[versionIx+1:])
-		setVersions[len(setVersions)-1] = moveMe
+		setVersions[len(setVersions)-1] = buildId
 	}
 }
 
