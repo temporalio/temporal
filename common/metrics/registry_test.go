@@ -22,51 +22,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package metrics
 
 import (
-	"context"
+	"testing"
 
-	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/primitives"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type simpleMonitor struct {
-	resolvers map[primitives.ServiceName]membership.ServiceResolver
+func TestRegistryBuildCatalog_Ok(t *testing.T) {
+	t.Parallel()
+
+	r := registry{}
+	r.register("foo", WithDescription("foo description"))
+	r.register("bar", WithDescription("bar description"))
+	c, err := r.buildCatalog()
+	require.Nil(t, err)
+	require.Equal(t, 2, len(c))
+	require.Equal(t, "foo description", c["foo"].description)
+	require.Equal(t, "bar description", c["bar"].description)
 }
 
-// NewSimpleMonitor returns a simple monitor interface
-func newSimpleMonitor(hosts map[primitives.ServiceName][]string) *simpleMonitor {
-	resolvers := make(map[primitives.ServiceName]membership.ServiceResolver, len(hosts))
-	for service, hostList := range hosts {
-		resolvers[service] = newSimpleResolver(service, hostList)
-	}
+func TestRegistryBuildCatalog_ErrMetricAlreadyExists(t *testing.T) {
+	t.Parallel()
 
-	return &simpleMonitor{resolvers}
-}
-
-func (s *simpleMonitor) Start() {
-}
-
-func (s *simpleMonitor) Stop() {
-}
-
-func (s *simpleMonitor) EvictSelf() error {
-	return nil
-}
-
-func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
-	resolver, ok := s.resolvers[service]
-	if !ok {
-		return nil, membership.ErrUnknownService
-	}
-	return resolver, nil
-}
-
-func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
-	return nil, nil
-}
-
-func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
-	return nil
+	b := registry{}
+	b.register("foo", WithDescription("foo description"))
+	b.register("foo", WithDescription("bar description"))
+	_, err := b.buildCatalog()
+	assert.ErrorIs(t, err, errMetricAlreadyExists)
+	assert.ErrorContains(t, err, "foo")
 }

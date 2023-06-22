@@ -39,6 +39,10 @@ message BuildId {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
+    // HLC timestamp representing when this build id was last made default in its version set.
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
 // An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
@@ -50,11 +54,10 @@ message CompatibleVersionSet {
     repeated string set_ids = 1;
     // All the compatible versions, unordered except for the last element, which is considered the set "default".
     repeated BuildId build_ids = 2;
-    // HLC timestamp representing when the set default was updated. Different from BuildId.state_update_timestamp, which
-    // refers to the build ID status.
+    // HLC timestamp representing when this set was last made the default for the queue.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
-    temporal.server.api.clock.v1.HybridLogicalClock default_update_timestamp = 3;
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
 // Holds all the data related to worker versioning for a task queue.
@@ -62,10 +65,6 @@ message CompatibleVersionSet {
 message VersioningData {
     // All the incompatible version sets, unordered except for the last element, which is considered the set "default".
     repeated CompatibleVersionSet version_sets = 1;
-    // HLC timestamp representing when the default set was last updated or established.
-    // (-- api-linter: core::0142::time-field-type=disabled
-    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
-    temporal.server.api.clock.v1.HybridLogicalClock default_update_timestamp = 2;
 }
 
 // Container for all persistent user provided data for a task queue.

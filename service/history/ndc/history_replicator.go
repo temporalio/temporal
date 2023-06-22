@@ -333,7 +333,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
-	lastEventTime, lastFirstTxnID, err := r.backfillHistory(
+	_, lastFirstTxnID, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
 		namespaceID,
@@ -377,7 +377,6 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	}
 	return r.transactionMgr.createWorkflow(
 		ctx,
-		timestamp.TimeValue(lastEventTime),
 		NewWorkflow(
 			ctx,
 			r.namespaceRegistry,
@@ -499,7 +498,6 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 
 	err = r.transactionMgr.createWorkflow(
 		ctx,
-		task.getEventTime(),
 		NewWorkflow(
 			ctx,
 			r.namespaceRegistry,
@@ -637,7 +635,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 	err = r.transactionMgr.updateWorkflow(
 		ctx,
-		task.getEventTime(),
 		isRebuilt,
 		targetWorkflow,
 		newWorkflow,
@@ -883,7 +880,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	err = r.transactionMgr.createWorkflow(
 		ctx,
-		task.getEventTime(),
 		targetWorkflow,
 	)
 	if err != nil {

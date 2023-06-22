@@ -86,8 +86,6 @@ type (
 
 		persistenceBean persistenceClient.Bean
 
-		membershipMonitor membership.Monitor
-
 		metricsHandler metrics.Handler
 
 		status           int32
@@ -143,6 +141,7 @@ func NewService(
 	archiverProvider provider.ArchiverProvider,
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
+	hostInfoProvider membership.HostInfoProvider,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	metricsHandler metrics.Handler,
 	metadataManager persistence.MetadataManager,
@@ -173,7 +172,7 @@ func NewService(
 		executionManager:          executionManager,
 		persistenceBean:           persistenceBean,
 		workerServiceResolver:     workerServiceResolver,
-		membershipMonitor:         membershipMonitor,
+		hostInfo:                  hostInfoProvider.HostInfo(),
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		metricsHandler:            metricsHandler,
@@ -321,6 +320,10 @@ func NewConfig(
 				dynamicconfig.ExecutionScannerHistoryEventIdValidator,
 				true,
 			),
+			RemovableBuildIdDurationSinceDefault: dc.GetDurationProperty(
+				dynamicconfig.RemovableBuildIdDurationSinceDefault,
+				time.Hour,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
@@ -389,15 +392,6 @@ func (s *Service) Start() {
 	s.clusterMetadata.Start()
 	s.namespaceRegistry.Start()
 
-	hostInfo, err := s.membershipMonitor.WhoAmI()
-	if err != nil {
-		s.logger.Fatal(
-			"fail to get host info from membership monitor",
-			tag.Error(err),
-		)
-	}
-	s.hostInfo = hostInfo
-
 	// The service is now started up
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
@@ -428,7 +422,7 @@ func (s *Service) Start() {
 	s.logger.Info(
 		"worker service started",
 		tag.ComponentWorker,
-		tag.Address(hostInfo.GetAddress()),
+		tag.Address(s.hostInfo.GetAddress()),
 	)
 	<-s.stopC
 }

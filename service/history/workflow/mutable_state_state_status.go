@@ -135,7 +135,7 @@ func setStateStatus(
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 

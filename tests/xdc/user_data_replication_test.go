@@ -81,6 +81,8 @@ func (s *userDataReplicationTestSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
 		dynamicconfig.BuildIdScavengerEnabled:                                              true,
+		// Ensure the scavenger can immediately delete build ids that are not in use.
+		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }

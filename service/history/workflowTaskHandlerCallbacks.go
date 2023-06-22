@@ -322,7 +322,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			scheduledEventID := token.GetScheduledEventId()
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 
-			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
+			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID ||
+				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
@@ -411,7 +412,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
 	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
-		currentWorkflowTask.StartedEventID == common.EmptyEventID {
+		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
+		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
@@ -420,9 +422,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")
 	}
 
+	nsName := namespaceEntry.Name().String()
 	limits := workflow.WorkflowTaskCompletionLimits{
-		MaxResetPoints:     handler.config.MaxAutoResetPoints(namespaceEntry.Name().String()),
-		MaxTrackedBuildIds: handler.config.MaxTrackedBuildIds(namespaceEntry.Name().String()),
+		MaxResetPoints:              handler.config.MaxAutoResetPoints(nsName),
+		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
 	}
 	// TODO: this metric is inaccurate, it should only be emitted if a new binary checksum (or build ID) is added in this completion.
 	if ms.GetExecutionInfo().AutoResetPoints != nil && limits.MaxResetPoints == len(ms.GetExecutionInfo().AutoResetPoints.Points) {

@@ -81,6 +81,7 @@ type (
 		// membership infos
 
 		MembershipMonitor       *membership.MockMonitor
+		HostInfoProvider        *membership.MockHostInfoProvider
 		FrontendServiceResolver *membership.MockServiceResolver
 		MatchingServiceResolver *membership.MockServiceResolver
 		HistoryServiceResolver  *membership.MockServiceResolver
@@ -154,6 +155,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	persistenceBean.EXPECT().GetClusterMetadataManager().Return(clusterMetadataManager).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
+	hostInfoProvider := membership.NewMockHostInfoProvider(controller)
 	frontendServiceResolver := membership.NewMockServiceResolver(controller)
 	matchingServiceResolver := membership.NewMockServiceResolver(controller)
 	historyServiceResolver := membership.NewMockServiceResolver(controller)
@@ -189,6 +191,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 		// membership infos
 
 		MembershipMonitor:       membershipMonitor,
+		HostInfoProvider:        hostInfoProvider,
 		FrontendServiceResolver: frontendServiceResolver,
 		MatchingServiceResolver: matchingServiceResolver,
 		HistoryServiceResolver:  historyServiceResolver,
@@ -295,6 +298,11 @@ func (t *Test) GetArchiverProvider() provider.ArchiverProvider {
 // GetMembershipMonitor for testing
 func (t *Test) GetMembershipMonitor() membership.Monitor {
 	return t.MembershipMonitor
+}
+
+// GetHostInfoProvider for testing
+func (t *Test) GetHostInfoProvider() membership.HostInfoProvider {
+	return t.HostInfoProvider
 }
 
 // GetFrontendServiceResolver for testing

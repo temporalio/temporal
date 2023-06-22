@@ -197,6 +197,9 @@ const (
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
+	// set for it to be considered for removal, used by the build id scavenger.
+	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 
 	// keys for frontend
 
@@ -218,7 +221,7 @@ const (
 	// FrontendRPS is workflow rate limit per second
 	FrontendRPS = "frontend.rps"
 	// FrontendNamespaceReplicationInducingAPIsRPS limits the per second request rate for namespace replication inducing
-	// APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
@@ -231,14 +234,14 @@ const (
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"
 	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance is a per host/per namespace RPS limit for
-	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance = "frontend.namespaceRPS.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
 	// FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance is a per host/per namespace burst limit for
-	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance = "frontend.namespaceBurst.namespaceReplicationInducingAPIs"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
@@ -254,7 +257,7 @@ const (
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendGlobalNamespaceVisibilityRPS = "frontend.globalNamespaceRPS.visibility"
 	// FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS is a cluster global, per namespace RPS limit for
-	// namespace replication inducing APIs (e.g. UpdateNamespace, UpdateWorkerBuildIdCompatibility).
+	// namespace replication inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// The limit is evenly distributed among available frontend service instances.
 	// If this is set, it overwrites the per instance limit configured with
 	// "frontend.namespaceRPS.namespaceReplicationInducingAPIs".
@@ -695,8 +698,6 @@ const (
 	DefaultWorkflowRetryPolicy = "history.defaultWorkflowRetryPolicy"
 	// HistoryMaxAutoResetPoints is the key for max number of auto reset points stored in mutableState
 	HistoryMaxAutoResetPoints = "history.historyMaxAutoResetPoints"
-	// HistoryMaxTrackedBuildIds indicates the max number of build IDs to store in the BuildIds search attribute
-	HistoryMaxTrackedBuildIds = "history.maxTrackedBuildIds"
 	// EnableParentClosePolicy whether to  ParentClosePolicy
 	EnableParentClosePolicy = "history.enableParentClosePolicy"
 	// ParentClosePolicyThreshold decides that parent close policy will be processed by sys workers(if enabled) if
