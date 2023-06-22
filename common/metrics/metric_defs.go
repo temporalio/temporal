@@ -1465,11 +1465,9 @@ var (
 	ReplicationTasksFailed                        = NewCounterDef("replication_tasks_failed")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
-	// It currently has units of "ms", which is incorrect. See https://github.com/temporalio/temporal/issues/4483.
-	ReplicationTasksLag = NewTimeHistogramDef("replication_tasks_lag")
+	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
-	// It has the same unit issue as ReplicationTasksLag.
-	ReplicationTasksFetched                        = NewTimeHistogramDef("replication_tasks_fetched")
+	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
 	ReplicationTasksAppliedLatency                 = NewTimerDef("replication_tasks_applied_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")

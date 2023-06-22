@@ -65,10 +65,6 @@ func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition 
 	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
 }
 
-func NewTimeHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
-}
-
 func NewCounterDef(name string, opts ...Option) metricDefinition {
 	return globalRegistry.register(name, opts...)
 }
