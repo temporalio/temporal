@@ -197,6 +197,9 @@ const (
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
+	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
+	// set for it to be considered for removal, used by the build id scavenger.
+	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 
 	// keys for frontend
 

@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -72,14 +73,19 @@ type (
 	}
 
 	Activities struct {
-		logger                 log.Logger
-		taskManager            persistence.TaskManager
-		metadataManager        persistence.MetadataManager
-		visibilityManager      manager.VisibilityManager
-		namespaceRegistry      namespace.Registry
-		matchingClient         matchingservice.MatchingServiceClient
-		currentClusterName     string
-		removableBuildIdMinAge dynamicconfig.DurationPropertyFn
+		logger             log.Logger
+		taskManager        persistence.TaskManager
+		metadataManager    persistence.MetadataManager
+		visibilityManager  manager.VisibilityManager
+		namespaceRegistry  namespace.Registry
+		matchingClient     matchingservice.MatchingServiceClient
+		currentClusterName string
+		// Minimum duration since a build id was last default in its containing set for it to be considered for removal.
+		// If a build id was still default recently, there may be:
+		// 1. workers with that identifier processing tasks
+		// 2. workflows with that identifier that have yet to be indexed in visibility
+		// The scavenger should allow enough time to pass before cleaning these build ids.
+		removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
 	}
 
 	heartbeatDetails struct {
@@ -98,15 +104,17 @@ func NewActivities(
 	namespaceRegistry namespace.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	currentClusterName string,
+	removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:             logger,
-		taskManager:        taskManager,
-		metadataManager:    metadataManager,
-		visibilityManager:  visibilityManager,
-		namespaceRegistry:  namespaceRegistry,
-		matchingClient:     matchingClient,
-		currentClusterName: currentClusterName,
+		logger:                               logger,
+		taskManager:                          taskManager,
+		metadataManager:                      metadataManager,
+		visibilityManager:                    visibilityManager,
+		namespaceRegistry:                    namespaceRegistry,
+		matchingClient:                       matchingClient,
+		currentClusterName:                   currentClusterName,
+		removableBuildIdDurationSinceDefault: removableBuildIdDurationSinceDefault,
 	}
 }
 
@@ -270,6 +278,10 @@ func (a *Activities) findBuildIdsToRemove(
 			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
 			// Don't remove if build id is the queue default of there's another active build id in this set.
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
+				continue
+			}
+			timeSinceWasDefault := time.Since(hybrid_logical_clock.UTC(*buildId.BecameDefaultTimestamp))
+			if timeSinceWasDefault < a.removableBuildIdDurationSinceDefault() {
 				continue
 			}
 
