@@ -1255,7 +1255,8 @@ var (
 	LockRequests                                  = NewCounterDef("lock_requests")
 	LockFailures                                  = NewCounterDef("lock_failures")
 	LockLatency                                   = NewTimerDef("lock_latency")
-	ClientRequests                                = NewCounterDef("client_requests",
+	ClientRequests                                = NewCounterDef(
+		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
 	ClientFailures               = NewCounterDef("client_errors")
