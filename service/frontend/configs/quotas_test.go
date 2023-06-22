@@ -186,8 +186,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	apis := map[string]struct{}{
-		"UpdateWorkerBuildIdCompatibility": {},
+		"RegisterNamespace":                {},
 		"UpdateNamespace":                  {},
+		"UpdateWorkerBuildIdCompatibility": {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -208,7 +209,6 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"GetSystemInfo":       {},
 		"GetSearchAttributes": {},
 
-		"RegisterNamespace":  {},
 		"DescribeNamespace":  {},
 		"ListNamespaces":     {},
 		"DeprecateNamespace": {},

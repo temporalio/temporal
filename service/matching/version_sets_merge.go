@@ -74,13 +74,13 @@ type buildIDInfo struct {
 	stateUpdateTimestamp hlc.Clock
 	setIDs               []string
 	madeDefaultAt        hlc.Clock
+	setMadeDefaultAt     hlc.Clock
 }
 
 func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]buildIDInfo {
 	buildIDToInfo := make(map[string]buildIDInfo, 0)
 	for _, set := range sets {
-		lastIdx := len(set.BuildIds) - 1
-		for setIdx, buildID := range set.BuildIds {
+		for _, buildID := range set.BuildIds {
 			if info, found := buildIDToInfo[buildID.Id]; found {
 				// A build ID appears in more than one source, merge its information, and track it
 				state := info.state
@@ -88,28 +88,21 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 				if hlc.Equal(stateUpdateTimestamp, *buildID.StateUpdateTimestamp) {
 					state = buildID.State
 				}
-				madeDefaultAt := info.madeDefaultAt
-				if setIdx == lastIdx {
-					madeDefaultAt = hlc.Max(*set.DefaultUpdateTimestamp, madeDefaultAt)
-				}
-
 				buildIDToInfo[buildID.Id] = buildIDInfo{
 					state:                state,
 					stateUpdateTimestamp: stateUpdateTimestamp,
 					setIDs:               mergeSetIDs(info.setIDs, set.SetIds),
-					madeDefaultAt:        madeDefaultAt,
+					madeDefaultAt:        hlc.Max(*buildID.BecameDefaultTimestamp, info.madeDefaultAt),
+					setMadeDefaultAt:     hlc.Max(*set.BecameDefaultTimestamp, info.setMadeDefaultAt),
 				}
 			} else {
 				// A build ID was seen for the first time, track it
-				madeDefaultAt := hlc.Zero(0)
-				if setIdx == lastIdx {
-					madeDefaultAt = *set.DefaultUpdateTimestamp
-				}
 				buildIDToInfo[buildID.Id] = buildIDInfo{
 					state:                buildID.State,
 					stateUpdateTimestamp: *buildID.StateUpdateTimestamp,
 					setIDs:               set.SetIds,
-					madeDefaultAt:        madeDefaultAt,
+					madeDefaultAt:        *buildID.BecameDefaultTimestamp,
+					setMadeDefaultAt:     *set.BecameDefaultTimestamp,
 				}
 			}
 		}
@@ -117,62 +110,47 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 	return buildIDToInfo
 }
 
-func intoVersionSets(buildIDToInfo map[string]buildIDInfo, defaultSetIds []string) []*persistencespb.CompatibleVersionSet {
+func intoVersionSets(buildIDToInfo map[string]buildIDInfo) []*persistencespb.CompatibleVersionSet {
 	sets := make([]*persistencespb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
+		info := info
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
-			defaultTimestamp := hlc.Zero(0)
 			set = &persistencespb.CompatibleVersionSet{
 				SetIds:                 info.setIDs,
 				BuildIds:               make([]*persistencespb.BuildId, 0),
-				DefaultUpdateTimestamp: &defaultTimestamp,
+				BecameDefaultTimestamp: &info.setMadeDefaultAt,
 			}
 			sets = append(sets, set)
 		} else {
 			set.SetIds = mergeSetIDs(set.SetIds, info.setIDs)
+			set.BecameDefaultTimestamp = hlc.Ptr(hlc.Max(info.setMadeDefaultAt, *set.BecameDefaultTimestamp))
 		}
-		timestamp := info.stateUpdateTimestamp
 		buildID := &persistencespb.BuildId{
-			Id:                   id,
-			State:                info.state,
-			StateUpdateTimestamp: &timestamp,
+			Id:                     id,
+			State:                  info.state,
+			StateUpdateTimestamp:   &info.stateUpdateTimestamp,
+			BecameDefaultTimestamp: &info.madeDefaultAt,
 		}
-		defaultTimestamp := info.madeDefaultAt
-
-		// Insert the build ID in the right order based on whether it is the default or by its update timestamp
-		if hlc.Greater(*set.DefaultUpdateTimestamp, defaultTimestamp) {
-			// Can't be the last element, it's the default already
-			lastIdx := len(set.BuildIds) - 1
-			for idx, curr := range set.BuildIds {
-				if idx == lastIdx || hlc.Greater(*curr.StateUpdateTimestamp, timestamp) {
-					// Insert just before
-					set.BuildIds = append(set.BuildIds[:idx+1], set.BuildIds[idx:]...)
-					set.BuildIds[idx] = buildID
-					break
-				}
-			}
-		} else {
-			set.DefaultUpdateTimestamp = &defaultTimestamp
-			set.BuildIds = append(set.BuildIds, buildID)
-		}
+		set.BuildIds = append(set.BuildIds, buildID)
 	}
 	// Sort the sets based on their default update timestamp, ensuring the default set comes last
-	sortSets(sets, defaultSetIds)
+	sortSets(sets)
+	for _, set := range sets {
+		sortBuildIds(set.BuildIds)
+	}
 	return sets
 }
 
-func sortSets(sets []*persistencespb.CompatibleVersionSet, defaultSetIds []string) {
+func sortSets(sets []*persistencespb.CompatibleVersionSet) {
 	sort.Slice(sets, func(i, j int) bool {
-		si := sets[i]
-		sj := sets[j]
-		if setContainsSetIDs(si, defaultSetIds) {
-			return false
-		}
-		if setContainsSetIDs(sj, defaultSetIds) {
-			return true
-		}
-		return hlc.Less(*si.DefaultUpdateTimestamp, *sj.DefaultUpdateTimestamp)
+		return hlc.Less(*sets[i].BecameDefaultTimestamp, *sets[j].BecameDefaultTimestamp)
+	})
+}
+
+func sortBuildIds(buildIds []*persistencespb.BuildId) {
+	sort.Slice(buildIds, func(i, j int) bool {
+		return hlc.Less(*buildIds[i].BecameDefaultTimestamp, *buildIds[j].BecameDefaultTimestamp)
 	})
 }
 
@@ -190,19 +168,10 @@ func MergeVersioningData(a *persistencespb.VersioningData, b *persistencespb.Ver
 
 	// Collect information about each build ID from both sources
 	buildIDToInfo := collectBuildIdInfo(append(a.VersionSets, b.VersionSets...))
-
-	maxDefaultTimestamp := hlc.Max(*b.DefaultUpdateTimestamp, *a.DefaultUpdateTimestamp)
-
-	defaultSetIds := a.VersionSets[len(a.VersionSets)-1].SetIds
-	if hlc.Equal(maxDefaultTimestamp, *b.DefaultUpdateTimestamp) {
-		defaultSetIds = b.VersionSets[len(b.VersionSets)-1].SetIds
-	}
-
 	// Build the merged compatible sets using collected build ID information
-	sets := intoVersionSets(buildIDToInfo, defaultSetIds)
+	sets := intoVersionSets(buildIDToInfo)
 
 	return &persistencespb.VersioningData{
-		VersionSets:            sets,
-		DefaultUpdateTimestamp: &maxDefaultTimestamp,
+		VersionSets: sets,
 	}
 }

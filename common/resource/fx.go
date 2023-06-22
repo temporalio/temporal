@@ -117,7 +117,6 @@ var Module = fx.Options(
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
-	membership.HostInfoProviderModule,
 	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),

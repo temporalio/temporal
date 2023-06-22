@@ -29,14 +29,13 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
-	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -47,8 +46,7 @@ type ContextTest struct {
 
 	Resource *resourcetest.Test
 
-	MockEventsCache      *events.MockCache
-	MockHostInfoProvider *membership.MockHostInfoProvider
+	MockEventsCache *events.MockCache
 }
 
 var _ Context = (*ContextTest)(nil)
@@ -72,7 +70,7 @@ func NewTestContext(
 ) *ContextTest {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
-	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+	hostInfoProvider := resourceTest.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if shardInfo.QueueAckLevels == nil {
 		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
@@ -115,10 +113,9 @@ func NewTestContext(
 		hostInfoProvider:        hostInfoProvider,
 	}
 	return &ContextTest{
-		Resource:             resourceTest,
-		ContextImpl:          shard,
-		MockEventsCache:      eventsCache,
-		MockHostInfoProvider: hostInfoProvider,
+		Resource:        resourceTest,
+		ContextImpl:     shard,
+		MockEventsCache: eventsCache,
 	}
 }
 

@@ -31,8 +31,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		name string
-		unit MetricUnit
+		name        string
+		description string
+		unit        MetricUnit
 	}
 )
 
@@ -52,22 +53,22 @@ func (md metricDefinition) GetMetricUnit() MetricUnit {
 	return md.unit
 }
 
-func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{name: name, unit: Milliseconds}
+func NewTimerDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
 }
 
-func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{name: name, unit: Bytes}
+func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
 }
 
-func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{name: name, unit: Dimensionless}
+func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
 }
 
-func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{name: name}
+func NewCounterDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, opts...)
 }
 
-func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{name: name}
+func NewGaugeDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, opts...)
 }

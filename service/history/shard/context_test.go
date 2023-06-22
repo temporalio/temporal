@@ -87,7 +87,7 @@ func (s *contextSuite) SetupTest() {
 	)
 	s.mockShard = shardContext
 
-	shardContext.MockHostInfoProvider.EXPECT().HostInfo().Return(shardContext.Resource.GetHostInfo()).AnyTimes()
+	shardContext.Resource.HostInfoProvider.EXPECT().HostInfo().Return(shardContext.Resource.GetHostInfo()).AnyTimes()
 
 	s.mockNamespaceCache = shardContext.Resource.NamespaceCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()

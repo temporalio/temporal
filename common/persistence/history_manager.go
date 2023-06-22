@@ -213,6 +213,7 @@ findDeleteRanges:
 	}
 
 	req := &InternalDeleteHistoryBranchRequest{
+		BranchToken:  request.BranchToken,
 		BranchInfo:   branch,
 		ShardID:      request.ShardID,
 		BranchRanges: deleteRanges,
