@@ -449,6 +449,20 @@ func (mr *MockContextMockRecorder) GetQueueState(category interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueState", reflect.TypeOf((*MockContext)(nil).GetQueueState), category)
 }
 
+// GetRangeID mocks base method.
+func (m *MockContext) GetRangeID() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRangeID")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetRangeID indicates an expected call of GetRangeID.
+func (mr *MockContextMockRecorder) GetRangeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRangeID", reflect.TypeOf((*MockContext)(nil).GetRangeID))
+}
+
 // GetRemoteAdminClient mocks base method.
 func (m *MockContext) GetRemoteAdminClient(arg0 string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
