@@ -42,7 +42,7 @@ message BuildId {
     // HLC timestamp representing when this build id was last made default in its version set.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
-    temporal.server.api.clock.v1.HybridLogicalClock set_default_update_timestamp = 4;
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
 // An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
@@ -57,7 +57,7 @@ message CompatibleVersionSet {
     // HLC timestamp representing when this set was last made the default for the queue.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
-    temporal.server.api.clock.v1.HybridLogicalClock queue_default_update_timestamp = 4;
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
 // Holds all the data related to worker versioning for a task queue.

@@ -1592,9 +1592,9 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 		tag.WorkflowTaskQueueName(taskQueue),
 		tag.BuildId(buildId.Id))
 	return &persistencespb.BuildId{
-		Id:                        buildId.GetId(),
-		State:                     persistencespb.STATE_ACTIVE,
-		StateUpdateTimestamp:      &stamp,
-		SetDefaultUpdateTimestamp: buildId.SetDefaultUpdateTimestamp,
+		Id:                     buildId.GetId(),
+		State:                  persistencespb.STATE_ACTIVE,
+		StateUpdateTimestamp:   &stamp,
+		BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 	}
 }
