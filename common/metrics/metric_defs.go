@@ -1266,10 +1266,22 @@ var (
 	HistoryCount                                  = NewDimensionlessHistogramDef("history_count")
 	SearchAttributesSize                          = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                                      = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows                  = NewCounterDef("wf_too_many_pending_child_workflows")
-	TooManyPendingActivities                      = NewCounterDef("wf_too_many_pending_activities")
-	TooManyPendingCancelRequests                  = NewCounterDef("wf_too_many_pending_cancel_requests")
-	TooManyPendingSignalsToExternalWorkflows      = NewCounterDef("wf_too_many_pending_external_workflow_signals")
+	TooManyPendingChildWorkflows                  = NewCounterDef(
+		"wf_too_many_pending_child_workflows",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingActivities = NewCounterDef(
+		"wf_too_many_pending_activities",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending activities to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingCancelRequests = NewCounterDef(
+		"wf_too_many_pending_cancel_requests",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending cancel requests to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingSignalsToExternalWorkflows = NewCounterDef(
+		"wf_too_many_pending_external_workflow_signals",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
+	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
