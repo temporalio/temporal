@@ -28,6 +28,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -282,6 +283,7 @@ type Service struct {
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
+	httpAPIServer     *HTTPAPIServer
 
 	logger                         log.Logger
 	grpcListener                   net.Listener
@@ -293,6 +295,7 @@ func NewService(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -308,6 +311,7 @@ func NewService(
 		config:                         serviceConfig,
 		server:                         server,
 		healthServer:                   healthServer,
+		httpAPIServer:                  httpAPIServer,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
 		operatorHandler:                operatorHandler,
@@ -345,10 +349,22 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	listener := s.grpcListener
 	logger.Info("Starting to serve on frontend listener")
-	if err := s.server.Serve(listener); err != nil {
-		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+
+	// Start the gRPC and HTTP server (if any) in the background
+	serveErrCh := make(chan error, 2)
+	serverCount := 1
+	go func() { serveErrCh <- s.server.Serve(s.grpcListener) }()
+	if s.httpAPIServer != nil {
+		serverCount++
+		go func() { serveErrCh <- s.httpAPIServer.Serve() }()
+	}
+
+	// Wait until one errors or they are both successfully complete
+	for i := 0; i < serverCount; i++ {
+		if err := <-serveErrCh; err != nil {
+			logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+		}
 	}
 }
 
@@ -383,12 +399,26 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	logger.Info("ShutdownHandler: Draining traffic")
-	t := time.AfterFunc(requestDrainTime, func() {
-		logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
-		s.server.Stop()
-	})
-	s.server.GracefulStop()
-	t.Stop()
+	// Gracefully stop gRPC server and HTTP API server concurrently
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.AfterFunc(requestDrainTime, func() {
+			logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+			s.server.Stop()
+		})
+		s.server.GracefulStop()
+		t.Stop()
+	}()
+	if s.httpAPIServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.httpAPIServer.GracefulStop()
+		}()
+	}
+	wg.Wait()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(logger)

@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -95,6 +96,7 @@ var Module = fx.Options(
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -103,6 +105,7 @@ func NewServiceProvider(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -117,6 +120,7 @@ func NewServiceProvider(
 		serviceConfig,
 		server,
 		healthServer,
+		httpAPIServer,
 		handler,
 		adminHandler,
 		operatorHandler,
@@ -597,6 +601,30 @@ func HandlerProvider(
 		membershipMonitor,
 	)
 	return wfHandler
+}
+
+func HTTPAPIServerProvider(
+	config *config.Config,
+	serviceName primitives.ServiceName,
+	serviceConfig *Config,
+	grpcListener net.Listener,
+	rpcFactory common.RPCFactory,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	logger log.Logger,
+) (*HTTPAPIServer, error) {
+	// If HTTP API server not enabled, return nil
+	rpcConfig := config.Services[string(serviceName)].RPC
+	if rpcConfig.HTTPDisabled {
+		return nil, nil
+	}
+	return NewHTTPAPIServer(
+		serviceConfig,
+		rpcConfig,
+		grpcListener,
+		rpcFactory,
+		tlsConfigProvider,
+		logger,
+	)
 }
 
 func ServiceLifetimeHooks(
