@@ -34,6 +34,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
@@ -101,11 +102,17 @@ func TestMeter(t *testing.T) {
 			),
 		),
 	)
-	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: provider.Meter("test")}, defaultConfig)
+
+	p, err := NewOtelMetricsHandler(
+		log.NewTestLogger(),
+		&testProvider{meter: provider.Meter("test")},
+		defaultConfig,
+	)
+	require.NoError(t, err)
 	recordMetrics(p)
 
 	var got metricdata.ResourceMetrics
-	err := rdr.Collect(ctx, &got)
+	err = rdr.Collect(ctx, &got)
 	assert.Nil(t, err)
 
 	want := []metricdata.Metrics{
@@ -257,7 +264,8 @@ func TestOtelMetricsHandler_Error(t *testing.T) {
 	meter := erroneousMeter{err: testErr}
 	provider := &testProvider{meter: meter}
 	cfg := ClientConfig{}
-	handler := NewOtelMetricsHandler(logger, provider, cfg)
+	handler, err := NewOtelMetricsHandler(logger, provider, cfg)
+	require.NoError(t, err)
 	msg := "error getting metric"
 	errTag := tag.Error(testErr)
 
