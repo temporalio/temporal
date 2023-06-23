@@ -248,8 +248,8 @@ func (s *scheduler) run() (*schedspb.StartScheduleArgs, error) {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
-		// if run out of actions or no more jobs to run, finish the schedule workflow
-		if s.hasMinVersion(FinishIdleSchedule) && (nextWakeup.IsZero() || (!s.Schedule.State.Paused && !s.canTakeScheduledAction(false, false))) {
+		// if run out of actions or no more jobs to run and the schedule workflow is not paused, finish the schedule workflow
+		if s.hasMinVersion(FinishIdleSchedule) && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
 			return &s.StartScheduleArgs, nil
 		}
 		// sleep returns on any of:
