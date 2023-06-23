@@ -3308,6 +3308,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 		NamespaceId:        namespaceID.String(),
 		WorkflowExecution:  execution,
+		WorkflowVersion:    common.EmptyVersion,
 		ClosedWorkflowOnly: false,
 	})
 	if err != nil {
