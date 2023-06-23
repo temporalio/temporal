@@ -1178,9 +1178,55 @@ func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
 	s.True(entry.Info.Paused)
 	s.Equal("because I said so", entry.Info.Notes)
 
-	return
-	// finally delete
+	// update and unpause
 
+	schedule.Spec.Calendar = nil
+	schedule.Spec.Interval = []*schedulepb.IntervalSpec{{Interval: timestamp.DurationPtr(1 * time.Second)}}
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+	schedule.State.RemainingActions = 1
+	schedule.State.LimitedActions = true
+
+	updateTime = time.Now()
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	})
+	s.NoError(err)
+
+	_, err = s.engine.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Unpause: "because I said so",
+		},
+		Identity:  "test",
+		RequestId: uuid.New(),
+	})
+	s.NoError(err)
+
+	// wait for one new run
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 4 }, 5*time.Second, 500*time.Millisecond)
+
+	// check schedule workflow status
+	swfresp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+	})
+
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, swfresp.WorkflowExecutionInfo.Status)
+
+	// describe again
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	// finally delete
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
@@ -1188,11 +1234,13 @@ func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
 	})
 	s.NoError(err)
 
+	return
+	// TODO: we can still describe a deleted schedule workflow here?!
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
 	})
-	s.Error(err)
+	s.Error(err, describeResp)
 
 	s.Eventually(func() bool { // wait for visibility
 		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
