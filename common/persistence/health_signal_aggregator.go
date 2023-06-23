@@ -64,7 +64,7 @@ type (
 		metricsHandler            metrics.Handler
 		emitMetricsTimer          *time.Ticker
 		perShardRPSWarnLimit      dynamicconfig.IntPropertyFn
-		perShardPerNsRPSWarnLimit dynamicconfig.IntPropertyFn
+		perShardPerNsRPSWarnLimit dynamicconfig.FloatPropertyFn
 
 		logger log.Logger
 	}
@@ -76,7 +76,7 @@ func NewHealthSignalAggregatorImpl(
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	perShardRPSWarnLimit dynamicconfig.IntPropertyFn,
-	perShardPerNsRPSWarnLimit dynamicconfig.IntPropertyFn,
+	perShardPerNsRPSWarnLimit dynamicconfig.FloatPropertyFn,
 	logger log.Logger,
 ) *HealthSignalAggregatorImpl {
 	ret := &HealthSignalAggregatorImpl{
@@ -166,15 +166,15 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 				for namespace, count := range requestCountPerNS {
 					shardRequestCount += count
 					shardRPSPerNS := int64(float64(count) / emitMetricsInterval.Seconds())
-					if shardRPSPerNS > int64(s.perShardPerNsRPSWarnLimit()) {
-						s.logger.Warn("Per shard per namespace RPS warn limit exceeded", tag.ShardID(shardID), tag.WorkflowNamespace(namespace))
+					if s.perShardPerNsRPSWarnLimit() > 0.0 && shardRPSPerNS > int64(s.perShardPerNsRPSWarnLimit()*float64(s.perShardRPSWarnLimit())) {
+						s.logger.Warn("Per shard per namespace RPS warn limit exceeded", tag.ShardID(shardID), tag.WorkflowNamespace(namespace), tag.RPS(shardRPSPerNS))
 					}
 				}
 
 				shardRPS := int64(float64(shardRequestCount) / emitMetricsInterval.Seconds())
 				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS)
 				if shardRPS > int64(s.perShardRPSWarnLimit()) {
-					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID))
+					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID), tag.RPS(shardRPS))
 				}
 			}
 		}
