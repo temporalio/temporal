@@ -50,9 +50,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -94,14 +91,10 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
-	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/integration_test_cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-	default:
-		s.setupSuite("testdata/integration_test_es_cluster.yaml")
-		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
-	}
+
+	// list schedule does not support standard visibility anymore, so we need to use advanced visibility
+	s.setupSuite("testdata/integration_test_es_cluster.yaml")
+	s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 }
 
 func (s *scheduleIntegrationSuite) TearDownSuite() {
