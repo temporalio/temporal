@@ -813,3 +813,393 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
+
+func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
+
+	sid := "sched-test-basics"
+	wid := "sched-test-basics-wf"
+	wt := "sched-test-basics-wt"
+	wt2 := "sched-test-basics-wt2"
+
+	csa := "CustomKeywordField"
+
+	wfMemo := payload.EncodeString("workflow memo")
+	wfSAValue := payload.EncodeString("workflow sa value")
+	schMemo := payload.EncodeString("schedule memo")
+	schSAValue := payload.EncodeString("schedule sa value")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(5 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					Memo: &commonpb.Memo{
+						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
+					},
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{csa: wfSAValue},
+					},
+				},
+			},
+		},
+		State: &schedulepb.ScheduleState{
+			RemainingActions: 2,
+			LimitedActions:   true,
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
+		},
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{csa: schSAValue},
+		},
+	}
+
+	var runs, runs2 int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+	workflow2Fn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			atomic.AddInt32(&runs2, 1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflow2Fn, workflow.RegisterOptions{Name: wt2})
+
+	// create
+
+	createTime := time.Now()
+	_, err := s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+
+	// sleep until we see two runs, plus a bit more to ensure that it has time to complete
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 12*time.Second, 500*time.Millisecond)
+	time.Sleep(1 * time.Second)
+
+	// check schedule workflow status
+	swfresp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+	})
+
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, swfresp.WorkflowExecutionInfo.Status)
+
+	// describe
+
+	describeResp, err := s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	checkSpec := func(spec *schedulepb.ScheduleSpec) {
+		s.Equal(schedule.Spec.Interval, spec.Interval)
+		s.Nil(spec.Calendar)
+		s.Nil(spec.CronString)
+	}
+	checkSpec(describeResp.Schedule.Spec)
+
+	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
+	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.Seconds())          // set to default value
+
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 3*time.Second)
+	s.EqualValues(2, describeResp.Info.ActionCount)
+	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
+	s.EqualValues(0, describeResp.Info.OverlapSkipped)
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+	s.EqualValues(2, len(describeResp.Info.RecentActions))
+	action0 := describeResp.Info.RecentActions[0]
+	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
+	s.True(action0.ScheduleTime.UnixNano()%int64(5*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 3*time.Second)
+
+	// list
+
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		if err != nil || len(listResp.Schedules) != 1 || listResp.Schedules[0].ScheduleId != sid || len(listResp.Schedules[0].GetInfo().GetRecentActions()) < 2 {
+			return false
+		}
+		s.NoError(err)
+		entry := listResp.Schedules[0]
+		s.Equal(sid, entry.ScheduleId)
+		s.Equal(schSAValue.Data, entry.SearchAttributes.IndexedFields[csa].Data)
+		s.Equal(schMemo.Data, entry.Memo.Fields["schedmemo1"].Data)
+		checkSpec(entry.Info.Spec)
+		s.Equal(wt, entry.Info.WorkflowType.Name)
+		s.False(entry.Info.Paused)
+		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2 is below the limit where list entry might be cut off
+		return true
+	}, 10*time.Second, 1*time.Second)
+
+	// list workflows
+
+	wfResp, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  5,
+		Query:     "",
+	})
+	s.NoError(err)
+	s.Equal(len(wfResp.Executions), 2) // should run exactly twice
+	for _, ex := range wfResp.Executions {
+		s.Equal(wt, ex.Type.Name, "should only see started workflows")
+	}
+	ex0 := wfResp.Executions[0]
+	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
+	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
+		ex0.Execution.RunId == describeResp.Info.RecentActions[1].GetStartWorkflowResult().RunId)
+	s.Equal(wt, ex0.Type.Name)
+	s.Nil(ex0.ParentExecution) // not a child workflow
+	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
+	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById].Data)
+	var ex0StartTime time.Time
+	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
+	s.WithinRange(ex0StartTime, createTime, time.Now())
+	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
+
+	// update
+
+	schedule.Spec.Interval[0].Phase = timestamp.DurationPtr(1 * time.Second)
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+	schedule.State.RemainingActions = 1
+
+	updateTime := time.Now()
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	})
+	s.NoError(err)
+
+	// wait for one new run
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 7*time.Second, 500*time.Millisecond)
+
+	// check schedule workflow status
+	swfresp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+	})
+
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, swfresp.WorkflowExecutionInfo.Status)
+
+	// describe again
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
+	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.Seconds())          // set to default value
+
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
+	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BuildIds])
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	// The create time should be the same as the original schedule workflow
+	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 3*time.Second)
+	s.EqualValues(3, describeResp.Info.ActionCount)
+	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
+	s.EqualValues(0, describeResp.Info.OverlapSkipped)
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+	s.EqualValues(3, len(describeResp.Info.RecentActions))
+	action0 = describeResp.Info.RecentActions[0]
+	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
+	s.True(action0.ScheduleTime.UnixNano()%int64(5*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 3*time.Second)
+
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 3*time.Second)
+	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
+	s.True(lastAction.ScheduleTime.UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.UnixNano())
+
+	// update with calendar spec that has one event
+	targetTime := time.Now().UTC().Add(5 * time.Second)
+
+	schedule.Spec.Interval = nil
+	schedule.Spec.Calendar = []*schedulepb.CalendarSpec{
+		{
+			Year:       fmt.Sprintf("%d", targetTime.Year()),
+			Month:      fmt.Sprintf("%d", targetTime.Month()),
+			DayOfMonth: fmt.Sprintf("%d", targetTime.Day()),
+			Hour:       fmt.Sprintf("%d", targetTime.Hour()),
+			Minute:     fmt.Sprintf("%d", targetTime.Minute()),
+			Second:     fmt.Sprintf("%d", targetTime.Second()),
+		},
+	}
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+	schedule.State.LimitedActions = false
+
+	updateTime = time.Now()
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	})
+	s.NoError(err)
+
+	// wait for one new run
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 2 }, 10*time.Second, 500*time.Millisecond)
+
+	// describe again
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 3*time.Second)
+	lastAction = describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
+	s.DurationNear(lastAction.ScheduleTime.Sub(targetTime), 0, 1*time.Second)
+
+	// trigger immediately
+	_, err = s.engine.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+		},
+		Identity:  "test",
+		RequestId: uuid.New(),
+	})
+	s.NoError(err)
+
+	time.Sleep(2 * time.Second)
+	s.EqualValues(3, atomic.LoadInt32(&runs2), "ran once more")
+
+	// check schedule workflow status
+	swfresp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+	})
+
+	// after trigger it goes back to completed status since remaining actions should be 0
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, swfresp.WorkflowExecutionInfo.Status)
+
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 3*time.Second)
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 3*time.Second)
+	s.EqualValues(5, len(describeResp.Info.RecentActions))
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+
+	// pause, should start a new workflow (since it was completed) and pause it
+	_, err = s.engine.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "because I said so",
+		},
+		Identity:  "test",
+		RequestId: uuid.New(),
+	})
+	s.NoError(err)
+
+	time.Sleep(7 * time.Second)
+	s.EqualValues(3, atomic.LoadInt32(&runs2), "has not run again")
+
+	// check schedule workflow status
+	swfresp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+	})
+
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, swfresp.WorkflowExecutionInfo.Status)
+
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.True(describeResp.Schedule.State.Paused)
+	s.Equal("because I said so", describeResp.Schedule.State.Notes)
+
+	// don't loop to wait for visibility, we already waited 7s from the patch
+	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 5,
+	})
+	s.NoError(err)
+	// we list all completed and running schedules, so we should have 3
+	s.Equal(5, len(listResp.Schedules))
+	entry := listResp.Schedules[0]
+	s.Equal(sid, entry.ScheduleId)
+	s.True(entry.Info.Paused)
+	s.Equal("because I said so", entry.Info.Notes)
+
+	return
+	// finally delete
+
+	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.Error(err)
+
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		s.NoError(err)
+		return len(listResp.Schedules) == 0
+	}, 10*time.Second, 1*time.Second)
+}
