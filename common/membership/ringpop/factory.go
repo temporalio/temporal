@@ -69,14 +69,7 @@ type factoryParams struct {
 
 // factory provides ringpop based membership objects
 type factory struct {
-	Config          *config.Membership
-	ServiceName     primitives.ServiceName
-	ServicePortMap  config.ServicePortMap
-	Logger          log.Logger
-	MetadataManager persistence.ClusterMetadataManager
-	RPCConfig       *config.RPC
-	TLSFactory      encryption.TLSConfigProvider
-	DC              *dynamicconfig.Collection
+	*factoryParams
 
 	channel *tchannel.Channel
 	monitor *monitor
@@ -98,14 +91,7 @@ func newFactory(params factoryParams) (*factory, error) {
 	}
 
 	return &factory{
-		Config:          params.Config,
-		ServiceName:     params.ServiceName,
-		ServicePortMap:  params.ServicePortMap,
-		Logger:          params.Logger,
-		MetadataManager: params.MetadataManager,
-		RPCConfig:       params.RPCConfig,
-		TLSFactory:      params.TLSFactory,
-		DC:              params.DC,
+		factoryParams: &params,
 	}, nil
 }
 
