@@ -119,6 +119,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
+		hostInfoProvider            membership.HostInfoProvider
 		metricsHandler              metrics.Handler
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
@@ -144,6 +145,7 @@ type (
 		HistoryClient                       historyservice.HistoryServiceClient
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
+		HostInfoProvider                    membership.HostInfoProvider
 		ArchiverProvider                    provider.ArchiverProvider
 		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
@@ -196,6 +198,7 @@ func NewAdminHandler(
 		historyClient:               args.HistoryClient,
 		sdkClientFactory:            args.sdkClientFactory,
 		membershipMonitor:           args.MembershipMonitor,
+		hostInfoProvider:            args.HostInfoProvider,
 		metricsHandler:              args.MetricsHandler,
 		namespaceRegistry:           args.NamespaceRegistry,
 		saProvider:                  args.SaProvider,
@@ -1020,13 +1023,8 @@ func (adh *AdminHandler) DescribeCluster(
 
 	membershipInfo := &clusterspb.MembershipInfo{}
 	if monitor := adh.membershipMonitor; monitor != nil {
-		currentHost, err := monitor.WhoAmI()
-		if err != nil {
-			return nil, err
-		}
-
 		membershipInfo.CurrentHost = &clusterspb.HostInfo{
-			Identity: currentHost.Identity(),
+			Identity: adh.hostInfoProvider.HostInfo().Identity(),
 		}
 
 		members, err := monitor.GetReachableMembers()

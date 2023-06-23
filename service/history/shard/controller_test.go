@@ -134,7 +134,7 @@ func (s *controllerSuite) SetupTest() {
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
-	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
+	s.mockHostInfoProvider = s.mockResource.HostInfoProvider
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(s.hostInfo).AnyTimes()
 
 	s.logger = s.mockResource.Logger

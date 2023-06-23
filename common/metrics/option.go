@@ -22,51 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package metrics
 
-import (
-	"context"
-
-	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/primitives"
-)
-
-type simpleMonitor struct {
-	resolvers map[primitives.ServiceName]membership.ServiceResolver
+// Option is used to configure a metric definition. Note that options are currently only supported when using the
+// Prometheus reporter with the OpenTelemetry framework.
+type Option interface {
+	apply(m *metricDefinition)
 }
 
-// NewSimpleMonitor returns a simple monitor interface
-func newSimpleMonitor(hosts map[primitives.ServiceName][]string) *simpleMonitor {
-	resolvers := make(map[primitives.ServiceName]membership.ServiceResolver, len(hosts))
-	for service, hostList := range hosts {
-		resolvers[service] = newSimpleResolver(service, hostList)
-	}
+// WithDescription sets the description, or "help text", of a metric. See [ServiceRequests] for an example.
+type WithDescription string
 
-	return &simpleMonitor{resolvers}
+func (h WithDescription) apply(m *metricDefinition) {
+	m.description = string(h)
 }
 
-func (s *simpleMonitor) Start() {
-}
+// WithUnit sets the unit of a metric. See NewBytesHistogramDef for an example.
+type WithUnit MetricUnit
 
-func (s *simpleMonitor) Stop() {
-}
-
-func (s *simpleMonitor) EvictSelf() error {
-	return nil
-}
-
-func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
-	resolver, ok := s.resolvers[service]
-	if !ok {
-		return nil, membership.ErrUnknownService
-	}
-	return resolver, nil
-}
-
-func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
-	return nil, nil
-}
-
-func (s *simpleMonitor) WaitUntilInitialized(_ context.Context) error {
-	return nil
+func (h WithUnit) apply(m *metricDefinition) {
+	m.unit = MetricUnit(h)
 }

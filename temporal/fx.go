@@ -194,7 +194,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
-		metricHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+		metricHandler, err = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+		if err != nil {
+			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
+		}
 	}
 
 	// DynamicConfigClient

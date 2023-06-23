@@ -448,9 +448,9 @@ func newPrometheusScope(
 }
 
 // MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
-func MetricsHandlerFromConfig(logger log.Logger, c *Config) Handler {
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 	if c == nil {
-		return NoopMetricsHandler
+		return NoopMetricsHandler, nil
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
@@ -467,7 +467,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) Handler {
 	return NewTallyMetricsHandler(
 		c.ClientConfig,
 		NewScope(logger, c),
-	)
+	), nil
 }
 
 func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
