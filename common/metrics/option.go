@@ -1,5 +1,4 @@
 // The MIT License
-
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -25,50 +24,22 @@
 
 package metrics
 
-// types used/defined by the package
-type (
-	MetricUnit string
-
-	// metricDefinition contains the definition for a metric
-	metricDefinition struct {
-		name        string
-		description string
-		unit        MetricUnit
-	}
-)
-
-// MetricUnit supported values
-// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
-const (
-	Dimensionless = "1"
-	Milliseconds  = "ms"
-	Bytes         = "By"
-)
-
-func (md metricDefinition) GetMetricName() string {
-	return md.name
+// Option is used to configure a metric definition. Note that options are currently only supported when using the
+// Prometheus reporter with the OpenTelemetry framework.
+type Option interface {
+	apply(m *metricDefinition)
 }
 
-func (md metricDefinition) GetMetricUnit() MetricUnit {
-	return md.unit
+// WithDescription sets the description, or "help text", of a metric. See [ServiceRequests] for an example.
+type WithDescription string
+
+func (h WithDescription) apply(m *metricDefinition) {
+	m.description = string(h)
 }
 
-func NewTimerDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
-}
+// WithUnit sets the unit of a metric. See NewBytesHistogramDef for an example.
+type WithUnit MetricUnit
 
-func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
-}
-
-func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
-}
-
-func NewCounterDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
-}
-
-func NewGaugeDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
+func (h WithUnit) apply(m *metricDefinition) {
+	m.unit = MetricUnit(h)
 }

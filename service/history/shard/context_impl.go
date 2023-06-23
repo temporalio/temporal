@@ -195,6 +195,13 @@ func (s *ContextImpl) GetShardID() int32 {
 	return s.shardID
 }
 
+func (s *ContextImpl) GetRangeID() int64 {
+	s.rLock()
+	defer s.rUnlock()
+
+	return s.getRangeIDLocked()
+}
+
 func (s *ContextImpl) GetOwner() string {
 	// constant from initialization, no need for locks
 	return s.owner

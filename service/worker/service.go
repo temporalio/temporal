@@ -320,6 +320,10 @@ func NewConfig(
 				dynamicconfig.ExecutionScannerHistoryEventIdValidator,
 				true,
 			),
+			RemovableBuildIdDurationSinceDefault: dc.GetDurationProperty(
+				dynamicconfig.RemovableBuildIdDurationSinceDefault,
+				time.Hour,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),

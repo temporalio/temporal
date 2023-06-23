@@ -1,5 +1,4 @@
 // The MIT License
-
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -25,50 +24,33 @@
 
 package metrics
 
-// types used/defined by the package
-type (
-	MetricUnit string
+import (
+	"testing"
 
-	// metricDefinition contains the definition for a metric
-	metricDefinition struct {
-		name        string
-		description string
-		unit        MetricUnit
-	}
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// MetricUnit supported values
-// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
-const (
-	Dimensionless = "1"
-	Milliseconds  = "ms"
-	Bytes         = "By"
-)
+func TestRegistryBuildCatalog_Ok(t *testing.T) {
+	t.Parallel()
 
-func (md metricDefinition) GetMetricName() string {
-	return md.name
+	r := registry{}
+	r.register("foo", WithDescription("foo description"))
+	r.register("bar", WithDescription("bar description"))
+	c, err := r.buildCatalog()
+	require.Nil(t, err)
+	require.Equal(t, 2, len(c))
+	require.Equal(t, "foo description", c["foo"].description)
+	require.Equal(t, "bar description", c["bar"].description)
 }
 
-func (md metricDefinition) GetMetricUnit() MetricUnit {
-	return md.unit
-}
+func TestRegistryBuildCatalog_ErrMetricAlreadyExists(t *testing.T) {
+	t.Parallel()
 
-func NewTimerDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
-}
-
-func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
-}
-
-func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
-}
-
-func NewCounterDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
-}
-
-func NewGaugeDef(name string, opts ...Option) metricDefinition {
-	return globalRegistry.register(name, opts...)
+	b := registry{}
+	b.register("foo", WithDescription("foo description"))
+	b.register("foo", WithDescription("bar description"))
+	_, err := b.buildCatalog()
+	assert.ErrorIs(t, err, errMetricAlreadyExists)
+	assert.ErrorContains(t, err, "foo")
 }

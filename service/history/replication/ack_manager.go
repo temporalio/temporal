@@ -272,9 +272,6 @@ func (p *ackMgrImpl) GetTasks(
 	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
 		Record(int64(len(replicationTasks)))
 
-	p.metricsHandler.Histogram(metrics.ReplicationTasksReturned.GetMetricName(), metrics.ReplicationTasksReturned.GetMetricUnit()).
-		Record(int64(len(replicationTasks)))
-
 	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
