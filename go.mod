@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.289
 	github.com/blang/semver/v4 v4.0.0
 	github.com/brianvoe/gofakeit/v6 v6.22.0
-	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
+	github.com/cactus/go-statsd-client/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.15.0
@@ -66,7 +66,7 @@ require (
 )
 
 require (
-	github.com/cactus/go-statsd-client/v5 v5.0.0 // indirect
+	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
