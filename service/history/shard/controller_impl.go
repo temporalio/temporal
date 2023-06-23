@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
@@ -203,7 +204,7 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 	return ids
 }
 
-func (c *ControllerImpl) shardClosedCallback(shard ControllableContext) {
+func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
 		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
@@ -256,7 +257,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (Context, error)
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
 
-	shard, err := c.contextFactory.CreateContext(shardID, c.shardClosedCallback)
+	shard, err := c.contextFactory.CreateContext(shardID, c.shardRemoveAndStop)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +292,52 @@ func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableC
 	return current
 }
 
+// shardLingerThenClose delays closing the shard for a small amount of time,
+// while watching for the shard to become invalid due to receiving a shard
+// ownership lost error. It calls AssertOwnership to probe for lost ownership,
+// but any concurrent request may also see the error, which will mark the shard
+// as invalid.
+func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32) {
+	c.RLock()
+	shard, ok := c.historyShards[shardID]
+	c.RUnlock()
+	if !ok {
+		return
+	}
+
+	startTime := time.Now()
+	timeout := util.Min(c.config.ShardLingerTimeLimit(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	qps := c.config.ShardLingerOwnershipCheckQPS()
+	// The limiter must be configured with burst>=1. With burst=1,
+	// the first call to Wait() won't be delayed.
+	limiter := rate.NewLimiter(rate.Limit(qps), 1)
+
+	for {
+		if !shard.IsValid() {
+			c.taggedMetricsHandler.Timer(metrics.ShardLingerSuccess.GetMetricName()).Record(time.Since(startTime))
+			break
+		}
+
+		if err := limiter.Wait(ctx); err != nil {
+			c.contextTaggedLogger.Info("shardLinger: wait timed out",
+				tag.ShardID(shardID),
+				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
+			)
+			c.taggedMetricsHandler.Counter(metrics.ShardLingerTimeouts.GetMetricName()).Record(1)
+			break
+		}
+
+		// If this AssertOwnership or any other request on the shard receives
+		// a shard ownership lost error, the shard will be marked as invalid.
+		_ = shard.AssertOwnership(ctx)
+	}
+
+	c.shardRemoveAndStop(shard)
+}
+
 func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	c.taggedMetricsHandler.Counter(metrics.AcquireShardsCounter.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
@@ -304,7 +351,11 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
 			if IsShardOwnershipLostError(err) {
 				// current host is not owner of shard, unload it if it is already loaded.
-				c.CloseShardByID(shardID)
+				if c.config.ShardLingerEnabled() {
+					c.shardLingerThenClose(ctx, shardID)
+				} else {
+					c.CloseShardByID(shardID)
+				}
 			}
 			return
 		}

@@ -48,6 +48,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -77,6 +79,7 @@ type (
 		logger               log.Logger
 		shardController      *ControllerImpl
 		mockHostInfoProvider *membership.MockHostInfoProvider
+		metricsTestHandler   *metricstest.Handler
 	}
 )
 
@@ -85,6 +88,7 @@ func NewTestController(
 	config *configs.Config,
 	resource *resourcetest.Test,
 	hostInfoProvider *membership.MockHostInfoProvider,
+	metricsTestHandler *metricstest.Handler,
 ) *ControllerImpl {
 	contextFactory := ContextFactoryProvider(ContextFactoryParams{
 		ArchivalMetadata:            resource.GetArchivalMetadata(),
@@ -96,7 +100,7 @@ func NewTestController(
 		HistoryServiceResolver:      resource.GetHistoryServiceResolver(),
 		HostInfoProvider:            hostInfoProvider,
 		Logger:                      resource.GetLogger(),
-		MetricsHandler:              resource.GetMetricsHandler(),
+		MetricsHandler:              metricsTestHandler,
 		NamespaceRegistry:           resource.GetNamespaceRegistry(),
 		PayloadSerializer:           resource.GetPayloadSerializer(),
 		PersistenceExecutionManager: resource.GetExecutionManager(),
@@ -111,7 +115,7 @@ func NewTestController(
 		config,
 		resource.GetLogger(),
 		resource.GetHistoryServiceResolver(),
-		resource.GetMetricsHandler(),
+		metricsTestHandler,
 		resource.GetHostInfoProvider(),
 		contextFactory,
 	).(*ControllerImpl)
@@ -139,12 +143,16 @@ func (s *controllerSuite) SetupTest() {
 
 	s.logger = s.mockResource.Logger
 	s.config = tests.NewDynamicConfig()
+	metricsTestHandler, err := metricstest.NewHandler(log.NewNoopLogger(), metrics.ClientConfig{})
+	s.NoError(err)
+	s.metricsTestHandler = metricsTestHandler
 
 	s.shardController = NewTestController(
 		s.mockEngineFactory,
 		s.config,
 		s.mockResource,
 		s.mockHostInfoProvider,
+		s.metricsTestHandler,
 	)
 }
 
@@ -319,6 +327,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.config,
 		s.mockResource,
 		s.mockHostInfoProvider,
+		s.metricsTestHandler,
 	)
 	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -423,6 +432,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.config,
 		s.mockResource,
 		s.mockHostInfoProvider,
+		s.metricsTestHandler,
 	)
 
 	historyEngines := make(map[int32]*MockEngine)
@@ -728,6 +738,133 @@ func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {
 	s.ErrorIs(err, invalidShardIdUpperBound)
 }
 
+func (s *controllerSuite) TestShardLingerTimeout() {
+	shardID := int32(1)
+	s.config.NumberOfShards = 1
+	s.config.ShardLingerEnabled = func() bool {
+		return true
+	}
+	timeLimit := 1 * time.Second
+	checkQPS := 5
+	s.config.ShardLingerTimeLimit = func() time.Duration {
+		return timeLimit
+	}
+	s.config.ShardLingerOwnershipCheckQPS = func() int {
+		return checkQPS
+	}
+
+	historyEngines := make(map[int32]*MockEngine)
+	mockEngine := NewMockEngine(s.controller)
+	historyEngines[shardID] = mockEngine
+	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
+
+	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+	s.shardController.acquireShards(context.Background())
+
+	s.Len(s.shardController.ShardIDs(), 1)
+
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress("newhost"), nil)
+
+	mockEngine.EXPECT().Stop().Return()
+
+	start := time.Now()
+	s.shardController.acquireShards(context.Background())
+	expectedMinimumWait := timeLimit - (time.Second / time.Duration(checkQPS))
+	s.Greater(time.Now().Sub(start), expectedMinimumWait)
+	s.Len(s.shardController.ShardIDs(), 0)
+
+	s.Equal(float64(1), s.readMetricsCounter(
+		metrics.ShardLingerTimeouts.GetMetricName(),
+		metrics.OperationTag(metrics.HistoryShardControllerScope)))
+}
+
+func (s *controllerSuite) TestShardLingerSuccess() {
+	shardID := int32(1)
+	s.config.NumberOfShards = 1
+	s.config.ShardLingerEnabled = func() bool {
+		return true
+	}
+	timeLimit := 1 * time.Second
+	checkQPS := 5
+	s.config.ShardLingerTimeLimit = func() time.Duration {
+		return timeLimit
+	}
+	s.config.ShardLingerOwnershipCheckQPS = func() int {
+		return checkQPS
+	}
+
+	historyEngines := make(map[int32]*MockEngine)
+	mockEngine := NewMockEngine(s.controller)
+	historyEngines[shardID] = mockEngine
+
+	mockEngine.EXPECT().Start().MinTimes(1)
+	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(1)
+	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(1)
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                shardID,
+				Owner:                  s.hostInfo.Identity(),
+				RangeId:                5,
+				ReplicationDlqAckLevel: map[string]int64{},
+				QueueStates:            s.queueStates(),
+			},
+		}, nil).MinTimes(1)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
+		ShardInfo: &persistencespb.ShardInfo{
+			ShardId:                shardID,
+			Owner:                  s.hostInfo.Identity(),
+			RangeId:                6,
+			StolenSinceRenew:       1,
+			ReplicationDlqAckLevel: map[string]int64{},
+			QueueStates:            s.queueStates(),
+		},
+		PreviousRangeID: 5,
+	})).Return(nil).MinTimes(1)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).Return(nil).Times(1)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+
+	s.shardController.acquireShards(context.Background())
+	s.Len(s.shardController.ShardIDs(), 1)
+	shard, err := s.shardController.getOrCreateShardContext(shardID)
+	s.NoError(err)
+
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress("newhost"), nil)
+
+	mockEngine.EXPECT().Stop().Return().MinTimes(1)
+
+	// We mock 2 AssertShardOwnership calls because the first call happens
+	// before any waiting actually occcurs in shardLingerAndClose.
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).Return(nil).Times(1)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).DoAndReturn(func(_ context.Context, _ *persistence.AssertShardOwnershipRequest) error {
+		shard.UnloadForOwnershipLost()
+		return nil
+	}).Times(1)
+
+	start := time.Now()
+	s.shardController.acquireShards(context.Background())
+	s.Len(s.shardController.ShardIDs(), 0)
+
+	expectedWait := time.Second / time.Duration(checkQPS)
+	expected := start.Add(expectedWait)
+	s.WithinDuration(time.Now(), expected, 100*time.Millisecond)
+}
+
 func (s *controllerSuite) setupMocksForAcquireShard(
 	shardID int32,
 	mockEngine *MockEngine,
@@ -772,7 +909,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 		ShardID: shardID,
 		RangeID: newRangeID,
-	}).Return(nil).AnyTimes()
+	}).Return(nil).MinTimes(minTimes)
 }
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
@@ -868,4 +1005,18 @@ func (m updateShardRequestMatcher) Matches(x interface{}) bool {
 
 func (m updateShardRequestMatcher) String() string {
 	return fmt.Sprintf("%+v", (persistence.UpdateShardRequest)(m))
+}
+
+func (s *controllerSuite) readMetricsCounter(name string, nonSystemTags ...metrics.Tag) float64 {
+	expectedSystemTags := []metrics.Tag{
+		metrics.StringTag("otel_scope_name", "temporal"),
+		metrics.StringTag("otel_scope_version", ""),
+	}
+	snapshot, err := s.metricsTestHandler.Snapshot()
+	s.NoError(err)
+
+	tags := append(nonSystemTags, expectedSystemTags...)
+	value, err := snapshot.Counter(name+"_total", tags...)
+	s.NoError(err)
+	return value
 }
