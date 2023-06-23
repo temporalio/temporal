@@ -2408,6 +2408,23 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
+	// Verify that the scavenger considers both v0 and v01 unreachable as they have no running workflows and
+	// removableBuildIdDurationSinceDefault is set to a single microsecond
+	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        s.T().Name() + "-scavenger",
+		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
+	}, build_ids.BuildIdScavangerWorkflowName)
+	s.Require().NoError(err)
+	err = run.Get(ctx, nil)
+	s.Require().NoError(err)
+
+	compatibility, err := s.sdkClient.GetWorkerBuildIdCompatibility(ctx, &sdkclient.GetWorkerBuildIdCompatibilityOptions{
+		TaskQueue: tq1,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(compatibility.Sets))
+	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
+
 }
 
 func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {

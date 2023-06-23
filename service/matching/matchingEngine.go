@@ -1051,11 +1051,11 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		for _, buildId := range buildIdsRemoved {
 			// We accept that the user data is locked for updates while running these visibility queries.
 			// Nothing else is _supposed_ to update it on follower (standby) clusters.
-			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, e.visibilityManager, ns, req.TaskQueue, buildId)
+			hasRunningWorkflows, err := worker_versioning.BuildIdHasRunningWorkflows(ctx, e.visibilityManager, ns, req.TaskQueue, buildId)
 			if err != nil {
 				return nil, false, err
 			}
-			if exists {
+			if hasRunningWorkflows {
 				buildIdsToRevive = append(buildIdsToRevive, buildId)
 			}
 		}

@@ -288,12 +288,12 @@ func (a *Activities) findBuildIdsToRemove(
 			if err := rateLimiter.Wait(ctx); err != nil {
 				return buildIdsToRemove, err
 			}
-			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.Id)
+			hasRunningWorkflows, err := worker_versioning.BuildIdHasRunningWorkflows(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.Id)
 			if err != nil {
 				return buildIdsToRemove, err
 			}
 			a.recordHeartbeat(ctx, heartbeat)
-			if !exists {
+			if !hasRunningWorkflows {
 				a.logger.Info("Found build id to remove",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),

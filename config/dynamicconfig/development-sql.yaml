@@ -30,16 +30,18 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
-system.enableEagerWorkflowStart:
-  - value: true
 limit.maxIDLength:
   - value: 255
     constraints: {}
-frontend.workerVersioningDataAPIs:
-  - value: true
-frontend.workerVersioningWorkflowAPIs:
+system.enableEagerWorkflowStart:
   - value: true
 frontend.enableUpdateWorkflowExecution:
   - value: true
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
+  - value: true
+frontend.workerVersioningDataAPIs:
+  - value: true
+frontend.workerVersioningWorkflowAPIs:
+  - value: true
+worker.buildIdScavengerEnabled:
   - value: true

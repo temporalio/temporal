@@ -83,10 +83,13 @@ func FindBuildId(versionSets []*taskqueuepb.CompatibleVersionSet, buildId string
 	return setIndex, indexInSet
 }
 
-func WorkflowsExistForBuildId(ctx context.Context, visibilityManager manager.VisibilityManager, ns *namespace.Namespace, taskQueue, buildId string) (bool, error) {
+func BuildIdHasRunningWorkflows(ctx context.Context, visibilityManager manager.VisibilityManager, ns *namespace.Namespace, taskQueue, buildId string) (bool, error) {
 	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(taskQueue)))
 	escapedBuildId := sqlparser.String(sqlparser.NewStrVal([]byte(VersionedBuildIdSearchAttribute(buildId))))
-	query := fmt.Sprintf("%s = %s AND %s = %s", searchattribute.TaskQueue, escapedTaskQueue, searchattribute.BuildIds, escapedBuildId)
+	query := fmt.Sprintf("%s = %s AND %s = %s AND %s = 'Running'",
+		searchattribute.TaskQueue, escapedTaskQueue,
+		searchattribute.BuildIds, escapedBuildId,
+		searchattribute.ExecutionStatus)
 
 	response, err := visibilityManager.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: ns.ID(),
