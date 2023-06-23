@@ -82,7 +82,7 @@ type (
 	RegistryImpl struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		store           UpdateStore
+		getStoreFn      func() UpdateStore
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
@@ -133,10 +133,13 @@ func WithTracerProvider(t trace.TracerProvider) regOpt {
 
 var _ Registry = (*RegistryImpl)(nil)
 
-func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
+func NewRegistry(
+	getStoreFn func() UpdateStore,
+	opts ...regOpt,
+) *RegistryImpl {
 	r := &RegistryImpl{
 		updates:         make(map[string]*Update),
-		store:           store,
+		getStoreFn:      getStoreFn,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
 		maxTotal:        func() int { return math.MaxInt },
@@ -145,7 +148,7 @@ func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
 		opt(r)
 	}
 
-	store.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
 		// need to eager load here so that Len and admit are correct.
 		if acc := updInfo.GetAcceptance(); acc != nil {
 			r.updates[updID] = newAccepted(
@@ -263,7 +266,7 @@ func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
-	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
+	updOutcome, err := r.getStoreFn().GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that update doesn't exist.
 	var notFound *serviceerror.NotFound
