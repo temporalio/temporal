@@ -729,7 +729,7 @@ func (s *contextSuite) TestShardStopReasonCloseShard() {
 	s.mockShard.state = contextStateAcquired
 	s.mockHistoryEngine.EXPECT().Stop().Times(1)
 
-	s.mockShard.finishStop()
+	s.mockShard.FinishStop()
 
 	s.False(s.mockShard.IsValid())
 	s.False(s.mockShard.stoppedForOwnershipLost())
