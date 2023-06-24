@@ -1143,6 +1143,39 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	return event
 }
 
+func (b *HistoryBuilder) AddSignalWithStartChildWorkflowExecutionInitiatedEvent(
+	workflowTaskCompletedEventID int64,
+	command *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes,
+	targetNamespaceID namespace.ID,
+) *historypb.HistoryEvent {
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_SignalWithStartChildWorkflowExecutionInitiatedEventAttributes{
+		SignalWithStartChildWorkflowExecutionInitiatedEventAttributes: &historypb.SignalWithStartChildWorkflowExecutionInitiatedEventAttributes{
+			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+			Namespace:                    command.Namespace,
+			NamespaceId:                  targetNamespaceID.String(),
+			WorkflowId:                   command.WorkflowId,
+			WorkflowType:                 command.WorkflowType,
+			TaskQueue:                    command.TaskQueue,
+			Header:                       command.Header,
+			WorkflowInput:                command.WorkflowInput,
+			WorkflowExecutionTimeout:     command.WorkflowExecutionTimeout,
+			WorkflowRunTimeout:           command.WorkflowRunTimeout,
+			WorkflowTaskTimeout:          command.WorkflowTaskTimeout,
+			SignalName:                   command.SignalName,
+			SignalInput:                  command.SignalInput,
+			WorkflowIdReusePolicy:        command.WorkflowIdReusePolicy,
+			RetryPolicy:                  command.RetryPolicy,
+			CronSchedule:                 command.CronSchedule,
+			Memo:                         command.Memo,
+			SearchAttributes:             command.SearchAttributes,
+			ParentClosePolicy:            command.GetParentClosePolicy(),
+		},
+	}
+
+	return b.appendEvents(event)
+}
+
 func (b *HistoryBuilder) appendEvents(
 	event *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, int64) {
