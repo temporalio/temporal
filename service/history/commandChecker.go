@@ -683,6 +683,14 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+func (v *commandAttrValidator) validateSignalWithStartChildWorkflowExecutionAttributes(
+	attributes *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes,
+) (enumspb.SignalWithStartChildWorkflowExecutionFailedCause, error) {
+	const failedCause = enumspb.SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+	// TODO add validation
+	return failedCause, nil
+}
+
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID namespace.ID,
 	targetNamespaceID namespace.ID,
