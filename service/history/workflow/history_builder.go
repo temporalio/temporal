@@ -1176,6 +1176,33 @@ func (b *HistoryBuilder) AddSignalWithStartChildWorkflowExecutionInitiatedEvent(
 	return b.appendEvents(event)
 }
 
+func (b *HistoryBuilder) AddSignalWithStartChildWorkflowExecutionFailedEvent(
+	initiatedID int64,
+	startedEventID int64,
+	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	workflowType *commonpb.WorkflowType,
+	failure *failurepb.Failure,
+	retryState enumspb.RetryState,
+) *historypb.HistoryEvent {
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_SignalWithStartChildWorkflowExecutionFailedEventAttributes{
+		SignalWithStartChildWorkflowExecutionFailedEventAttributes: &historypb.SignalWithStartChildWorkflowExecutionFailedEventAttributes{
+			InitiatedEventId: initiatedID,
+			// What StartedEventId:    startedEventID,
+			Namespace:   targetNamespace.String(),
+			NamespaceId: targetNamespaceID.String(),
+			//WorkflowExecution: execution,
+			WorkflowType: workflowType,
+			//Failure:           failure,
+			//RetryState:        retryState,
+		},
+	}
+
+	return b.appendEvents(event)
+}
+
 func (b *HistoryBuilder) appendEvents(
 	event *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, int64) {
