@@ -97,7 +97,9 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
+			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{},
+			}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.gorogrp.Cancel()
@@ -117,7 +119,9 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{},
+	}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
 	tlm.taskReader.gorogrp.Cancel()

@@ -188,7 +188,60 @@ func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
 }
 
-// RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
+// IsWorkflowTaskValid - whether workflow task is still valid
+func (h *Handler) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+	workflowID := request.Execution.WorkflowId
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err := engine.IsWorkflowTaskValid(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+// IsActivityTaskValid - whether activity task is still valid
+func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (_ *historyservice.IsActivityTaskValidResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+	workflowID := request.Execution.WorkflowId
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err := engine.IsActivityTaskValid(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()

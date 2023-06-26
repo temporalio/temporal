@@ -40,6 +40,8 @@ var (
 		"GetDLQReplicationMessages":              0,
 		"GetMutableState":                        0,
 		"GetReplicationMessages":                 0,
+		"IsActivityTaskValid":                    0,
+		"IsWorkflowTaskValid":                    0,
 		"MergeDLQMessages":                       0,
 		"PollMutableState":                       0,
 		"PurgeDLQMessages":                       0,
