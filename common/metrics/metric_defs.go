@@ -1458,6 +1458,7 @@ var (
 	ReplicationTasksSend                          = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                          = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog                   = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
+	ReplicationTasksSkipped                       = NewCounterDef("replication_tasks_skipped")
 	ReplicationTasksApplied                       = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                        = NewCounterDef("replication_tasks_failed")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
