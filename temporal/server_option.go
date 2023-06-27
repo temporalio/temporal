@@ -29,7 +29,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -152,14 +151,6 @@ func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
 func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStoreFactory) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customDataStoreFactory = customFactory
-	})
-}
-
-// WithClientFactoryProvider sets a custom ClientFactoryProvider
-// NOTE: this option is experimental and may be changed or removed in future release.
-func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
-	return applyFunc(func(s *serverOptions) {
-		s.clientFactoryProvider = clientFactoryProvider
 	})
 }
 

@@ -59,19 +59,6 @@ type (
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
 
-	// FactoryProvider can be used to provide a customized client Factory implementation.
-	FactoryProvider interface {
-		NewFactory(
-			rpcFactory common.RPCFactory,
-			monitor membership.Monitor,
-			metricsHandler metrics.Handler,
-			dc *dynamicconfig.Collection,
-			numberOfHistoryShards int32,
-			logger log.Logger,
-			throttledLogger log.Logger,
-		) Factory
-	}
-
 	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
 	NamespaceIDToNameFunc func(id namespace.ID) (namespace.Name, error)
 
@@ -85,21 +72,13 @@ type (
 		throttledLogger       log.Logger
 	}
 
-	factoryProviderImpl struct {
-	}
-
 	serviceKeyResolverImpl struct {
 		resolver membership.ServiceResolver
 	}
 )
 
-// NewFactoryProvider creates a default implementation of FactoryProvider.
-func NewFactoryProvider() FactoryProvider {
-	return &factoryProviderImpl{}
-}
-
 // NewFactory creates an instance of client factory that knows how to dispatch RPC calls.
-func (p *factoryProviderImpl) NewFactory(
+func NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,

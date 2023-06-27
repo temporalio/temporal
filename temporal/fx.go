@@ -42,7 +42,6 @@ import (
 	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -119,13 +118,12 @@ type (
 		AudienceGetter         authorization.JWTAudienceMapper
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                log.Logger
-		ClientFactoryProvider client.FactoryProvider
-		DynamicConfigClient   dynamicconfig.Client
-		TLSConfigProvider     encryption.TLSConfigProvider
-		EsConfig              *esclient.Config
-		EsClient              esclient.Client
-		MetricsHandler        metrics.Handler
+		Logger              log.Logger
+		DynamicConfigClient dynamicconfig.Client
+		TLSConfigProvider   encryption.TLSConfigProvider
+		EsConfig            *esclient.Config
+		EsClient            esclient.Client
+		MetricsHandler      metrics.Handler
 	}
 )
 
@@ -183,12 +181,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	logger := so.logger
 	if logger == nil {
 		logger = log.NewZapLogger(log.BuildZapLogger(so.config.Log))
-	}
-
-	// ClientFactoryProvider
-	clientFactoryProvider := so.clientFactoryProvider
-	if clientFactoryProvider == nil {
-		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
 	// MetricsHandler
@@ -276,13 +268,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClaimMapper:            so.claimMapper,
 		AudienceGetter:         so.audienceGetter,
 
-		Logger:                logger,
-		ClientFactoryProvider: clientFactoryProvider,
-		DynamicConfigClient:   dcClient,
-		TLSConfigProvider:     tlsConfigProvider,
-		EsConfig:              esConfig,
-		EsClient:              esClient,
-		MetricsHandler:        metricHandler,
+		Logger:              logger,
+		DynamicConfigClient: dcClient,
+		TLSConfigProvider:   tlsConfigProvider,
+		EsConfig:            esConfig,
+		EsClient:            esClient,
+		MetricsHandler:      metricHandler,
 	}, nil
 }
 
@@ -340,7 +331,6 @@ type (
 		TlsConfigProvider          encryption.TLSConfigProvider
 		PersistenceConfig          config.Persistence
 		ClusterMetadata            *cluster.Config
-		ClientFactoryProvider      client.FactoryProvider
 		AudienceGetter             authorization.JWTAudienceMapper
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
@@ -386,7 +376,6 @@ func HistoryServiceProvider(
 			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
@@ -436,7 +425,6 @@ func MatchingServiceProvider(
 			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
@@ -494,7 +482,6 @@ func genericFrontendServiceProvider(
 			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
@@ -560,7 +547,6 @@ func WorkerServiceProvider(
 			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),

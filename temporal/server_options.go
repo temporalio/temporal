@@ -31,7 +31,6 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,7 +69,6 @@ type (
 		elasticsearchHttpClient    *http.Client
 		dynamicConfigClient        dynamicconfig.Client
 		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
-		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
 		metricHandler              metrics.Handler

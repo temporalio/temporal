@@ -216,7 +216,6 @@ func NamespaceRegistryProvider(
 }
 
 func ClientFactoryProvider(
-	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
@@ -225,7 +224,7 @@ func ClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 ) client.Factory {
-	return factoryProvider.NewFactory(
+	return client.NewFactory(
 		rpcFactory,
 		membershipMonitor,
 		metricsHandler,

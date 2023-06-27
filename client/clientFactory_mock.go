@@ -37,11 +37,6 @@ import (
 	v10 "go.temporal.io/server/api/adminservice/v1"
 	v11 "go.temporal.io/server/api/historyservice/v1"
 	v12 "go.temporal.io/server/api/matchingservice/v1"
-	common "go.temporal.io/server/common"
-	dynamicconfig "go.temporal.io/server/common/dynamicconfig"
-	log "go.temporal.io/server/common/log"
-	membership "go.temporal.io/server/common/membership"
-	metrics "go.temporal.io/server/common/metrics"
 	grpc "google.golang.org/grpc"
 )
 
@@ -156,41 +151,4 @@ func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, time
 func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress, timeout, longPollTimeout interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
-}
-
-// MockFactoryProvider is a mock of FactoryProvider interface.
-type MockFactoryProvider struct {
-	ctrl     *gomock.Controller
-	recorder *MockFactoryProviderMockRecorder
-}
-
-// MockFactoryProviderMockRecorder is the mock recorder for MockFactoryProvider.
-type MockFactoryProviderMockRecorder struct {
-	mock *MockFactoryProvider
-}
-
-// NewMockFactoryProvider creates a new mock instance.
-func NewMockFactoryProvider(ctrl *gomock.Controller) *MockFactoryProvider {
-	mock := &MockFactoryProvider{ctrl: ctrl}
-	mock.recorder = &MockFactoryProviderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockFactoryProvider) EXPECT() *MockFactoryProviderMockRecorder {
-	return m.recorder
-}
-
-// NewFactory mocks base method.
-func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.Handler, dc *dynamicconfig.Collection, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger)
-	ret0, _ := ret[0].(Factory)
-	return ret0
-}
-
-// NewFactory indicates an expected call of NewFactory.
-func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger)
 }
