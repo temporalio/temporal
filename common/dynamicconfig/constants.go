@@ -116,6 +116,9 @@ const (
 	PersistenceHealthSignalBufferSize = "system.persistenceHealthSignalBufferSize"
 	// ShardRPSWarnLimit is the per-shard RPS limit for warning
 	ShardRPSWarnLimit = "system.shardRPSWarnLimit"
+	// ShardPerNsRPSWarnPercent is the per-shard per-namespace RPS limit for warning as a percentage of ShardRPSWarnLimit
+	// these warning are not emitted if the value is set to 0 or less
+	ShardPerNsRPSWarnPercent = "system.shardPerNsRPSWarnPercent"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"

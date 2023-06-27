@@ -172,7 +172,7 @@ func (p *shardPersistenceClient) GetOrCreateShard(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetOrCreateShardScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetOrCreateShard(ctx, request)
@@ -186,7 +186,7 @@ func (p *shardPersistenceClient) UpdateShard(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardInfo.GetShardId(), latency, retErr)
+		p.healthSignals.Record(request.ShardInfo.GetShardId(), caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateShardScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateShard(ctx, request)
@@ -200,7 +200,7 @@ func (p *shardPersistenceClient) AssertShardOwnership(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceAssertShardOwnershipScope, caller, latency, retErr)
 	}()
 	return p.persistence.AssertShardOwnership(ctx, request)
@@ -226,7 +226,7 @@ func (p *executionPersistenceClient) CreateWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.CreateWorkflowExecution(ctx, request)
@@ -240,7 +240,7 @@ func (p *executionPersistenceClient) GetWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetWorkflowExecution(ctx, request)
@@ -254,7 +254,7 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.SetWorkflowExecution(ctx, request)
@@ -268,7 +268,7 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateWorkflowExecution(ctx, request)
@@ -282,7 +282,7 @@ func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.ConflictResolveWorkflowExecution(ctx, request)
@@ -296,7 +296,7 @@ func (p *executionPersistenceClient) DeleteWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteWorkflowExecution(ctx, request)
@@ -310,7 +310,7 @@ func (p *executionPersistenceClient) DeleteCurrentWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteCurrentWorkflowExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
@@ -324,7 +324,7 @@ func (p *executionPersistenceClient) GetCurrentExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetCurrentExecutionScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetCurrentExecution(ctx, request)
@@ -338,7 +338,7 @@ func (p *executionPersistenceClient) ListConcreteExecutions(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceListConcreteExecutionsScope, caller, latency, retErr)
 	}()
 	return p.persistence.ListConcreteExecutions(ctx, request)
@@ -379,7 +379,7 @@ func (p *executionPersistenceClient) AddHistoryTasks(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceAddTasksScope, caller, latency, retErr)
 	}()
 	return p.persistence.AddHistoryTasks(ctx, request)
@@ -409,7 +409,7 @@ func (p *executionPersistenceClient) GetHistoryTasks(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(operation, caller, latency, retErr)
 	}()
 	return p.persistence.GetHistoryTasks(ctx, request)
@@ -439,7 +439,7 @@ func (p *executionPersistenceClient) CompleteHistoryTask(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(operation, caller, latency, retErr)
 	}()
 	return p.persistence.CompleteHistoryTask(ctx, request)
@@ -469,7 +469,7 @@ func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(operation, caller, latency, retErr)
 	}()
 	return p.persistence.RangeCompleteHistoryTasks(ctx, request)
@@ -483,7 +483,7 @@ func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistencePutReplicationTaskToDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.PutReplicationTaskToDLQ(ctx, request)
@@ -497,7 +497,7 @@ func (p *executionPersistenceClient) GetReplicationTasksFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetReplicationTasksFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetReplicationTasksFromDLQ(ctx, request)
@@ -511,7 +511,7 @@ func (p *executionPersistenceClient) DeleteReplicationTaskFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteReplicationTaskFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteReplicationTaskFromDLQ(ctx, request)
@@ -525,7 +525,7 @@ func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceRangeDeleteReplicationTaskFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
@@ -539,7 +539,7 @@ func (p *executionPersistenceClient) IsReplicationDLQEmpty(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.healthSignals.Record(request.ShardID, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetReplicationTasksFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.IsReplicationDLQEmpty(ctx, request)
@@ -561,7 +561,7 @@ func (p *taskPersistenceClient) CreateTasks(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCreateTasksScope, caller, latency, retErr)
 	}()
 	return p.persistence.CreateTasks(ctx, request)
@@ -575,7 +575,7 @@ func (p *taskPersistenceClient) GetTasks(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetTasksScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetTasks(ctx, request)
@@ -589,7 +589,7 @@ func (p *taskPersistenceClient) CompleteTask(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCompleteTaskScope, caller, latency, retErr)
 	}()
 	return p.persistence.CompleteTask(ctx, request)
@@ -603,7 +603,7 @@ func (p *taskPersistenceClient) CompleteTasksLessThan(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCompleteTasksLessThanScope, caller, latency, retErr)
 	}()
 	return p.persistence.CompleteTasksLessThan(ctx, request)
@@ -617,7 +617,7 @@ func (p *taskPersistenceClient) CreateTaskQueue(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCreateTaskQueueScope, caller, latency, retErr)
 	}()
 	return p.persistence.CreateTaskQueue(ctx, request)
@@ -631,7 +631,7 @@ func (p *taskPersistenceClient) UpdateTaskQueue(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateTaskQueueScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateTaskQueue(ctx, request)
@@ -645,7 +645,7 @@ func (p *taskPersistenceClient) GetTaskQueue(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetTaskQueueScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetTaskQueue(ctx, request)
@@ -659,7 +659,7 @@ func (p *taskPersistenceClient) ListTaskQueue(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceListTaskQueueScope, caller, latency, retErr)
 	}()
 	return p.persistence.ListTaskQueue(ctx, request)
@@ -673,7 +673,7 @@ func (p *taskPersistenceClient) DeleteTaskQueue(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteTaskQueueScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteTaskQueue(ctx, request)
@@ -687,7 +687,7 @@ func (p *taskPersistenceClient) GetTaskQueueUserData(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetTaskQueueUserDataScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetTaskQueueUserData(ctx, request)
@@ -701,7 +701,7 @@ func (p *taskPersistenceClient) UpdateTaskQueueUserData(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateTaskQueueUserDataScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateTaskQueueUserData(ctx, request)
@@ -715,7 +715,7 @@ func (p *taskPersistenceClient) ListTaskQueueUserDataEntries(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceListTaskQueueUserDataEntriesScope, caller, latency, retErr)
 	}()
 	return p.persistence.ListTaskQueueUserDataEntries(ctx, request)
@@ -726,7 +726,7 @@ func (p *taskPersistenceClient) GetTaskQueuesByBuildId(ctx context.Context, requ
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetTaskQueuesByBuildIdScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetTaskQueuesByBuildId(ctx, request)
@@ -737,7 +737,7 @@ func (p *taskPersistenceClient) CountTaskQueuesByBuildId(ctx context.Context, re
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCountTaskQueuesByBuildIdScope, caller, latency, retErr)
 	}()
 	return p.persistence.CountTaskQueuesByBuildId(ctx, request)
@@ -759,7 +759,7 @@ func (p *metadataPersistenceClient) CreateNamespace(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceCreateNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.CreateNamespace(ctx, request)
@@ -773,7 +773,7 @@ func (p *metadataPersistenceClient) GetNamespace(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetNamespace(ctx, request)
@@ -787,7 +787,7 @@ func (p *metadataPersistenceClient) UpdateNamespace(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateNamespace(ctx, request)
@@ -801,7 +801,7 @@ func (p *metadataPersistenceClient) RenameNamespace(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceRenameNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.RenameNamespace(ctx, request)
@@ -815,7 +815,7 @@ func (p *metadataPersistenceClient) DeleteNamespace(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteNamespace(ctx, request)
@@ -829,7 +829,7 @@ func (p *metadataPersistenceClient) DeleteNamespaceByName(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceByNameScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteNamespaceByName(ctx, request)
@@ -843,7 +843,7 @@ func (p *metadataPersistenceClient) ListNamespaces(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceListNamespacesScope, caller, latency, retErr)
 	}()
 	return p.persistence.ListNamespaces(ctx, request)
@@ -856,7 +856,7 @@ func (p *metadataPersistenceClient) GetMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetMetadata(ctx)
@@ -875,7 +875,7 @@ func (p *executionPersistenceClient) AppendHistoryNodes(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceAppendHistoryNodesScope, caller, latency, retErr)
 	}()
 	return p.persistence.AppendHistoryNodes(ctx, request)
@@ -890,7 +890,7 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceAppendRawHistoryNodesScope, caller, latency, retErr)
 	}()
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
@@ -905,7 +905,7 @@ func (p *executionPersistenceClient) ReadHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranch(ctx, request)
@@ -919,7 +919,7 @@ func (p *executionPersistenceClient) ReadHistoryBranchReverse(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchReverseScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranchReverse(ctx, request)
@@ -934,7 +934,7 @@ func (p *executionPersistenceClient) ReadHistoryBranchByBatch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranchByBatch(ctx, request)
@@ -949,7 +949,7 @@ func (p *executionPersistenceClient) ReadRawHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadRawHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadRawHistoryBranch(ctx, request)
@@ -964,7 +964,7 @@ func (p *executionPersistenceClient) ForkHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceForkHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ForkHistoryBranch(ctx, request)
@@ -979,7 +979,7 @@ func (p *executionPersistenceClient) DeleteHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteHistoryBranch(ctx, request)
@@ -994,7 +994,7 @@ func (p *executionPersistenceClient) TrimHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceTrimHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.TrimHistoryBranch(ctx, request)
@@ -1008,7 +1008,7 @@ func (p *executionPersistenceClient) GetAllHistoryTreeBranches(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetAllHistoryTreeBranchesScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetAllHistoryTreeBranches(ctx, request)
@@ -1023,7 +1023,7 @@ func (p *executionPersistenceClient) GetHistoryTree(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetHistoryTreeScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetHistoryTree(ctx, request)
@@ -1044,7 +1044,7 @@ func (p *queuePersistenceClient) EnqueueMessage(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageScope, caller, latency, retErr)
 	}()
 	return p.persistence.EnqueueMessage(ctx, blob)
@@ -1059,7 +1059,7 @@ func (p *queuePersistenceClient) ReadMessages(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadQueueMessagesScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadMessages(ctx, lastMessageID, maxCount)
@@ -1073,7 +1073,7 @@ func (p *queuePersistenceClient) UpdateAckLevel(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateAckLevelScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateAckLevel(ctx, metadata)
@@ -1086,7 +1086,7 @@ func (p *queuePersistenceClient) GetAckLevels(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetAckLevelScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetAckLevels(ctx)
@@ -1100,7 +1100,7 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteMessagesBeforeScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteMessagesBefore(ctx, messageID)
@@ -1114,7 +1114,7 @@ func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageToDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.EnqueueMessageToDLQ(ctx, blob)
@@ -1131,7 +1131,7 @@ func (p *queuePersistenceClient) ReadMessagesFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadMessagesFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
@@ -1145,7 +1145,7 @@ func (p *queuePersistenceClient) DeleteMessageFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteMessageFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteMessageFromDLQ(ctx, messageID)
@@ -1160,7 +1160,7 @@ func (p *queuePersistenceClient) RangeDeleteMessagesFromDLQ(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceRangeDeleteMessagesFromDLQScope, caller, latency, retErr)
 	}()
 	return p.persistence.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
@@ -1174,7 +1174,7 @@ func (p *queuePersistenceClient) UpdateDLQAckLevel(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpdateDLQAckLevelScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpdateDLQAckLevel(ctx, metadata)
@@ -1187,7 +1187,7 @@ func (p *queuePersistenceClient) GetDLQAckLevels(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetDLQAckLevelScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetDLQAckLevels(ctx)
@@ -1209,7 +1209,7 @@ func (p *clusterMetadataPersistenceClient) ListClusterMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceListClusterMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.ListClusterMetadata(ctx, request)
@@ -1222,7 +1222,7 @@ func (p *clusterMetadataPersistenceClient) GetCurrentClusterMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetCurrentClusterMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetCurrentClusterMetadata(ctx)
@@ -1236,7 +1236,7 @@ func (p *clusterMetadataPersistenceClient) GetClusterMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetClusterMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetClusterMetadata(ctx, request)
@@ -1250,7 +1250,7 @@ func (p *clusterMetadataPersistenceClient) SaveClusterMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceSaveClusterMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.SaveClusterMetadata(ctx, request)
@@ -1264,7 +1264,7 @@ func (p *clusterMetadataPersistenceClient) DeleteClusterMetadata(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteClusterMetadataScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteClusterMetadata(ctx, request)
@@ -1282,7 +1282,7 @@ func (p *clusterMetadataPersistenceClient) GetClusterMembers(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceGetClusterMembersScope, caller, latency, retErr)
 	}()
 	return p.persistence.GetClusterMembers(ctx, request)
@@ -1296,7 +1296,7 @@ func (p *clusterMetadataPersistenceClient) UpsertClusterMembership(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceUpsertClusterMembershipScope, caller, latency, retErr)
 	}()
 	return p.persistence.UpsertClusterMembership(ctx, request)
@@ -1310,7 +1310,7 @@ func (p *clusterMetadataPersistenceClient) PruneClusterMembership(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistencePruneClusterMembershipScope, caller, latency, retErr)
 	}()
 	return p.persistence.PruneClusterMembership(ctx, request)
@@ -1324,7 +1324,7 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, latency, retErr)
+		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceInitializeSystemNamespaceScope, caller, latency, retErr)
 	}()
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)

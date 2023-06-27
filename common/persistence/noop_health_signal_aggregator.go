@@ -40,7 +40,7 @@ func (a *noopSignalAggregator) Start() {}
 
 func (a *noopSignalAggregator) Stop() {}
 
-func (a *noopSignalAggregator) Record(_ int32, _ time.Duration, _ error) {}
+func (a *noopSignalAggregator) Record(_ int32, _ string, _ time.Duration, _ error) {}
 
 func (a *noopSignalAggregator) AverageLatency() float64 {
 	return 0
