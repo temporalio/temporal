@@ -278,7 +278,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 			return taskQueueState{}, errors.New(t.Name())
 		}))
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(false)
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
 
@@ -299,7 +299,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(false)
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
 	// without a poller to consume the one task ID from the reserved block.
@@ -337,7 +337,7 @@ func TestReaderSignaling(t *testing.T) {
 	tqm.taskReader.notifyC = readerNotifications
 
 	tqm.Start()
-	defer tqm.Stop()
+	defer tqm.Stop(false)
 
 	// shut down the taskReader so it doesn't steal notifications from us
 	tqm.taskReader.gorogrp.Cancel()
@@ -514,7 +514,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(false)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
@@ -524,7 +524,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
+	tlm.Stop(false)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 }
 
@@ -604,7 +604,7 @@ func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMLoadsUserDataFromPersistenceOnInitOnlyOnceWhenNoData(t *testing.T) {
@@ -638,7 +638,7 @@ func TestTQMLoadsUserDataFromPersistenceOnInitOnlyOnceWhenNoData(t *testing.T) {
 
 	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
 
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
@@ -676,7 +676,7 @@ func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
@@ -745,7 +745,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
@@ -798,7 +798,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataUpTree(t *testing.T) {
@@ -837,7 +837,7 @@ func TestTQMFetchesUserDataUpTree(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
@@ -876,7 +876,7 @@ func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestTQMFetchesUserDataStickyToNormal(t *testing.T) {
@@ -935,7 +935,7 @@ func TestTQMFetchesUserDataStickyToNormal(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	tq.Stop()
+	tq.Stop(false)
 }
 
 func TestUpdateOnNonRootFails(t *testing.T) {
