@@ -90,7 +90,7 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
+	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
@@ -133,6 +133,11 @@ func NewServiceProvider(
 	)
 }
 
+type GrpcServerOptions struct {
+	Options           []grpc.ServerOption
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+}
+
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	serviceConfig *Config,
@@ -154,7 +159,7 @@ func GrpcServerOptionsProvider(
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-) []grpc.ServerOption {
+) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
@@ -213,13 +218,14 @@ func GrpcServerOptionsProvider(
 		telemetryInterceptor.StreamIntercept,
 	}
 
-	return append(
+	grpcServerOptions = append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
 
 func ConfigProvider(
@@ -608,8 +614,9 @@ func HTTPAPIServerProvider(
 	serviceName primitives.ServiceName,
 	serviceConfig *Config,
 	grpcListener net.Listener,
-	rpcFactory common.RPCFactory,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	handler Handler,
+	grpcServerOptions GrpcServerOptions,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
 	// If HTTP API server not enabled, return nil
@@ -621,8 +628,9 @@ func HTTPAPIServerProvider(
 		serviceConfig,
 		rpcConfig,
 		grpcListener,
-		rpcFactory,
 		tlsConfigProvider,
+		handler,
+		grpcServerOptions.UnaryInterceptors,
 		logger,
 	)
 }
