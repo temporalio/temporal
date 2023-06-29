@@ -133,6 +133,8 @@ func NewServiceProvider(
 	)
 }
 
+// GrpcServerOptions are the options to build the frontend gRPC server along
+// with the interceptors that are already set in the options.
 type GrpcServerOptions struct {
 	Options           []grpc.ServerOption
 	UnaryInterceptors []grpc.UnaryServerInterceptor
@@ -609,6 +611,8 @@ func HandlerProvider(
 	return wfHandler
 }
 
+// HTTPAPIServerProvider provides an HTTP API server if enabled or nil
+// otherwise.
 func HTTPAPIServerProvider(
 	config *config.Config,
 	serviceName primitives.ServiceName,

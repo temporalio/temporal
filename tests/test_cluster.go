@@ -26,6 +26,8 @@ package tests
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"os"
 	"path"
@@ -53,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/tests/testutils"
 )
@@ -89,6 +92,7 @@ type (
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         config.FaultInjection `yaml:"faultinjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		GenerateMTLS           bool
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -100,13 +104,13 @@ type (
 )
 
 const (
-	defaultPageSize = 5
-	pprofTestPort   = 7000
+	defaultPageSize   = 5
+	pprofTestPort     = 7000
+	tlsCertCommonName = "my-common-name"
 )
 
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-
 	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
@@ -224,6 +228,13 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		return nil, err
 	}
 
+	var tlsConfigProvider *encryption.FixedTLSConfigProvider
+	if options.GenerateMTLS {
+		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
+			return nil, err
+		}
+	}
+
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -244,6 +255,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		MockAdminClient:                  options.MockAdminClient,
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
+		TLSConfigProvider:                tlsConfigProvider,
 	}
 
 	err = newPProfInitializerImpl(logger, pprofTestPort).Start()
@@ -447,4 +459,51 @@ func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 
 func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
+}
+
+func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) {
+	// We use the existing cert generation utilities even though they use slow
+	// RSA and use disk unnecessarily
+	tempDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tempDir)
+
+	certChain, err := testutils.GenerateTestChain(tempDir, tlsCertCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Due to how mTLS is built in the server, we have to reuse the CA for server
+	// and client, therefore we might as well reuse the cert too
+
+	tlsCert, err := tls.LoadX509KeyPair(certChain.CertPubFile, certChain.CertKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	if caCertBytes, err := os.ReadFile(certChain.CaPubFile); err != nil {
+		return nil, err
+	} else if !caCertPool.AppendCertsFromPEM(caCertBytes) {
+		return nil, fmt.Errorf("failed adding CA to pool")
+	}
+
+	serverTLSConfig := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		ClientCAs:    caCertPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}
+	clientTLSConfig := &tls.Config{
+		ServerName:   tlsCertCommonName,
+		Certificates: []tls.Certificate{tlsCert},
+		RootCAs:      caCertPool,
+	}
+
+	return &encryption.FixedTLSConfigProvider{
+		InternodeServerConfig: serverTLSConfig,
+		InternodeClientConfig: clientTLSConfig,
+		FrontendServerConfig:  serverTLSConfig,
+		FrontendClientConfig:  clientTLSConfig,
+	}, nil
 }

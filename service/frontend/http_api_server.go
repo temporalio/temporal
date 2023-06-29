@@ -16,24 +16,40 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 )
 
+// HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
+// gRPC interceptors.
 type HTTPAPIServer struct {
-	server            http.Server
-	listener          net.Listener
-	logger            log.Logger
-	serveMux          *runtime.ServeMux
-	shutdownDrainTime time.Duration
-	stopped           chan struct{}
+	server                 http.Server
+	listener               net.Listener
+	logger                 log.Logger
+	serveMux               *runtime.ServeMux
+	shutdownDrainTime      time.Duration
+	stopped                chan struct{}
+	matchAdditionalHeaders map[string]bool
 }
 
+var defaultForwardedHeaders = []string{
+	"Authorization-Extras",
+	"X-Forwarded-For",
+	http.CanonicalHeaderKey(headers.ClientNameHeaderName),
+	http.CanonicalHeaderKey(headers.ClientVersionHeaderName),
+}
+
+type httpRemoteAddrContextKey struct{}
+
+// NewHTTPAPIServer creates an [HTTPAPIServer].
 func NewHTTPAPIServer(
 	serviceConfig *Config,
 	rpcConfig config.RPC,
@@ -93,6 +109,16 @@ func NewHTTPAPIServer(
 	// Set Temporal service error handler
 	opts = append(opts, runtime.WithProtoErrorHandler(h.errorHandler))
 
+	// Match headers w/ default
+	h.matchAdditionalHeaders = map[string]bool{}
+	for _, v := range defaultForwardedHeaders {
+		h.matchAdditionalHeaders[v] = true
+	}
+	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
+		h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
+	}
+	opts = append(opts, runtime.WithIncomingHeaderMatcher(h.incomingHeaderMatcher))
+
 	// Create inline client connection
 	clientConn := newInlineClientConn(
 		map[string]any{"temporal.api.workflowservice.v1.WorkflowService": handler},
@@ -109,20 +135,27 @@ func NewHTTPAPIServer(
 	if err != nil {
 		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
 	}
+	// Set the handler as our function that wraps serve mux
+	h.server.Handler = http.HandlerFunc(h.serveHTTP)
+
+	// Put the remote address on the context
+	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
+		return context.WithValue(ctx, httpRemoteAddrContextKey{}, c)
+	}
 
 	// We want to set ReadTimeout and WriteTimeout as max idle (and IdleTimeout
 	// defaults to ReadTimeout) to ensure that a connection cannot hang over that
 	// amount of time.
 	h.server.ReadTimeout = serviceConfig.KeepAliveMaxConnectionIdle()
 	h.server.WriteTimeout = serviceConfig.KeepAliveMaxConnectionIdle()
-	// Set the handler as our function that wraps serve mux
-	h.server.Handler = http.HandlerFunc(h.serveHTTP)
 
 	success = true
 	return h, nil
 }
 
-// TODO(cretz): Document that error is wrapped
+// Serve serves the HTTP API and does not return until there is a serve error or
+// GracefulStop completes. Upon graceful stop, this will return nil. If an error
+// is returned, the message is clear that it came from the HTTP API server.
 func (h *HTTPAPIServer) Serve() error {
 	err := h.server.Serve(h.listener)
 	// If the error is for close, we have to wait for the shutdown to complete and
@@ -138,6 +171,8 @@ func (h *HTTPAPIServer) Serve() error {
 	return nil
 }
 
+// GracefulStop stops the HTTP server. This will first attempt a graceful stop
+// with a drain time, then will hard-stop. This will not return until stopped.
 func (h *HTTPAPIServer) GracefulStop() {
 	// We try a graceful stop for the amount of time we can drain, then we do a
 	// hard stop
@@ -173,6 +208,21 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if acceptHeaderSuffix != "" {
 		r.Header.Set("Accept", "application/json"+acceptHeaderSuffix)
+	}
+
+	// Put the TLS info on the peer context
+	if r.TLS != nil {
+		var addr net.Addr
+		if conn, _ := r.Context().Value(httpRemoteAddrContextKey{}).(net.Conn); conn != nil {
+			addr = conn.RemoteAddr()
+		}
+		r = r.WithContext(peer.NewContext(r.Context(), &peer.Peer{
+			Addr: addr,
+			AuthInfo: credentials.TLSInfo{
+				State:          *r.TLS,
+				CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.PrivacyAndIntegrity},
+			},
+		}))
 	}
 
 	// Call gRPC gateway mux
@@ -225,10 +275,25 @@ func (h *HTTPAPIServer) newMarshaler(pretty bool, disablePayloadShorthand bool) 
 	}
 }
 
+func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) {
+	// Try ours before falling back to default
+	if h.matchAdditionalHeaders[headerName] {
+		return headerName, true
+	}
+	return runtime.DefaultHeaderMatcher(headerName)
+}
+
+// inlineClientConn is a [grpc.ClientConnInterface] implementation that forwards
+// requests directly to gRPC via interceptors. This implementation moves all
+// outgoing metadata to incoming and takes resulting outgoing metadata and sets
+// as header. But which headers to use and TLS peer context and such are
+// expected to be handled by the caller.
 type inlineClientConn struct {
 	methods     map[string]*serviceMethod
 	interceptor grpc.UnaryServerInterceptor
 }
+
+var _ grpc.ClientConnInterface = (*inlineClientConn)(nil)
 
 type serviceMethod struct {
 	info    grpc.UnaryServerInfo
@@ -275,11 +340,9 @@ func newInlineClientConn(servers map[string]any, interceptors []grpc.UnaryServer
 
 	return &inlineClientConn{
 		methods:     methods,
-		interceptor: chainUnaryInterceptors(interceptors),
+		interceptor: chainUnaryServerInterceptors(interceptors),
 	}
 }
-
-var _ grpc.ClientConnInterface = (*inlineClientConn)(nil)
 
 func (i *inlineClientConn) Invoke(
 	ctx context.Context,
@@ -290,11 +353,16 @@ func (i *inlineClientConn) Invoke(
 ) error {
 	// Move outgoing metadata to incoming and set new outgoing metadata
 	md, _ := metadata.FromOutgoingContext(ctx)
+	// Set the client and version headers if not already set
+	if len(md[headers.ClientNameHeaderName]) == 0 {
+		md.Set(headers.ClientNameHeaderName, headers.ClientNameServerHTTP)
+	}
+	if len(md[headers.ClientVersionHeaderName]) == 0 {
+		md.Set(headers.ClientVersionHeaderName, headers.ServerVersion)
+	}
 	ctx = metadata.NewIncomingContext(ctx, md)
 	outgoingMD := metadata.MD{}
 	ctx = metadata.NewOutgoingContext(ctx, outgoingMD)
-
-	// TODO(cretz): Peer context such as auth info
 
 	// Get the method. Should never fail, but we check anyways
 	serviceMethod := i.methods[method]

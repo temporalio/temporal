@@ -102,6 +102,9 @@ type (
 		// HTTPDisabled can be set to true to disable HTTP API. This setting only
 		// applies to the frontend service.
 		HTTPDisabled bool `yaml:"httpDisabled"`
+		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
+		// forwarded from HTTP to gRPC.
+		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
 	}
 
 	// Global contains config items that apply process-wide to all services

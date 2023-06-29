@@ -1,12 +1,16 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
+	"google.golang.org/grpc/metadata"
 )
 
 type SomeJSONStruct struct {
@@ -115,8 +119,79 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 
 }
 
-func (s *clientIntegrationSuite) httpGet(expectedStatus int, relUrl string) (*http.Response, []byte) {
-	resp, err := http.Get("http://" + s.httpAPIAddress + relUrl)
+func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
+	// Make a claim mapper and authorizer that capture info
+	var lastInfo *authorization.AuthInfo
+	var listWorkflowMetadata metadata.MD
+	s.testCluster.host.onGetClaims = func(info *authorization.AuthInfo) (*authorization.Claims, error) {
+		if info != nil {
+			lastInfo = info
+		}
+		return &authorization.Claims{System: authorization.RoleAdmin}, nil
+	}
+	s.testCluster.host.onAuthorize = func(
+		ctx context.Context,
+		caller *authorization.Claims,
+		target *authorization.CallTarget,
+	) (authorization.Result, error) {
+		if target.APIName == "/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions" {
+			listWorkflowMetadata, _ = metadata.FromIncomingContext(ctx)
+		}
+		return authorization.Result{Decision: authorization.DecisionAllow}, nil
+	}
+
+	// Make a simple list call that we don't care about the result
+	req, err := http.NewRequest("GET", "/api/v1/namespaces/"+s.namespace+"/workflows", nil)
+	s.Require().NoError(err)
+	req.Header.Set("Authorization", "my-auth-token")
+	req.Header.Set("X-Forwarded-For", "1.2.3.4:5678")
+	// The header is set to forward deep in the onebox config
+	req.Header.Set("This-Header-Forwarded", "some-value")
+	req.Header.Set("This-Header-Not-Forwarded", "some-value")
+	s.httpRequest(http.StatusOK, req)
+
+	// Confirm the claims got my auth token
+	s.Require().Equal("my-auth-token", lastInfo.AuthToken)
+
+	// Check headers
+	s.Require().Equal("my-auth-token", listWorkflowMetadata["authorization"][0])
+	s.Require().Contains(listWorkflowMetadata["x-forwarded-for"][0], "1.2.3.4:5678")
+	s.Require().Equal("some-value", listWorkflowMetadata["this-header-forwarded"][0])
+	s.Require().NotContains(listWorkflowMetadata, "this-header-not-forwarded")
+	s.Require().Equal(headers.ClientNameServerHTTP, listWorkflowMetadata[headers.ClientNameHeaderName][0])
+	s.Require().Equal(headers.ServerVersion, listWorkflowMetadata[headers.ClientVersionHeaderName][0])
+}
+
+func (s *clientIntegrationSuite) TestHTTPAPIPretty() {
+	// Make a call to system info normal, confirm no newline, then ask for pretty
+	// and confirm newlines
+	_, b := s.httpGet(http.StatusOK, "/api/v1/system-info")
+	s.Require().NotContains(b, byte('\n'))
+	_, b = s.httpGet(http.StatusOK, "/api/v1/system-info?pretty")
+	s.Require().Contains(b, byte('\n'))
+}
+
+func (s *clientIntegrationSuite) httpGet(expectedStatus int, url string) (*http.Response, []byte) {
+	req, err := http.NewRequest("GET", url, nil)
+	s.Require().NoError(err)
+	return s.httpRequest(expectedStatus, req)
+}
+
+func (s *clientIntegrationSuite) httpPost(expectedStatus int, url string, jsonBody string) (*http.Response, []byte) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(jsonBody))
+	s.Require().NoError(err)
+	req.Header.Set("Content-Type", "application/json")
+	return s.httpRequest(expectedStatus, req)
+}
+
+func (s *clientIntegrationSuite) httpRequest(expectedStatus int, req *http.Request) (*http.Response, []byte) {
+	if req.URL.Scheme == "" {
+		req.URL.Scheme = "http"
+	}
+	if req.URL.Host == "" {
+		req.URL.Host = s.httpAPIAddress
+	}
+	resp, err := http.DefaultClient.Do(req)
 	s.Require().NoError(err)
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -124,25 +199,3 @@ func (s *clientIntegrationSuite) httpGet(expectedStatus int, relUrl string) (*ht
 	s.Require().Equal(expectedStatus, resp.StatusCode, "Bad status, body: %s", body)
 	return resp, body
 }
-
-func (s *clientIntegrationSuite) httpPost(expectedStatus int, relUrl string, jsonBody string) (*http.Response, []byte) {
-	resp, err := http.Post("http://"+s.httpAPIAddress+relUrl, "application/json", strings.NewReader(jsonBody))
-	s.Require().NoError(err)
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	s.Require().NoError(err)
-	s.Require().Equal(expectedStatus, resp.StatusCode, "Bad status, body: %s", body)
-	return resp, body
-}
-
-/*
-
-TODO(cretz): Tests/impl to write
-
-* TLS support including mTLS
-* Header pass through including JWT support
-* Version header fallback if not provided
-* Pretty JSON
-* Payload shorthand disabled
-
-*/

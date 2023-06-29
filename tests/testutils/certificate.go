@@ -63,11 +63,12 @@ func generateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 		if ip.IsLoopback() {
 			template.DNSNames = []string{"localhost"}
 		}
+	} else {
+		template.DNSNames = []string{commonName}
 	}
 
 	if strings.ToLower(commonName) == "localhost" {
 		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
-		template.DNSNames = []string{"localhost"}
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, keyLengthBits)
@@ -116,11 +117,12 @@ func generateServerX509UsingCAAndSerialNumber(commonName string, serialNumber in
 		if ip.IsLoopback() {
 			template.DNSNames = []string{"localhost"}
 		}
+	} else {
+		template.DNSNames = []string{commonName}
 	}
 
 	if strings.ToLower(commonName) == "localhost" {
 		template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
-		template.DNSNames = []string{"localhost"}
 	}
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
