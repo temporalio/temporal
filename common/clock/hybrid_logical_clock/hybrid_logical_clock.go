@@ -97,6 +97,14 @@ func Max(a Clock, b Clock) Clock {
 	return a
 }
 
+// Min returns the minimum of two clocks
+func Min(a Clock, b Clock) Clock {
+	if Compare(a, b) > 0 {
+		return a
+	}
+	return b
+}
+
 // Equal returns whether two clocks are equal
 func Equal(a Clock, b Clock) bool {
 	return Compare(a, b) == 0
