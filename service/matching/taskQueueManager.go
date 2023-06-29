@@ -479,7 +479,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	}
 
 	task.namespace = c.namespace
-	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
+	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
 	return task, nil
 }
 
