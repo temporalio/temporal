@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -40,7 +41,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -257,7 +258,7 @@ func RedirectionInterceptorProvider(
 	logger log.Logger,
 	clientBean client.Bean,
 	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	clusterMetadata cluster.Metadata,
 ) *RedirectionInterceptor {
 	return NewRedirectionInterceptor(
@@ -286,19 +287,18 @@ func TelemetryInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	clock clockwork.Clock,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
 	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
 
-	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-		),
-		map[string]int{},
-	)
+	return interceptor.NewRateLimitInterceptor(configs.NewRequestToRateLimiter(
+		quotas.NewDefaultIncomingRateLimiter(rateFn),
+		quotas.NewDefaultIncomingRateLimiter(rateFn),
+		quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
+		quotas.NewDefaultIncomingRateLimiter(rateFn),
+		clock,
+	), map[string]int{}, clockwork.NewRealClock())
 }
 
 func NamespaceRateLimitInterceptorProvider(
@@ -306,6 +306,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	clock clockwork.Clock,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -355,6 +356,7 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				clock,
 			)
 		},
 	)
@@ -481,7 +483,7 @@ func AdminHandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -565,7 +567,7 @@ func HandlerProvider(
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,

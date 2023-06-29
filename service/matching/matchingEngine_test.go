@@ -36,6 +36,7 @@ import (
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
+	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
@@ -58,7 +59,6 @@ import (
 	"go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -85,6 +85,7 @@ type (
 		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
 		mockNamespaceCache    *namespace.MockRegistry
 		mockVisibilityManager *manager.MockVisibilityManager
+		clock                 clockwork.Clock
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -129,6 +130,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
+	s.clock = clockwork.NewRealClock()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -142,13 +144,27 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager)
+	return newMatchingEngine(
+		config,
+		taskMgr,
+		s.mockHistoryClient,
+		s.logger,
+		s.mockNamespaceCache,
+		s.mockMatchingClient,
+		s.mockVisibilityManager,
+		s.clock,
+	)
 }
 
 func newMatchingEngine(
-	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
-	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
+	config *Config,
+	taskMgr persistence.TaskManager,
+	mockHistoryClient historyservice.HistoryServiceClient,
+	logger log.Logger,
+	mockNamespaceCache namespace.Registry,
+	mockMatchingClient matchingservice.MatchingServiceClient,
 	mockVisibilityManager manager.VisibilityManager,
+	clock clockwork.Clock,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:       taskMgr,
@@ -162,7 +178,7 @@ func newMatchingEngine(
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
 		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:        clock.NewRealTimeSource(),
+		clock:             clock,
 		visibilityManager: mockVisibilityManager,
 	}
 }
@@ -294,10 +310,11 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 
 	tqm2, err := newTaskQueueManager(
 		s.matchingEngine,
-		queueID, // same queueID as above
+		queueID,
 		normalStickyInfo,
 		s.matchingEngine.config,
 		s.matchingEngine.clusterMeta,
+		s.clock,
 	)
 	s.Require().NoError(err)
 
@@ -801,7 +818,14 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(
+		s.matchingEngine,
+		tlID,
+		normalStickyInfo,
+		s.matchingEngine.config,
+		s.matchingEngine.clusterMeta,
+		s.clock,
+	)
 	s.NoError(err)
 
 	mgrImpl, ok := mgr.(*taskQueueManagerImpl)
@@ -1019,7 +1043,14 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	var err error
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(
+		s.matchingEngine,
+		tlID,
+		normalStickyInfo,
+		s.matchingEngine.config,
+		s.matchingEngine.clusterMeta,
+		s.clock,
+	)
 	s.NoError(err)
 
 	mgrImpl := mgr.(*taskQueueManagerImpl)
@@ -1766,7 +1797,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	const maxReadLevel = int64(120)
 	config := defaultTestConfig()
 	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
+	tlMgr0, err := newTaskQueueManager(
+		s.matchingEngine,
+		tlID,
+		normalStickyInfo,
+		config,
+		s.matchingEngine.clusterMeta,
+		s.clock,
+	)
 	s.NoError(err)
 
 	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
@@ -1803,7 +1841,14 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	for i := 0; i < 4; i++ {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(tlID)
 
-		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
+		tlMgr, err := newTaskQueueManager(
+			s.matchingEngine,
+			tlID,
+			normalStickyInfo,
+			config,
+			s.matchingEngine.clusterMeta,
+			s.clock,
+		)
 		s.NoError(err)
 
 		tlMgr.Start()

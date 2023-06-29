@@ -28,13 +28,14 @@ import (
 	"context"
 	"net"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -197,10 +198,12 @@ func TelemetryInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
+	clock clockwork.Clock,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, clock),
 		map[string]int{},
+		clock,
 	)
 }
 
@@ -260,7 +263,7 @@ func VisibilityManagerProvider(
 }
 
 func EventNotifierProvider(
-	timeSource clock.TimeSource,
+	timeSource cclock.TimeSource,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) events.Notifier {

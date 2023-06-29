@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -504,7 +505,7 @@ func (s *readerSuite) newTestReader(
 		s.mockScheduler,
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
-		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
+		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1, clockwork.NewRealClock()),
 		s.monitor,
 		completionFn,
 		s.logger,

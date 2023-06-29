@@ -38,6 +38,7 @@ func NewSchedulerRateLimiter(
 	hostMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	persistenceHostMaxQPS dynamicconfig.IntPropertyFn,
+	clock clockwork.Clock,
 ) SchedulerRateLimiter {
 	hostRateFn := func() float64 {
 		hostMaxQPS := float64(hostMaxQPS())
@@ -76,7 +77,7 @@ func NewSchedulerRateLimiter(
 		priorityToRateLimiters[int(priority)] = requestRateLimiter
 	}
 
-	return quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters, clockwork.NewRealClock())
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters, clock)
 }
 
 func newHighPriorityTaskRequestRateLimiter(

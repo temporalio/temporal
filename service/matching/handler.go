@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -78,6 +79,7 @@ func NewHandler(
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
+	clock clockwork.Clock,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -96,6 +98,7 @@ func NewHandler(
 			clusterMetadata,
 			namespaceReplicationQueue,
 			visibilityManager,
+			clock,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

@@ -90,18 +90,19 @@ func NewPriorityRateLimiter(
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	logger log.Logger,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
 	return quotas.NewMultiRequestRateLimiter(
 		// per shardID+namespaceID rate limiters
-		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, clock),
 		// per namespaceID rate limiters
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, clock),
 		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger),
+		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger, clock),
 		// basic host-level rate limiter
-		newPriorityRateLimiter(hostRateFn, requestPriorityFn),
+		newPriorityRateLimiter(hostRateFn, requestPriorityFn, clock),
 	)
 }
 
@@ -109,6 +110,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) && hasCallerSegment(req) {
@@ -117,9 +119,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 					return float64(hostMaxQPS())
 				}
 				return float64(perShardNamespaceMaxQPS(req.Caller))
-			},
-				requestPriorityFn,
-			)
+			}, requestPriorityFn, clock)
 		}
 		return quotas.NoopRequestRateLimiter
 	},
@@ -138,6 +138,7 @@ func newPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) {
@@ -155,6 +156,7 @@ func newPriorityNamespaceRateLimiter(
 					return namespaceQPS
 				},
 				requestPriorityFn,
+				clock,
 			)
 		}
 		return quotas.NoopRequestRateLimiter
@@ -164,13 +166,14 @@ func newPriorityNamespaceRateLimiter(
 func newPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 	}
 
-	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clockwork.NewRealClock())
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clock)
 }
 
 func newPriorityDynamicRateLimiter(
@@ -179,6 +182,7 @@ func newPriorityDynamicRateLimiter(
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	logger log.Logger,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
@@ -186,11 +190,12 @@ func newPriorityDynamicRateLimiter(
 		rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 	}
 
-	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clockwork.NewRealClock())
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clock)
 }
 
 func NewNoopPriorityRateLimiter(
 	maxQPS PersistenceMaxQps,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
@@ -198,7 +203,7 @@ func NewNoopPriorityRateLimiter(
 		priority: quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(maxQPS()) },
 		)),
-	}, clockwork.NewRealClock())
+	}, clock)
 }
 
 func RequestPriorityFn(req quotas.Request) int {

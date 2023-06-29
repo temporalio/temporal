@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,7 +50,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -118,7 +118,6 @@ type (
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
-		timeSource           clock.TimeSource
 		visibilityManager    manager.VisibilityManager
 		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
@@ -138,6 +137,7 @@ type (
 		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
 		// Serializes access to the per namespace lock map
 		namespaceUpdateLockMapLock sync.Mutex
+		clock                      clockwork.Clock
 	}
 )
 
@@ -170,6 +170,7 @@ func NewEngine(
 	clusterMeta cluster.Metadata,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
+	clock clockwork.Clock,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -182,7 +183,6 @@ func NewEngine(
 		namespaceRegistry:         namespaceRegistry,
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
-		timeSource:                clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:         visibilityManager,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		taskQueues:                make(map[taskQueueID]taskQueueManager),
@@ -192,6 +192,7 @@ func NewEngine(
 		pollMap:                   lockablePollMap{polls: make(map[string]context.CancelFunc)},
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		clock:                     clock,
 	}
 }
 
@@ -273,7 +274,7 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 		e.taskQueuesLock.Lock()
 		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
 			var err error
-			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
+			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta, e.clock)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
@@ -877,7 +878,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clock = &tmp
 		}
-		updatedClock := hlc.Next(*clock, e.timeSource)
+		updatedClock := hlc.Next(*clock, e.clock)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
@@ -924,7 +925,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	// Only clear tombstones after they have been replicated.
 	if operationCreatedTombstones {
 		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-			updatedClock := hlc.Next(*data.GetClock(), e.timeSource)
+			updatedClock := hlc.Next(*data.GetClock(), e.clock)
 			// Avoid mutation
 			ret := *data
 			ret.Clock = &updatedClock
@@ -1587,7 +1588,7 @@ func newRecordTaskStartedContext(
 func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
 	// Bump the stamp and ensure it's newer than the deletion stamp.
 	prevStamp := *buildId.StateUpdateTimestamp
-	stamp := hlc.Next(prevStamp, e.timeSource)
+	stamp := hlc.Next(prevStamp, e.clock)
 	stamp.ClusterId = e.clusterMeta.GetClusterID()
 	e.logger.Info("Revived build id while applying replication event",
 		tag.WorkflowNamespace(ns.Name().String()),

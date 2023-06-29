@@ -26,8 +26,8 @@ package interceptor
 
 import (
 	"context"
-	"time"
 
+	"github.com/jonboulle/clockwork"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
@@ -47,6 +47,7 @@ type (
 	RateLimitInterceptor struct {
 		rateLimiter quotas.RequestRateLimiter
 		tokens      map[string]int
+		clock       clockwork.Clock
 	}
 )
 
@@ -55,10 +56,12 @@ var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
 func NewRateLimitInterceptor(
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
+	clock clockwork.Clock,
 ) *RateLimitInterceptor {
 	return &RateLimitInterceptor{
 		rateLimiter: rateLimiter,
 		tokens:      tokens,
+		clock:       clock,
 	}
 }
 
@@ -74,7 +77,7 @@ func (i *RateLimitInterceptor) Intercept(
 		token = RateLimitDefaultToken
 	}
 
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
+	if !i.rateLimiter.Allow(i.clock.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
 		"", // this interceptor layer does not throttle based on caller name

@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
@@ -377,6 +378,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 			stoppedCh,
 			persistenceConfig,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
@@ -473,6 +475,7 @@ func (c *temporalImpl) startHistory(
 				stoppedCh,
 				persistenceConfig,
 				serviceName,
+				fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 			),
 			fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
@@ -571,6 +574,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			stoppedCh,
 			persistenceConfig,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
@@ -665,6 +669,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			stoppedCh,
 			persistenceConfig,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),

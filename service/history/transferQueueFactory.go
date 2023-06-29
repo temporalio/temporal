@@ -99,6 +99,7 @@ func NewTransferQueueFactory(
 					transferQueuePersistenceMaxRPSRatio,
 				),
 				int64(params.Config.QueueMaxReaderCount()),
+				params.Clock,
 			),
 		},
 	}

@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,6 +77,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			TimeSource:     namespace.NewMockClock(ctrl),
 			MetricsHandler: metricsHandler,
 			Logger:         log.NewNoopLogger(),
+			Clock:          clockwork.NewRealClock(),
 		},
 	})
 	queue := queueFactory.CreateQueue(mockShard, nil)

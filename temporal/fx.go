@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -153,7 +154,10 @@ func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, err
 	var s ServerFx
 	s.app = fx.New(
 		topLevelModule,
-		fx.Supply(opts),
+		fx.Supply(
+			opts,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
+		),
 		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
 	)
@@ -384,6 +388,7 @@ func HistoryServiceProvider(
 			params.ClusterMetadata,
 			params.Cfg,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -434,6 +439,7 @@ func MatchingServiceProvider(
 			params.ClusterMetadata,
 			params.Cfg,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -492,6 +498,7 @@ func genericFrontendServiceProvider(
 			params.ClusterMetadata,
 			params.Cfg,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -558,6 +565,7 @@ func WorkerServiceProvider(
 			params.ClusterMetadata,
 			params.Cfg,
 			serviceName,
+			fx.Annotate(clockwork.NewRealClock(), fx.As(new(clockwork.Clock))),
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),

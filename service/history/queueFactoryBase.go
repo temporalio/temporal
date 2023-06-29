@@ -27,11 +27,12 @@ package history
 import (
 	"context"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/clock"
+	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -67,10 +68,11 @@ type (
 		NamespaceRegistry    namespace.Registry
 		ClusterMetadata      cluster.Metadata
 		Config               *configs.Config
-		TimeSource           clock.TimeSource
+		TimeSource           cclock.TimeSource
 		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
+		Clock                clockwork.Clock
 	}
 
 	QueueFactoryBase struct {
@@ -154,12 +156,14 @@ func getOptionalQueueFactories(
 
 func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,
+	clock clockwork.Clock,
 ) queues.SchedulerRateLimiter {
 	return queues.NewSchedulerRateLimiter(
 		config.TaskSchedulerNamespaceMaxQPS,
 		config.TaskSchedulerMaxQPS,
 		config.PersistenceNamespaceMaxQPS,
 		config.PersistenceMaxQPS,
+		clock,
 	)
 }
 

@@ -34,6 +34,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
+	clockwork "github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -104,7 +105,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		tlm := mustCreateTestTaskQueueManager(t, controller)
+		tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 		tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 		test(tlm)
 		// dispatchBufferedTasks should stop after invocation of the test function
@@ -116,7 +117,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
@@ -130,7 +131,7 @@ func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
 
 	scope := tally.NewTestScope("test", nil)
@@ -165,7 +166,7 @@ func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 	tlm.config.LoadUserData = dynamicconfig.GetBoolPropertyFn(false)
 
 	scope := tally.NewTestScope("test", nil)
@@ -197,7 +198,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -270,13 +271,12 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 }
 
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t), clockwork.NewRealClock(), makeTestBlocAlloc(func() (taskQueueState, error) {
+		// any error other than ConditionFailedError indicates an
+		// availability problem at a lower layer so the TQM should NOT
+		// unload itself because resilient sync match is enabled.
+		return taskQueueState{}, errors.New(t.Name())
+	}))
 	tqm.Start()
 	defer tqm.Stop()
 	poller, _ := runOneShotPoller(context.Background(), tqm)
@@ -294,10 +294,9 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{rangeID: 1}, leaseErr
-		}))
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t), clockwork.NewRealClock(), makeTestBlocAlloc(func() (taskQueueState, error) {
+		return taskQueueState{rangeID: 1}, leaseErr
+	}))
 	tqm.Start()
 	defer tqm.Stop()
 
@@ -331,7 +330,7 @@ func TestReaderSignaling(t *testing.T) {
 			<-readerNotifications
 		}
 	}
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t), clockwork.NewRealClock())
 
 	// redirect taskReader signals into our local channel
 	tqm.taskReader.notifyC = readerNotifications
@@ -395,20 +394,22 @@ func defaultTqId() *taskQueueID {
 func mustCreateTestTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
+	clock clockwork.Clock,
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), opts...)
+	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), clock, opts...)
 }
 
 func mustCreateTestTaskQueueManagerWithConfig(
 	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
+	clock clockwork.Clock,
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
+	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, clock, opts...)
 	require.NoError(t, err)
 	return tqm
 }
@@ -416,6 +417,7 @@ func mustCreateTestTaskQueueManagerWithConfig(
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
+	clock clockwork.Clock,
 	opts ...taskQueueManagerOpt,
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
@@ -426,8 +428,25 @@ func createTestTaskQueueManagerWithConfig(
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
-	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
+	me := newMatchingEngine(
+		testOpts.config,
+		tm,
+		nil,
+		logger,
+		mockNamespaceCache,
+		testOpts.matchingClientMock,
+		mockVisibilityManager,
+		clock,
+	)
+	tlMgr, err := newTaskQueueManager(
+		me,
+		testOpts.tqId,
+		normalStickyInfo,
+		testOpts.config,
+		cmeta,
+		clock,
+		opts...,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +463,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	PollerIdentity := "test-poll"
 
 	// Create taskQueue Manager and set taskQueue state
-	tlm := mustCreateTestTaskQueueManager(t, controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller, clockwork.NewRealClock())
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -502,13 +521,13 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tqCfg.config = cfg
 
 	// Idle
-	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tlm.Start()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
@@ -518,7 +537,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlm.taskReader.Signal()
@@ -536,6 +555,7 @@ func TestAddTaskStandby(t *testing.T) {
 		t,
 		controller,
 		defaultTqmTestOpts(controller),
+		clockwork.NewRealClock(),
 		func(tqm *taskQueueManagerImpl) {
 			ns := namespace.NewGlobalNamespaceForTest(
 				&persistencespb.NamespaceInfo{},
@@ -585,7 +605,7 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tm := tqm.engine.taskManager.(*testTaskManager)
 
 	tqm.Start()
@@ -604,7 +624,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.config = cfg
 
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tm := tqm.engine.taskManager.(*testTaskManager)
 
 	tqm.Start()
@@ -635,7 +655,7 @@ func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 
 	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
@@ -662,7 +682,7 @@ func TestTQMLoadsUserDataFromPersistenceOnInitOnlyOnceWhenNoData(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tm := tq.engine.taskManager.(*testTaskManager)
 
 	require.Equal(t, 0, tm.getGetUserDataCount(tqId))
@@ -715,7 +735,7 @@ func TestTQMFetchesUserDataFromOnInit(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
@@ -783,7 +803,7 @@ func TestTQMFetchesUserDataAndFetchesAgain(t *testing.T) {
 		}).
 		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
@@ -836,7 +856,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
@@ -876,7 +896,7 @@ func TestTQMFetchesUserDataUpTree(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
@@ -915,7 +935,7 @@ func TestTQMFetchesUserDataActivityToWorkflow(t *testing.T) {
 			UserData:             data1,
 		}, nil)
 
-	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
@@ -965,13 +985,22 @@ func TestTQMFetchesUserDataStickyToNormal(t *testing.T) {
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
-	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
+	me := newMatchingEngine(
+		tqCfg.config,
+		tm,
+		nil,
+		logger,
+		mockNamespaceCache,
+		tqCfg.matchingClientMock,
+		mockVisibilityManager,
+		clockwork.NewRealClock(),
+	)
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		normalName: normalName,
 	}
-	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta)
+	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta, clockwork.NewRealClock())
 	require.NoError(t, err)
 	tq := tlMgr.(*taskQueueManagerImpl)
 
@@ -993,7 +1022,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	err = subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
@@ -1004,7 +1033,7 @@ func TestUpdateOnNonRootFails(t *testing.T) {
 	require.NoError(t, err)
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
-	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
+	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg, clockwork.NewRealClock())
 	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
@@ -1020,7 +1049,7 @@ func TestDisableLoadUserData_NonRootDoesNotRequestUserDataFromRoot(t *testing.T)
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = taskQueueId
-	mgr := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	mgr := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg, clockwork.NewRealClock())
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Times(0)
 	mgr.config.LoadUserData = func() bool { return false }
 	mgr.Start()

@@ -27,6 +27,7 @@ package client
 import (
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -65,6 +66,7 @@ type (
 		Logger                             log.Logger
 		HealthSignals                      persistence.HealthSignalAggregator
 		DynamicRateLimitingParams          DynamicRateLimitingParams
+		Clock                              clockwork.Clock
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -95,9 +97,10 @@ func FactoryProvider(
 				params.HealthSignals,
 				params.DynamicRateLimitingParams,
 				params.Logger,
+				params.Clock,
 			)
 		} else {
-			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
+			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS, params.Clock)
 		}
 	}
 

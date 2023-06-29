@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/quotas"
@@ -107,7 +108,12 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 	var namespaceMaxRPS = func(namespace string) int { return 1 }
 	var hostMaxRPS = func() int { return 1 }
 
-	var limiter = newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+	var limiter = newPriorityNamespaceRateLimiter(
+		namespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		clockwork.NewRealClock(),
+	)
 
 	var request = quotas.NewRequest(
 		"test-api",
@@ -134,7 +140,12 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 	var perShardNamespaceMaxRPS = func(namespace string) int { return 1 }
 	var hostMaxRPS = func() int { return 1 }
 
-	var limiter = newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+	var limiter = newPerShardPerNamespacePriorityRateLimiter(
+		perShardNamespaceMaxRPS,
+		hostMaxRPS,
+		RequestPriorityFn,
+		clockwork.NewRealClock(),
+	)
 
 	var request = quotas.NewRequest(
 		"test-api",

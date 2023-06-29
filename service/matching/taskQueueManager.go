@@ -215,6 +215,7 @@ func newTaskQueueManager(
 	stickyInfo stickyInfo,
 	config *Config,
 	clusterMeta cluster.Metadata,
+	clock clockwork.Clock,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
@@ -261,7 +262,7 @@ func newTaskQueueManager(
 	}
 
 	tlMgr.liveness = newLiveness(
-		clockwork.NewRealClock(),
+		clock,
 		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)

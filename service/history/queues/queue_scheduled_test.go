@@ -32,6 +32,7 @@ import (
 	"time"
 
 	gomock "github.com/golang/mock/gomock"
+	clockwork "github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
@@ -94,6 +95,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 			s.mockShard.GetConfig().TaskSchedulerMaxQPS,
 			s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
 			s.mockShard.GetConfig().PersistenceMaxQPS,
+			clockwork.NewRealClock(),
 		),
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
@@ -117,6 +119,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,
+			clockwork.NewRealClock(),
 		),
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,

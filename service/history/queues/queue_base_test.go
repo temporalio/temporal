@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -107,7 +108,11 @@ func (s *queueBaseSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
-	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, int64(s.options.MaxReaderCount()))
+	s.rateLimiter = NewReaderPriorityRateLimiter(
+		func() float64 { return 20 },
+		int64(s.options.MaxReaderCount()),
+		clockwork.NewRealClock(),
+	)
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }

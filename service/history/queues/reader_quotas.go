@@ -39,6 +39,7 @@ const (
 func NewReaderPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	maxReaders int64,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter, maxReaders)
 	readerCallerToPriority := make(map[string]int, maxReaders)
@@ -55,7 +56,7 @@ func NewReaderPriorityRateLimiter(
 			return priority
 		}
 		return lowestPriority
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }
 
 func newShardReaderRateLimiter(
@@ -67,6 +68,7 @@ func newShardReaderRateLimiter(
 		NewReaderPriorityRateLimiter(
 			func() float64 { return float64(shardMaxPollRPS()) },
 			maxReaders,
+			clockwork.NewRealClock(),
 		),
 		hostReaderRateLimiter,
 	)

@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 
+	clockwork "github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -105,10 +106,12 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLogge
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	clock clockwork.Clock,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, clock),
 		map[string]int{},
+		clock,
 	)
 }
 
@@ -187,6 +190,7 @@ func HandlerProvider(
 	clusterMetadata cluster.Metadata,
 	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
+	clock clockwork.Clock,
 ) *Handler {
 	return NewHandler(
 		config,
@@ -201,6 +205,7 @@ func HandlerProvider(
 		clusterMetadata,
 		namespaceReplicationQueue,
 		visibilityManager,
+		clock,
 	)
 }
 

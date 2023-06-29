@@ -120,6 +120,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues
 				archivalQueuePersistenceMaxRPSRatio,
 			),
 			int64(params.Config.QueueMaxReaderCount()),
+			params.Clock,
 		),
 	}
 }

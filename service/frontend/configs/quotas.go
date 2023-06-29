@@ -168,13 +168,17 @@ func NewRequestToRateLimiter(
 	visibilityRateBurstFn quotas.RateBurst,
 	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
 	otherRateBurstFn quotas.RateBurst,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
-	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
-	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn)
+	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, clock)
+	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, clock)
+	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+		namespaceReplicationInducingRateBurstFn,
+		clock,
+	)
+	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn, clock)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter
@@ -192,9 +196,7 @@ func NewRequestToRateLimiter(
 	return quotas.NewRoutingRateLimiter(mapping)
 }
 
-func NewExecutionPriorityRateLimiter(
-	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+func NewExecutionPriorityRateLimiter(rateBurstFn quotas.RateBurst, clock clockwork.Clock) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range ExecutionAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
@@ -204,12 +206,10 @@ func NewExecutionPriorityRateLimiter(
 			return priority
 		}
 		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }
 
-func NewVisibilityPriorityRateLimiter(
-	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+func NewVisibilityPriorityRateLimiter(rateBurstFn quotas.RateBurst, clock clockwork.Clock) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range VisibilityAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
@@ -219,12 +219,10 @@ func NewVisibilityPriorityRateLimiter(
 			return priority
 		}
 		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }
 
-func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
-	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+func NewNamespaceReplicationInducingAPIPriorityRateLimiter(rateBurstFn quotas.RateBurst, clock clockwork.Clock) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range NamespaceReplicationInducingAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
@@ -234,12 +232,10 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 			return priority
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }
 
-func NewOtherAPIPriorityRateLimiter(
-	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+func NewOtherAPIPriorityRateLimiter(rateBurstFn quotas.RateBurst, clock clockwork.Clock) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range OtherAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
@@ -249,5 +245,5 @@ func NewOtherAPIPriorityRateLimiter(
 			return priority
 		}
 		return OtherAPIPrioritiesOrdered[len(OtherAPIPrioritiesOrdered)-1]
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }

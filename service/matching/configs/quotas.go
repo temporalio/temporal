@@ -55,6 +55,7 @@ var (
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	clock clockwork.Clock,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
@@ -65,5 +66,5 @@ func NewPriorityRateLimiter(
 			return priority
 		}
 		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters, clockwork.NewRealClock())
+	}, rateLimiters, clock)
 }
