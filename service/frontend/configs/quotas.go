@@ -27,6 +27,7 @@ package configs
 import (
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 )
@@ -203,7 +204,7 @@ func NewExecutionPriorityRateLimiter(
 			return priority
 		}
 		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	}, rateLimiters, clockwork.NewRealClock())
 }
 
 func NewVisibilityPriorityRateLimiter(
@@ -218,7 +219,7 @@ func NewVisibilityPriorityRateLimiter(
 			return priority
 		}
 		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	}, rateLimiters, clockwork.NewRealClock())
 }
 
 func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
@@ -233,7 +234,7 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 			return priority
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	}, rateLimiters, clockwork.NewRealClock())
 }
 
 func NewOtherAPIPriorityRateLimiter(
@@ -248,5 +249,5 @@ func NewOtherAPIPriorityRateLimiter(
 			return priority
 		}
 		return OtherAPIPrioritiesOrdered[len(OtherAPIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	}, rateLimiters, clockwork.NewRealClock())
 }

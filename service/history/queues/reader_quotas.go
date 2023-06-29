@@ -27,6 +27,7 @@ package queues
 import (
 	"strconv"
 
+	"github.com/jonboulle/clockwork"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 )
@@ -49,15 +50,12 @@ func NewReaderPriorityRateLimiter(
 	}
 	lowestPriority := int(DefaultReaderId + maxReaders - 1)
 
-	return quotas.NewPriorityRateLimiter(
-		func(req quotas.Request) int {
-			if priority, ok := readerCallerToPriority[req.Caller]; ok {
-				return priority
-			}
-			return lowestPriority
-		},
-		rateLimiters,
-	)
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := readerCallerToPriority[req.Caller]; ok {
+			return priority
+		}
+		return lowestPriority
+	}, rateLimiters, clockwork.NewRealClock())
 }
 
 func newShardReaderRateLimiter(

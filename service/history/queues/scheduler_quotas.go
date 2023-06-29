@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"github.com/jonboulle/clockwork"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
@@ -75,10 +76,7 @@ func NewSchedulerRateLimiter(
 		priorityToRateLimiters[int(priority)] = requestRateLimiter
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		priorityToRateLimiters,
-	)
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters, clockwork.NewRealClock())
 }
 
 func newHighPriorityTaskRequestRateLimiter(

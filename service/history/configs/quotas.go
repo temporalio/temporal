@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"github.com/jonboulle/clockwork"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -95,5 +96,5 @@ func NewPriorityRateLimiter(
 			return priority
 		}
 		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+	}, rateLimiters, clockwork.NewRealClock())
 }

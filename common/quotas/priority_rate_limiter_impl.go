@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 type (
@@ -41,6 +43,7 @@ type (
 		// sorted rate limiter from low priority value to high priority value
 		priorityToIndex map[int]int
 		rateLimiters    []RequestRateLimiter
+		clock           clockwork.Clock
 	}
 )
 
@@ -51,6 +54,7 @@ var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
 func NewPriorityRateLimiter(
 	requestPriorityFn RequestPriorityFn,
 	priorityToRateLimiters map[int]RequestRateLimiter,
+	clock clockwork.Clock,
 ) *PriorityRateLimiterImpl {
 	priorities := make([]int, 0, len(priorityToRateLimiters))
 	for priority := range priorityToRateLimiters {
@@ -72,6 +76,7 @@ func NewPriorityRateLimiter(
 
 		priorityToIndex: priorityToIndex,
 		rateLimiters:    rateLimiters,
+		clock:           clock,
 	}
 }
 
@@ -120,7 +125,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 	default:
 	}
 
-	now := time.Now().UTC()
+	now := p.clock.Now().UTC()
 	reservation := p.Reserve(now, request)
 	if !reservation.OK() {
 		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
@@ -139,14 +144,14 @@ func (p *PriorityRateLimiterImpl) Wait(
 		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
 	}
 
-	t := time.NewTimer(delay)
+	t := p.clock.NewTimer(delay)
 	defer t.Stop()
 	select {
-	case <-t.C:
+	case <-t.Chan():
 		return nil
 
 	case <-ctx.Done():
-		reservation.CancelAt(time.Now())
+		reservation.CancelAt(p.clock.Now())
 		return ctx.Err()
 	}
 }

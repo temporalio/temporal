@@ -25,6 +25,7 @@
 package client
 
 import (
+	"github.com/jonboulle/clockwork"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -169,10 +170,7 @@ func newPriorityRateLimiter(
 		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		rateLimiters,
-	)
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clockwork.NewRealClock())
 }
 
 func newPriorityDynamicRateLimiter(
@@ -188,10 +186,7 @@ func newPriorityDynamicRateLimiter(
 		rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		rateLimiters,
-	)
+	return quotas.NewPriorityRateLimiter(requestPriorityFn, rateLimiters, clockwork.NewRealClock())
 }
 
 func NewNoopPriorityRateLimiter(
@@ -199,14 +194,11 @@ func NewNoopPriorityRateLimiter(
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
-	return quotas.NewPriorityRateLimiter(
-		func(_ quotas.Request) int { return priority },
-		map[int]quotas.RequestRateLimiter{
-			priority: quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return float64(maxQPS()) },
-			)),
-		},
-	)
+	return quotas.NewPriorityRateLimiter(func(_ quotas.Request) int { return priority }, map[int]quotas.RequestRateLimiter{
+		priority: quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(maxQPS()) },
+		)),
+	}, clockwork.NewRealClock())
 }
 
 func RequestPriorityFn(req quotas.Request) int {
