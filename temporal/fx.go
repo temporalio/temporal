@@ -1087,6 +1087,16 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.NewStringTag("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
+	case *fxevent.Run:
+		if e.Err != nil {
+			l.logger.Error("error returned",
+				tag.ComponentFX,
+				tag.NewStringTag("name", e.Name),
+				tag.NewStringTag("kind", e.Kind),
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err),
+			)
+		}
 	case *fxevent.Invoking:
 		// Do not log stack as it will make logs hard to read.
 		l.logger.Debug("invoking",

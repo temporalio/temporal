@@ -27,15 +27,20 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -48,38 +53,36 @@ import (
 type versionSetFetcher struct {
 	lock           sync.Mutex
 	matchingClient matchingservice.MatchingServiceClient
-	futures        map[string]future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse]
+	futures        map[string]future.Future[*persistencespb.VersioningData]
 }
 
 func newVersionSetFetcher(matchingClient matchingservice.MatchingServiceClient) *versionSetFetcher {
 	return &versionSetFetcher{
 		matchingClient: matchingClient,
-		futures:        make(map[string]future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse]),
+		futures:        make(map[string]future.Future[*persistencespb.VersioningData]),
 	}
 }
 
-func (f *versionSetFetcher) getFuture(ctx context.Context, ns *namespace.Namespace, taskQueue string) future.Future[*matchingservice.GetWorkerBuildIdCompatibilityResponse] {
+func (f *versionSetFetcher) getFuture(ctx context.Context, ns *namespace.Namespace, taskQueue string) future.Future[*persistencespb.VersioningData] {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	_, found := f.futures[taskQueue]
 	if !found {
-		fut := future.NewFuture[*matchingservice.GetWorkerBuildIdCompatibilityResponse]()
+		fut := future.NewFuture[*persistencespb.VersioningData]()
 		f.futures[taskQueue] = fut
 		go func() {
-			value, err := f.matchingClient.GetWorkerBuildIdCompatibility(ctx, &matchingservice.GetWorkerBuildIdCompatibilityRequest{
-				NamespaceId: ns.ID().String(),
-				Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
-					Namespace: ns.Name().String(),
-					TaskQueue: taskQueue,
-				},
+			value, err := f.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   ns.ID().String(),
+				TaskQueue:     taskQueue,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			})
-			fut.Set(value, err)
+			fut.Set(value.GetUserData().GetData().GetVersioningData(), err)
 		}()
 	}
 	return f.futures[taskQueue]
 }
 
-func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *namespace.Namespace, taskQueue string) (*matchingservice.GetWorkerBuildIdCompatibilityResponse, error) {
+func (f *versionSetFetcher) fetchTaskQueueVersions(ctx context.Context, ns *namespace.Namespace, taskQueue string) (*persistencespb.VersioningData, error) {
 	return f.getFuture(ctx, ns, taskQueue).Get(ctx)
 }
 
@@ -135,7 +138,7 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 	taskQueuesToQuery, taskQueuesToSkip := taskQueues[:numTaskQueuesToQuery], taskQueues[numTaskQueuesToQuery:]
 
 	taskQueueReachability, err := util.MapConcurrent(taskQueuesToQuery, func(taskQueue string) (*taskqueuepb.TaskQueueReachability, error) {
-		compatibilityResponse, err := request.versionSetFetcher.fetchTaskQueueVersions(ctx, request.namespace, taskQueue)
+		versioningData, err := request.versionSetFetcher.fetchTaskQueueVersions(ctx, request.namespace, taskQueue)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +146,7 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 			buildId:          request.buildId,
 			namespace:        request.namespace,
 			taskQueue:        taskQueue,
-			versionSets:      compatibilityResponse.GetResponse().GetMajorVersionSets(),
+			versioningData:   versioningData,
 			reachabilityType: request.reachabilityType,
 		})
 	})
@@ -165,7 +168,7 @@ type taskQueueReachabilityRequest struct {
 	buildId          string
 	taskQueue        string
 	namespace        *namespace.Namespace
-	versionSets      []*taskqueuepb.CompatibleVersionSet
+	versioningData   *persistencespb.VersioningData
 	reachabilityType enumspb.TaskReachability
 }
 
@@ -174,21 +177,35 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 	taskQueueReachability := taskqueuepb.TaskQueueReachability{TaskQueue: request.taskQueue, Reachability: []enumspb.TaskReachability{}}
 
 	var isDefaultInQueue bool
+	var reachableByNewWorkflows bool
 	var buildIdsFilter string
+	versionSets := request.versioningData.GetVersionSets()
 
-	if request.buildId == "" {
-		// Query for the unversioned worker
-		isDefaultInQueue = len(request.versionSets) == 0
+	if request.buildId == "" { // Query for the unversioned worker
+		isDefaultInQueue = len(versionSets) == 0
+		if isDefaultInQueue {
+			reachableByNewWorkflows = true
+		} else {
+			// If the queue became versioned just recently, consider the unversioned build id reachable.
+			queueBecameVersionedAt := util.ReduceSlice(versionSets, hlc.Clock{WallClock: math.MaxInt64}, func(c hlc.Clock, set *persistencespb.CompatibleVersionSet) hlc.Clock {
+				return hlc.Min(c, *set.BecameDefaultTimestamp)
+			})
+			reachableByNewWorkflows = time.Since(hlc.UTC(queueBecameVersionedAt)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
+		}
+
 		// Query workflows that have completed tasks marked with a sentinel "unversioned" search attribute.
 		buildIdsFilter = fmt.Sprintf(`%s = "%s"`, searchattribute.BuildIds, worker_versioning.UnversionedSearchAttribute)
-	} else {
-		// Query for a versioned worker
-		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versionSets, request.buildId)
+	} else { // Query for a versioned worker
+		setIdx, buildIdIdx := worker_versioning.FindBuildId(request.versioningData, request.buildId)
 		if setIdx == -1 {
 			// build id not in set - unreachable
 			return &taskQueueReachability, nil
 		}
-		set := request.versionSets[setIdx]
+		set := versionSets[setIdx]
+		if set.BuildIds[buildIdIdx].State == persistencespb.STATE_DELETED {
+			// build id not in set anymore - unreachable
+			return &taskQueueReachability, nil
+		}
 		isDefaultInSet := buildIdIdx == len(set.BuildIds)-1
 
 		if !isDefaultInSet {
@@ -196,19 +213,27 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 			return &taskQueueReachability, nil
 		}
 
-		isDefaultInQueue = setIdx == len(request.versionSets)-1
-		escapedBuildIds := make([]string, len(set.GetBuildIds()))
-		for i, buildId := range set.GetBuildIds() {
-			escapedBuildIds[i] = sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId))))
+		isDefaultInQueue = setIdx == len(versionSets)-1
+
+		// Allow some propagation delay of the versioning data.
+		reachableByNewWorkflows = isDefaultInQueue || time.Since(hlc.UTC(*set.BecameDefaultTimestamp)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
+
+		var escapedBuildIds []string
+		for _, buildId := range set.GetBuildIds() {
+			if buildId.State == persistencespb.STATE_ACTIVE {
+				escapedBuildIds = append(escapedBuildIds, sqlparser.String(sqlparser.NewStrVal([]byte(worker_versioning.VersionedBuildIdSearchAttribute(buildId.Id)))))
+			}
 		}
 		buildIdsFilter = fmt.Sprintf("%s IN (%s)", searchattribute.BuildIds, strings.Join(escapedBuildIds, ","))
 	}
 
-	if isDefaultInQueue {
+	if reachableByNewWorkflows {
 		taskQueueReachability.Reachability = append(
 			taskQueueReachability.Reachability,
 			enumspb.TASK_REACHABILITY_NEW_WORKFLOWS,
 		)
+	}
+	if isDefaultInQueue {
 		// Take into account started workflows that have not yet been processed by any worker.
 		if request.reachabilityType != enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS {
 			buildIdsFilter = fmt.Sprintf("(%s IS NULL OR %s)", searchattribute.BuildIds, buildIdsFilter)

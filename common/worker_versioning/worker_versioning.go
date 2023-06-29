@@ -30,8 +30,8 @@ import (
 
 	"github.com/xwb1989/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,17 +66,18 @@ func VersionStampToBuildIdSearchAttribute(stamp *commonpb.WorkerVersionStamp) st
 	return UnversionedBuildIdSearchAttribute(stamp.BuildId)
 }
 
-func FindBuildId(versionSets []*taskqueuepb.CompatibleVersionSet, buildId string) (setIndex, indexInSet int) {
+// FindBuildId finds a build id in the version data's sets, returning (set index, index within that set).
+// Returns -1, -1 if not found.
+func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) (setIndex, indexInSet int) {
+	versionSets := versioningData.GetVersionSets()
 	setIndex = -1
 	indexInSet = -1
-	if len(versionSets) > 0 {
-		for sidx, set := range versionSets {
-			for bidx, id := range set.BuildIds {
-				if buildId == id {
-					setIndex = sidx
-					indexInSet = bidx
-					break
-				}
+	for sidx, set := range versionSets {
+		for bidx, id := range set.GetBuildIds() {
+			if buildId == id.Id {
+				setIndex = sidx
+				indexInSet = bidx
+				break
 			}
 		}
 	}
