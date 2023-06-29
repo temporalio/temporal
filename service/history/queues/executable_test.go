@@ -280,7 +280,7 @@ func (s *executableSuite) TestExecute_DiscardTask() {
 		Clusters:          []string{"nonCurrentCluster"},
 	}, 1)
 
-	registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+	registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).Times(2)
 	s.ErrorIs(executable.Execute(), consts.ErrTaskDiscarded)
 }
 
