@@ -750,13 +750,13 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 func initCurrentClusterMetadataRecord(
 	ctx context.Context,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	config *config.Config,
+	svc *config.Config,
 	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
 	logger log.Logger,
 ) error {
 	var clusterId string
-	currentClusterName := config.ClusterMetadata.CurrentClusterName
-	currentClusterInfo := config.ClusterMetadata.ClusterInformation[currentClusterName]
+	currentClusterName := svc.ClusterMetadata.CurrentClusterName
+	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
 	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
 		if currentClusterInfo.ClusterID != "" {
 			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
@@ -770,13 +770,13 @@ func initCurrentClusterMetadataRecord(
 		ctx,
 		&persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount:        config.Persistence.NumHistoryShards,
+				HistoryShardCount:        svc.Persistence.NumHistoryShards,
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
 				ClusterAddress:           currentClusterInfo.RPCAddress,
-				FailoverVersionIncrement: config.ClusterMetadata.FailoverVersionIncrement,
+				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
 				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
-				IsGlobalNamespaceEnabled: config.ClusterMetadata.EnableGlobalNamespace,
+				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
 				IsConnectionEnabled:      currentClusterInfo.Enabled,
 				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				IndexSearchAttributes:    initialIndexSearchAttributes,
