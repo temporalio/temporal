@@ -214,7 +214,7 @@ const (
 	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
 	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
 	// is currently processing a task.
-	// 2. There are delays in the asynchrnous visiblity task processor.
+	// 2. There are delays in the visibility task processor (which is asynchronous).
 	// 3. There's propagation delay of the versioning data between matching nodes.
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
 
