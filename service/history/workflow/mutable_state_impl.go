@@ -4385,7 +4385,8 @@ func (ms *MutableStateImpl) StartTransaction(
 			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.Value(ms.hBuilder),
 		)
-		return false, serviceerror.NewInternal("MutableState encountered dirty transaction")
+		ms.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
+		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
