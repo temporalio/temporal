@@ -324,6 +324,10 @@ func NewConfig(
 				dynamicconfig.RemovableBuildIdDurationSinceDefault,
 				time.Hour,
 			),
+			BuildIdScavengerVisibilityRPS: dc.GetFloat64Property(
+				dynamicconfig.BuildIdScavenengerVisibilityRPS,
+				1.0,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
