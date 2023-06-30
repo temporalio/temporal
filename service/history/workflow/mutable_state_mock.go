@@ -1795,6 +1795,20 @@ func (mr *MockMutableStateMockRecorder) IsCurrentWorkflowGuaranteed() *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCurrentWorkflowGuaranteed", reflect.TypeOf((*MockMutableState)(nil).IsCurrentWorkflowGuaranteed))
 }
 
+// IsDirty mocks base method.
+func (m *MockMutableState) IsDirty() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDirty")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDirty indicates an expected call of IsDirty.
+func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockMutableState)(nil).IsDirty))
+}
+
 // IsResourceDuplicated mocks base method.
 func (m *MockMutableState) IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool {
 	m.ctrl.T.Helper()
