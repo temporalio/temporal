@@ -579,7 +579,6 @@ func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Second)
@@ -599,7 +598,6 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
-	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
