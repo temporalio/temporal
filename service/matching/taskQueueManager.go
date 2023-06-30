@@ -533,7 +533,6 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	c.signalIfFatal(err)
 	if !shouldReplicate {
 		return nil
 	}
