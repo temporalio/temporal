@@ -1327,7 +1327,9 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}
-	response.BacklogCountHint = task.backlogCountHint
+	if task.backlogCountHint != nil {
+		response.BacklogCountHint = task.backlogCountHint()
+	}
 	return response
 }
 
