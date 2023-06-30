@@ -118,7 +118,7 @@ type (
 
 	taskQueueManager interface {
 		Start()
-		Stop(bool)
+		Stop()
 		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
@@ -181,6 +181,9 @@ type (
 		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataInitialFetch *future.FutureImpl[struct{}]
+		// lostOwnership controls behavior on Stop: if it's false, we try to write one final
+		// update before unloading
+		lostOwnership atomic.Bool
 	}
 )
 
@@ -260,7 +263,7 @@ func newTaskQueueManager(
 	tlMgr.liveness = newLiveness(
 		clockwork.NewRealClock(),
 		taskQueueConfig.MaxTaskQueueIdleTime,
-		func() { tlMgr.unloadFromEngine(false) },
+		tlMgr.unloadFromEngine,
 	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
@@ -280,8 +283,8 @@ func newTaskQueueManager(
 }
 
 // unloadFromEngine asks the MatchingEngine to unload this task queue. It will cause Stop to be called.
-func (c *taskQueueManagerImpl) unloadFromEngine(lostOwnership bool) {
-	c.engine.unloadTaskQueue(c, lostOwnership)
+func (c *taskQueueManagerImpl) unloadFromEngine() {
+	c.engine.unloadTaskQueue(c)
 }
 
 // signalIfFatal calls unloadFromEngine on this taskQueueManagerImpl instance
@@ -295,7 +298,8 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
-		c.unloadFromEngine(true)
+		c.lostOwnership.Store(true)
+		c.unloadFromEngine()
 		return true
 	}
 	return false
@@ -317,7 +321,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
 
-func (c *taskQueueManagerImpl) Stop(lostOwnership bool) {
+func (c *taskQueueManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusStarted,
@@ -332,7 +336,7 @@ func (c *taskQueueManagerImpl) Stop(lostOwnership bool) {
 	// Note that it's fine to GC even if the update ack level fails because we did match the
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 && !lostOwnership {
+	if ackLevel >= 0 && !c.lostOwnership.Load() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
@@ -346,7 +350,7 @@ func (c *taskQueueManagerImpl) Stop(lostOwnership bool) {
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
-	c.unloadFromEngine(lostOwnership)
+	c.unloadFromEngine()
 }
 
 // managesSpecificVersionSet returns true if this is a tqm for a specific version set in the
@@ -362,7 +366,8 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	c.initializedError.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
-		c.unloadFromEngine(true)
+		c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+		c.unloadFromEngine()
 	}
 }
 
@@ -370,7 +375,8 @@ func (c *taskQueueManagerImpl) SetUserDataInitialFetch(err error) {
 	c.userDataInitialFetch.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
-		c.unloadFromEngine(true)
+		c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+		c.unloadFromEngine()
 	}
 }
 
@@ -647,7 +653,8 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.unloadFromEngine(true)
+			c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+			c.unloadFromEngine()
 			return
 		}
 		c.taskReader.Signal()

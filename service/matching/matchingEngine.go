@@ -215,7 +215,7 @@ func (e *matchingEngineImpl) Stop() {
 	}
 
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
-		l.Stop(false)
+		l.Stop()
 	}
 }
 
@@ -1117,7 +1117,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueue(
 	if tqm == nil {
 		return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: false}, nil
 	}
-	e.unloadTaskQueue(tqm, false)
+	e.unloadTaskQueue(tqm)
 	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: true}, nil
 }
 
@@ -1252,7 +1252,7 @@ func (e *matchingEngineImpl) getTask(
 	return tqm.GetTask(ctx, pollMetadata)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager, lostOwnership bool) {
+func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 	queueID := unloadTQM.QueueID()
 	e.taskQueuesLock.Lock()
 	foundTQM, ok := e.taskQueues[*queueID]
@@ -1267,7 +1267,7 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager, lostOwn
 	e.taskQueuesLock.Unlock()
 
 	e.updateTaskQueueGauge(countKey, taskQueueCount)
-	foundTQM.Stop(lostOwnership)
+	foundTQM.Stop()
 }
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {

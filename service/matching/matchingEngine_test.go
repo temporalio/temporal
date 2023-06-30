@@ -302,7 +302,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.Require().NoError(err)
 
 	// try to unload a different tqm instance with the same taskqueue ID
-	s.matchingEngine.unloadTaskQueue(tqm2, false)
+	s.matchingEngine.unloadTaskQueue(tqm2)
 
 	got, err := s.matchingEngine.getTaskQueueManager(
 		context.Background(), queueID, normalStickyInfo, true)
@@ -311,7 +311,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		"Unload call with non-matching taskQueueManager should not cause unload")
 
 	// this time unload the right tqm
-	s.matchingEngine.unloadTaskQueue(tqm, false)
+	s.matchingEngine.unloadTaskQueue(tqm)
 
 	got, err = s.matchingEngine.getTaskQueueManager(
 		context.Background(), queueID, normalStickyInfo, true)
@@ -1706,7 +1706,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	tlMgr.Stop(false)
+	tlMgr.Stop()
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
@@ -1809,7 +1809,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		tlMgr.Start()
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)
-		tlMgr.Stop(false)
+		tlMgr.Stop()
 
 		getTasksCount := s.taskManager.getGetTasksCount(tlID) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
