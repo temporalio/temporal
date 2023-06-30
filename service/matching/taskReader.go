@@ -153,7 +153,6 @@ dispatchLoop:
 			break dispatchLoop
 		}
 	}
-	tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 	return nil
 }
 

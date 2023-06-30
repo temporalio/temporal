@@ -1664,7 +1664,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if command.UseCompatibleVersion {
-		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -2121,17 +2121,16 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	saPayload, found := searchAttributes[searchattribute.BuildIds]
 	if !found {
 		return []string{}, nil
-	} else {
-		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		if err != nil {
-			return nil, err
-		}
-		searchAttributeValues, ok := decoded.([]string)
-		if !ok {
-			return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
-		}
-		return searchAttributeValues, nil
 	}
+	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	if err != nil {
+		return nil, err
+	}
+	searchAttributeValues, ok := decoded.([]string)
+	if !ok {
+		return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+	}
+	return searchAttributeValues, nil
 }
 
 // Takes a list of loaded build IDs from a search attribute and adds new build IDs to it. Returns a potentially modified

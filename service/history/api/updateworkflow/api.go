@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -193,7 +194,7 @@ func Invoke(
 			}
 			taskQueue = *newWorkflowTask.TaskQueue
 			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
-			directive = common.MakeVersionDirectiveForWorkflowTask(
+			directive = worker_versioning.MakeDirectiveForWorkflowTask(
 				ms.GetWorkerVersionStamp(),
 				ms.GetLastWorkflowTaskStartedEventID(),
 			)

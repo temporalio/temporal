@@ -637,12 +637,12 @@ func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 
-	tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
+	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId.String(),
 			TaskQueue:   defaultRootTqID,
 			UserData:    data1,
-		})
+		}))
 	data1.Version++
 
 	tq.Start()
