@@ -2431,6 +2431,7 @@ type testTaskQueueManager struct {
 	createTaskCount  int
 	getTasksCount    int
 	getUserDataCount int
+	updateCount      int
 	tasks            *treemap.Map
 	userData         *persistencespb.VersionedTaskQueueUserData
 }
@@ -2495,6 +2496,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
+	tlm.updateCount++
 
 	if tlm.rangeID != request.PrevRangeID {
 		return nil, &persistence.ConditionFailedError{
@@ -2693,6 +2695,14 @@ func (m *testTaskManager) getGetUserDataCount(taskQueue *taskQueueID) int {
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.getUserDataCount
+}
+
+// getUpdateCount returns how many times UpdateTaskQueue was called
+func (m *testTaskManager) getUpdateCount(taskQueue *taskQueueID) int {
+	tlm := m.getTaskQueueManager(taskQueue)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.updateCount
 }
 
 func (m *testTaskManager) String() string {
