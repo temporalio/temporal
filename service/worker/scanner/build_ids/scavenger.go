@@ -26,7 +26,6 @@ package build_ids
 
 import (
 	"context"
-	"math"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -67,7 +66,6 @@ var (
 
 type (
 	BuildIdScavangerInput struct {
-		VisibilityRPS         float64
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
 	}
@@ -86,6 +84,7 @@ type (
 		// 2. workflows with that identifier that have yet to be indexed in visibility
 		// The scavenger should allow enough time to pass before cleaning these build ids.
 		removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
+		buildIdScavengerVisibilityRPS        dynamicconfig.FloatPropertyFn
 	}
 
 	heartbeatDetails struct {
@@ -105,6 +104,7 @@ func NewActivities(
 	matchingClient matchingservice.MatchingServiceClient,
 	currentClusterName string,
 	removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn,
+	buildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn,
 ) *Activities {
 	return &Activities{
 		logger:                               logger,
@@ -115,6 +115,7 @@ func NewActivities(
 		matchingClient:                       matchingClient,
 		currentClusterName:                   currentClusterName,
 		removableBuildIdDurationSinceDefault: removableBuildIdDurationSinceDefault,
+		buildIdScavengerVisibilityRPS:        buildIdScavengerVisibilityRPS,
 	}
 }
 
@@ -136,9 +137,6 @@ func (a *Activities) setDefaults(input *BuildIdScavangerInput) {
 	if input.TaskQueueListPageSize == 0 {
 		input.TaskQueueListPageSize = 100
 	}
-	if input.VisibilityRPS == 0 {
-		input.VisibilityRPS = 1
-	}
 }
 
 func (a *Activities) recordHeartbeat(ctx context.Context, heartbeat heartbeatDetails) {
@@ -155,7 +153,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
 		}
 	}
-	rateLimiter := quotas.NewRateLimiter(input.VisibilityRPS, int(math.Ceil(input.VisibilityRPS)))
+	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(a.buildIdScavengerVisibilityRPS))
 	for ctx.Err() == nil {
 		nsResponse, err := a.metadataManager.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
 			PageSize:       input.NamespaceListPageSize,
