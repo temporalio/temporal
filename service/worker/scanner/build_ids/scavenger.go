@@ -154,7 +154,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		}
 	}
 	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(a.buildIdScavengerVisibilityRPS))
-	for ctx.Err() == nil {
+	for {
 		nsResponse, err := a.metadataManager.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
 			PageSize:       input.NamespaceListPageSize,
 			NextPageToken:  heartbeat.NamespaceNextPageToken,
@@ -163,7 +163,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		if err != nil {
 			return err
 		}
-		for ctx.Err() == nil && heartbeat.NamespaceIdx < len(nsResponse.Namespaces) {
+		for heartbeat.NamespaceIdx < len(nsResponse.Namespaces) {
 			nsId := nsResponse.Namespaces[heartbeat.NamespaceIdx].Namespace.Info.Id
 			if err := a.processNamespaceEntry(ctx, rateLimiter, input, &heartbeat, nsId); err != nil {
 				return err
@@ -178,7 +178,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 		}
 		a.recordHeartbeat(ctx, heartbeat)
 	}
-	return ctx.Err()
+	return nil
 }
 
 func (a *Activities) processNamespaceEntry(
@@ -196,7 +196,7 @@ func (a *Activities) processNamespaceEntry(
 	if !ns.ActiveInCluster(a.currentClusterName) {
 		return nil
 	}
-	for ctx.Err() == nil {
+	for {
 		tqResponse, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, &persistence.ListTaskQueueUserDataEntriesRequest{
 			NamespaceID:   nsId,
 			PageSize:      input.TaskQueueListPageSize,
@@ -205,7 +205,10 @@ func (a *Activities) processNamespaceEntry(
 		if err != nil {
 			return err
 		}
-		for ctx.Err() == nil && heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
+		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
 			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
 				// Intentionally don't fail the activity on single entry.
@@ -226,7 +229,7 @@ func (a *Activities) processNamespaceEntry(
 		}
 		a.recordHeartbeat(ctx, *heartbeat)
 	}
-	return ctx.Err()
+	return nil
 }
 
 func (a *Activities) processUserDataEntry(
