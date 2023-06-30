@@ -399,7 +399,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		StartedEventId:         common.EmptyEventID,
 		Attempt:                1,
 		NextEventId:            common.EmptyEventID,
-		BacklogCountHint:       1,
+		BacklogCountHint:       0,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
 		TransientWorkflowTask:  nil,
