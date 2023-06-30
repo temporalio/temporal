@@ -32,11 +32,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -151,7 +151,7 @@ func newActivityTaskPostActionInfo(
 		return nil, err
 	}
 
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
@@ -171,7 +171,7 @@ func newActivityRetryTimePostActionInfo(
 		return nil, err
 	}
 
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
@@ -191,7 +191,7 @@ func newWorkflowTaskPostActionInfo(
 		return nil, err
 	}
 
-	directive := common.MakeVersionDirectiveForWorkflowTask(
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(
 		mutableState.GetWorkerVersionStamp(),
 		mutableState.GetLastWorkflowTaskStartedEventID(),
 	)

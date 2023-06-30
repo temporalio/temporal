@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
@@ -197,7 +198,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
-	directive := common.MakeVersionDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
+	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), ai.UseCompatibleVersion)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -244,7 +245,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
-	directive := common.MakeVersionDirectiveForWorkflowTask(
+	directive := worker_versioning.MakeDirectiveForWorkflowTask(
 		mutableState.GetWorkerVersionStamp(),
 		mutableState.GetLastWorkflowTaskStartedEventID(),
 	)
@@ -820,7 +821,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// - parent is using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if attributes.UseCompatibleVersion {
-		sourceVersionStamp = common.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetWorkerVersionStamp())
 	}
 
 	childRunID, childClock, err := t.startWorkflow(

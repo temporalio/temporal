@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// nolint:revive,goerr113
 package tests
 
 import (
@@ -634,7 +635,6 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act1state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)
@@ -647,7 +647,6 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act2state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)

@@ -2047,12 +2047,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -2074,12 +2074,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -2101,12 +2101,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
@@ -2176,12 +2176,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
