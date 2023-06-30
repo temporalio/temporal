@@ -383,16 +383,23 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 // UpdateRemoteClusterInfo deprecated
 // Deprecated use UpdateRemoteReaderInfo in the future instead
 func (s *ContextImpl) UpdateRemoteClusterInfo(
-	cluster string,
+	clusterName string,
 	ackTaskID int64,
 	ackTimestamp time.Time,
 ) {
 	s.wLock()
 	defer s.wUnlock()
 
-	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(cluster)
-	remoteClusterInfo.AckedReplicationTaskIDs[s.shardID] = ackTaskID
-	remoteClusterInfo.AckedReplicationTimestamps[s.shardID] = ackTimestamp
+	clusterInfo := s.clusterMetadata.GetAllClusterInfo()
+	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(clusterName)
+	for _, remoteShardID := range common.MapShardID(
+		clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
+		clusterInfo[clusterName].ShardCount,
+		s.shardID,
+	) {
+		remoteClusterInfo.AckedReplicationTaskIDs[remoteShardID] = ackTaskID
+		remoteClusterInfo.AckedReplicationTimestamps[remoteShardID] = ackTimestamp
+	}
 }
 
 func (s *ContextImpl) UpdateRemoteReaderInfo(
