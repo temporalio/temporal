@@ -575,6 +575,52 @@ func TestAddTaskStandby(t *testing.T) {
 	require.False(t, syncMatch)
 }
 
+func TestTQMDoesFinalUpdateOnIdleUnload(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(1 * time.Second)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.config = cfg
+
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tm := tqm.engine.taskManager.(*testTaskManager)
+
+	tqm.Start()
+	time.Sleep(2 * time.Second) // will unload due to idleness
+	require.Equal(t, 1, tm.getUpdateCount(tqCfg.tqId))
+}
+
+func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
+	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
+	cfg.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.config = cfg
+
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tm := tqm.engine.taskManager.(*testTaskManager)
+
+	tqm.Start()
+	time.Sleep(1 * time.Second)
+
+	// simulate ownership lost
+	ttm := tm.getTaskQueueManager(tqCfg.tqId)
+	ttm.Lock()
+	ttm.rangeID++
+	ttm.Unlock()
+
+	time.Sleep(2 * time.Second) // will attempt to update and fail and not try again
+
+	require.Equal(t, 1, tm.getUpdateCount(tqCfg.tqId))
+}
+
 func TestTQMLoadsUserDataFromPersistenceOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
