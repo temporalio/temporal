@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/primitives"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
@@ -99,7 +100,8 @@ func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, 
 	greeter := &HelloServer{}
 	helloworld.RegisterGreeterServer(server, greeter)
 
-	listener := factory.GetGRPCListener()
+	listener, err := rpc.StartServiceListener(rpcTestCfgDefault, log.NewTestLogger(), primitives.FrontendService)
+	s.NoError(err)
 
 	port := strings.Split(listener.Addr().String(), ":")[1]
 	s.NoError(err)

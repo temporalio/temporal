@@ -22,19 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package rpc_test
 
 import (
-	"google.golang.org/grpc"
+	"net"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc"
 )
 
-type (
-	// RPCFactory provides both server-side configuration options and client-side connection information.
-	RPCFactory interface {
-		GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
-		GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
-		CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
-		CreateLocalFrontendGRPCConnection() *grpc.ClientConn
-		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
-	}
-)
+func TestStartListener_InvalidPort(t *testing.T) {
+	t.Parallel()
+
+	_, err := rpc.StartServiceListener(&config.RPC{
+		GRPCPort: -1,
+	}, log.NewTestLogger(), primitives.FrontendService)
+	assert.ErrorIs(t, err, rpc.ErrStartListener)
+}
+
+func TestStartListener_Ok(t *testing.T) {
+	t.Parallel()
+
+	listener, err := rpc.StartServiceListener(&config.RPC{
+		GRPCPort: 0,
+	}, log.NewTestLogger(), primitives.FrontendService)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, listener.Close())
+	})
+	assert.NotZero(t, listener.Addr().(*net.TCPAddr).Port)
+}

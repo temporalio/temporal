@@ -27,7 +27,6 @@ package resource
 import (
 	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -111,7 +110,7 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
-	fx.Provide(GrpcListenerProvider),
+	fx.Provide(rpc.StartServiceListener),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryClientProvider),
@@ -147,10 +146,6 @@ func ThrottledLoggerProvider(
 		logger,
 		quotas.RateFn(fn),
 	)
-}
-
-func GrpcListenerProvider(factory common.RPCFactory) net.Listener {
-	return factory.GetGRPCListener()
 }
 
 func HostNameProvider() (HostName, error) {

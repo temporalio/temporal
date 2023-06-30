@@ -25,6 +25,8 @@
 package ringpop
 
 import (
+	"net"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/membership"
@@ -33,7 +35,7 @@ import (
 // Module provides membership objects given the types in factoryParams.
 var Module = fx.Provide(
 	provideFactory,
-	provideMembership,
+	provideMonitor,
 	provideHostInfoProvider,
 )
 
@@ -46,7 +48,9 @@ func provideFactory(lc fx.Lifecycle, params factoryParams) (*factory, error) {
 	return f, nil
 }
 
-func provideMembership(lc fx.Lifecycle, f *factory) membership.Monitor {
+// provideMonitor provides a membership monitor that is started and stopped. We depend on a listener object because
+// we don't want to broadcast our own address to the ringpop cluster until we are ready to accept connections.
+func provideMonitor(lc fx.Lifecycle, f *factory, _ net.Listener) membership.Monitor {
 	m := f.getMonitor()
 	lc.Append(fx.StartStopHook(m.Start, m.Stop))
 	return m

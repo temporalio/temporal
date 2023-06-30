@@ -27,14 +27,12 @@ package rpc
 import (
 	"crypto/tls"
 	"net"
-	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
@@ -52,8 +50,6 @@ type RPCFactory struct {
 	frontendURL       string
 	frontendTLSConfig *tls.Config
 
-	initListener       sync.Once
-	grpcListener       net.Listener
 	tlsFactory         encryption.TLSConfigProvider
 	clientInterceptors []grpc.UnaryClientInterceptor
 }
@@ -136,23 +132,6 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 	}
 
 	return nil, nil
-}
-
-// GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
-func (d *RPCFactory) GetGRPCListener() net.Listener {
-	d.initListener.Do(func() {
-		hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
-		var err error
-		d.grpcListener, err = net.Listen("tcp", hostAddress)
-
-		if err != nil {
-			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-		}
-
-		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-	})
-
-	return d.grpcListener
 }
 
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {

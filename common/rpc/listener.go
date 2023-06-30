@@ -22,19 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package rpc
 
 import (
-	"google.golang.org/grpc"
+	"errors"
+	"fmt"
+	"net"
+
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 )
 
-type (
-	// RPCFactory provides both server-side configuration options and client-side connection information.
-	RPCFactory interface {
-		GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
-		GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
-		CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
-		CreateLocalFrontendGRPCConnection() *grpc.ClientConn
-		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
+var ErrStartListener = errors.New("failed to start gRPC listener")
+
+// StartServiceListener starts a gRPC listener on the configured port. The logger and serviceName are just used for
+// logging.
+func StartServiceListener(rpcCfg *config.RPC, logger log.Logger, serviceName primitives.ServiceName) (net.Listener, error) {
+	hostAddress := net.JoinHostPort(getListenIP(rpcCfg, logger).String(), convert.IntToString(rpcCfg.GRPCPort))
+
+	listener, err := net.Listen("tcp", hostAddress)
+	if err != nil {
+		return nil, fmt.Errorf("can't start %q service: %w: %+v", serviceName, ErrStartListener, err)
 	}
-)
+
+	logger.Info("Created gRPC listener", tag.Service(serviceName), tag.Address(hostAddress))
+
+	return listener, nil
+}

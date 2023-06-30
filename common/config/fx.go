@@ -25,6 +25,8 @@
 package config
 
 import (
+	"errors"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/primitives"
@@ -38,6 +40,8 @@ var Module = fx.Provide(
 	provideMembershipConfig,
 	provideServicePortMap,
 )
+
+var errInvalidListener = errors.New("listener is not a TCP listener")
 
 func provideRPCConfig(cfg *Config, svcName primitives.ServiceName) *RPC {
 	c := cfg.Services[string(svcName)].RPC

@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -159,8 +160,6 @@ type (
 		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
-
-	listenHostPort string
 )
 
 // newTemporal returns an instance that hosts full temporal in one process
@@ -378,11 +377,13 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(func(svcName primitives.ServiceName) (*config.Config, error) {
+			return c.getRPCConfig(svcName, c.FrontendGRPCAddress())
+		}),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(hosts)
 		}),
@@ -451,7 +452,7 @@ func (c *temporalImpl) startHistory(
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := primitives.HistoryService
-	for _, grpcPort := range c.HistoryServiceAddress() {
+	for _, grpcAddress := range c.HistoryServiceAddress() {
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -475,10 +476,12 @@ func (c *temporalImpl) startHistory(
 				serviceName,
 			),
 			fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
-			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(newRPCFactoryImpl),
+			fx.Provide(func(svcName primitives.ServiceName) (*config.Config, error) {
+				return c.getRPCConfig(svcName, grpcAddress)
+			}),
 			fx.Provide(func() membership.Monitor {
 				return newSimpleMonitor(hosts)
 			}),
@@ -573,9 +576,11 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			serviceName,
 		),
 		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
-		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(func(svcName primitives.ServiceName) (*config.Config, error) {
+			return c.getRPCConfig(svcName, c.MatchingGRPCServiceAddress())
+		}),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(hosts)
 		}),
@@ -630,6 +635,27 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 	c.shutdownWG.Done()
 }
 
+func (c *temporalImpl) getRPCConfig(svcName primitives.ServiceName, address string) (*config.Config, error) {
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %q service address %q: %w", svcName, address, err)
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %q service port %q: %w", svcName, port, err)
+	}
+	return &config.Config{
+		Services: map[string]config.Service{
+			string(svcName): {
+				RPC: config.RPC{
+					GRPCPort:        p,
+					BindOnLocalHost: true,
+				},
+			},
+		},
+	}, nil
+}
+
 func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.WorkerService
 
@@ -667,10 +693,12 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			serviceName,
 		),
 		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
-		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(func(svcName primitives.ServiceName) (*config.Config, error) {
+			return c.getRPCConfig(svcName, c.WorkerGRPCServiceAddress())
+		}),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(hosts)
 		}),
@@ -794,10 +822,9 @@ func sdkClientFactoryProvider(
 }
 
 type rpcFactoryImpl struct {
-	serviceName  primitives.ServiceName
-	grpcHostPort string
-	logger       log.Logger
-	frontendURL  string
+	serviceName primitives.ServiceName
+	logger      log.Logger
+	frontendURL string
 
 	sync.RWMutex
 	listener net.Listener
@@ -823,37 +850,16 @@ func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.Cl
 	return c.CreateGRPCConnection(hostName)
 }
 
-func newRPCFactoryImpl(sn primitives.ServiceName, grpcHostPort listenHostPort, logger log.Logger, resolver membership.GRPCResolver) common.RPCFactory {
+func newRPCFactoryImpl(
+	sn primitives.ServiceName,
+	logger log.Logger,
+	grpcResolver membership.GRPCResolver,
+) common.RPCFactory {
 	return &rpcFactoryImpl{
-		serviceName:  sn,
-		grpcHostPort: string(grpcHostPort),
-		logger:       logger,
-		frontendURL:  resolver.MakeURL(primitives.FrontendService),
+		serviceName: sn,
+		logger:      logger,
+		frontendURL: grpcResolver.MakeURL(primitives.FrontendService),
 	}
-}
-
-func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
-	c.RLock()
-	if c.listener != nil {
-		c.RUnlock()
-		return c.listener
-	}
-	c.RUnlock()
-
-	c.Lock()
-	defer c.Unlock()
-
-	if c.listener == nil {
-		var err error
-		c.listener, err = net.Listen("tcp", c.grpcHostPort)
-		if err != nil {
-			c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-		}
-
-		c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-	}
-
-	return c.listener
 }
 
 // CreateGRPCConnection creates connection for gRPC calls
