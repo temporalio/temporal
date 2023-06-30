@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -84,11 +85,10 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
 
 	a := &Activities{
-		logger:            log.NewCLILogger(),
-		visibilityManager: visiblityManager,
-		removableBuildIdDurationSinceDefault: func() time.Duration {
-			return time.Hour
-		},
+		logger:                               log.NewCLILogger(),
+		visibilityManager:                    visiblityManager,
+		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
 	}
 
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
@@ -233,16 +233,15 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 
 	a := &Activities{
-		logger:            log.NewCLILogger(),
-		visibilityManager: visiblityManager,
-		metadataManager:   metadataManager,
-		taskManager:       taskManager,
-		namespaceRegistry: namespaceRegistry,
-		matchingClient:    matchingClient,
-		removableBuildIdDurationSinceDefault: func() time.Duration {
-			return time.Hour
-		},
-		currentClusterName: "test-cluster",
+		logger:                               log.NewCLILogger(),
+		visibilityManager:                    visiblityManager,
+		metadataManager:                      metadataManager,
+		taskManager:                          taskManager,
+		namespaceRegistry:                    namespaceRegistry,
+		matchingClient:                       matchingClient,
+		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
+		currentClusterName:                   "test-cluster",
 	}
 
 	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
