@@ -216,8 +216,6 @@ func (a *Activities) processNamespaceEntry(
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),
 					tag.Error(err))
-				heartbeat.TaskQueueIdx++
-				continue
 			}
 			heartbeat.TaskQueueIdx++
 			a.recordHeartbeat(ctx, *heartbeat)
