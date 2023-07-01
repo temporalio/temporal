@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -3807,6 +3808,35 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 	return event, ci, nil
+}
+
+func (ms *MutableStateImpl) AddSignalWithStartChildWorkflowExecutionInitiatedEvent(
+	workflowTaskCompletedEventID int64,
+	createRequestID string,
+	command *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes,
+	targetNamespaceID namespace.ID,
+) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error) {
+	opTag := tag.WorkflowActionChildWorkflowInitiated
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, nil, err
+	}
+	event := ms.hBuilder.AddSignalWithStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
+	if err := ms.taskGenerator.GenerateChildWorkflowTasks(
+		event,
+	); err != nil {
+		return nil, nil, err
+	}
+	fmt.Printf("AVOID compilation error %v %v %v %v", workflowTaskCompletedEventID, createRequestID, command, targetNamespaceID)
+	return nil, nil, errors.New("not implemented yet")
+}
+
+func (ms *MutableStateImpl) AddSignalWithStartChildWorkflowExecutionFailedEvent(
+	initiatedID int64,
+	cause enumspb.SignalWithStartChildWorkflowExecutionFailedCause,
+	initiatedEventAttributes *historypb.SignalWithStartChildWorkflowExecutionInitiatedEventAttributes,
+) (*historypb.HistoryEvent, error) {
+	fmt.Printf("AVOID compilation error %v %v %v %v", initiatedID, cause, initiatedEventAttributes)
+	return nil, errors.New("not implemented yet")
 }
 
 func (ms *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(

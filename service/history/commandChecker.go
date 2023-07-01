@@ -683,6 +683,100 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+func (v *commandAttrValidator) validateSignalWithStartChildWorkflowExecutionAttributes(
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
+	targetNamespace namespace.Name,
+	attributes *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes,
+	parentInfo *persistencespb.WorkflowExecutionInfo,
+	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES
+	if err := v.validateCrossNamespaceCall(
+		namespaceID,
+		targetNamespaceID,
+	); err != nil {
+		return failedCause, err
+	}
+
+	if attributes == nil {
+		return failedCause, serviceerror.NewInvalidArgument("SignalWithStartChildWorkflowExecutionCommandAttributes is not set on command.")
+	}
+	if attributes.GetWorkflowId() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("Required field WorkflowId is not set on command.")
+	}
+
+	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("Required field WorkflowType is not set on command.")
+	}
+	if attributes.GetSignalName() == "" {
+		return failedCause, serviceerror.NewInvalidArgument("Required field SignalName is not set on command.")
+	}
+
+	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
+	}
+
+	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
+	}
+
+	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()) < 0 {
+		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeout.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
+		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
+	}
+
+	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
+		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
+	}
+
+	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
+		return failedCause, err
+	}
+
+	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
+		return failedCause, err
+	}
+
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
+	}
+
+	// Inherit taskqueue from parent workflow execution if not provided on command
+	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
+	if err != nil {
+		return failedCause, err
+	}
+	attributes.TaskQueue = taskQueue
+
+	// workflow execution timeout is left as is
+	//  if workflow execution timeout == 0 -> infinity
+
+	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowRunTimeout(
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
+		),
+	)
+
+	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
+		common.OverrideWorkflowTaskTimeout(
+			targetNamespace.String(),
+			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
+			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
+			defaultWorkflowTaskTimeoutFn,
+		),
+	)
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	namespaceID namespace.ID,
 	targetNamespaceID namespace.ID,

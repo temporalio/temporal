@@ -252,6 +252,9 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 		return nil, handler.handleCommandStartChildWorkflow(ctx, command.GetStartChildWorkflowExecutionCommandAttributes())
 
+	case enumspb.COMMAND_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION:
+		return nil, handler.handleCommandSignalExternalWorkflow(ctx, command.GetSignalExternalWorkflowExecutionCommandAttributes())
+
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return nil, handler.handleCommandUpsertWorkflowSearchAttributes(ctx, command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
@@ -1096,6 +1099,95 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 
 	signalRequestID := uuid.New() // for deduplicate
 	_, _, err := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
+		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
+	)
+	return err
+}
+
+func (handler *workflowTaskHandlerImpl) handleCommandSignalWithStartChildWorkflow(
+	_ context.Context,
+	attr *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes,
+) error {
+	handler.metricsHandler.Counter(metrics.CommandTypeSignalWithStartChildWorkflowCounter.GetMetricName()).Record(1)
+	//executionInfo := handler.mutableState.GetExecutionInfo()
+	//namespaceID := namespace.ID(executionInfo.NamespaceId)
+	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
+	parentNamespaceID := parentNamespaceEntry.ID()
+	parentNamespace := parentNamespaceEntry.Name()
+	targetNamespaceID := parentNamespaceID
+	targetNamespace := parentNamespace
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
+		if err != nil {
+			return err
+		}
+		targetNamespace = targetNamespaceEntry.Name()
+		targetNamespaceID = targetNamespaceEntry.ID()
+	} else {
+		attr.Namespace = parentNamespace.String()
+	}
+
+	unaliasedSas, err := searchattribute.UnaliasFields(
+		handler.searchAttributesMapperProvider,
+		attr.GetSearchAttributes(),
+		targetNamespace.String(),
+	)
+	if err != nil {
+		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
+	}
+	if unaliasedSas != nil {
+		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// which can be needed again in case of retry.
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
+	}
+
+	if attr.GetNamespace() != "" {
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
+		if err != nil {
+			return err
+		}
+		targetNamespaceID = targetNamespaceEntry.ID()
+	}
+
+	if err := handler.validateCommandAttr(
+		func() (enumspb.WorkflowTaskFailedCause, error) {
+			return handler.attrValidator.validateSignalWithStartChildWorkflowExecutionAttributes(
+				parentNamespaceID,
+				targetNamespaceID,
+				targetNamespace,
+				attr,
+				handler.mutableState.GetExecutionInfo(),
+				handler.config.DefaultWorkflowTaskTimeout,
+			)
+		},
+	); err != nil || handler.stopProcessing {
+		return err
+	}
+
+	if err := handler.sizeLimitChecker.checkIfNumPendingSignalsExceedsLimit(); err != nil {
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED, err)
+	}
+
+	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION.String()),
+		attr.GetWorkflowInput().Size(),
+		"SignalWithStartChildWorkflowCommandAttributes.WorkflowInput exceeds size limit.",
+	); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, err)
+	}
+
+	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION.String()),
+		attr.GetSignalInput().Size(),
+		"SignalWithStartChildWorkflowCommandAttributes.SignalInput exceeds size limit.",
+	); err != nil {
+		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, err)
+	}
+
+	signalRequestID := uuid.New() // for deduplicate
+	_, _, err = handler.mutableState.AddSignalWithStartChildWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
 	)
 	return err

@@ -1345,6 +1345,7 @@ var (
 	CommandTypeCancelExternalWorkflowCounter             = NewCounterDef("cancel_external_workflow_command")
 	CommandTypeContinueAsNewCounter                      = NewCounterDef("continue_as_new_command")
 	CommandTypeSignalExternalWorkflowCounter             = NewCounterDef("signal_external_workflow_command")
+	CommandTypeSignalWithStartChildWorkflowCounter       = NewCounterDef("signal_with_start_workflow_command")
 	CommandTypeUpsertWorkflowSearchAttributesCounter     = NewCounterDef("upsert_workflow_search_attributes_command")
 	CommandTypeModifyWorkflowPropertiesCounter           = NewCounterDef("modify_workflow_properties_command")
 	CommandTypeChildWorkflowCounter                      = NewCounterDef("child_workflow_command")

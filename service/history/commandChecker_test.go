@@ -66,6 +66,7 @@ var (
 		{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION},
 		{CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION},
 		{CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION},
 		{CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES},
 		{CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES},
 	}
@@ -930,4 +931,107 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateSignalWithStartChildWorkflowExecutionAttributes() {
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+	workflowTypeName := "workflowType"
+	taskQueue := "taskQueue"
+	executionTimeout := time.Hour
+	parentInfo := &persistencespb.WorkflowExecutionInfo{
+		WorkflowTypeName:         workflowTypeName,
+		TaskQueue:                taskQueue,
+		WorkflowExecutionTimeout: timestamp.DurationPtr(executionTimeout),
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testTargetNamespaceID).Return(targetNamespaceEntry, nil).AnyTimes()
+
+	var attributes *commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes
+
+	fc, err := s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+	s.EqualError(err, "SignalWithStartChildWorkflowExecutionCommandAttributes is not set on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
+
+	attributes = &commandpb.SignalWithStartChildWorkflowExecutionCommandAttributes{}
+	fc, err = s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+	s.EqualError(err, "Required field WorkflowId is not set on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
+
+	attributes.WorkflowId = "workflow-id"
+	fc, err = s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+
+	s.EqualError(err, "Required field WorkflowType is not set on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
+
+	attributes.WorkflowType = &commonpb.WorkflowType{
+		Name: "my-workflow",
+	}
+	fc, err = s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+	s.EqualError(err, "Required field SignalName is not set on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
+
+	attributes.SignalName = "my signal name"
+	fc, err = s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+	s.EqualError(err, "missing task queue name")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WITH_START_CHILD_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
+
+	attributes.TaskQueue = &taskqueuepb.TaskQueue{
+		Name: "my-task-queue",
+	}
+	fc, err = s.validator.validateSignalWithStartChildWorkflowExecutionAttributes(
+		s.testNamespaceID,
+		s.testTargetNamespaceID,
+		targetNamespaceEntry.Name(),
+		attributes,
+		parentInfo,
+		dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute),
+	)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+
 }
