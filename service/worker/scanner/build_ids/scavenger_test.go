@@ -302,7 +302,6 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 					NextPageToken: []byte{},
 				}, nil
 			} else {
-				// nolint:goerr113
 				return nil, errors.New("invalid NextPageToken")
 			}
 		},
