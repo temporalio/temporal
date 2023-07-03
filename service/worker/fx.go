@@ -29,7 +29,6 @@ import (
 
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -131,7 +130,7 @@ func ServiceLifetimeHooks(
 	lc.Append(
 		fx.Hook{
 			OnStart: func(context.Context) error {
-				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
+				go func(svc *Service, svcStoppedCh chan<- struct{}) {
 					// Start is blocked until Stop() is called.
 					svc.Start()
 					close(svcStoppedCh)

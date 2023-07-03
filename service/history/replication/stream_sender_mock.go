@@ -125,18 +125,6 @@ func (mr *MockStreamSenderMockRecorder) Key() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Key", reflect.TypeOf((*MockStreamSender)(nil).Key))
 }
 
-// Start mocks base method.
-func (m *MockStreamSender) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockStreamSenderMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockStreamSender)(nil).Start))
-}
-
 // Stop mocks base method.
 func (m *MockStreamSender) Stop() {
 	m.ctrl.T.Helper()
