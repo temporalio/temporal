@@ -149,14 +149,12 @@ dispatchLoop:
 				}
 				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
-			tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 			return ctx.Err()
 
 		case <-ctx.Done():
 			break dispatchLoop
 		}
 	}
-	tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
 	return nil
 }
 
