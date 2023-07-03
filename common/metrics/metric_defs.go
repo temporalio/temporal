@@ -78,304 +78,16 @@ const (
 
 // Admin Client Operations
 const (
-	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
-	AdminClientAddSearchAttributesScope = "AdminClientAddSearchAttributes"
-	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
-	AdminClientRemoveSearchAttributesScope = "AdminClientRemoveSearchAttributes"
-	// AdminClientGetSearchAttributesScope tracks RPC calls to admin service
-	AdminClientGetSearchAttributesScope = "AdminClientGetSearchAttributes"
-	// AdminClientCloseShardScope tracks RPC calls to admin service
-	AdminClientCloseShardScope = "AdminClientCloseShard"
-	// AdminClientGetShardScope tracks RPC calls to admin service
-	AdminClientGetShardScope = "AdminClientGetShard"
-	// AdminClientListHistoryTasksScope tracks RPC calls to admin service
-	AdminClientListHistoryTasksScope = "AdminClientListHistoryTasks"
-	// AdminClientRemoveTaskScope tracks RPC calls to admin service
-	AdminClientRemoveTaskScope = "AdminClientRemoveTask"
-	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
-	AdminClientDescribeHistoryHostScope = "AdminClientDescribeHistoryHost"
-	// AdminClientRebuildMutableStateScope tracks RPC calls to admin service
-	AdminClientRebuildMutableStateScope = "AdminClientRebuildMutableState"
-	// AdminClientDescribeMutableStateScope tracks RPC calls to admin service
-	AdminClientDescribeMutableStateScope = "AdminClientDescribeMutableState"
-	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
-	AdminClientGetWorkflowExecutionRawHistoryV2Scope = "AdminClientGetWorkflowExecutionRawHistoryV2"
-	// AdminClientDescribeClusterScope tracks RPC calls to admin service
-	AdminClientDescribeClusterScope = "AdminClientDescribeCluster"
-	// AdminClientListClustersScope tracks RPC calls to admin service
-	AdminClientListClustersScope = "AdminClientListClusters"
-	// AdminClientListClusterMembersScope tracks RPC calls to admin service
-	AdminClientListClusterMembersScope = "AdminClientListClusterMembers"
-	// AdminClientAddOrUpdateRemoteClusterScope tracks RPC calls to admin service
-	AdminClientAddOrUpdateRemoteClusterScope = "AdminClientAddOrUpdateRemoteCluster"
-	// AdminClientRemoveRemoteClusterScope tracks RPC calls to admin service
-	AdminClientRemoveRemoteClusterScope = "AdminClientRemoveRemoteCluster"
-	// AdminClientGetReplicationMessagesScope tracks RPC calls to admin service
-	AdminClientGetReplicationMessagesScope = "AdminClientGetReplicationMessages"
-	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
-	AdminClientGetNamespaceReplicationMessagesScope = "AdminClientGetNamespaceReplicationMessages"
-	// AdminClientGetNamespaceScope tracks RPC calls to admin service
-	AdminClientGetNamespaceScope = "AdminClientGetNamespace"
-	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
-	AdminClientGetDLQReplicationMessagesScope = "AdminClientGetDLQReplicationMessages"
-	// AdminClientReapplyEventsScope tracks RPC calls to admin service
-	AdminClientReapplyEventsScope = "AdminClientReapplyEvents"
-	// AdminClientGetDLQMessagesScope tracks RPC calls to admin service
-	AdminClientGetDLQMessagesScope = "AdminClientGetDLQMessages"
-	// AdminClientPurgeDLQMessagesScope tracks RPC calls to admin service
-	AdminClientPurgeDLQMessagesScope = "AdminClientPurgeDLQMessages"
-	// AdminClientMergeDLQMessagesScope tracks RPC calls to admin service
-	AdminClientMergeDLQMessagesScope = "AdminClientMergeDLQMessages"
-	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
-	AdminClientRefreshWorkflowTasksScope = "AdminClientRefreshWorkflowTasks"
-	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
-	AdminClientResendReplicationTasksScope = "AdminClientResendReplicationTasks"
-	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
-	AdminClientGetTaskQueueTasksScope = "AdminClientGetTaskQueueTasks"
-	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
-	AdminClientDeleteWorkflowExecutionScope = "AdminClientDeleteWorkflowExecution"
 	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientStreamWorkflowReplicationMessagesScope = "AdminClientStreamWorkflowReplicationMessages"
 )
 
 // Frontend Client Operations
-const (
-	// FrontendClientDeleteWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientDeleteWorkflowExecutionScope = "FrontendClientDeleteWorkflowExecution"
-	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
-	FrontendClientDeprecateNamespaceScope = "FrontendClientDeprecateNamespace"
-	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
-	FrontendClientDescribeNamespaceScope = "FrontendClientDescribeNamespace"
-	// FrontendClientDescribeTaskQueueScope tracks RPC calls to frontend service
-	FrontendClientDescribeTaskQueueScope = "FrontendClientDescribeTaskQueue"
-	// FrontendClientDescribeWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientDescribeWorkflowExecutionScope = "FrontendClientDescribeWorkflowExecution"
-	// FrontendClientGetWorkflowExecutionHistoryScope tracks RPC calls to frontend service
-	FrontendClientGetWorkflowExecutionHistoryScope = "FrontendClientGetWorkflowExecutionHistory"
-	// FrontendClientGetWorkflowExecutionHistoryReverseScope tracks RPC calls to frontend service
-	FrontendClientGetWorkflowExecutionHistoryReverseScope = "FrontendClientGetWorkflowExecutionHistoryReverse"
-	// FrontendClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
-	FrontendClientGetWorkflowExecutionRawHistoryScope = "FrontendClientGetWorkflowExecutionRawHistory"
-	// FrontendClientPollForWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
-	FrontendClientPollForWorkflowExecutionRawHistoryScope = "FrontendClientPollForWorkflowExecutionRawHistory"
-	// FrontendClientListArchivedWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientListArchivedWorkflowExecutionsScope = "FrontendClientListArchivedWorkflowExecutions"
-	// FrontendClientListClosedWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientListClosedWorkflowExecutionsScope = "FrontendClientListClosedWorkflowExecutions"
-	// FrontendClientListNamespacesScope tracks RPC calls to frontend service
-	FrontendClientListNamespacesScope = "FrontendClientListNamespaces"
-	// FrontendClientListOpenWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientListOpenWorkflowExecutionsScope = "FrontendClientListOpenWorkflowExecutions"
-	// FrontendClientPollActivityTaskQueueScope tracks RPC calls to frontend service
-	FrontendClientPollActivityTaskQueueScope = "FrontendClientPollActivityTaskQueue"
-	// FrontendClientPollWorkflowExecutionUpdateScope tracks RPC calls to frontend service
-	FrontendClientPollWorkflowExecutionUpdateScope = "FrontendClientPollWorkflowExecutionUpdate"
-	// FrontendClientPollWorkflowTaskQueueScope tracks RPC calls to frontend service
-	FrontendClientPollWorkflowTaskQueueScope = "FrontendClientPollWorkflowTaskQueue"
-	// FrontendClientQueryWorkflowScope tracks RPC calls to frontend service
-	FrontendClientQueryWorkflowScope = "FrontendClientQueryWorkflow"
-	// FrontendClientRecordActivityTaskHeartbeatScope tracks RPC calls to frontend service
-	FrontendClientRecordActivityTaskHeartbeatScope = "FrontendClientRecordActivityTaskHeartbeat"
-	// FrontendClientRecordActivityTaskHeartbeatByIdScope tracks RPC calls to frontend service
-	FrontendClientRecordActivityTaskHeartbeatByIdScope = "FrontendClientRecordActivityTaskHeartbeatById"
-	// FrontendClientRegisterNamespaceScope tracks RPC calls to frontend service
-	FrontendClientRegisterNamespaceScope = "FrontendClientRegisterNamespace"
-	// FrontendClientRequestCancelWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientRequestCancelWorkflowExecutionScope = "FrontendClientRequestCancelWorkflowExecution"
-	// FrontendClientResetStickyTaskQueueScope tracks RPC calls to frontend service
-	FrontendClientResetStickyTaskQueueScope = "FrontendClientResetStickyTaskQueue"
-	// FrontendClientResetWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientResetWorkflowExecutionScope = "FrontendClientResetWorkflowExecution"
-	// FrontendClientRespondActivityTaskCanceledScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCanceledScope = "FrontendClientRespondActivityTaskCanceled"
-	// FrontendClientRespondActivityTaskCanceledByIdScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCanceledByIdScope = "FrontendClientRespondActivityTaskCanceledById"
-	// FrontendClientRespondActivityTaskCompletedScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCompletedScope = "FrontendClientRespondActivityTaskCompleted"
-	// FrontendClientRespondActivityTaskCompletedByIdScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskCompletedByIdScope = "FrontendClientRespondActivityTaskCompletedById"
-	// FrontendClientRespondActivityTaskFailedScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskFailedScope = "FrontendClientRespondActivityTaskFailed"
-	// FrontendClientRespondActivityTaskFailedByIdScope tracks RPC calls to frontend service
-	FrontendClientRespondActivityTaskFailedByIdScope = "FrontendClientRespondActivityTaskFailedById"
-	// FrontendClientRespondWorkflowTaskCompletedScope tracks RPC calls to frontend service
-	FrontendClientRespondWorkflowTaskCompletedScope = "FrontendClientRespondWorkflowTaskCompleted"
-	// FrontendClientRespondWorkflowTaskFailedScope tracks RPC calls to frontend service
-	FrontendClientRespondWorkflowTaskFailedScope = "FrontendClientRespondWorkflowTaskFailed"
-	// FrontendClientRespondQueryTaskCompletedScope tracks RPC calls to frontend service
-	FrontendClientRespondQueryTaskCompletedScope = "FrontendClientRespondQueryTaskCompleted"
-	// FrontendClientSignalWithStartWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientSignalWithStartWorkflowExecutionScope = "FrontendClientSignalWithStartWorkflowExecution"
-	// FrontendClientSignalWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientSignalWorkflowExecutionScope = "FrontendClientSignalWorkflowExecution"
-	// FrontendClientStartWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientStartWorkflowExecutionScope = "FrontendClientStartWorkflowExecution"
-	// FrontendClientTerminateWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientTerminateWorkflowExecutionScope = "FrontendClientTerminateWorkflowExecution"
-	// FrontendClientUpdateNamespaceScope tracks RPC calls to frontend service
-	FrontendClientUpdateNamespaceScope = "FrontendClientUpdateNamespace"
-	// FrontendClientListWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientListWorkflowExecutionsScope = "FrontendClientListWorkflowExecutions"
-	// FrontendClientScanWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientScanWorkflowExecutionsScope = "FrontendClientScanWorkflowExecutions"
-	// FrontendClientCountWorkflowExecutionsScope tracks RPC calls to frontend service
-	FrontendClientCountWorkflowExecutionsScope = "FrontendClientCountWorkflowExecutions"
-	// FrontendClientGetSearchAttributesScope tracks RPC calls to frontend service
-	FrontendClientGetSearchAttributesScope = "FrontendClientGetSearchAttributes"
-	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
-	FrontendClientGetClusterInfoScope = "FrontendClientGetClusterInfo"
-	// FrontendClientGetSystemInfoScope tracks RPC calls to frontend
-	FrontendClientGetSystemInfoScope = "FrontendClientGetSystemInfo"
-	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
-	FrontendClientListTaskQueuePartitionsScope = "FrontendClientListTaskQueuePartitions"
-	// FrontendClientCreateScheduleScope tracks RPC calls to frontend service
-	FrontendClientCreateScheduleScope = "FrontendClientCreateSchedule"
-	// FrontendClientDescribeScheduleScope tracks RPC calls to frontend service
-	FrontendClientDescribeScheduleScope = "FrontendClientDescribeSchedule"
-	// FrontendClientUpdateScheduleScope tracks RPC calls to frontend service
-	FrontendClientUpdateScheduleScope = "FrontendClientUpdateSchedule"
-	// FrontendClientPatchScheduleScope tracks RPC calls to frontend service
-	FrontendClientPatchScheduleScope = "FrontendClientPatchSchedule"
-	// FrontendClientListScheduleMatchingTimesScope tracks RPC calls to frontend service
-	FrontendClientListScheduleMatchingTimesScope = "FrontendClientListScheduleMatchingTimes"
-	// FrontendClientDeleteScheduleScope tracks RPC calls to frontend service
-	FrontendClientDeleteScheduleScope = "FrontendClientDeleteSchedule"
-	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
-	FrontendClientListSchedulesScope = "FrontendClientListSchedules"
-	// FrontendClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkerBuildIdCompatibilityScope = "FrontendClientUpdateWorkerBuildIdCompatibility"
-	// FrontendClientUpdateWorkflowExecutionScope tracks RPC calls to frontend service
-	FrontendClientUpdateWorkflowExecutionScope = "FrontendClientUpdateWorkflowExecution"
-	// FrontendClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerBuildIdCompatibilityScope = "FrontendClientGetWorkerBuildIdCompatibility"
-	// FrontendClientGetWorkerTaskReachabilityScope tracks RPC calls to frontend service
-	FrontendClientGetWorkerTaskReachabilityScope = "FrontendClientGetWorkerTaskReachability"
-	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
-	FrontendClientDescribeBatchOperationScope = "FrontendClientDescribeBatchOperation"
-	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
-	FrontendClientListBatchOperationsScope = "FrontendClientListBatchOperations"
-	// FrontendClientStartBatchOperationScope tracks RPC calls to frontend service
-	FrontendClientStartBatchOperationScope = "FrontendClientStartBatchOperation"
-	// FrontendClientStopBatchOperationScope tracks RPC calls to frontend service
-	FrontendClientStopBatchOperationScope = "FrontendClientStopBatchOperation"
-)
 
 // History Client Operations
 const (
-	// HistoryClientStartWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientStartWorkflowExecutionScope = "HistoryClientStartWorkflowExecution"
-	// HistoryClientRecordActivityTaskHeartbeatScope tracks RPC calls to history service
-	HistoryClientRecordActivityTaskHeartbeatScope = "HistoryClientRecordActivityTaskHeartbeat"
-	// HistoryClientRespondWorkflowTaskCompletedScope tracks RPC calls to history service
-	HistoryClientRespondWorkflowTaskCompletedScope = "HistoryClientRespondWorkflowTaskCompleted"
-	// HistoryClientRespondWorkflowTaskFailedScope tracks RPC calls to history service
-	HistoryClientRespondWorkflowTaskFailedScope = "HistoryClientRespondWorkflowTaskFailed"
-	// HistoryClientRespondActivityTaskCompletedScope tracks RPC calls to history service
-	HistoryClientRespondActivityTaskCompletedScope = "HistoryClientRespondActivityTaskCompleted"
-	// HistoryClientRespondActivityTaskFailedScope tracks RPC calls to history service
-	HistoryClientRespondActivityTaskFailedScope = "HistoryClientRespondActivityTaskFailed"
-	// HistoryClientRespondActivityTaskCanceledScope tracks RPC calls to history service
-	HistoryClientRespondActivityTaskCanceledScope = "HistoryClientRespondActivityTaskCanceled"
-	// HistoryClientGetMutableStateScope tracks RPC calls to history service
-	HistoryClientGetMutableStateScope = "HistoryClientGetMutableState"
-	// HistoryClientPollMutableStateScope tracks RPC calls to history service
-	HistoryClientPollMutableStateScope = "HistoryClientPollMutableState"
-	// HistoryClientResetStickyTaskQueueScope tracks RPC calls to history service
-	HistoryClientResetStickyTaskQueueScope = "HistoryClientResetStickyTaskQueue"
-	// HistoryClientDescribeWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientDescribeWorkflowExecutionScope = "HistoryClientDescribeWorkflowExecution"
-	// HistoryClientRecordWorkflowTaskStartedScope tracks RPC calls to history service
-	HistoryClientRecordWorkflowTaskStartedScope = "HistoryClientRecordWorkflowTaskStarted"
-	// HistoryClientRecordActivityTaskStartedScope tracks RPC calls to history service
-	HistoryClientRecordActivityTaskStartedScope = "HistoryClientRecordActivityTaskStarted"
-	// HistoryClientRequestCancelWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientRequestCancelWorkflowExecutionScope = "HistoryClientRequestCancelWorkflowExecution"
-	// HistoryClientSignalWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientSignalWorkflowExecutionScope = "HistoryClientSignalWorkflowExecution"
-	// HistoryClientSignalWithStartWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientSignalWithStartWorkflowExecutionScope = "HistoryClientSignalWithStartWorkflowExecution"
-	// HistoryClientRemoveSignalMutableStateScope tracks RPC calls to history service
-	HistoryClientRemoveSignalMutableStateScope = "HistoryClientRemoveSignalMutableState"
-	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientTerminateWorkflowExecutionScope = "HistoryClientTerminateWorkflowExecution"
-	// HistoryClientUpdateWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientUpdateWorkflowExecutionScope = "HistoryClientUpdateWorkflowExecution"
-	// HistoryClientPollWorkflowExecutionUpdateScope tracks RPC calls to history service
-	HistoryClientPollWorkflowExecutionUpdateScope = "HistoryClientPollPollWorkflowExecutionUpdate"
-	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientDeleteWorkflowExecutionScope = "HistoryClientDeleteWorkflowExecution"
-	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientResetWorkflowExecutionScope = "HistoryClientResetWorkflowExecution"
-	// HistoryClientScheduleWorkflowTaskScope tracks RPC calls to history service
-	HistoryClientScheduleWorkflowTaskScope = "HistoryClientScheduleWorkflowTask"
-	// HistoryClientVerifyFirstWorkflowTaskScheduled tracks RPC calls to history service
-	HistoryClientVerifyFirstWorkflowTaskScheduled
-	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
-	HistoryClientRecordChildExecutionCompletedScope = "HistoryClientRecordChildExecutionCompleted"
-	// HistoryClientVerifyChildExecutionCompletionRecordedScope tracks RPC calls to history service
-	HistoryClientVerifyChildExecutionCompletionRecordedScope = "HistoryClientVerifyChildExecutionCompletionRecorded"
-	// HistoryClientReplicateEventsV2Scope tracks RPC calls to history service
-	HistoryClientReplicateEventsV2Scope = "HistoryClientReplicateEventsV2"
-	// HistoryClientReplicateWorkflowStateScope tracks RPC calls to history service
-	HistoryClientReplicateWorkflowStateScope = "HistoryClientReplicateWorkflowState"
-	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
-	HistoryClientSyncShardStatusScope = "HistoryClientSyncShardStatus"
-	// HistoryClientSyncActivityScope tracks RPC calls to history service
-	HistoryClientSyncActivityScope = "HistoryClientSyncActivity"
-	// HistoryClientGetReplicationTasksScope tracks RPC calls to history service
-	HistoryClientGetReplicationTasksScope = "HistoryClientGetReplicationTasks"
-	// HistoryClientGetDLQReplicationTasksScope tracks RPC calls to history service
-	HistoryClientGetDLQReplicationTasksScope = "HistoryClientGetDLQReplicationTasks"
-	// HistoryClientQueryWorkflowScope tracks RPC calls to history service
-	HistoryClientQueryWorkflowScope = "HistoryClientQueryWorkflow"
-	// HistoryClientReapplyEventsScope tracks RPC calls to history service
-	HistoryClientReapplyEventsScope = "HistoryClientReapplyEvents"
-	// HistoryClientGetDLQMessagesScope tracks RPC calls to history service
-	HistoryClientGetDLQMessagesScope = "HistoryClientGetDLQMessages"
-	// HistoryClientPurgeDLQMessagesScope tracks RPC calls to history service
-	HistoryClientPurgeDLQMessagesScope = "HistoryClientPurgeDLQMessages"
-	// HistoryClientMergeDLQMessagesScope tracks RPC calls to history service
-	HistoryClientMergeDLQMessagesScope = "HistoryClientMergeDLQMessages"
-	// HistoryClientRefreshWorkflowTasksScope tracks RPC calls to history service
-	HistoryClientRefreshWorkflowTasksScope = "HistoryClientRefreshWorkflowTasks"
-	// HistoryClientGenerateLastHistoryReplicationTasksScope tracks RPC calls to history service
-	HistoryClientGenerateLastHistoryReplicationTasksScope = "HistoryClientGenerateLastHistoryReplicationTasks"
-	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
-	HistoryClientGetReplicationStatusScope = "HistoryClientGetReplicationStatus"
-	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
-	HistoryClientDeleteWorkflowVisibilityRecordScope = "HistoryClientDeleteWorkflowVisibilityRecord"
-	// HistoryClientCloseShardScope tracks RPC calls to history service
-	HistoryClientCloseShardScope = "HistoryClientCloseShard"
-	// HistoryClientDescribeMutableStateScope tracks RPC calls to history service
-	HistoryClientDescribeMutableStateScope = "HistoryClientDescribeMutableState"
-	// HistoryClientGetDLQReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientGetDLQReplicationMessagesScope = "HistoryClientGetDLQReplicationMessages"
-	// HistoryClientGetShardScope tracks RPC calls to history service
-	HistoryClientGetShardScope = "HistoryClientGetShard"
-	// HistoryClientIsActivityTaskValidScope tracks RPC calls to history service
-	HistoryClientIsActivityTaskValidScope = "HistoryClientIsActivityTaskValid"
-	// HistoryClientIsWorkflowTaskValidScope tracks RPC calls to history service
-	HistoryClientIsWorkflowTaskValidScope = "HistoryClientIsWorkflowTaskValid"
-	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
-	HistoryClientRebuildMutableStateScope = "HistoryClientRebuildMutableState"
-	// HistoryClientRemoveTaskScope tracks RPC calls to history service
-	HistoryClientRemoveTaskScope = "HistoryClientRemoveTask"
-	// HistoryClientVerifyFirstWorkflowTaskScheduledScope tracks RPC calls to history service
-	HistoryClientVerifyFirstWorkflowTaskScheduledScope = "HistoryClientVerifyFirstWorkflowTaskScheduled"
-	// HistoryClientDescribeHistoryHostScope tracks RPC calls to history service
-	HistoryClientDescribeHistoryHostScope = "HistoryClientDescribeHistoryHost"
-	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
-	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
 	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
-	// HistoryClientGetWorkflowExecutionHistoryScope tracks RPC calls to history service
-	HistoryClientGetWorkflowExecutionHistoryScope = "HistoryClientGetWorkflowExecutionHistory"
-	// HistoryClientGetWorkflowExecutionHistoryReverseScope tracks RPC calls to history service
-	HistoryClientGetWorkflowExecutionHistoryReverseScope = "HistoryClientGetWorkflowExecutionHistoryReverse"
-	// HistoryClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to history service
-	HistoryClientGetWorkflowExecutionRawHistoryV2Scope = "HistoryClientGetWorkflowExecutionRawHistoryV2"
-	// HistoryClientForceDeleteWorkflowExecutionScope tracks RPC calls to history service
-	HistoryClientForceDeleteWorkflowExecutionScope = "HistoryClientForceDeleteWorkflowExecution"
 )
 
 // Matching Client Operations
@@ -390,30 +102,6 @@ const (
 	MatchingClientAddWorkflowTaskScope = "MatchingClientAddWorkflowTask"
 	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
 	MatchingClientQueryWorkflowScope = "MatchingClientQueryWorkflow"
-	// MatchingClientRespondQueryTaskCompletedScope tracks RPC calls to matching service
-	MatchingClientRespondQueryTaskCompletedScope = "MatchingClientRespondQueryTaskCompleted"
-	// MatchingClientCancelOutstandingPollScope tracks RPC calls to matching service
-	MatchingClientCancelOutstandingPollScope = "MatchingClientCancelOutstandingPoll"
-	// MatchingClientDescribeTaskQueueScope tracks RPC calls to matching service
-	MatchingClientDescribeTaskQueueScope = "MatchingClientDescribeTaskQueue"
-	// MatchingClientGetBuildIdTaskQueueMappingScope tracks RPC calls to matching service
-	MatchingClientGetBuildIdTaskQueueMappingScope = "MatchingClientGetBuildIdTaskQueueMapping"
-	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
-	MatchingClientListTaskQueuePartitionsScope = "MatchingClientListTaskQueuePartitions"
-	// MatchingClientUpdateWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
-	MatchingClientUpdateWorkerBuildIdCompatibilityScope = "MatchingClientUpdateWorkerBuildIdCompatibility"
-	// MatchingClientGetWorkerBuildIdCompatibilityScope tracks RPC calls to matching service
-	MatchingClientGetWorkerBuildIdCompatibilityScope = "MatchingClientGetWorkerBuildIdCompatibility"
-	// MatchingClientGetTaskQueueUserDataScope tracks RPC calls to matching service
-	MatchingClientGetTaskQueueUserDataScope = "MatchingClientGetTaskQueueUserData"
-	// MatchingClientApplyTaskQueueUserDataReplicationEventScope tracks RPC calls to matching service
-	MatchingClientApplyTaskQueueUserDataReplicationEventScope = "MatchingClientApplyTaskQueueUserDataReplicationEvent"
-	// MatchingClientForceUnloadTaskQueueScope tracks RPC calls to matching service
-	MatchingClientForceUnloadTaskQueueScope = "MatchingClientForceUnloadTaskQueue"
-	// MatchingClientUpdateTaskQueueUserDataScope tracks RPC calls to matching service
-	MatchingClientUpdateTaskQueueUserDataScope = "MatchingClientUpdateTaskQueueUserData"
-	// MatchingClientReplicateTaskQueueUserDataScope tracks RPC calls to matching service
-	MatchingClientReplicateTaskQueueUserDataScope = "MatchingClientReplicateTaskQueueUserData"
 )
 
 // Worker
@@ -429,8 +117,6 @@ const (
 	PersistenceAppendHistoryNodesScope = "AppendHistoryNodes"
 	// PersistenceAppendRawHistoryNodesScope tracks AppendRawHistoryNodes calls made by service to persistence layer
 	PersistenceAppendRawHistoryNodesScope = "AppendRawHistoryNodes"
-	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
-	PersistenceDeleteHistoryNodesScope = "DeleteHistoryNodes"
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope = "ReadHistoryBranch"
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
@@ -443,8 +129,6 @@ const (
 	PersistenceDeleteHistoryBranchScope = "DeleteHistoryBranch"
 	// PersistenceTrimHistoryBranchScope tracks TrimHistoryBranch calls made by service to persistence layer
 	PersistenceTrimHistoryBranchScope = "TrimHistoryBranch"
-	// PersistenceCompleteForkBranchScope tracks CompleteForkBranch calls made by service to persistence layer
-	PersistenceCompleteForkBranchScope = "CompleteForkBranch"
 	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
 	PersistenceGetHistoryTreeScope = "GetHistoryTree"
 	// PersistenceGetAllHistoryTreeBranchesScope tracks GetHistoryTree calls made by service to persistence layer
@@ -505,8 +189,6 @@ const (
 	PersistenceUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
 	// PersistenceConflictResolveWorkflowExecutionScope tracks ConflictResolveWorkflowExecution calls made by service to persistence layer
 	PersistenceConflictResolveWorkflowExecutionScope = "ConflictResolveWorkflowExecution"
-	// PersistenceResetWorkflowExecutionScope tracks ResetWorkflowExecution calls made by service to persistence layer
-	PersistenceResetWorkflowExecutionScope = "ResetWorkflowExecution"
 	// PersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecution calls made by service to persistence layer
 	PersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// PersistenceDeleteCurrentWorkflowExecutionScope tracks DeleteCurrentWorkflowExecution calls made by service to persistence layer
@@ -583,12 +265,6 @@ const (
 	PersistenceGetTaskQueuesByBuildIdScope = "GetTaskQueuesByBuildId"
 	// PersistenceCountTaskQueuesByBuildIdScope is the metric scope for persistence.TaskManager.CountTaskQueuesByBuildId API
 	PersistenceCountTaskQueuesByBuildIdScope = "CountTaskQueuesByBuildId"
-	// PersistenceAppendHistoryEventsScope tracks AppendHistoryEvents calls made by service to persistence layer
-	PersistenceAppendHistoryEventsScope = "AppendHistoryEvents"
-	// PersistenceGetWorkflowExecutionHistoryScope tracks GetWorkflowExecutionHistory calls made by service to persistence layer
-	PersistenceGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
-	// PersistenceDeleteWorkflowExecutionHistoryScope tracks DeleteWorkflowExecutionHistory calls made by service to persistence layer
-	PersistenceDeleteWorkflowExecutionHistoryScope = "DeleteWorkflowExecutionHistory"
 	// PersistenceInitializeSystemNamespaceScope tracks InitializeSystemNamespaceScope calls made by service to persistence layer
 	PersistenceInitializeSystemNamespaceScope = "InitializeSystemNamespace"
 	// PersistenceCreateNamespaceScope tracks CreateNamespace calls made by service to persistence layer
@@ -661,8 +337,6 @@ const (
 
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
 	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
-	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
-	FrontendPollWorkflowTaskQueueScope = "PollWorkflowTaskQueue"
 	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
 	FrontendPollActivityTaskQueueScope = "PollActivityTaskQueue"
 	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
@@ -671,110 +345,19 @@ const (
 	FrontendRecordActivityTaskHeartbeatByIdScope = "RecordActivityTaskHeartbeatById"
 	// FrontendRespondWorkflowTaskCompletedScope is the metric scope for frontend.RespondWorkflowTaskCompleted
 	FrontendRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
-	// FrontendRespondWorkflowTaskFailedScope is the metric scope for frontend.RespondWorkflowTaskFailed
-	FrontendRespondWorkflowTaskFailedScope = "RespondWorkflowTaskFailed"
-	// FrontendRespondQueryTaskCompletedScope is the metric scope for frontend.RespondQueryTaskCompleted
-	FrontendRespondQueryTaskCompletedScope = "RespondQueryTaskCompleted"
-	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompleted
-	FrontendRespondActivityTaskCompletedScope = "RespondActivityTaskCompleted"
-	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailed
-	FrontendRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
-	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
-	FrontendRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
-	// FrontendRespondActivityTaskCompletedByIdScope is the metric scope for frontend.RespondActivityTaskCompletedById
-	FrontendRespondActivityTaskCompletedByIdScope = "RespondActivityTaskCompletedById"
-	// FrontendRespondActivityTaskFailedByIdScope is the metric scope for frontend.RespondActivityTaskFailedById
-	FrontendRespondActivityTaskFailedByIdScope = "RespondActivityTaskFailedById"
-	// FrontendRespondActivityTaskCanceledByIdScope is the metric scope for frontend.RespondActivityTaskCanceledById
-	FrontendRespondActivityTaskCanceledByIdScope = "RespondActivityTaskCanceledById"
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
-	// FrontendGetWorkflowExecutionHistoryReverseScope is the metric for frontend.GetWorkflowExecutionHistoryReverse
-	FrontendGetWorkflowExecutionHistoryReverseScope = "GetWorkflowExecutionHistoryReverse"
 	// FrontendPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
 	FrontendPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
-	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
-	FrontendGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
-	// FrontendPollForWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
-	FrontendPollForWorkflowExecutionRawHistoryScope = "PollForWorkflowExecutionRawHistory"
 	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
 	FrontendSignalWorkflowExecutionScope = "SignalWorkflowExecution"
 	// FrontendSignalWithStartWorkflowExecutionScope is the metric scope for frontend.SignalWithStartWorkflowExecution
 	FrontendSignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
-	// FrontendTerminateWorkflowExecutionScope is the metric scope for frontend.TerminateWorkflowExecution
-	FrontendTerminateWorkflowExecutionScope = "TerminateWorkflowExecution"
-	// FrontendDeleteWorkflowExecutionScope is the metric scope for frontend.DeleteWorkflowExecution
-	FrontendDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
-	// FrontendRequestCancelWorkflowExecutionScope is the metric scope for frontend.RequestCancelWorkflowExecution
-	FrontendRequestCancelWorkflowExecutionScope = "RequestCancelWorkflowExecution"
-	// FrontendListArchivedWorkflowExecutionsScope is the metric scope for frontend.ListArchivedWorkflowExecutions
-	FrontendListArchivedWorkflowExecutionsScope = "ListArchivedWorkflowExecutions"
-	// FrontendListOpenWorkflowExecutionsScope is the metric scope for frontend.ListOpenWorkflowExecutions
-	FrontendListOpenWorkflowExecutionsScope = "ListOpenWorkflowExecutions"
-	// FrontendListClosedWorkflowExecutionsScope is the metric scope for frontend.ListClosedWorkflowExecutions
-	FrontendListClosedWorkflowExecutionsScope = "ListClosedWorkflowExecutions"
-	// FrontendListWorkflowExecutionsScope is the metric scope for frontend.ListWorkflowExecutions
-	FrontendListWorkflowExecutionsScope = "ListWorkflowExecutions"
-	// FrontendScanWorkflowExecutionsScope is the metric scope for frontend.ListWorkflowExecutions
-	FrontendScanWorkflowExecutionsScope = "ScanWorkflowExecutions"
-	// FrontendCountWorkflowExecutionsScope is the metric scope for frontend.CountWorkflowExecutions
-	FrontendCountWorkflowExecutionsScope = "CountWorkflowExecutions"
-	// FrontendRegisterNamespaceScope is the metric scope for frontend.RegisterNamespace
-	FrontendRegisterNamespaceScope = "RegisterNamespace"
-	// FrontendDescribeNamespaceScope is the metric scope for frontend.DescribeNamespace
-	FrontendDescribeNamespaceScope = "DescribeNamespace"
-	// FrontendUpdateNamespaceScope is the metric scope for frontend.DescribeNamespace
-	FrontendUpdateNamespaceScope = "UpdateNamespace"
-	// FrontendDeprecateNamespaceScope is the metric scope for frontend.DeprecateNamespace
-	FrontendDeprecateNamespaceScope = "DeprecateNamespace"
 	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
 	FrontendQueryWorkflowScope = "QueryWorkflow"
-	// FrontendDescribeWorkflowExecutionScope is the metric scope for frontend.DescribeWorkflowExecution
-	FrontendDescribeWorkflowExecutionScope = "DescribeWorkflowExecution"
-	// FrontendDescribeTaskQueueScope is the metric scope for frontend.DescribeTaskQueue
-	FrontendDescribeTaskQueueScope = "DescribeTaskQueue"
-	// FrontendListTaskQueuePartitionsScope is the metric scope for frontend.ResetStickyTaskQueue
-	FrontendListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// FrontendResetStickyTaskQueueScope is the metric scope for frontend.ResetStickyTaskQueue
-	FrontendResetStickyTaskQueueScope = "ResetStickyTaskQueue"
-	// FrontendListNamespacesScope is the metric scope for frontend.ListNamespace
-	FrontendListNamespacesScope = "ListNamespaces"
 	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
 	FrontendResetWorkflowExecutionScope = "ResetWorkflowExecution"
-	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
-	FrontendGetSearchAttributesScope = "GetSearchAttributes"
-	// FrontendGetClusterInfoScope is the metric scope for frontend.GetClusterInfo
-	FrontendGetClusterInfoScope = "GetClusterInfo"
-	// FrontendGetSystemInfoScope is the metric scope for frontend.GetSystemInfo
-	FrontendGetSystemInfoScope = "GetSystemInfo"
-	// FrontendCreateScheduleScope is the metric scope for frontend.CreateScheduleScope = "CreateScheduleScope is the metric scope for frontend.CreateSchedule"
-	FrontendCreateScheduleScope = "CreateSchedule"
-	// FrontendDescribeScheduleScope is the metric scope for frontend.DescribeScheduleScope = "DescribeScheduleScope is the metric scope for frontend.DescribeSchedule"
-	FrontendDescribeScheduleScope = "DescribeSchedule"
-	// FrontendUpdateScheduleScope is the metric scope for frontend.UpdateScheduleScope = "UpdateScheduleScope is the metric scope for frontend.UpdateSchedule"
-	FrontendUpdateScheduleScope = "UpdateSchedule"
-	// FrontendPatchScheduleScope is the metric scope for frontend.PatchScheduleScope = "PatchScheduleScope is the metric scope for frontend.PatchSchedule"
-	FrontendPatchScheduleScope = "PatchSchedule"
-	// FrontendListScheduleMatchingTimesScope is the metric scope for frontend.ListScheduleMatchingTimesScope = "ListScheduleMatchingTimesScope is the metric scope for frontend.ListScheduleMatchingTimes"
-	FrontendListScheduleMatchingTimesScope = "ListScheduleMatchingTimes"
-	// FrontendDeleteScheduleScope is the metric scope for frontend.DeleteScheduleScope = "DeleteScheduleScope is the metric scope for frontend.DeleteSchedule"
-	FrontendDeleteScheduleScope = "DeleteSchedule"
-	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope = "ListSchedulesScope is the metric scope for frontend.ListSchedules"
-	FrontendListSchedulesScope = "ListSchedules"
-	// FrontendUpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibilityScope is the metric scope for frontend.UpdateWorkerBuildIdCompatibility"
-	FrontendUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
-	// FrontendGetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibilityScope is the metric scope for frontend.GetWorkerBuildIdCompatibility"
-	FrontendGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
-	// FrontendUpdateWorkflowExecutionScope is the metric scope for frontend.UpdateWorkflowExecution
-	FrontendUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
-	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
-	FrontendDescribeBatchOperationScope = "DescribeBatchOperation"
-	// FrontendListBatchOperationsScope is the metric scope for frontend.ListBatchOperations
-	FrontendListBatchOperationsScope = "ListBatchOperations"
-	// FrontendStartBatchOperationScope is the metric scope for frontend.StartBatchOperation
-	FrontendStartBatchOperationScope = "StartBatchOperation"
-	// FrontendStopBatchOperationScope is the metric scope for frontend.StopBatchOperation
-	FrontendStopBatchOperationScope = "StopBatchOperation"
+
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope = "VersionCheck"
 )
@@ -787,16 +370,12 @@ const (
 	HistoryRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
 	// HistoryRespondWorkflowTaskCompletedScope tracks RespondWorkflowTaskCompleted API calls received by service
 	HistoryRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
-	// HistoryRespondWorkflowTaskFailedScope tracks RespondWorkflowTaskFailed API calls received by service
-	HistoryRespondWorkflowTaskFailedScope = "RespondWorkflowTaskFailed"
 	// HistoryRespondActivityTaskCompletedScope tracks RespondActivityTaskCompleted API calls received by service
 	HistoryRespondActivityTaskCompletedScope = "RespondActivityTaskCompleted"
 	// HistoryRespondActivityTaskFailedScope tracks RespondActivityTaskFailed API calls received by service
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
-	// HistoryGetMutableStateScope tracks GetMutableStateScope API calls received by service
-	HistoryGetMutableStateScope = "GetMutableState"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
 	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
@@ -805,78 +384,18 @@ const (
 	HistoryGetRawHistoryScope = "GetRawHistory"
 	// HistoryGetHistoryReverseScope tracks GetHistoryReverseScope API calls received by service
 	HistoryGetHistoryReverseScope = "GetHistoryReverse"
-	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
-	HistoryPollMutableStateScope = "PollMutableState"
-	// HistoryResetStickyTaskQueueScope tracks ResetStickyTaskQueueScope API calls received by service
-	HistoryResetStickyTaskQueueScope = "ResetStickyTaskQueue"
-	// HistoryDescribeWorkflowExecutionScope tracks DescribeWorkflowExecution API calls received by service
-	HistoryDescribeWorkflowExecutionScope = "DescribeWorkflowExecution"
 	// HistoryRecordWorkflowTaskStartedScope tracks RecordWorkflowTaskStarted API calls received by service
 	HistoryRecordWorkflowTaskStartedScope = "RecordWorkflowTaskStarted"
 	// HistoryRecordActivityTaskStartedScope tracks RecordActivityTaskStarted API calls received by service
 	HistoryRecordActivityTaskStartedScope = "RecordActivityTaskStarted"
-	// HistorySignalWorkflowExecutionScope tracks SignalWorkflowExecution API calls received by service
-	HistorySignalWorkflowExecutionScope = "SignalWorkflowExecution"
 	// HistorySignalWithStartWorkflowExecutionScope tracks SignalWithStartWorkflowExecution API calls received by service
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
-	// HistoryRemoveSignalMutableStateScope tracks RemoveSignalMutableState API calls received by service
-	HistoryRemoveSignalMutableStateScope = "RemoveSignalMutableState"
-	// HistoryTerminateWorkflowExecutionScope tracks TerminateWorkflowExecution API calls received by service
-	HistoryTerminateWorkflowExecutionScope = "TerminateWorkflowExecution"
-	// HistoryScheduleWorkflowTaskScope tracks ScheduleWorkflowTask API calls received by service
-	HistoryScheduleWorkflowTaskScope = "ScheduleWorkflowTask"
-	// HistoryVerifyFirstWorkflowTaskScheduled tracks VerifyFirstWorkflowTaskScheduled API calls received by service
-	HistoryVerifyFirstWorkflowTaskScheduledScope = "VerifyFirstWorkflowTaskScheduled"
-	// HistoryRecordChildExecutionCompletedScope tracks RecordChildExecutionCompleted API calls received by service
-	HistoryRecordChildExecutionCompletedScope = "RecordChildExecutionCompleted"
-	// HistoryVerifyChildExecutionCompletionRecordedScope tracks VerifyChildExecutionCompletionRecorded API calls received by service
-	HistoryVerifyChildExecutionCompletionRecordedScope = "VerifyChildExecutionCompletionRecorded"
-	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
-	HistoryRequestCancelWorkflowExecutionScope = "RequestCancelWorkflowExecution"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
-	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
-	HistorySyncActivityScope = "SyncActivity"
-	// HistoryRebuildMutableStateScope tracks RebuildMutable API calls received by service
-	HistoryRebuildMutableStateScope = "RebuildMutableState"
-	// HistoryDescribeMutableStateScope tracks DescribeMutableState API calls received by service
-	HistoryDescribeMutableStateScope = "DescribeMutableState"
-	// HistoryGetReplicationMessagesScope tracks GetReplicationMessages API calls received by service
-	HistoryGetReplicationMessagesScope = "GetReplicationMessages"
-	// HistoryGetDLQReplicationMessagesScope tracks GetReplicationMessages API calls received by service
-	HistoryGetDLQReplicationMessagesScope = "GetDLQReplicationMessages"
-	// HistoryReadDLQMessagesScope tracks GetDLQMessages API calls received by service
-	HistoryReadDLQMessagesScope = "ReadDLQMessages"
-	// HistoryPurgeDLQMessagesScope tracks PurgeDLQMessages API calls received by service
-	HistoryPurgeDLQMessagesScope = "PurgeDLQMessages"
-	// HistoryMergeDLQMessagesScope tracks MergeDLQMessages API calls received by service
-	HistoryMergeDLQMessagesScope = "MergeDLQMessages"
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope = "ShardController"
 	// HistoryReapplyEventsScope is the scope used by event reapplication
 	HistoryReapplyEventsScope = "ReapplyEvents"
-	// HistoryRefreshWorkflowTasksScope is the scope used by refresh workflow tasks API
-	HistoryRefreshWorkflowTasksScope = "RefreshWorkflowTasks"
-	// HistoryGenerateLastHistoryReplicationTasksScope is the scope used by generate last replication tasks API
-	HistoryGenerateLastHistoryReplicationTasksScope = "GenerateLastHistoryReplicationTasks"
-	// HistoryGetReplicationStatusScope is the scope used by GetReplicationStatus API
-	HistoryGetReplicationStatusScope = "GetReplicationStatus"
-	// HistoryHistoryRemoveTaskScope is the scope used by remove task API
-	HistoryHistoryRemoveTaskScope = "HistoryRemoveTask"
-	// HistoryCloseShard is the scope used by close shard API
-	HistoryCloseShardScope = "CloseShard"
-	// HistoryGetShard is the scope used by get shard API
-	HistoryGetShardScope = "GetShard"
-	// HistoryReplicateEventsV2 is the scope used by replicate events API
-	HistoryReplicateEventsV2Scope = "ReplicateEventsV2"
-	// HistoryDescribeHistoryHost is the scope used by describe history host API
-	HistoryDescribeHistoryHostScope = "DescribeHistoryHost"
-	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
-	HistoryDeleteWorkflowVisibilityRecordScope = "DeleteWorkflowVisibilityRecord"
-	// HistoryUpdateWorkflowExecutionScope is the scope used by update workflow execution API
-	HistoryUpdateWorkflowExecutionScope = "UpdateWorkflowExecution"
-	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
-	HistoryResetWorkflowExecutionScope = "ResetWorkflowExecution"
 	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
 	HistoryQueryWorkflowScope = "QueryWorkflow"
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
@@ -887,95 +406,23 @@ const (
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
 	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
-	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
-	TaskPriorityAssignerScope = "TaskPriorityAssigner"
+
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
 	TransferQueueProcessorScope = "TransferQueueProcessor"
-	// TransferActiveQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferActiveQueueProcessorScope = "TransferActiveQueueProcessor"
-	// TransferStandbyQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferStandbyQueueProcessorScope = "TransferStandbyQueueProcessor"
-	// TransferActiveTaskActivityScope is the scope used for activity task processing by transfer queue processor
-	TransferActiveTaskActivityScope = "TransferActiveTaskActivity"
-	// TransferActiveTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
-	TransferActiveTaskWorkflowTaskScope = "TransferActiveTaskWorkflowTask"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
-	// TransferActiveTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
-	TransferActiveTaskCancelExecutionScope = "TransferActiveTaskCancelExecution"
-	// TransferActiveTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
-	TransferActiveTaskSignalExecutionScope = "TransferActiveTaskSignalExecution"
-	// TransferActiveTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
-	TransferActiveTaskStartChildExecutionScope = "TransferActiveTaskStartChildExecution"
-	// TransferActiveTaskResetWorkflowScope is the scope used for record workflow started task processing by transfer queue processor
-	TransferActiveTaskResetWorkflowScope = "TransferActiveTaskResetWorkflow"
-	// TransferStandbyTaskResetWorkflowScope is the scope used for record workflow started task processing by transfer queue processor
-	TransferStandbyTaskResetWorkflowScope = "TransferStandbyTaskResetWorkflow"
-	// TransferStandbyTaskActivityScope is the scope used for activity task processing by transfer queue processor
-	TransferStandbyTaskActivityScope = "TransferStandbyTaskActivity"
-	// TransferStandbyTaskWorkflowTaskScope is the scope used for workflow task processing by transfer queue processor
-	TransferStandbyTaskWorkflowTaskScope = "TransferStandbyTaskWorkflowTask"
-	// TransferStandbyTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
-	TransferStandbyTaskCloseExecutionScope = "TransferStandbyTaskCloseExecution"
-	// TransferStandbyTaskCancelExecutionScope is the scope used for cancel execution task processing by transfer queue processor
-	TransferStandbyTaskCancelExecutionScope = "TransferStandbyTaskCancelExecution"
-	// TransferStandbyTaskSignalExecutionScope is the scope used for signal execution task processing by transfer queue processor
-	TransferStandbyTaskSignalExecutionScope = "TransferStandbyTaskSignalExecution"
-	// TransferStandbyTaskStartChildExecutionScope is the scope used for start child execution task processing by transfer queue processor
-	TransferStandbyTaskStartChildExecutionScope = "TransferStandbyTaskStartChildExecution"
-
-	// VisibilityQueueProcessorScope is the scope used by all metric emitted by visibility queue processor
-	VisibilityQueueProcessorScope = "VisibilityQueueProcessor"
-	// VisibilityTaskStartExecutionScope is the scope used for start execution processing by visibility queue processor
-	VisibilityTaskStartExecutionScope = "VisibilityTaskStartExecution"
-	// VisibilityTaskUpsertExecutionScope is the scope used for upsert execution processing by visibility queue processor
-	VisibilityTaskUpsertExecutionScope = "VisibilityTaskUpsertExecution"
-	// VisibilityTaskCloseExecutionScope is the scope used for close execution attributes processing by visibility queue processor
-	VisibilityTaskCloseExecutionScope = "VisibilityTaskCloseExecution"
-	// VisibilityTaskDeleteExecutionScope is the scope used for delete by visibility queue processor
-	VisibilityTaskDeleteExecutionScope = "VisibilityTaskDeleteExecution"
 
 	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerQueueProcessorScope = "TimerQueueProcessor"
-	// TimerActiveQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerActiveQueueProcessorScope = "TimerActiveQueueProcessor"
-	// TimerStandbyQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerStandbyQueueProcessorScope = "TimerStandbyQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
 	TimerActiveTaskWorkflowTaskTimeoutScope = "TimerActiveTaskWorkflowTaskTimeout"
-	// TimerActiveTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
-	TimerActiveTaskUserTimerScope = "TimerActiveTaskUserTimer"
-	// TimerActiveTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
-	TimerActiveTaskWorkflowTimeoutScope = "TimerActiveTaskWorkflowTimeout"
-	// TimerActiveTaskActivityRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
-	TimerActiveTaskActivityRetryTimerScope = "TimerActiveTaskActivityRetryTimer"
 	// TimerActiveTaskWorkflowBackoffTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
 	TimerActiveTaskWorkflowBackoffTimerScope = "TimerActiveTaskWorkflowBackoffTimer"
-	// TimerActiveTaskDeleteHistoryEventScope is the scope used by metric emitted by timer queue processor for processing history event cleanup
-	TimerActiveTaskDeleteHistoryEventScope = "TimerActiveTaskDeleteHistoryEvent"
-	// TimerStandbyTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
-	TimerStandbyTaskActivityTimeoutScope = "TimerStandbyTaskActivityTimeout"
-	// TimerStandbyTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
-	TimerStandbyTaskWorkflowTaskTimeoutScope = "TimerStandbyTaskWorkflowTaskTimeout"
-	// TimerStandbyTaskUserTimerScope is the scope used by metric emitted by timer queue processor for processing user timers
-	TimerStandbyTaskUserTimerScope = "TimerStandbyTaskUserTimer"
-	// TimerStandbyTaskWorkflowTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow timeouts.
-	TimerStandbyTaskWorkflowTimeoutScope = "TimerStandbyTaskWorkflowTimeout"
-	// TimerStandbyTaskActivityRetryTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
-	TimerStandbyTaskActivityRetryTimerScope = "TimerStandbyTaskActivityRetryTimer"
-	// TimerStandbyTaskDeleteHistoryEventScope is the scope used by metric emitted by timer queue processor for processing history event cleanup
-	TimerStandbyTaskDeleteHistoryEventScope = "TimerStandbyTaskDeleteHistoryEvent"
-	// TimerStandbyTaskWorkflowBackoffTimerScope is the scope used by metric emitted by timer queue processor for processing retry task.
-	TimerStandbyTaskWorkflowBackoffTimerScope = "TimerStandbyTaskWorkflowBackoffTimer"
 
 	// ReplicatorQueueProcessorScope is the scope used by all metric emitted by replicator queue processor
 	ReplicatorQueueProcessorScope = "ReplicatorQueueProcessor"
-	// ReplicatorTaskHistoryScope is the scope used for history task processing by replicator queue processor
-	ReplicatorTaskHistoryScope = "ReplicatorTaskHistory"
-	// ReplicatorTaskSyncActivityScope is the scope used for sync activity by replicator queue processor
-	ReplicatorTaskSyncActivityScope = "ReplicatorTaskSyncActivity"
 	// ReplicateHistoryEventsScope is the scope used by historyReplicator API for applying events
 	ReplicateHistoryEventsScope = "ReplicateHistoryEvents"
 	// HistoryRereplicationByTransferTaskScope tracks history replication calls made by transfer task
@@ -984,8 +431,6 @@ const (
 	HistoryRereplicationByTimerTaskScope = "HistoryRereplicationByTimerTask"
 	// HistoryRereplicationByHistoryReplicationScope tracks history replication calls made by history replication
 	HistoryRereplicationByHistoryReplicationScope = "HistoryRereplicationByHistoryReplication"
-	// HistoryRereplicationByHistoryMetadataReplicationScope tracks history replication calls made by history replication
-	HistoryRereplicationByHistoryMetadataReplicationScope = "HistoryRereplicationByHistoryMetadataReplication"
 	// HistoryRereplicationByActivityReplicationScope tracks history replication calls made by activity replication
 	HistoryRereplicationByActivityReplicationScope = "HistoryRereplicationByActivityReplication"
 
@@ -1021,16 +466,8 @@ const (
 	DeadlockDetectorScope = "DeadlockDetector"
 	// OperationTimerQueueProcessorScope is a scope for timer queue base processor
 	OperationTimerQueueProcessorScope = "TimerQueueProcessor"
-	// OperationTimerActiveQueueProcessorScope is a scope for timer queue active processor
-	OperationTimerActiveQueueProcessorScope = "TimerActiveQueueProcessor"
-	// OperationTimerStandbyQueueProcessorScope is a scope for timer queue standby processor
-	OperationTimerStandbyQueueProcessorScope = "TimerStandbyQueueProcessor"
 	// OperationTransferQueueProcessorScope is a scope for transfer queue base processor
 	OperationTransferQueueProcessorScope = "TransferQueueProcessor"
-	// OperationTransferActiveQueueProcessorScope is a scope for transfer queue active processor
-	OperationTransferActiveQueueProcessorScope = "TransferActiveQueueProcessor"
-	// OperationTransferStandbyQueueProcessorScope is a scope for transfer queue standby processor
-	OperationTransferStandbyQueueProcessorScope = "TransferStandbyQueueProcessor"
 	// OperationVisibilityQueueProcessorScope is a scope for visibility queue processor
 	OperationVisibilityQueueProcessorScope = "VisibilityQueueProcessor"
 	// OperationArchivalQueueProcessorScope is a scope for archival queue processor
@@ -1057,20 +494,6 @@ const (
 	MatchingQueryWorkflowScope = "QueryWorkflow"
 	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
 	MatchingRespondQueryTaskCompletedScope = "RespondQueryTaskCompleted"
-	// MatchingCancelOutstandingPollScope tracks CancelOutstandingPoll API calls received by service
-	MatchingCancelOutstandingPollScope = "CancelOutstandingPoll"
-	// MatchingDescribeTaskQueueScope tracks DescribeTaskQueue API calls received by service
-	MatchingDescribeTaskQueueScope = "DescribeTaskQueue"
-	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
-	MatchingListTaskQueuePartitionsScope = "ListTaskQueuePartitions"
-	// MatchingUpdateWorkerBuildIdCompatibilityScope tracks UpdateWorkerBuildIdCompatibility API calls received by service
-	MatchingUpdateWorkerBuildIdCompatibilityScope = "UpdateWorkerBuildIdCompatibility"
-	// MatchingGetWorkerBuildIdCompatibilityScope tracks GetWorkerBuildIdCompatibility API calls received by service
-	MatchingGetWorkerBuildIdCompatibilityScope = "GetWorkerBuildIdCompatibility"
-	// MatchingGetTaskQueueUserDataScope tracks GetTaskQueueUserData API calls received by service
-	MatchingGetTaskQueueUserDataScope = "GetTaskQueueUserData"
-	// MatchingApplyTaskQueueUserDataReplicationEventScope tracks ApplyTaskQueueUserDataReplicationEvent API calls received by service
-	MatchingApplyTaskQueueUserDataReplicationEventScope = "MatchingApplyTaskQueueUserDataReplicationEvent"
 )
 
 // Worker Scope
