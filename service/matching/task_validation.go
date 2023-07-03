@@ -34,7 +34,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/service/worker/scanner/taskqueue"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -80,7 +80,7 @@ func (v *taskValidatorImpl) maybeValidate(
 	task *persistencespb.AllocatedTaskInfo,
 	taskType enumspb.TaskQueueType,
 ) bool {
-	if taskqueue.IsTaskExpired(task) {
+	if IsTaskExpired(task) {
 		return false
 	}
 	if !v.shouldValidate(task) {
@@ -167,4 +167,14 @@ func (v *taskValidatorImpl) isTaskValid(
 	default:
 		return true, nil
 	}
+}
+
+// TODO https://github.com/temporalio/temporal/issues/1021
+//
+//	there should be more validation logic here
+//	1. if task has valid TTL -> TTL reached -> delete
+//	2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
+func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
+	expiry := timestamp.TimeValue(t.GetData().GetExpiryTime())
+	return expiry.Unix() > 0 && expiry.Before(time.Now())
 }

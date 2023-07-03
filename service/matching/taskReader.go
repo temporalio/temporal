@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/internal/goro"
-	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 const (
@@ -269,7 +268,7 @@ func (tr *taskReader) addTasksToBuffer(
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) error {
 	for _, t := range tasks {
-		if taskqueue.IsTaskExpired(t) {
+		if IsTaskExpired(t) {
 			tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired

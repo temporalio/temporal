@@ -29,10 +29,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
 
@@ -82,7 +82,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 
 		for _, task := range resp.Tasks {
 			nProcessed++
-			if !IsTaskExpired(task) {
+			if !matching.IsTaskExpired(task) {
 				return handlerStatusDone
 			}
 		}
@@ -140,14 +140,4 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 		s.logger.Info("scavenger.deleteHandler processed.",
 			tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowTaskQueueName(key.TaskQueueName), tag.WorkflowTaskQueueType(key.TaskQueueType), tag.NumberProcessed(nProcessed), tag.NumberDeleted(nDeleted))
 	}
-}
-
-// TODO https://github.com/temporalio/temporal/issues/1021
-//
-//	there should be more validation logic here
-//	1. if task has valid TTL -> TTL reached -> delete
-//	2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
-func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
-	expiry := timestamp.TimeValue(t.GetData().GetExpiryTime())
-	return expiry.Unix() > 0 && expiry.Before(time.Now())
 }
