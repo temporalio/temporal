@@ -29,7 +29,6 @@ import (
 
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -49,7 +48,8 @@ const QueueFactoryFxGroup = "queueFactory"
 
 type (
 	QueueFactory interface {
-		common.Daemon
+		Start()
+		Stop()
 
 		// TODO:
 		// 1. Remove the cache parameter after workflow cache become a host level component

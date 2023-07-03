@@ -69,7 +69,8 @@ var (
 type (
 	// TaskProcessor is the interface for task processor
 	TaskProcessor interface {
-		common.Daemon
+		Start()
+		Stop()
 	}
 
 	// taskProcessorImpl is responsible for processing replication tasks for a shard.
