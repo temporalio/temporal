@@ -104,7 +104,7 @@ func (v *taskValidatorImpl) shouldValidate(
 		// this task has not been validated
 
 		// after timeout attempting to dispatch the task, check whether the task is still valid
-		if task.Data.CreateTime != nil && time.Now().Sub(*task.Data.CreateTime) > taskReaderValidationThreshold {
+		if task.Data.CreateTime != nil && time.Since(*task.Data.CreateTime) > taskReaderValidationThreshold {
 			return true
 		}
 	} else {
