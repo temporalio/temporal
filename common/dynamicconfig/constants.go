@@ -116,6 +116,9 @@ const (
 	PersistenceHealthSignalBufferSize = "system.persistenceHealthSignalBufferSize"
 	// ShardRPSWarnLimit is the per-shard RPS limit for warning
 	ShardRPSWarnLimit = "system.shardRPSWarnLimit"
+	// ShardPerNsRPSWarnPercent is the per-shard per-namespace RPS limit for warning as a percentage of ShardRPSWarnLimit
+	// these warning are not emitted if the value is set to 0 or less
+	ShardPerNsRPSWarnPercent = "system.shardPerNsRPSWarnPercent"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
@@ -195,11 +198,27 @@ const (
 	// ReachabilityQueryBuildIdLimit limits the number of build ids that can be requested in a single call to the
 	// GetWorkerTaskReachability API.
 	ReachabilityQueryBuildIdLimit = "limit.reachabilityQueryBuildIds"
+	// ReachabilityQuerySetDurationSinceDefault is the minimum period since a version set was demoted from being the
+	// queue default before it is considered unreachable by new workflows.
+	// This setting allows some propogation delay of versioning data for the reachability queries, which may happen for
+	// the following reasons:
+	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
+	// is currently processing a task.
+	// 2. There are delays in the visibility task processor (which is asynchronous).
+	// 3. There's propagation delay of the versioning data between matching nodes.
+	ReachabilityQuerySetDurationSinceDefault = "frontend.reachabilityQuerySetDurationSinceDefault"
 	// TaskQueuesPerBuildIdLimit limits the number of task queue names that can be mapped to a single build id.
 	TaskQueuesPerBuildIdLimit = "limit.taskQueuesPerBuildId"
 	// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its containing
 	// set for it to be considered for removal, used by the build id scavenger.
+	// This setting allows some propogation delay of versioning data, which may happen for the following reasons:
+	// 1. There are no workflows currently marked as open in the visibility store but a worker for the demoted version
+	// is currently processing a task.
+	// 2. There are delays in the visibility task processor (which is asynchronous).
+	// 3. There's propagation delay of the versioning data between matching nodes.
 	RemovableBuildIdDurationSinceDefault = "worker.removableBuildIdDurationSinceDefault"
+	// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
+	BuildIdScavenengerVisibilityRPS = "worker.buildIdScavengerVisibilityRPS"
 
 	// keys for frontend
 

@@ -41,8 +41,9 @@ const (
 
 type (
 	StreamReceiverMonitor interface {
-		common.Daemon
 		RegisterInboundStream(streamSender StreamSender)
+		Start()
+		Stop()
 	}
 	StreamReceiverMonitorImpl struct {
 		ProcessToolBox
