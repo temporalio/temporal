@@ -1490,6 +1490,7 @@ func (m *IsWorkflowTaskValidRequest) GetScheduledEventId() int64 {
 }
 
 type IsWorkflowTaskValidResponse struct {
+	// whether matching service can call history service to start the workflow task
 	IsValid bool `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
 }
 
@@ -1952,6 +1953,7 @@ func (m *IsActivityTaskValidRequest) GetScheduledEventId() int64 {
 }
 
 type IsActivityTaskValidResponse struct {
+	// whether matching service can call history service to start the activity task
 	IsValid bool `protobuf:"varint,1,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`
 }
 
