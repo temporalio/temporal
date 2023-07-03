@@ -58,7 +58,7 @@ type (
 	taskValidatorImpl struct {
 		historyClient historyservice.HistoryServiceClient
 
-		lastValidatedTaskInfo *taskValidationInfo
+		lastValidatedTaskInfo taskValidationInfo
 	}
 )
 
@@ -90,7 +90,7 @@ func (v *taskValidatorImpl) maybeValidate(
 	if err != nil {
 		return true
 	}
-	v.lastValidatedTaskInfo = &taskValidationInfo{
+	v.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         task.TaskId,
 		validationTime: time.Now().UTC(),
 	}
@@ -100,7 +100,7 @@ func (v *taskValidatorImpl) maybeValidate(
 func (v *taskValidatorImpl) shouldValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo == nil || v.lastValidatedTaskInfo.taskID != task.TaskId {
+	if v.lastValidatedTaskInfo.taskID != task.TaskId {
 		// this task has not been validated
 
 		// after timeout attempting to dispatch the task, check whether the task is still valid

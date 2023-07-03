@@ -94,7 +94,7 @@ func (s *taskValidatorSuite) TeardownTest() {
 }
 
 func (s *taskValidatorSuite) TestShouldValidate_NewTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = &taskValidationInfo{
+	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.Data.ScheduledEventId - 1,
 		validationTime: time.Unix(0, rand.Int63()),
 	}
@@ -105,7 +105,7 @@ func (s *taskValidatorSuite) TestShouldValidate_NewTask_Validate() {
 }
 
 func (s *taskValidatorSuite) TestShouldValidate_NewTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = &taskValidationInfo{
+	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.Data.ScheduledEventId - 1,
 		validationTime: time.Unix(0, rand.Int63()),
 	}
@@ -116,7 +116,7 @@ func (s *taskValidatorSuite) TestShouldValidate_NewTask_Skip() {
 }
 
 func (s *taskValidatorSuite) TestShouldValidate_ExistingTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = &taskValidationInfo{
+	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.Data.ScheduledEventId,
 		validationTime: time.Now().Add(-2 * taskReaderValidationThreshold),
 	}
@@ -126,7 +126,7 @@ func (s *taskValidatorSuite) TestShouldValidate_ExistingTask_Validate() {
 }
 
 func (s *taskValidatorSuite) TestShouldValidate_ExistingTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = &taskValidationInfo{
+	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.Data.ScheduledEventId,
 		validationTime: time.Now().Add(2 * taskReaderValidationThreshold),
 	}
