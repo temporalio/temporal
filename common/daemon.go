@@ -34,12 +34,3 @@ const (
 	// DaemonStatusStopped coroutine pool stopped
 	DaemonStatusStopped int32 = 2
 )
-
-type (
-	// Daemon is the base interfaces implemented by
-	// background tasks within Temporal
-	Daemon interface {
-		Start()
-		Stop()
-	}
-)
