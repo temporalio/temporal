@@ -109,7 +109,7 @@ func (v *taskValidatorImpl) shouldValidate(
 		}
 	} else {
 		// this task has been validated before
-		if time.Now().Sub(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
+		if time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
 			return true
 		}
 	}
