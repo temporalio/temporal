@@ -31,6 +31,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -47,6 +48,7 @@ type (
 		NamespaceRegistry         namespace.Registry
 		HistoryClient             historyservice.HistoryServiceClient
 		FrontendClient            workflowservice.WorkflowServiceClient
+		ClientFactory             serverClient.Factory
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
@@ -95,6 +97,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		namespaceRegistry:         wc.NamespaceRegistry,
 		historyClient:             wc.HistoryClient,
 		frontendClient:            wc.FrontendClient,
+		clientFactory:             wc.ClientFactory,
 		namespaceReplicationQueue: wc.NamespaceReplicationQueue,
 		taskManager:               wc.TaskManager,
 		logger:                    wc.Logger,

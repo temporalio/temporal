@@ -26,6 +26,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -38,9 +39,11 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -275,8 +278,10 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		},
 	})
 
+	metricsHander := a.metricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName))
 	switch err.(type) {
 	case nil:
+		metricsHander.Counter(metrics.GenerateHistoryReplicationTasksCount.GetMetricName()).Record(1)
 		stateTransitionCount := resp.StateTransitionCount
 		for stateTransitionCount > 0 {
 			token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
@@ -285,8 +290,10 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		}
 		return nil
 	case *serviceerror.NotFound:
+		metricsHander.Counter(metrics.GenerateHistoryReplicationTasksError.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 		return nil
 	default:
+		metricsHander.Counter(metrics.GenerateHistoryReplicationTasksError.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 		return err
 	}
 }
@@ -381,7 +388,8 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		we := request.Executions[i]
 		err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
-			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
+
+			a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
 			return err
 		}
 		activity.RecordHeartbeat(ctx, i)
@@ -394,7 +402,6 @@ func (a *activities) setCallerInfoForGenReplicationTask(
 	ctx context.Context,
 	namespaceID namespace.ID,
 ) context.Context {
-
 	nsName, err := a.namespaceRegistry.GetNamespaceName(namespaceID)
 	if err != nil {
 		a.logger.Error("Failed to get namespace name when generating replication task",
@@ -480,5 +487,122 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 		heartbeatDetails.NextPageToken = response.NextPageToken
 		heartbeatDetails.IndexInPage = 0
 		activity.RecordHeartbeat(ctx, heartbeatDetails)
+	}
+}
+
+func (a *activities) verifyReplicationTasks(ctx context.Context, request *genearteAndVerifyReplicationTasksRequest, verifieldFlags []bool, adminClient adminservice.AdminServiceClient) (bool, error) {
+	var verified = true
+	for i := 0; i < len(request.Executions); i++ {
+		if verifieldFlags[i] {
+			continue
+		}
+
+		we := request.Executions[i]
+		if _, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: request.Namespace,
+			Execution: &we,
+		}); err != nil {
+			var notFoundErr *serviceerror.NotFound
+			if !errors.As(err, &notFoundErr) {
+				return false, err
+			}
+
+			// Continue to verify even though a single workflow execution was not found.
+			verified = false
+		} else {
+			a.metricsHandler.Counter(metrics.ForceReplicationVerifyReplicationSuccess.GetMetricName()).Record(1)
+			verifieldFlags[i] = true
+		}
+	}
+
+	return verified, nil
+}
+
+type (
+	replicationTasksHeartbeatDetails struct {
+		VerifiedFlags      []bool
+		VerifyTimeoutCount int
+	}
+
+	verifyReplicationTasksTimeoutErr struct {
+		Details replicationTasksHeartbeatDetails
+	}
+)
+
+func (e verifyReplicationTasksTimeoutErr) Error() string {
+	return fmt.Sprintf("Failed to verify replication tasks. Details: %v", e.Details)
+}
+
+func (a *activities) GenerateAndVerifyReplicationTasks(ctx context.Context, request *genearteAndVerifyReplicationTasksRequest) error {
+	ctx = a.setCallerInfoForGenReplicationTask(ctx, namespace.ID(request.NamespaceID))
+	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
+
+	var details replicationTasksHeartbeatDetails
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {
+			return err
+		}
+	}
+
+	if len(details.VerifiedFlags) == 0 {
+		details.VerifiedFlags = make([]bool, len(request.Executions))
+		activity.RecordHeartbeat(ctx, details)
+	}
+
+	var executions []commonpb.WorkflowExecution
+	for i := 0; i < len(request.Executions); i++ {
+		if !details.VerifiedFlags[i] {
+			executions = append(executions, request.Executions[i])
+		}
+	}
+
+	generateErrChan := make(chan error)
+	go func() {
+		for _, we := range executions {
+			err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
+			if err != nil {
+				a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
+				generateErrChan <- err
+				return
+			}
+		}
+
+		return
+	}()
+
+	adminClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
+		request.TargetClusterEndpoint,
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+
+	ticker := time.NewTicker(request.VerifyInterval)
+	timer := time.NewTimer(request.VerifyTimeout)
+
+	for {
+		select {
+		case err := <-generateErrChan:
+			return err
+		case <-ticker.C:
+			var result bool
+			var err error
+			a.metricsHandler.Counter(metrics.ForceReplicationVerifyWorkflowAttempts.GetMetricName()).Record(1)
+			if result, err = a.verifyReplicationTasks(ctx, request, details.VerifiedFlags, adminClient); err != nil {
+				return err
+			}
+
+			// Record progress
+			activity.RecordHeartbeat(ctx, details)
+			if result == true {
+				return nil
+			}
+		case <-timer.C:
+			details.VerifyTimeoutCount++
+			activity.RecordHeartbeat(ctx, details)
+			a.metricsHandler.Counter(metrics.ForceReplicationVerifyReplicationFailures.GetMetricName()).Record(1)
+			return verifyReplicationTasksTimeoutErr{
+				Details: details,
+			}
+		}
 	}
 }
