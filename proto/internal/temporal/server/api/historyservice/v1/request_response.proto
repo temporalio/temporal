@@ -227,6 +227,7 @@ message IsWorkflowTaskValidRequest {
 }
 
 message IsWorkflowTaskValidResponse {
+    // whether matching service can call history service to start the workflow task
     bool is_valid = 1;
 }
 
@@ -271,6 +272,7 @@ message IsActivityTaskValidRequest {
 }
 
 message IsActivityTaskValidResponse {
+    // whether matching service can call history service to start the activity task
     bool is_valid = 1;
 }
 
