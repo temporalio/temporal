@@ -399,7 +399,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		StartedEventId:         common.EmptyEventID,
 		Attempt:                1,
 		NextEventId:            common.EmptyEventID,
-		BacklogCountHint:       1,
+		BacklogCountHint:       0,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
 		TransientWorkflowTask:  nil,
@@ -2047,12 +2047,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -2074,12 +2074,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -2101,12 +2101,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
@@ -2176,12 +2176,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.taskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			TaskQueue:   tq,
 			UserData:    userData,
-		})
+		}))
 	userData.Version++
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -2406,6 +2406,7 @@ type testTaskQueueManager struct {
 	createTaskCount  int
 	getTasksCount    int
 	getUserDataCount int
+	updateCount      int
 	tasks            *treemap.Map
 	userData         *persistencespb.VersionedTaskQueueUserData
 }
@@ -2470,6 +2471,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
+	tlm.updateCount++
 
 	if tlm.rangeID != request.PrevRangeID {
 		return nil, &persistence.ConditionFailedError{
@@ -2668,6 +2670,14 @@ func (m *testTaskManager) getGetUserDataCount(taskQueue *taskQueueID) int {
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.getUserDataCount
+}
+
+// getUpdateCount returns how many times UpdateTaskQueue was called
+func (m *testTaskManager) getUpdateCount(taskQueue *taskQueueID) int {
+	tlm := m.getTaskQueueManager(taskQueue)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.updateCount
 }
 
 func (m *testTaskManager) String() string {

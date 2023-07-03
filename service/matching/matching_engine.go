@@ -471,7 +471,7 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 			return err
 		}
 		err = tqm.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted {
+		if err != errInterrupted { // nolint:goerr113
 			return err
 		}
 	}
@@ -1062,7 +1062,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		mergedData := MergeVersioningData(current.GetVersioningData(), req.GetUserData().GetVersioningData())
 
 		for _, buildId := range buildIdsToRevive {
-			setIdx, buildIdIdx := findVersion(mergedData, buildId)
+			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
 			if setIdx == -1 {
 				continue
 			}
@@ -1327,7 +1327,9 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}
-	response.BacklogCountHint = task.backlogCountHint
+	if task.backlogCountHint != nil {
+		response.BacklogCountHint = task.backlogCountHint()
+	}
 	return response
 }
 
@@ -1513,7 +1515,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	}
 
 	versionSet, err := lookupVersionSetForAdd(data, buildId)
-	if err == errEmptyVersioningData {
+	if err == errEmptyVersioningData { // nolint:goerr113
 		// default was requested for an unversioned queue
 		return taskQueue, userDataChanged, nil
 	} else if err != nil {

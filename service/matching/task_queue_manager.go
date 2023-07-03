@@ -181,6 +181,9 @@ type (
 		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataInitialFetch *future.FutureImpl[struct{}]
+		// lostOwnership controls behavior on Stop: if it's false, we try to write one final
+		// update before unloading
+		lostOwnership atomic.Bool
 	}
 )
 
@@ -295,6 +298,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
+		c.lostOwnership.Store(true)
 		c.unloadFromEngine()
 		return true
 	}
@@ -325,17 +329,18 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	// ackLevel in taskAckManager is initialized to -1 and then set to a real value (>= 0) once
-	// we've successfully acquired a lease. If it's still -1, then we don't have current
-	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
+	// Maybe try to write one final update of ack level and GC some tasks.
+	// Skip the update if we never initialized (ackLevel will be -1 in that case).
+	// Also skip if we're stopping due to lost ownership (the update will fail in that case).
+	// Ignore any errors.
+	// Note that it's fine to GC even if the update ack level fails because we did match the
+	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 {
+	if ackLevel >= 0 && !c.lostOwnership.Load() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
-		if err := c.db.UpdateState(ctx, ackLevel); err != nil {
-			c.logger.Error("Failed to update task queue state", tag.Error(err))
-		}
+		_ = c.db.UpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.liveness.Stop()
@@ -361,6 +366,7 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	c.initializedError.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
+		c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
 		c.unloadFromEngine()
 	}
 }
@@ -369,6 +375,7 @@ func (c *taskQueueManagerImpl) SetUserDataInitialFetch(err error) {
 	c.userDataInitialFetch.Set(struct{}{}, err)
 	if err != nil {
 		// We can't recover from here without starting over, so unload the whole task queue
+		c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
 		c.unloadFromEngine()
 	}
 }
@@ -479,7 +486,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	}
 
 	task.namespace = c.namespace
-	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
+	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
 	return task, nil
 }
 
@@ -526,7 +533,6 @@ func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserD
 	if err != nil {
 		return err
 	}
-	c.signalIfFatal(err)
 	if !shouldReplicate {
 		return nil
 	}
@@ -646,6 +652,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
+			c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
 			c.unloadFromEngine()
 			return
 		}
@@ -763,7 +770,7 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 
 	degree := c.config.ForwarderMaxChildrenPerNode()
 	parent, err := c.taskQueueID.Parent(degree)
-	if err == tqname.ErrNoParent {
+	if err == tqname.ErrNoParent { // nolint:goerr113
 		// we're the root activity task queue, ask the root workflow task queue
 		return c.taskQueueID.FullName(), nil
 	} else if err != nil {
@@ -797,7 +804,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
-		if err == errMissingNormalQueueName {
+		if err == errMissingNormalQueueName { // nolint:goerr113
 			// pretend we have no user data
 			c.SetUserDataInitialFetch(nil)
 		}
