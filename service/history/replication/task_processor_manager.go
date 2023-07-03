@@ -80,8 +80,6 @@ type (
 	}
 )
 
-var _ common.Daemon = (*taskProcessorManagerImpl)(nil)
-
 func NewTaskProcessorManager(
 	config *configs.Config,
 	shard shard.Context,
