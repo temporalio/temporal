@@ -127,7 +127,7 @@ dispatchLoop:
 			for ctx.Err() == nil {
 				if valid := tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType); !valid {
 					task.finish(nil)
-					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+					tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.
 					continue dispatchLoop
 				}
@@ -272,7 +272,7 @@ func (tr *taskReader) addTasksToBuffer(
 ) error {
 	for _, t := range tasks {
 		if taskqueue.IsTaskExpired(t) {
-			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+			tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
