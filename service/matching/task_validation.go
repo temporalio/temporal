@@ -103,7 +103,7 @@ func (v *taskValidatorImpl) shouldValidate(
 	if v.lastValidatedTaskInfo == nil || v.lastValidatedTaskInfo.taskID != task.TaskId {
 		// this task has not been validated
 
-		// after timeout attempting to dispatch the task, checking whether the task is still valid
+		// after timeout attempting to dispatch the task, check whether the task is still valid
 		if task.Data.CreateTime != nil && time.Now().Sub(*task.Data.CreateTime) > taskReaderValidationThreshold {
 			return true
 		}
