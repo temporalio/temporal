@@ -1,0 +1,1 @@
+CREATE DATABASE temporal_visibility;
