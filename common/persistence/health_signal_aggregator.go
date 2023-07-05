@@ -43,10 +43,11 @@ const (
 
 type (
 	HealthSignalAggregator interface {
-		common.Daemon
 		Record(callerSegment int32, namespace string, latency time.Duration, err error)
 		AverageLatency() float64
 		ErrorRatio() float64
+		Start()
+		Stop()
 	}
 
 	HealthSignalAggregatorImpl struct {

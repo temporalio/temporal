@@ -22,11 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package temporal_test
 
 import (
+	"fmt"
 	"path"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,9 +36,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,17 +48,18 @@ import (
 func TestNewServer(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-
 	cfg := loadConfig(t)
-	logger := newErrorLogDetector(t, ctrl)
+	logDetector := newErrorLogDetector(t)
+	logDetector.Start()
 
-	server, err := NewServer(
-		WithConfig(cfg),
-		WithLogger(logger),
+	server, err := temporal.NewServer(
+		temporal.ForServices(temporal.DefaultServices),
+		temporal.WithConfig(cfg),
+		temporal.WithLogger(logDetector),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
+		logDetector.Stop()
 		assert.NoError(t, server.Stop())
 	})
 	require.NoError(t, server.Start())
@@ -98,35 +101,88 @@ func setTestPorts(cfg *config.Config) {
 	}
 }
 
+type errorLogDetector struct {
+	t  testing.TB
+	on atomic.Bool
+	log.Logger
+}
+
+func (d *errorLogDetector) Start() {
+	d.on.Store(true)
+}
+
+func (d *errorLogDetector) Stop() {
+	d.on.Store(false)
+}
+
+func (d *errorLogDetector) Warn(msg string, tags ...tag.Tag) {
+	d.Logger.Warn(msg, tags...)
+
+	if !d.on.Load() {
+		return
+	}
+
+	if strings.Contains(msg, "error creating sdk client") {
+		return
+	}
+
+	d.t.Errorf("unexpected warning log: %s", msg)
+}
+
+func (d *errorLogDetector) Error(msg string, tags ...tag.Tag) {
+	d.Logger.Error(msg, tags...)
+
+	if !d.on.Load() {
+		return
+	}
+
+	if strings.Contains(msg, "Unable to process new range") {
+		return
+	}
+
+	d.t.Errorf("unexpected error log: %s", msg)
+}
+
 // newErrorLogDetector returns a logger that fails the test if it logs any errors or warnings, except for the ones that
 // are expected. Ideally, there are no "expected" errors or warnings, but we still want this test to avoid introducing
 // any new ones while we are working on removing the existing ones.
-func newErrorLogDetector(t *testing.T, ctrl *gomock.Controller) *log.MockLogger {
-	logger := log.NewMockLogger(ctrl)
-	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
-	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-	logger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes().Do(func(msg string, tags ...tag.Tag) {
-		if strings.Contains(msg, "error creating sdk client") {
-			return
-		}
+func newErrorLogDetector(t testing.TB) *errorLogDetector {
+	return &errorLogDetector{
+		t:      t,
+		Logger: log.NewCLILogger(),
+	}
+}
 
-		if strings.Contains(msg, "poll for task") {
-			return
-		}
+type fakeTest struct {
+	testing.TB
+	errorfMsgs []string
+}
 
-		if strings.Contains(msg, "error in prometheus") {
-			return
-		}
+func (f *fakeTest) Errorf(msg string, args ...any) {
+	f.errorfMsgs = append(f.errorfMsgs, fmt.Sprintf(msg, args...))
+}
 
-		t.Errorf("unexpected warning: %v", msg)
-	})
-	logger.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes().Do(func(msg string, tags ...tag.Tag) {
-		if strings.Contains(msg, "looking up host for shardID") {
-			return
-		}
+func TestErrorLogDetector(t *testing.T) {
+	t.Parallel()
 
-		t.Errorf("unexpected error: %v", msg)
-	})
+	f := &fakeTest{TB: t}
+	d := newErrorLogDetector(f)
+	d.Start()
+	d.Warn("error creating sdk client")
+	d.Error("Unable to process new range")
+	d.Error("unexpected error")
+	d.Warn("unexpected warning")
 
-	return logger
+	assert.Equal(t, []string{
+		"unexpected error log: unexpected error",
+		"unexpected warning log: unexpected warning",
+	}, f.errorfMsgs, "should fail the test if there are any unexpected errors or warnings")
+
+	d.Stop()
+
+	f.errorfMsgs = nil
+
+	d.Error("unexpected error")
+	d.Warn("unexpected warning")
+	assert.Empty(t, f.errorfMsgs, "should not fail the test if the detector is stopped")
 }

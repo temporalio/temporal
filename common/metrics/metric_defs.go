@@ -1478,6 +1478,7 @@ var (
 	WorkflowRunTimeoutOverrideCount                = NewCounterDef("workflow_run_timeout_overrides")
 	ReplicationTaskCleanupCount                    = NewCounterDef("replication_task_cleanup_count")
 	ReplicationTaskCleanupFailure                  = NewCounterDef("replication_task_cleanup_failed")
+	MutableStateDirty                              = NewCounterDef("mutable_state_dirty")
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
 	ClusterMetadataLockLatency                     = NewTimerDef("cluster_metadata_lock_latency")

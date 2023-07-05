@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -67,7 +68,11 @@ func (e *executorWrapper) Execute(
 		return e.activeExecutor.Execute(ctx, executable)
 	}
 
-	return e.standbyExecutor.Execute(ctx, executable)
+	// for standby tasks, use preemptable callerType to avoid impacting active traffic
+	return e.standbyExecutor.Execute(
+		headers.SetCallerType(ctx, headers.CallerTypePreemptable),
+		executable,
+	)
 }
 
 func (e *executorWrapper) isActiveTask(

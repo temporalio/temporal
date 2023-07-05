@@ -395,6 +395,8 @@ func (s *ContextImpl) UpdateRemoteClusterInfo(
 	remoteClusterInfo.AckedReplicationTimestamps[s.shardID] = ackTimestamp
 }
 
+// UpdateRemoteReaderInfo do not use streaming replication until remoteClusterInfo is updated to allow both
+// streaming & pull based replication
 func (s *ContextImpl) UpdateRemoteReaderInfo(
 	readerID int64,
 	ackTaskID int64,
@@ -1714,22 +1716,10 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 			continue
 		}
 
-		var taskID *int64
-		var ackTime *time.Time
-		for _, remoteShardID := range common.MapShardID(
-			clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
-			clusterInfo[clusterName].ShardCount,
-			s.shardID,
-		) {
-			if taskID == nil || v.AckedReplicationTaskIDs[remoteShardID] < *taskID {
-				taskID = convert.Int64Ptr(v.AckedReplicationTaskIDs[remoteShardID])
-				ackTime = timestamp.TimePtr(v.AckedReplicationTimestamps[remoteShardID])
-			}
-		}
-
+		remoteShardID := s.shardID
 		remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
-			AckedTaskId:             *taskID,
-			AckedTaskVisibilityTime: ackTime,
+			AckedTaskId:             v.AckedReplicationTaskIDs[remoteShardID],
+			AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamps[remoteShardID]),
 		}
 	}
 

@@ -24,16 +24,12 @@
 
 package tasks
 
-import (
-	"go.temporal.io/server/common"
-)
-
 type (
 	// Scheduler is the generic interface for scheduling & processing tasks
 	Scheduler[T Task] interface {
-		common.Daemon
-
 		Submit(task T)
 		TrySubmit(task T) bool
+		Start()
+		Stop()
 	}
 )

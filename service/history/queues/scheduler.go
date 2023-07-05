@@ -27,7 +27,6 @@
 package queues
 
 import (
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -54,13 +53,13 @@ type (
 	// be called on all executables that have been successfully submited.
 	// Reschedule() will only be called after the Scheduler has been stopped
 	Scheduler interface {
-		common.Daemon
-
 		Submit(Executable)
 		TrySubmit(Executable) bool
 
 		TaskChannelKeyFn() TaskChannelKeyFn
 		ChannelWeightFn() ChannelWeightFn
+		Start()
+		Stop()
 	}
 
 	TaskChannelKey struct {
