@@ -477,6 +477,11 @@ func RequestCount(c int) ZapTag {
 	return NewInt("request-count", c)
 }
 
+// RPS returns tag for requests per second
+func RPS(c int64) ZapTag {
+	return NewInt64("rps", c)
+}
+
 // Number returns tag for Number
 func Number(n int64) ZapTag {
 	return NewInt64("number", n)

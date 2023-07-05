@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/shard"
@@ -122,6 +123,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		RunId:      tests.RunID,
 	}
 
+	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
@@ -167,6 +169,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		RunId:      tests.RunID,
 	}
 
+	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
@@ -212,6 +215,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	}
 	now := time.Now()
 
+	s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	closeExecutionVisibilityTaskID := int64(39)
@@ -257,6 +261,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				RunId:      tests.RunID,
 			}
 
+			s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
@@ -332,6 +337,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				RunId:      tests.RunID,
 			}
 
+			s.mockVisibilityManager.EXPECT().HasStoreName(cassandra.CassandraPersistenceName).Return(true)
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 			branchToken := []byte{22, 8, 78}

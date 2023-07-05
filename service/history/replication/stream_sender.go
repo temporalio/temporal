@@ -61,9 +61,9 @@ type (
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
 	}
 	StreamSender interface {
-		common.Daemon
 		IsValid() bool
 		Key() ClusterShardKeyPair
+		Stop()
 	}
 	StreamSenderImpl struct {
 		server        historyservice.HistoryService_StreamWorkflowReplicationMessagesServer

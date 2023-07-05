@@ -25,7 +25,6 @@
 package flusher
 
 import (
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 )
 
@@ -35,7 +34,6 @@ type (
 	}
 
 	Flusher[T any] interface {
-		common.Daemon
 		Buffer(item T) future.Future[struct{}]
 		Flush()
 	}

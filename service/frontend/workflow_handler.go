@@ -4253,8 +4253,8 @@ type buildIdAndFlag interface {
 	GetUseVersioning() bool
 }
 
-func (wh *WorkflowHandler) validateVersioningInfo(namespace string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
-	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(namespace) {
+func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFlag, tq *taskqueuepb.TaskQueue) error {
+	if id.GetUseVersioning() && !wh.config.EnableWorkerVersioningWorkflow(nsName) {
 		return errWorkerVersioningNotAllowed
 	}
 	if id.GetUseVersioning() && tq.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && len(tq.GetNormalName()) == 0 {

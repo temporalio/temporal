@@ -55,7 +55,6 @@ const (
 
 type (
 	Metadata interface {
-		common.Daemon
 		common.Pingable
 
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
@@ -81,6 +80,8 @@ type (
 		GetFailoverVersionIncrement() int64
 		RegisterMetadataChangeCallback(callbackId any, cb CallbackFn)
 		UnRegisterMetadataChangeCallback(callbackId any)
+		Start()
+		Stop()
 	}
 
 	CallbackFn func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation)
