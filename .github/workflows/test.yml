@@ -1,0 +1,31 @@
+name: Test
+on:
+  pull_request:
+  push:
+permissions:
+  contents: read
+  checks: write
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: test
+        run: |
+          go install github.com/jstemmer/go-junit-report/v2@v2.0.0
+          make unit-test-coverage 2>&1 | go-junit-report > junit.xml
+      - name: Report Test Results
+        uses: dorny/test-reporter@v1.6.0
+        if: success() || failure()
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+        with:
+          name: Test Report
+          path: junit.xml
+          reporter: java-junit

@@ -11,18 +11,6 @@ steps:
 
   - wait
 
-  - label: ":golang: unit test"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make unit-test-coverage"
-    artifact_paths:
-      - ".coverage/*.out"
-    plugins:
-      - docker-compose#v3.8.0:
-          run: build
-          config: ./develop/buildkite/docker-compose.yml
-
   - label: ":golang: integration test"
     agents:
       queue: "default"
