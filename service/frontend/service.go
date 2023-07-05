@@ -350,15 +350,12 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	go func() {
-		logger.Info("Starting to serve on frontend listener")
-		if err := s.server.Serve(s.grpcListener); err != nil {
-			logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
-		}
-	}()
+	go s.membershipMonitor.Start()
 
-	s.membershipMonitor.Start()
-	logger.Info("frontend started")
+	logger.Info("Starting to serve on frontend listener")
+	if err := s.server.Serve(s.grpcListener); err != nil {
+		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+	}
 }
 
 // Stop stops the service

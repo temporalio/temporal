@@ -108,15 +108,12 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	go func() {
-		s.logger.Info("Starting to serve on matching listener")
-		if err := s.server.Serve(s.grpcListener); err != nil {
-			s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
-		}
-	}()
+	go s.membershipMonitor.Start()
 
-	s.membershipMonitor.Start()
-	s.logger.Info("matching started")
+	s.logger.Info("Starting to serve on matching listener")
+	if err := s.server.Serve(s.grpcListener); err != nil {
+		s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
+	}
 }
 
 // Stop stops the service
