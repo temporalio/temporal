@@ -5059,6 +5059,13 @@ func (wh *WorkflowHandler) signalWithStartScheduleWorkflow(ctx context.Context, 
 				},
 			})
 			if err == nil {
+				// if successfully started a new schedule workflow attempt to delete the old workflow and ignore errors
+				wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+					NamespaceId:        namespaceID.String(),
+					WorkflowExecution:  executionInfo.Execution,
+					WorkflowVersion:    common.EmptyVersion,
+					ClosedWorkflowOnly: false,
+				})
 				break
 			}
 			switch err.(type) {

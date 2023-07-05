@@ -899,7 +899,6 @@ func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, swfresp.WorkflowExecutionInfo.Status)
 
 	// describe
-
 	describeResp, err := s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
@@ -1164,8 +1163,8 @@ func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
-	// we list all completed and running schedules, so we should have 3
-	s.Equal(5, len(listResp.Schedules))
+	// we should have 1 schedule
+	s.Equal(1, len(listResp.Schedules))
 	entry := listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
 	s.True(entry.Info.Paused)
@@ -1226,9 +1225,9 @@ func (s *scheduleIntegrationSuite) TestIdleScheduleCompletion() {
 		Identity:   "test",
 	})
 	s.NoError(err)
+	// add a bit of delay so workflow is deleted
+	time.Sleep(2 * time.Second)
 
-	return
-	// TODO: we can still describe a deleted schedule workflow here?!
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
 		ScheduleId: sid,
