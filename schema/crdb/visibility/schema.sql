@@ -1,12 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS btree_gin;
-
--- convert_ts converts a timestamp in RFC3339 to UTC timestamp without time zone.
-CREATE FUNCTION convert_ts(s VARCHAR) RETURNS TIMESTAMP AS $$
-BEGIN
-  RETURN s::timestamptz at time zone 'UTC';
-END
-$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
-
 CREATE TABLE executions_visibility (
   namespace_id        CHAR(64)      NOT NULL,
   run_id              CHAR(64)      NOT NULL,
@@ -32,7 +23,7 @@ CREATE TABLE executions_visibility (
   TemporalChangeVersion         JSONB         GENERATED ALWAYS AS (search_attributes->'TemporalChangeVersion')                    STORED,
   BinaryChecksums               JSONB         GENERATED ALWAYS AS (search_attributes->'BinaryChecksums')                          STORED,
   BatcherUser                   VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'BatcherUser')                             STORED,
-  TemporalScheduledStartTime    TIMESTAMP     GENERATED ALWAYS AS (convert_ts(search_attributes->>'TemporalScheduledStartTime'))  STORED,
+  TemporalScheduledStartTime    TIMESTAMP     GENERATED ALWAYS AS (parse_timestamp(search_attributes->>'TemporalScheduledStartTime'))  STORED,
   TemporalScheduledById         VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalScheduledById')                   STORED,
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS ((search_attributes->'TemporalSchedulePaused')::boolean)        STORED,
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalNamespaceDivision')               STORED,
@@ -42,9 +33,9 @@ CREATE TABLE executions_visibility (
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
   Bool02          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool02')::boolean)        STORED,
   Bool03          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool03')::boolean)        STORED,
-  Datetime01      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime01'))  STORED,
-  Datetime02      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime02'))  STORED,
-  Datetime03      TIMESTAMP       GENERATED ALWAYS AS (convert_ts(search_attributes->>'Datetime03'))  STORED,
+  Datetime01      TIMESTAMP       GENERATED ALWAYS AS (parse_timestamp(search_attributes->>'Datetime01'))  STORED,
+  Datetime02      TIMESTAMP       GENERATED ALWAYS AS (parse_timestamp(search_attributes->>'Datetime02'))  STORED,
+  Datetime03      TIMESTAMP       GENERATED ALWAYS AS (parse_timestamp(search_attributes->>'Datetime03'))  STORED,
   Double01        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double01')::decimal)      STORED,
   Double02        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double02')::decimal)      STORED,
   Double03        DECIMAL(20, 5)  GENERATED ALWAYS AS ((search_attributes->'Double03')::decimal)      STORED,
@@ -81,9 +72,9 @@ CREATE INDEX by_history_size_bytes  ON executions_visibility (namespace_id, hist
 CREATE INDEX by_task_queue          ON executions_visibility (namespace_id, task_queue,         (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 
 -- Indexes for the predefined search attributes
-CREATE INDEX by_temporal_change_version       ON executions_visibility USING GIN (namespace_id, TemporalChangeVersion jsonb_path_ops);
-CREATE INDEX by_binary_checksums              ON executions_visibility USING GIN (namespace_id, BinaryChecksums jsonb_path_ops);
-CREATE INDEX by_build_ids                     ON executions_visibility USING GIN (namespace_id, BuildIds jsonb_path_ops);
+CREATE INDEX by_temporal_change_version       ON executions_visibility USING GIN (namespace_id, TemporalChangeVersion jsonb_ops);
+CREATE INDEX by_binary_checksums              ON executions_visibility USING GIN (namespace_id, BinaryChecksums jsonb_ops);
+CREATE INDEX by_build_ids                     ON executions_visibility USING GIN (namespace_id, BuildIds jsonb_ops);
 CREATE INDEX by_batcher_user                  ON executions_visibility (namespace_id, BatcherUser,                (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_start_time ON executions_visibility (namespace_id, TemporalScheduledStartTime, (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespace_id, TemporalScheduledById,      (COALESCE(close_time, '9999-12-31 23:59:59')) DESC, start_time DESC, run_id);
@@ -116,6 +107,6 @@ CREATE INDEX by_keyword_10      ON executions_visibility (namespace_id, Keyword1
 CREATE INDEX by_text_01         ON executions_visibility USING GIN (namespace_id, Text01);
 CREATE INDEX by_text_02         ON executions_visibility USING GIN (namespace_id, Text02);
 CREATE INDEX by_text_03         ON executions_visibility USING GIN (namespace_id, Text03);
-CREATE INDEX by_keyword_list_01 ON executions_visibility USING GIN (namespace_id, KeywordList01 jsonb_path_ops);
-CREATE INDEX by_keyword_list_02 ON executions_visibility USING GIN (namespace_id, KeywordList02 jsonb_path_ops);
-CREATE INDEX by_keyword_list_03 ON executions_visibility USING GIN (namespace_id, KeywordList03 jsonb_path_ops);
+CREATE INDEX by_keyword_list_01 ON executions_visibility USING GIN (namespace_id, KeywordList01 jsonb_ops);
+CREATE INDEX by_keyword_list_02 ON executions_visibility USING GIN (namespace_id, KeywordList02 jsonb_ops);
+CREATE INDEX by_keyword_list_03 ON executions_visibility USING GIN (namespace_id, KeywordList03 jsonb_ops);
