@@ -29,8 +29,6 @@ package frontend
 import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common"
 )
 
 const (
@@ -43,14 +41,13 @@ type (
 	// Handler is interface wrapping frontend workflow handler
 	Handler interface {
 		workflowservice.WorkflowServiceServer
-		common.Daemon
-
 		GetConfig() *Config
+		Start()
+		Stop()
 	}
 
 	// OperatorHandler is interface wrapping frontend workflow handler
 	OperatorHandler interface {
 		operatorservice.OperatorServiceServer
-		common.Daemon
 	}
 )

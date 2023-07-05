@@ -133,7 +133,6 @@ type (
 
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
-		common.Daemon
 		common.Pingable
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
@@ -148,6 +147,8 @@ type (
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
+		Start()
+		Stop()
 	}
 
 	registry struct {

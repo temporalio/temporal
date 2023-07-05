@@ -93,3 +93,6 @@ issues:
       text: "(cyclomatic|cognitive)"
       linters:
         - revive
+    - path: _test\.go
+      linters:
+        - goerr113

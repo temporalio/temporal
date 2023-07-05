@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespaceReplicationQueue_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespace_replication_queue_mock.go
 
 package persistence
 
@@ -104,7 +104,6 @@ type (
 
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
 	NamespaceReplicationQueue interface {
-		common.Daemon
 		Publish(ctx context.Context, task *replicationspb.ReplicationTask) error
 		GetReplicationMessages(
 			ctx context.Context,
@@ -127,6 +126,8 @@ type (
 
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
 		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
+		Start()
+		Stop()
 	}
 )
 

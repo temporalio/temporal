@@ -53,8 +53,6 @@ type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
 	Rescheduler interface {
-		common.Daemon
-
 		// Add task executable to the rescheduler.
 		Add(task Executable, rescheduleTime time.Time)
 
@@ -65,6 +63,8 @@ type (
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
+		Start()
+		Stop()
 	}
 
 	rescheduledExecuable struct {

@@ -22,20 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source queryParser.go -destination queryParser_mock.go -mock_names Interface=MockQueryParser
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source query_parser.go -destination query_parser_mock.go -mock_names Interface=MockQueryParser
 
-package s3store
+package filestore
 
 import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -47,32 +50,29 @@ type (
 	queryParser struct{}
 
 	parsedQuery struct {
-		workflowTypeName *string
-		workflowID       *string
-		startTime        *time.Time
-		closeTime        *time.Time
-		searchPrecision  *string
+		earliestCloseTime time.Time
+		latestCloseTime   time.Time
+		workflowID        *string
+		runID             *string
+		workflowTypeName  *string
+		status            *enumspb.WorkflowExecutionStatus
+		emptyResult       bool
 	}
 )
 
 // All allowed fields for filtering
 const (
-	WorkflowTypeName = "WorkflowTypeName"
-	WorkflowID       = "WorkflowId"
-	StartTime        = "StartTime"
-	CloseTime        = "CloseTime"
-	SearchPrecision  = "SearchPrecision"
+	WorkflowID   = "WorkflowId"
+	RunID        = "RunId"
+	WorkflowType = "WorkflowType"
+	CloseTime    = "CloseTime"
+	// Field name can't be just "Status" because it is reserved keyword in MySQL parser.
+	ExecutionStatus = "ExecutionStatus"
 )
 
-// Precision specific values
 const (
-	PrecisionDay    = "Day"
-	PrecisionHour   = "Hour"
-	PrecisionMinute = "Minute"
-	PrecisionSecond = "Second"
-)
-const (
-	queryTemplate         = "select * from dummy where %s"
+	queryTemplate = "select * from dummy where %s"
+
 	defaultDateTimeFormat = time.RFC3339
 )
 
@@ -82,30 +82,20 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
+	parsedQuery := &parsedQuery{
+		earliestCloseTime: time.Time{},
+		latestCloseTime:   time.Now().UTC(),
+	}
+	if strings.TrimSpace(query) == "" {
+		return parsedQuery, nil
+	}
 	stmt, err := sqlparser.Parse(fmt.Sprintf(queryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
 	whereExpr := stmt.(*sqlparser.Select).Where.Expr
-	parsedQuery := &parsedQuery{}
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
-	}
-	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil {
-		return nil, errors.New("WorkflowId or WorkflowTypeName is required in query")
-	}
-	if parsedQuery.workflowID != nil && parsedQuery.workflowTypeName != nil {
-		return nil, errors.New("only one of WorkflowId or WorkflowTypeName can be specified in a query")
-	}
-	if parsedQuery.closeTime != nil && parsedQuery.startTime != nil {
-		return nil, errors.New("only one of StartTime or CloseTime can be specified in a query")
-	}
-	if (parsedQuery.closeTime != nil || parsedQuery.startTime != nil) && parsedQuery.searchPrecision == nil {
-		return nil, errors.New("SearchPrecision is required when searching for a StartTime or CloseTime")
-	}
-
-	if parsedQuery.closeTime == nil && parsedQuery.startTime == nil && parsedQuery.searchPrecision != nil {
-		return nil, errors.New("SearchPrecision requires a StartTime or CloseTime")
 	}
 	return parsedQuery, nil
 }
@@ -152,18 +142,6 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	valStr := sqlparser.String(valExpr)
 
 	switch colNameStr {
-	case WorkflowTypeName:
-		val, err := extractStringValue(valStr)
-		if err != nil {
-			return err
-		}
-		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", WorkflowTypeName)
-		}
-		if parsedQuery.workflowTypeName != nil {
-			return fmt.Errorf("can not query %s multiple times", WorkflowTypeName)
-		}
-		parsedQuery.workflowTypeName = convert.StringPtr(val)
 	case WorkflowID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
@@ -172,53 +150,88 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", WorkflowID)
 		}
-		if parsedQuery.workflowID != nil {
-			return fmt.Errorf("can not query %s multiple times", WorkflowID)
+		if parsedQuery.workflowID != nil && *parsedQuery.workflowID != val {
+			parsedQuery.emptyResult = true
+			return nil
 		}
 		parsedQuery.workflowID = convert.StringPtr(val)
-	case CloseTime:
-		timestamp, err := convertToTime(valStr)
-		if err != nil {
-			return err
-		}
-		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", CloseTime)
-		}
-		parsedQuery.closeTime = &timestamp
-	case StartTime:
-		timestamp, err := convertToTime(valStr)
-		if err != nil {
-			return err
-		}
-		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", CloseTime)
-		}
-		parsedQuery.startTime = &timestamp
-	case SearchPrecision:
+	case RunID:
 		val, err := extractStringValue(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", SearchPrecision)
+			return fmt.Errorf("only operation = is support for %s", RunID)
 		}
-		if parsedQuery.searchPrecision != nil && *parsedQuery.searchPrecision != val {
-			return fmt.Errorf("only one expression is allowed for %s", SearchPrecision)
+		if parsedQuery.runID != nil && *parsedQuery.runID != val {
+			parsedQuery.emptyResult = true
+			return nil
 		}
-		switch val {
-		case PrecisionDay:
-		case PrecisionHour:
-		case PrecisionMinute:
-		case PrecisionSecond:
-		default:
-			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
+		parsedQuery.runID = convert.StringPtr(val)
+	case WorkflowType:
+		val, err := extractStringValue(valStr)
+		if err != nil {
+			return err
 		}
-		parsedQuery.searchPrecision = convert.StringPtr(val)
-
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", WorkflowType)
+		}
+		if parsedQuery.workflowTypeName != nil && *parsedQuery.workflowTypeName != val {
+			parsedQuery.emptyResult = true
+			return nil
+		}
+		parsedQuery.workflowTypeName = convert.StringPtr(val)
+	case ExecutionStatus:
+		val, err := extractStringValue(valStr)
+		if err != nil {
+			// if failed to extract string value, it means user input close status as a number
+			val = valStr
+		}
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
+		}
+		status, err := convertStatusStr(val)
+		if err != nil {
+			return err
+		}
+		if parsedQuery.status != nil && *parsedQuery.status != status {
+			parsedQuery.emptyResult = true
+			return nil
+		}
+		parsedQuery.status = &status
+	case CloseTime:
+		timestamp, err := convertToTime(valStr)
+		if err != nil {
+			return err
+		}
+		return p.convertCloseTime(timestamp, op, parsedQuery)
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)
 	}
 
+	return nil
+}
+
+func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQuery *parsedQuery) error {
+	switch op {
+	case "=":
+		if err := p.convertCloseTime(timestamp, ">=", parsedQuery); err != nil {
+			return err
+		}
+		if err := p.convertCloseTime(timestamp, "<=", parsedQuery); err != nil {
+			return err
+		}
+	case "<":
+		parsedQuery.latestCloseTime = util.MinTime(parsedQuery.latestCloseTime, timestamp.Add(-1*time.Nanosecond))
+	case "<=":
+		parsedQuery.latestCloseTime = util.MinTime(parsedQuery.latestCloseTime, timestamp)
+	case ">":
+		parsedQuery.earliestCloseTime = util.MaxTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
+	case ">=":
+		parsedQuery.earliestCloseTime = util.MaxTime(parsedQuery.earliestCloseTime, timestamp)
+	default:
+		return fmt.Errorf("operator %s is not supported for close time", op)
+	}
 	return nil
 }
 
@@ -236,6 +249,26 @@ func convertToTime(timeStr string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return parsedTime, nil
+}
+
+func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
+	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
+	switch statusStr {
+	case "completed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
+	case "failed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
+	case "canceled", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "terminated", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
+	case "continuedasnew", "continued_as_new", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
+	case "timedout", "timed_out", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
+	default:
+		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
+	}
 }
 
 func extractStringValue(s string) (string, error) {

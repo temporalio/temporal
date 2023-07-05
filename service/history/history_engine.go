@@ -109,7 +109,7 @@ type (
 		replicationAckMgr          replication.AckManager
 		nDCReplicator              ndc.HistoryReplicator
 		nDCActivityReplicator      ndc.ActivityReplicator
-		replicationProcessorMgr    common.Daemon
+		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
 		metricsHandler             metrics.Handler
