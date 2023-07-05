@@ -446,6 +446,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		attr.ActivityType.GetName(),
 		ai.Attempt,
 		shardClock,
+		ai.Version,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {

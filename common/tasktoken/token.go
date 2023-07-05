@@ -37,6 +37,7 @@ func NewWorkflowTaskToken(
 	startedEventId int64,
 	attempt int32,
 	clock *v11.VectorClock,
+	version int64,
 ) *tokenspb.Task {
 	return &tokenspb.Task{
 		NamespaceId:      namespaceID,
@@ -46,6 +47,7 @@ func NewWorkflowTaskToken(
 		StartedEventId:   startedEventId,
 		Attempt:          attempt,
 		Clock:            clock,
+		Version:          version,
 	}
 }
 
@@ -58,6 +60,7 @@ func NewActivityTaskToken(
 	activityType string,
 	attempt int32,
 	clock *v11.VectorClock,
+	version int64,
 ) *tokenspb.Task {
 	return &tokenspb.Task{
 		NamespaceId:      namespaceID,
@@ -68,5 +71,6 @@ func NewActivityTaskToken(
 		Attempt:          attempt,
 		ActivityId:       activityId,
 		Clock:            clock,
+		Version:          version,
 	}
 }

@@ -545,6 +545,7 @@ func (s *Starter) generateResponse(
 		workflowTaskInfo.StartedEventID,
 		workflowTaskInfo.Attempt,
 		clock,
+		workflowTaskInfo.Version,
 	)
 	serializedToken, err := tokenSerializer.Serialize(taskToken)
 	if err != nil {

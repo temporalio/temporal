@@ -1312,6 +1312,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			historyResponse.GetStartedEventId(),
 			historyResponse.GetAttempt(),
 			historyResponse.GetClock(),
+			historyResponse.GetVersion(),
 		)
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
@@ -1363,6 +1364,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		attributes.GetActivityType().GetName(),
 		historyResponse.GetAttempt(),
 		historyResponse.GetClock(),
+		historyResponse.GetVersion(),
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

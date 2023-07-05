@@ -848,6 +848,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	}
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
+	response.Version = workflowTask.Version
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
