@@ -84,6 +84,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -960,14 +961,15 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		ResetHistoryEventId: histResp.ResetHistoryEventId,
 	}
 	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := &tokenspb.Task{
-			NamespaceId:      taskToken.GetNamespaceId(),
-			WorkflowId:       taskToken.GetWorkflowId(),
-			RunId:            taskToken.GetRunId(),
-			ScheduledEventId: histResp.StartedResponse.GetScheduledEventId(),
-			StartedEventId:   histResp.StartedResponse.GetStartedEventId(),
-			Attempt:          histResp.StartedResponse.GetAttempt(),
-		}
+		taskToken := tasktoken.NewWorkflowTaskToken(
+			taskToken.GetNamespaceId(),
+			taskToken.GetWorkflowId(),
+			taskToken.GetRunId(),
+			histResp.StartedResponse.GetScheduledEventId(),
+			histResp.StartedResponse.GetStartedEventId(),
+			histResp.StartedResponse.GetAttempt(),
+			nil,
+		)
 		token, err := wh.tokenSerializer.Serialize(taskToken)
 		if err != nil {
 			return nil, err
@@ -1247,14 +1249,16 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, errActivityIDNotSet
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1411,14 +1415,16 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1592,14 +1598,16 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
@@ -1765,14 +1773,16 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, errIdentityTooLong
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
-		WorkflowId:       workflowID,
-		ScheduledEventId: common.EmptyEventID,
-		ActivityId:       activityID,
-		Attempt:          1,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		workflowID,
+		runID,
+		common.EmptyEventID,
+		activityID,
+		"",
+		1,
+		nil,
+	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
