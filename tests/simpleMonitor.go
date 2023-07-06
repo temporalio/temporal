@@ -32,23 +32,27 @@ import (
 )
 
 type simpleMonitor struct {
-	resolvers map[primitives.ServiceName]membership.ServiceResolver
+	hosts     map[primitives.ServiceName][]string
+	resolvers map[primitives.ServiceName]*simpleResolver
 }
 
 // NewSimpleMonitor returns a simple monitor interface
 func newSimpleMonitor(hosts map[primitives.ServiceName][]string) *simpleMonitor {
-	resolvers := make(map[primitives.ServiceName]membership.ServiceResolver, len(hosts))
+	resolvers := make(map[primitives.ServiceName]*simpleResolver, len(hosts))
 	for service, hostList := range hosts {
 		resolvers[service] = newSimpleResolver(service, hostList)
 	}
 
-	return &simpleMonitor{resolvers}
+	return &simpleMonitor{
+		hosts:     hosts,
+		resolvers: resolvers,
+	}
 }
 
 func (s *simpleMonitor) Start() {
-}
-
-func (s *simpleMonitor) Stop() {
+	for service, r := range s.resolvers {
+		r.start(s.hosts[service])
+	}
 }
 
 func (s *simpleMonitor) EvictSelf() error {

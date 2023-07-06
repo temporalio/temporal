@@ -103,6 +103,18 @@ func (mr *MockMonitorMockRecorder) GetResolver(service interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolver", reflect.TypeOf((*MockMonitor)(nil).GetResolver), service)
 }
 
+// Start mocks base method.
+func (m *MockMonitor) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockMonitorMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMonitor)(nil).Start))
+}
+
 // WaitUntilInitialized mocks base method.
 func (m *MockMonitor) WaitUntilInitialized(arg0 context.Context) error {
 	m.ctrl.T.Helper()
