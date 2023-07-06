@@ -48,7 +48,7 @@ func provideFactory(lc fx.Lifecycle, params factoryParams) (*factory, error) {
 
 func provideMembership(lc fx.Lifecycle, f *factory) membership.Monitor {
 	m := f.getMonitor()
-	lc.Append(fx.StartStopHook(m.Start, m.Stop))
+	lc.Append(fx.StopHook(m.Stop))
 	return m
 }
 

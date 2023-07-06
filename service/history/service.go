@@ -109,9 +109,14 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	listener := s.grpcListener
+	// As soon as we join membership, other hosts will send requests for shards
+	// that we own. Ideally, then, we would start the GRPC server, and only then
+	// join membership. That's not possible with the GRPC interface, though, hence
+	// we start membership in a goroutine.
+	go s.membershipMonitor.Start()
+
 	logger.Info("Starting to serve on history listener")
-	if err := s.server.Serve(listener); err != nil {
+	if err := s.server.Serve(s.grpcListener); err != nil {
 		logger.Fatal("Failed to serve on history listener", tag.Error(err))
 	}
 }
