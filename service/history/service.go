@@ -129,7 +129,7 @@ func (s *Service) Stop() {
 	if delay := s.config.ShutdownDrainDuration(); delay > 0 {
 		s.logger.Info("ShutdownHandler: delaying for shutdown drain",
 			tag.NewDurationTag("shutdownDrainDuration", delay))
-		time.Sleep(s.config.ShutdownDrainDuration())
+		time.Sleep(delay)
 	}
 
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
