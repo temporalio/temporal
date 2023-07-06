@@ -27,7 +27,7 @@ package matching
 import (
 	"math/rand"
 	"net"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -35,7 +35,6 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -46,7 +45,7 @@ import (
 
 // Service represents the matching service
 type Service struct {
-	status  int32
+	serveWg sync.WaitGroup
 	handler *Handler
 	config  *Config
 
@@ -75,7 +74,6 @@ func NewService(
 	visibilityManager manager.VisibilityManager,
 ) *Service {
 	return &Service{
-		status:                         common.DaemonStatusInitialized,
 		config:                         serviceConfig,
 		server:                         grpc.NewServer(grpcServerOptions...),
 		handler:                        handler,
@@ -92,10 +90,6 @@ func NewService(
 
 // Start starts the service
 func (s *Service) Start() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
-		return
-	}
-
 	s.logger.Info("matching starting")
 
 	// must start base service first
@@ -108,18 +102,18 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	s.logger.Info("Starting to serve on matching listener")
-	if err := s.server.Serve(s.grpcListener); err != nil {
-		s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
-	}
+	s.serveWg.Add(1)
+	go func() {
+		s.logger.Info("Starting to serve on matching listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
+		}
+		s.serveWg.Done()
+	}()
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
-		return
-	}
-
 	// remove self from membership ring and wait for traffic to drain
 	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
 	if err := s.membershipMonitor.EvictSelf(); err != nil {
@@ -131,6 +125,7 @@ func (s *Service) Stop() {
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
+	s.serveWg.Wait()
 
 	s.handler.Stop()
 
