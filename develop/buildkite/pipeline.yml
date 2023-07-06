@@ -3,13 +3,42 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make ci-build"
     plugins:
-      - docker-compose#v3.8.0:
-          run: build
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          build: build
+          build-alias:
+            # All services in the docker-compose file that run the server or tests should be listed here:
+            - "db-integration-test"
+            - "integration-test-cassandra"
+            - "integration-test-cassandra-es8"
+            - "integration-test-cassandra-opensearch"
+            - "integration-test-mysql"
+            - "integration-test-mysql8"
+            - "integration-test-postgresql"
+            - "integration-test-postgresql12"
+            - "integration-test-sqlite"
+            - "integration-test-xdc-cassandra"
+            - "integration-test-xdc-mysql"
+            - "integration-test-xdc-mysql8"
+            - "integration-test-xdc-postgresql"
+            - "integration-test-xdc-postgresql12"
+            - "coverage-report"
           config: ./develop/buildkite/docker-compose.yml
+          image-repository: "283266070392.dkr.ecr.us-west-2.amazonaws.com/buildkite"
 
   - wait
+
+  - label: ":golang: misc checks"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make ci-build-misc"
+    plugins:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          run: build
+          config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: unit test"
     agents:
@@ -20,7 +49,8 @@ steps:
       - ".coverage/*.out"
       - ".testreport/*.xml"
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: build
           config: ./develop/buildkite/docker-compose.yml
 
@@ -33,7 +63,8 @@ steps:
       - ".coverage/*.out"
       - ".testreport/*.xml"
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: db-integration-test
           config: ./develop/buildkite/docker-compose.yml
 
@@ -42,6 +73,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
@@ -49,7 +81,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -58,6 +91,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
@@ -65,9 +99,10 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
-          run: integration-test-cassandra
-          config: ./develop/buildkite/docker-compose-es8.yml
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          run: integration-test-cassandra-es8
+          config: ./develop/buildkite/docker-compose.yml
 
   # TODO(rodrigozhou): olivere client is incompatible with OpenSearch PIT
   # - label: ":golang: functional test with cassandra (OpenSearch 2)"
@@ -81,9 +116,10 @@ steps:
   #     automatic:
   #       limit: 1
   #   plugins:
-  #     - docker-compose#v3.8.0:
-  #         run: integration-test-cassandra
-  #         config: ./develop/buildkite/docker-compose-os2.yml
+  #     - ecr#v2.7.0: {login: true}
+  #     - docker-compose#v4.14.0:
+  #         run: integration-test-cassandra-opensearch
+  #         config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: functional xdc test with cassandra"
     agents:
@@ -97,7 +133,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -113,7 +150,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -122,6 +160,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
@@ -129,7 +168,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -145,7 +185,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -161,7 +202,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -170,6 +212,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
@@ -177,7 +220,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-mysql8
           config: ./develop/buildkite/docker-compose.yml
 
@@ -193,7 +237,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql8
           config: ./develop/buildkite/docker-compose.yml
 
@@ -209,7 +254,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql8
           config: ./develop/buildkite/docker-compose.yml
 
@@ -218,6 +264,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
@@ -225,7 +272,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -241,7 +289,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -257,56 +306,12 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: functional test with postgresql pgx"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make functional-test-coverage"
-    artifact_paths:
-      - ".coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.8.0:
-          run: integration-test-postgresql-pgx
-          config: ./develop/buildkite/docker-compose.yml
-
-  - label: ":golang: functional xdc test with postgresql pgx"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make functional-test-xdc-coverage"
-    artifact_paths:
-      - ".coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.8.0:
-          run: integration-test-xdc-postgresql-pgx
-          config: ./develop/buildkite/docker-compose.yml
-
-  - label: ":golang: functional ndc test with postgresql pgx"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "make functional-test-ndc-coverage"
-    artifact_paths:
-      - ".coverage/*.out"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-compose#v3.8.0:
-          run: integration-test-xdc-postgresql-pgx
-          config: ./develop/buildkite/docker-compose.yml
-
-  - label: ":golang: functional test with postgresql 12"
     agents:
       queue: "default"
       docker: "*"
@@ -318,7 +323,60 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          run: integration-test-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional xdc test with postgresql pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-xdc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+      - ".testreport/*.xml"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          run: integration-test-xdc-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional ndc test with postgresql pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-ndc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+      - ".testreport/*.xml"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
+          run: integration-test-xdc-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional test with postgresql 12"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-coverage"
+    parallelism: 3
+    artifact_paths:
+      - ".coverage/*.out"
+      - ".testreport/*.xml"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-postgresql12
           config: ./develop/buildkite/docker-compose.yml
 
@@ -334,7 +392,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12
           config: ./develop/buildkite/docker-compose.yml
 
@@ -350,7 +409,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12
           config: ./develop/buildkite/docker-compose.yml
 
@@ -359,13 +419,17 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+<<<<<<< HEAD
+      - docker-compose#v4.14.0:
           run: integration-test-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
 
@@ -376,11 +440,13 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
 
@@ -391,11 +457,13 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
 
@@ -411,7 +479,8 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: integration-test-sqlite
           config: ./develop/buildkite/docker-compose.yml
 
@@ -422,7 +491,6 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: buildkite-agent artifact download ".testreport/*.xml" .
     retry:
       automatic:
         limit: 2
@@ -446,6 +514,7 @@ steps:
       - artifacts#v1.9.0:
           download:
             - ".coverage/*.out"
-      - docker-compose#v3.8.0:
+      - ecr#v2.7.0: {login: true}
+      - docker-compose#v4.14.0:
           run: coverage-report
           config: ./develop/buildkite/docker-compose.yml

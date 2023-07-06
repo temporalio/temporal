@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/operatorservice/v1"
@@ -105,6 +106,8 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	s.checkTestShard()
+
 	params := ApplyTestClusterParams(options)
 
 	s.hostPort = "127.0.0.1:7134"
@@ -175,6 +178,34 @@ func (s *FunctionalTestBase) setupLogger() {
 	if s.Logger == nil {
 		s.Logger = log.NewTestLogger()
 	}
+}
+
+// checkTestShard supports test sharding based on environment variables.
+func (s *FunctionalTestBase) checkTestShard() {
+	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
+	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	if totalStr == "" || indexStr == "" {
+		return
+	}
+	total, err := strconv.Atoi(totalStr)
+	s.NoError(err)
+	s.GreaterOrEqual(total, 1)
+	index, err := strconv.Atoi(indexStr)
+	s.NoError(err)
+	s.GreaterOrEqual(index, 0)
+	s.Less(index, total)
+
+	// This was determined empirically to distribute our existing test names + run times
+	// reasonably well. This can be adjusted from time to time.
+	// For parallelism 4, use 10. For 3, use 26. For 2, use 18.
+	const salt = "-salt-26"
+
+	nameToHash := s.T().Name() + salt
+	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
+	if testIndex != index {
+		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index, total, testIndex)
+	}
+	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index, total)
 }
 
 // GetTestClusterConfig return test cluster config
