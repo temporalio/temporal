@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -274,8 +273,7 @@ func NewConfig(
 
 // Service represents the frontend service
 type Service struct {
-	serveWg sync.WaitGroup
-	config  *Config
+	config *Config
 
 	healthServer      *health.Server
 	handler           Handler
@@ -341,13 +339,11 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	s.serveWg.Add(1)
 	go func() {
 		s.logger.Info("Starting to serve on frontend listener")
 		if err := s.server.Serve(s.grpcListener); err != nil {
 			s.logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 		}
-		s.serveWg.Done()
 	}()
 }
 
@@ -382,7 +378,6 @@ func (s *Service) Stop() {
 	})
 	s.server.GracefulStop()
 	t.Stop()
-	s.serveWg.Wait()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)

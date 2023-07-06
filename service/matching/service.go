@@ -27,7 +27,6 @@ package matching
 import (
 	"math/rand"
 	"net"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -45,7 +44,6 @@ import (
 
 // Service represents the matching service
 type Service struct {
-	serveWg sync.WaitGroup
 	handler *Handler
 	config  *Config
 
@@ -102,13 +100,11 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	s.serveWg.Add(1)
 	go func() {
 		s.logger.Info("Starting to serve on matching listener")
 		if err := s.server.Serve(s.grpcListener); err != nil {
 			s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
 		}
-		s.serveWg.Done()
 	}()
 }
 
@@ -125,7 +121,6 @@ func (s *Service) Stop() {
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
-	s.serveWg.Wait()
 
 	s.handler.Stop()
 

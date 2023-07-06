@@ -27,7 +27,6 @@ package history
 import (
 	"math/rand"
 	"net"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -48,7 +47,6 @@ import (
 // Service represents the history service
 type (
 	Service struct {
-		serveWg           sync.WaitGroup
 		handler           *Handler
 		visibilityManager manager.VisibilityManager
 		config            *configs.Config
@@ -102,13 +100,11 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	s.serveWg.Add(1)
 	go func() {
 		s.logger.Info("Starting to serve on history listener")
 		if err := s.server.Serve(s.grpcListener); err != nil {
 			s.logger.Fatal("Failed to serve on history listener", tag.Error(err))
 		}
-		s.serveWg.Done()
 	}()
 }
 
@@ -148,7 +144,6 @@ func (s *Service) Stop() {
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
-	s.serveWg.Wait()
 
 	s.handler.Stop()
 	s.visibilityManager.Close()
