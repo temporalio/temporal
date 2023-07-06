@@ -72,6 +72,7 @@ type (
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
+		membershipMonitor      membership.Monitor
 		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
@@ -172,6 +173,7 @@ func NewService(
 		executionManager:          executionManager,
 		persistenceBean:           persistenceBean,
 		workerServiceResolver:     workerServiceResolver,
+		membershipMonitor:         membershipMonitor,
 		hostInfo:                  hostInfoProvider.HostInfo(),
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
@@ -399,6 +401,8 @@ func (s *Service) Start() {
 	// The service is now started up
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
+
+	s.membershipMonitor.Start()
 
 	s.ensureSystemNamespaceExists(context.TODO())
 	s.startScanner()
