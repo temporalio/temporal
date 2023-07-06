@@ -478,6 +478,9 @@ const (
 	HistoryCacheMaxSize = "history.cacheMaxSize"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
+	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
+	// before joining membership after starting.
+	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// EventsCacheInitialSize is initial size of events cache

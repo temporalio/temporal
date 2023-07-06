@@ -109,7 +109,17 @@ func (s *Service) Start() {
 
 	// As soon as we join membership, other hosts will send requests for shards that we own,
 	// so we should try to start this after starting the gRPC server.
-	go s.membershipMonitor.Start()
+	go func() {
+		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
+			// In some situations, like rolling upgrades of the history service,
+			// pausing before joining membership can help separate the shard movement
+			// caused by another history instance terminating with this instance starting.
+			s.logger.Info("history start: delaying before membership start",
+				tag.NewDurationTag("startupMembershipJoinDelay", delay))
+			time.Sleep(delay)
+		}
+		s.membershipMonitor.Start()
+	}()
 }
 
 // Stop stops the service
