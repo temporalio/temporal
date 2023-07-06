@@ -106,6 +106,8 @@ func (s *Service) Start() {
 			s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
 		}
 	}()
+
+	go s.membershipMonitor.Start()
 }
 
 // Stop stops the service

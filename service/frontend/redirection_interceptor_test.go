@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -326,6 +327,36 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNot
 	)
 	s.Nil(resp)
 	s.IsType(&serviceerror.NamespaceNotFound{}, err)
+}
+
+func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Empty() {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{}))
+	allowed := s.redirector.redirectionAllowed(ctx)
+	s.True(allowed)
+}
+
+func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Error() {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		dcRedirectionContextHeaderName: "?",
+	}))
+	allowed := s.redirector.redirectionAllowed(ctx)
+	s.True(allowed)
+}
+
+func (s *redirectionInterceptorSuite) TestRedirectionAllowed_True() {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		dcRedirectionContextHeaderName: "t",
+	}))
+	allowed := s.redirector.redirectionAllowed(ctx)
+	s.True(allowed)
+}
+
+func (s *redirectionInterceptorSuite) TestRedirectionAllowed_False() {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		dcRedirectionContextHeaderName: "f",
+	}))
+	allowed := s.redirector.redirectionAllowed(ctx)
+	s.False(allowed)
 }
 
 type (

@@ -117,16 +117,15 @@ func (c *ControllerImpl) Start() {
 	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
 	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
 
-	c.acquireShards()
-	c.shutdownWG.Add(1)
-	go c.shardManagementPump()
-
 	if err := c.historyServiceResolver.AddListener(
 		shardControllerMembershipUpdateListenerName,
 		c.membershipUpdateCh,
 	); err != nil {
 		c.contextTaggedLogger.Error("Error adding listener", tag.Error(err))
 	}
+
+	c.shutdownWG.Add(1)
+	go c.shardManagementPump()
 
 	c.contextTaggedLogger.Info("", tag.LifeCycleStarted)
 }

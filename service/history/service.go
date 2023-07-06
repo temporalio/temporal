@@ -106,6 +106,10 @@ func (s *Service) Start() {
 			s.logger.Fatal("Failed to serve on history listener", tag.Error(err))
 		}
 	}()
+
+	// As soon as we join membership, other hosts will send requests for shards that we own,
+	// so we should try to start this after starting the gRPC server.
+	go s.membershipMonitor.Start()
 }
 
 // Stop stops the service

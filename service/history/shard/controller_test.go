@@ -336,6 +336,8 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
+	s.shardController.acquireShards()
+
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {
 		workerWG.Add(1)
@@ -435,6 +437,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
+	s.shardController.acquireShards()
 
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {
@@ -691,6 +694,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	}
 
 	s.shardController.Start()
+	s.shardController.acquireShards()
 
 	var workers goro.Group
 	for i := 0; i < 10; i++ {
