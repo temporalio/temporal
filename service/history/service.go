@@ -27,7 +27,6 @@ package history
 import (
 	"math/rand"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -35,7 +34,6 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -49,7 +47,6 @@ import (
 // Service represents the history service
 type (
 	Service struct {
-		status            int32
 		handler           *Handler
 		visibilityManager manager.VisibilityManager
 		config            *configs.Config
@@ -77,7 +74,6 @@ func NewService(
 	healthServer *health.Server,
 ) *Service {
 	return &Service{
-		status:                         common.DaemonStatusInitialized,
 		server:                         grpc.NewServer(grpcServerOptions...),
 		handler:                        handler,
 		visibilityManager:              visibilityMgr,
@@ -93,12 +89,7 @@ func NewService(
 
 // Start starts the service
 func (s *Service) Start() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
-		return
-	}
-
-	logger := s.logger
-	logger.Info("history starting")
+	s.logger.Info("history starting")
 
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 	rand.Seed(time.Now().UnixNano())
@@ -109,35 +100,30 @@ func (s *Service) Start() {
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	// As soon as we join membership, other hosts will send requests for shards
-	// that we own. Ideally, then, we would start the GRPC server, and only then
-	// join membership. That's not possible with the GRPC interface, though, hence
-	// we start membership in a goroutine.
+	go func() {
+		s.logger.Info("Starting to serve on history listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			s.logger.Fatal("Failed to serve on history listener", tag.Error(err))
+		}
+	}()
+
+	// As soon as we join membership, other hosts will send requests for shards that we own,
+	// so we should try to start this after starting the gRPC server.
 	go func() {
 		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
 			// In some situations, like rolling upgrades of the history service,
 			// pausing before joining membership can help separate the shard movement
 			// caused by another history instance terminating with this instance starting.
-			logger.Info("history start: delaying before membership start",
+			s.logger.Info("history start: delaying before membership start",
 				tag.NewDurationTag("startupMembershipJoinDelay", delay))
 			time.Sleep(delay)
 		}
 		s.membershipMonitor.Start()
 	}()
-
-	logger.Info("Starting to serve on history listener")
-	if err := s.server.Serve(s.grpcListener); err != nil {
-		logger.Fatal("Failed to serve on history listener", tag.Error(err))
-	}
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
-	logger := s.logger
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
-		return
-	}
-
 	// initiate graceful shutdown :
 	// 1. remove self from the membership ring
 	// 2. wait for other members to discover we are going down
@@ -155,19 +141,19 @@ func (s *Service) Stop() {
 
 	remainingTime := s.config.ShutdownDrainDuration()
 
-	logger.Info("ShutdownHandler: Evicting self from membership ring")
+	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
 	_ = s.membershipMonitor.EvictSelf()
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
-	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
 
-	logger.Info("ShutdownHandler: Initiating shardController shutdown")
+	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.Stop()
-	logger.Info("ShutdownHandler: Waiting for traffic to drain")
+	s.logger.Info("ShutdownHandler: Waiting for traffic to drain")
 	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
 
-	logger.Info("ShutdownHandler: No longer taking rpc requests")
+	s.logger.Info("ShutdownHandler: No longer taking rpc requests")
 	_ = s.sleep(gracePeriod, remainingTime)
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
@@ -176,7 +162,7 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 	s.visibilityManager.Close()
 
-	logger.Info("history stopped")
+	s.logger.Info("history stopped")
 }
 
 // sleep sleeps for the minimum of desired and available duration
