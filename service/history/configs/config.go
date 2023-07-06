@@ -57,11 +57,12 @@ type Config struct {
 	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog       dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS       dynamicconfig.IntPropertyFn
-	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
+	EmitShardLagLog            dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS            dynamicconfig.IntPropertyFn
+	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -334,6 +335,7 @@ func NewConfig(
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
+		StartupMembershipJoinDelay:            dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
