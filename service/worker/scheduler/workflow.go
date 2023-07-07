@@ -126,6 +126,7 @@ type (
 	tweakablePolicies struct {
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
+		RetentionTime                     time.Duration // How long to keep schedules after they're done
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
 		FutureActionCount                 int           // The number of future action times to include in Describe.
@@ -163,6 +164,7 @@ var (
 	currentTweakablePolicies = tweakablePolicies{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
+		RetentionTime:                     7 * 24 * time.Hour,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
@@ -493,7 +495,7 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	if s.hasMinVersion(DeleteIdleSchedule) && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
 		shouldSelfDestruct = true
 		// TODO: fix this and use a proper retention time
-		nextWakeup = time.Now().Add(5 * time.Second)
+		nextWakeup = time.Now().Add(s.tweakables.RetentionTime)
 	}
 	// if we're paused, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && s.Schedule.State.Paused {
