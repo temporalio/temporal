@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -274,7 +273,6 @@ func NewConfig(
 
 // Service represents the frontend service
 type Service struct {
-	status int32
 	config *Config
 
 	healthServer      *health.Server
@@ -308,7 +306,6 @@ func NewService(
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return &Service{
-		status:                         common.DaemonStatusInitialized,
 		config:                         serviceConfig,
 		server:                         server,
 		healthServer:                   healthServer,
@@ -327,12 +324,7 @@ func NewService(
 
 // Start starts the service
 func (s *Service) Start() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
-		return
-	}
-
-	logger := s.logger
-	logger.Info("frontend starting")
+	s.logger.Info("frontend starting")
 
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
@@ -350,22 +342,18 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	go s.membershipMonitor.Start()
+	go func() {
+		s.logger.Info("Starting to serve on frontend listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
+			s.logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+		}
+	}()
 
-	logger.Info("Starting to serve on frontend listener")
-	if err := s.server.Serve(s.grpcListener); err != nil {
-		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
-	}
+	go s.membershipMonitor.Start()
 }
 
 // Stop stops the service
 func (s *Service) Stop() {
-	logger := s.logger
-
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
-		return
-	}
-
 	// initiate graceful shutdown:
 	// 1. Fail rpc health check, this will cause client side load balancer to stop forwarding requests to this node
 	// 2. wait for failure detection time
@@ -376,10 +364,10 @@ func (s *Service) Stop() {
 	requestDrainTime := util.Max(time.Second, s.config.ShutdownDrainDuration())
 	failureDetectionTime := util.Max(0, s.config.ShutdownFailHealthCheckDuration())
 
-	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
+	s.logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()
 
-	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(failureDetectionTime)
 
 	s.handler.Stop()
@@ -388,19 +376,19 @@ func (s *Service) Stop() {
 	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 
-	logger.Info("ShutdownHandler: Draining traffic")
+	s.logger.Info("ShutdownHandler: Draining traffic")
 	t := time.AfterFunc(requestDrainTime, func() {
-		logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 		s.server.Stop()
 	})
 	s.server.GracefulStop()
 	t.Stop()
 
 	if s.metricsHandler != nil {
-		s.metricsHandler.Stop(logger)
+		s.metricsHandler.Stop(s.logger)
 	}
 
-	logger.Info("frontend stopped")
+	s.logger.Info("frontend stopped")
 }
 
 func namespaceRPS(
