@@ -491,7 +491,7 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 		}
 
 	}
-	// if run out of actions or no more jobs to run and the schedule workflow is not paused, finish the schedule workflow
+	// if run out of actions or no more jobs to run and the schedule workflow is not paused, start a timer to delete the schedule workflow
 	if s.hasMinVersion(DeleteIdleSchedule) && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
 		shouldSelfDestruct = true
 		// TODO: fix this and use a proper retention time
