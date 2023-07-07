@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -93,6 +94,7 @@ type (
 		FaultInjection         config.FaultInjection `yaml:"faultinjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		GenerateMTLS           bool
+		EnableMetricsCapture   bool
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -256,6 +258,10 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
+	}
+
+	if options.EnableMetricsCapture {
+		temporalParams.CaptureMetricsHandler = metricstest.NewCaptureHandler()
 	}
 
 	err = newPProfInitializerImpl(logger, pprofTestPort).Start()

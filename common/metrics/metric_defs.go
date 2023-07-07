@@ -1219,7 +1219,7 @@ const (
 var (
 	ServiceRequests = NewCounterDef(
 		"service_requests",
-		WithDescription("The number of gRPC requests received by the service."),
+		WithDescription("The number of RPC requests received by the service."),
 	)
 	ServicePendingRequests                        = NewGaugeDef("service_pending_requests")
 	ServiceFailures                               = NewCounterDef("service_errors")
@@ -1280,6 +1280,10 @@ var (
 	VersionCheckFailedCount                  = NewCounterDef("version_check_failed")
 	VersionCheckRequestFailedCount           = NewCounterDef("version_check_request_failed")
 	VersionCheckLatency                      = NewTimerDef("version_check_latency")
+	HTTPServiceRequests                      = NewCounterDef(
+		"http_service_requests",
+		WithDescription("The number of HTTP requests received by the service."),
+	)
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")

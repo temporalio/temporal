@@ -19,7 +19,10 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -57,6 +60,8 @@ func NewHTTPAPIServer(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
 	interceptors []grpc.UnaryServerInterceptor,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
 	// Create a TCP listener the same as the frontend one but with different port
@@ -123,6 +128,8 @@ func NewHTTPAPIServer(
 	clientConn := newInlineClientConn(
 		map[string]any{"temporal.api.workflowservice.v1.WorkflowService": handler},
 		interceptors,
+		metricsHandler,
+		namespaceRegistry,
 	)
 
 	// Create serve mux
@@ -289,8 +296,10 @@ func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) 
 // as header. But which headers to use and TLS peer context and such are
 // expected to be handled by the caller.
 type inlineClientConn struct {
-	methods     map[string]*serviceMethod
-	interceptor grpc.UnaryServerInterceptor
+	methods           map[string]*serviceMethod
+	interceptor       grpc.UnaryServerInterceptor
+	requestsCounter   metrics.CounterIface
+	namespaceRegistry namespace.Registry
 }
 
 var _ grpc.ClientConnInterface = (*inlineClientConn)(nil)
@@ -304,7 +313,12 @@ var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
 var protoMessageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
 var errorType = reflect.TypeOf((*error)(nil)).Elem()
 
-func newInlineClientConn(servers map[string]any, interceptors []grpc.UnaryServerInterceptor) *inlineClientConn {
+func newInlineClientConn(
+	servers map[string]any,
+	interceptors []grpc.UnaryServerInterceptor,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+) *inlineClientConn {
 	// Create the set of methods via reflection. We currently accept the overhead
 	// of reflection compared to having to custom generate gateway code.
 	methods := map[string]*serviceMethod{}
@@ -339,8 +353,10 @@ func newInlineClientConn(servers map[string]any, interceptors []grpc.UnaryServer
 	}
 
 	return &inlineClientConn{
-		methods:     methods,
-		interceptor: chainUnaryServerInterceptors(interceptors),
+		methods:           methods,
+		interceptor:       chainUnaryServerInterceptors(interceptors),
+		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.GetMetricName()),
+		namespaceRegistry: namespaceRegistry,
 	}
 }
 
@@ -370,6 +386,16 @@ func (i *inlineClientConn) Invoke(
 		return status.Error(codes.NotFound, "call not found")
 	}
 
+	// Add metric
+	var namespaceTag metrics.Tag
+	if namespace := interceptor.MustGetNamespaceName(i.namespaceRegistry, args); namespace != "" {
+		namespaceTag = metrics.NamespaceTag(namespace.String())
+	} else {
+		namespaceTag = metrics.NamespaceUnknownTag()
+	}
+	i.requestsCounter.Record(1, metrics.OperationTag(method), namespaceTag)
+
+	// Invoke
 	var resp any
 	var err error
 	if i.interceptor == nil {

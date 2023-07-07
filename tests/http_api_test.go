@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -57,6 +58,16 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 		RunID string `json:"runId"`
 	}
 	s.Require().NoError(json.Unmarshal(respBody, &startResp))
+
+	// Check that our single HTTP call metric is present with the proper tags
+	httpMetrics := s.testCluster.host.captureMetricsHandler.Snapshot()[metrics.HTTPServiceRequests.GetMetricName()]
+	s.Require().Len(httpMetrics, 1)
+	s.Require().Equal(int64(1), httpMetrics[0].Value)
+	s.Require().Equal(
+		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+		httpMetrics[0].Tags[metrics.OperationTagName],
+	)
+	s.Require().Equal(s.namespace, httpMetrics[0].Tags["namespace"])
 
 	// Confirm already exists error with details and proper code
 	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{

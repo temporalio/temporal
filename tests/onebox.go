@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -125,6 +126,7 @@ type (
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		spanExporters                    []otelsdktrace.SpanExporter
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
+		captureMetricsHandler            *metricstest.CaptureHandler
 
 		onGetClaims func(*authorization.AuthInfo) (*authorization.Claims, error)
 		onAuthorize func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -166,6 +168,7 @@ type (
 		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
+		CaptureMetricsHandler            *metricstest.CaptureHandler
 	}
 
 	listenHostPort string
@@ -199,6 +202,7 @@ func newTemporal(params *TemporalParams) *temporalImpl {
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
+		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
 	}
 	impl.overrideHistoryDynamicConfig(testDCClient)
@@ -410,7 +414,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return c }),
 		fx.Provide(func() authorization.ClaimMapper { return c }),
@@ -492,7 +496,7 @@ func (c *temporalImpl) startHistory(
 				persistenceConfig,
 				serviceName,
 			),
-			fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -591,7 +595,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(c.newRPCFactory),
@@ -686,7 +690,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -754,6 +758,13 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 		return c.tlsConfigProvider
 	}
 	return nil
+}
+
+func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
+	if c.captureMetricsHandler != nil {
+		return c.captureMetricsHandler
+	}
+	return metrics.NoopMetricsHandler
 }
 
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {

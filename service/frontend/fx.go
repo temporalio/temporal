@@ -621,6 +621,8 @@ func HTTPAPIServerProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
 	grpcServerOptions GrpcServerOptions,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
 	// If HTTP API server not enabled, return nil
@@ -635,6 +637,8 @@ func HTTPAPIServerProvider(
 		tlsConfigProvider,
 		handler,
 		grpcServerOptions.UnaryInterceptors,
+		metricsHandler,
+		namespaceRegistry,
 		logger,
 	)
 }
