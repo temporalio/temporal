@@ -51,16 +51,17 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID     namespace.ID
-		taskQueue       *taskQueueID
-		taskQueueKind   enumspb.TaskQueueKind
-		rangeID         int64
-		ackLevel        int64
-		userData        *persistencespb.VersionedTaskQueueUserData
-		userDataChanged chan struct{}
-		store           persistence.TaskManager
-		logger          log.Logger
-		matchingClient  matchingservice.MatchingServiceClient
+		namespaceID      namespace.ID
+		taskQueue        *taskQueueID
+		taskQueueKind    enumspb.TaskQueueKind
+		rangeID          int64
+		ackLevel         int64
+		userData         *persistencespb.VersionedTaskQueueUserData
+		userDataChanged  chan struct{}
+		userDataDisabled error
+		store            persistence.TaskManager
+		logger           log.Logger
+		matchingClient   matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -309,6 +310,9 @@ func (db *taskQueueDB) GetUserData(
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
+	if db.userDataDisabled != nil {
+		return nil, nil, db.userDataDisabled
+	}
 	return db.userData, db.userDataChanged, nil
 }
 
@@ -343,6 +347,13 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 	return nil
 }
 
+// disableUserData causes subsequent calls to GetUserData to return this error.
+func (db *taskQueueDB) disableUserData(disabledError error) {
+	db.Lock()
+	defer db.Unlock()
+	db.userDataDisabled = disabledError
+}
+
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
 // to the update function is guaranteed to be non-nil.
 // Note that the user data's clock may be nil and should be initialized externally where there's access to the cluster
@@ -363,8 +374,13 @@ func (db *taskQueueDB) UpdateUserData(
 	if !db.DbStoresUserData() {
 		return nil, false, errUserDataNoMutateNonRoot
 	}
+
 	db.Lock()
 	defer db.Unlock()
+
+	if db.userDataDisabled != nil {
+		return nil, false, db.userDataDisabled
+	}
 
 	preUpdateData := db.userData.GetData()
 	preUpdateVersion := db.userData.GetVersion()

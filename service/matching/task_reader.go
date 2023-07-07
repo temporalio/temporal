@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -140,7 +141,7 @@ dispatchLoop:
 				}
 				// this should never happen unless there is a bug - don't drop the task
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if err == errUserDataDisabled {
+				if errors.Is(err, errUserDataDisabled) {
 					// We're trying to dispatch a versioned task but user data isn't loaded.
 					// Don't log here since it would be too spammy.
 				} else {

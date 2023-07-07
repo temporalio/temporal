@@ -145,7 +145,8 @@ func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataInitialFetch(nil)
+	firstCall := true
+	tlm.SetUserDataInitialFetch(nil, &firstCall, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(3 * taskReaderOfferThrottleWait)
@@ -180,7 +181,8 @@ func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataInitialFetch(nil)
+	firstCall := true
+	tlm.SetUserDataInitialFetch(nil, &firstCall, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(taskReaderOfferThrottleWait)
