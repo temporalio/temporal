@@ -181,7 +181,6 @@ type Config struct {
 	NumArchiveSystemWorkflows dynamicconfig.IntPropertyFn
 	ArchiveRequestRPS         dynamicconfig.IntPropertyFn
 	ArchiveSignalTimeout      dynamicconfig.DurationPropertyFn
-	DurableArchivalEnabled    dynamicconfig.BoolPropertyFn
 
 	// Size limit related settings
 	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -445,7 +444,6 @@ func NewConfig(
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
-		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, true),
 
 		BlobSizeLimitError:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
