@@ -164,18 +164,22 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 		close(doneC)
 	}()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-doneC:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
 	}
 }
 
 // InterruptibleSleep is like time.Sleep but can be interrupted by a context.
 func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
-	case <-time.After(timeout):
+	case <-timer.C:
 	case <-ctx.Done():
 	}
 }

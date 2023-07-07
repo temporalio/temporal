@@ -620,7 +620,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 		wg.Done()
 	}()
 
-	<-time.After(time.Second)
+	time.Sleep(time.Second)
 	ms1 := s.getMutableState(tests.NamespaceID, execution)
 	s.NotNil(ms1)
 	qr := ms1.GetQueryRegistry()
@@ -704,7 +704,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	waitGroup.Add(1)
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
 		defer waitGroup.Done()
-		<-time.After(delay)
+		time.Sleep(delay)
 		ms1 := s.getMutableState(tests.NamespaceID, execution)
 		s.NotNil(ms1)
 		qr := ms1.GetQueryRegistry()
@@ -776,7 +776,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	waitGroup.Add(1)
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
 		defer waitGroup.Done()
-		<-time.After(delay)
+		time.Sleep(delay)
 		ms1 := s.getMutableState(tests.NamespaceID, execution)
 		s.NotNil(ms1)
 		qr := ms1.GetQueryRegistry()

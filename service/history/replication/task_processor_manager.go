@@ -262,12 +262,14 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 
 func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
 	for {
+		timer := time.NewTimer(backoff.FullJitter(dlqSizeCheckInterval))
 		select {
-		case <-time.After(backoff.FullJitter(dlqSizeCheckInterval)):
+		case <-timer.C:
 			if r.config.ReplicationEnableDLQMetrics() {
 				r.checkReplicationDLQSize()
 			}
 		case <-r.shutdownChan:
+			timer.Stop()
 			return
 		}
 	}
