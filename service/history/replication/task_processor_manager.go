@@ -365,7 +365,6 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 		}
 		if !isEmpty {
 			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
-			r.logger.Info("Replication DLQ is not empty.", tag.ShardID(r.shard.GetShardID()), tag.AckLevel(minTaskKey))
 			break
 		}
 	}
