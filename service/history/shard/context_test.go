@@ -678,3 +678,59 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_4_8() {
 		},
 	}, remoteAckStatus)
 }
+
+func (s *contextSuite) TestShardStopReasonAssertOwnership() {
+	s.mockShard.state = contextStateAcquired
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	err := s.mockShard.AssertOwnership(context.Background())
+	s.Error(err)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestShardStopReasonShardRead() {
+	s.mockShard.state = contextStateAcquired
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.ShardOwnershipLostError{}).Times(1)
+
+	_, err := s.mockShard.GetCurrentExecution(context.Background(), nil)
+	s.Error(err)
+
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestShardStopReasonAcquireShard() {
+	s.mockShard.state = contextStateAcquiring
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
+		Return(&persistence.ShardOwnershipLostError{}).Times(1)
+
+	s.mockShard.acquireShard()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestShardStopReasonUnload() {
+	s.mockShard.state = contextStateAcquired
+
+	s.mockShard.UnloadForOwnershipLost()
+
+	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.False(s.mockShard.IsValid())
+	s.True(s.mockShard.stoppedForOwnershipLost())
+}
+
+func (s *contextSuite) TestShardStopReasonCloseShard() {
+	s.mockShard.state = contextStateAcquired
+	s.mockHistoryEngine.EXPECT().Stop().Times(1)
+
+	s.mockShard.finishStop()
+
+	s.False(s.mockShard.IsValid())
+	s.False(s.mockShard.stoppedForOwnershipLost())
+}
