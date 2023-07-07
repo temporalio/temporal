@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -38,7 +37,6 @@ type HTTPAPIServer struct {
 	listener               net.Listener
 	logger                 log.Logger
 	serveMux               *runtime.ServeMux
-	shutdownDrainTime      time.Duration
 	stopped                chan struct{}
 	matchAdditionalHeaders map[string]bool
 }
@@ -97,10 +95,9 @@ func NewHTTPAPIServer(
 	}
 
 	h := &HTTPAPIServer{
-		listener:          listener,
-		logger:            logger,
-		shutdownDrainTime: util.Max(time.Second, serviceConfig.ShutdownDrainDuration()),
-		stopped:           make(chan struct{}),
+		listener: listener,
+		logger:   logger,
+		stopped:  make(chan struct{}),
 	}
 
 	// Build 4 possible marshalers in order based on content type
@@ -180,10 +177,11 @@ func (h *HTTPAPIServer) Serve() error {
 
 // GracefulStop stops the HTTP server. This will first attempt a graceful stop
 // with a drain time, then will hard-stop. This will not return until stopped.
-func (h *HTTPAPIServer) GracefulStop() {
+func (h *HTTPAPIServer) GracefulStop(gracefulDrainTime time.Duration) {
 	// We try a graceful stop for the amount of time we can drain, then we do a
 	// hard stop
-	shutdownCtx, _ := context.WithTimeout(context.Background(), h.shutdownDrainTime)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulDrainTime)
+	defer cancel()
 	// We intentionally ignore this error, we're gonna stop at this point no
 	// matter what. This closes the listener too.
 	_ = h.server.Shutdown(shutdownCtx)
@@ -197,6 +195,12 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// https://github.com/grpc/grpc-go/blob/0673105ebcb956e8bf50b96e28209ab7845a65ad/server.go#L58.
 	// Max header bytes is defaulted by Go to 1MB.
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024*4)
+
+	// If accept header is present but not application/json, we fail
+	if accept := r.Header.Get("Accept"); accept != "" && accept != "application/json" {
+		w.WriteHeader(http.StatusNotAcceptable)
+		return
+	}
 
 	h.logger.Debug(
 		"HTTP API call",
@@ -258,6 +262,7 @@ func (h *HTTPAPIServer) errorHandler(
 	buf, merr := marshaler.Marshal(s.Proto())
 	if merr != nil {
 		h.logger.Warn("Failed to marshal error message", tag.Error(merr))
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"code": 13, "message": "failed to marshal error message"}`))
 		return
@@ -324,8 +329,11 @@ func newInlineClientConn(
 	methods := map[string]*serviceMethod{}
 	for qualifiedServerName, server := range servers {
 		serverVal := reflect.ValueOf(server)
-		for i := 0; i < serverVal.NumMethod(); i++ {
-			methodVal := serverVal.Method(i)
+		for i := 0; i < serverVal.Type().NumMethod(); i++ {
+			reflectMethod := serverVal.Type().Method(i)
+			// We intentionally look this up by name to not assume method indexes line
+			// up from type to value
+			methodVal := serverVal.MethodByName(reflectMethod.Name)
 			// We assume the methods we want only accept a context + request and only
 			// return a response + error. We also assume the method name matches the
 			// RPC name.
@@ -340,7 +348,7 @@ func newInlineClientConn(
 			if !validRPCMethod {
 				continue
 			}
-			fullMethod := "/" + qualifiedServerName + "/" + serverVal.Type().Method(i).Name
+			fullMethod := "/" + qualifiedServerName + "/" + reflectMethod.Name
 			methods[fullMethod] = &serviceMethod{
 				info: grpc.UnaryServerInfo{Server: server, FullMethod: fullMethod},
 				handler: func(ctx context.Context, req interface{}) (interface{}, error) {

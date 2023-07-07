@@ -415,7 +415,7 @@ func (s *Service) Stop() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.httpAPIServer.GracefulStop()
+			s.httpAPIServer.GracefulStop(requestDrainTime)
 		}()
 	}
 	wg.Wait()
