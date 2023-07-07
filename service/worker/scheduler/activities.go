@@ -304,6 +304,24 @@ func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.Termin
 	return translateError(err, "TerminateWorkflowExecution")
 }
 
+func (a *activities) DeleteScheduleWorkflow(ctx context.Context, scheduleId string) error {
+	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	defer cancel()
+
+	req := historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: a.namespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: WorkflowIDPrefix + scheduleId,
+		},
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
+	}
+	_, err := a.HistoryClient.DeleteWorkflowExecution(ctx, &req)
+	return translateError(err, "DeleteScheduleWorkflow")
+}
+
 func errType(err error) string {
 	return reflect.TypeOf(err).Name()
 }
