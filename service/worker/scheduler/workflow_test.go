@@ -1557,10 +1557,6 @@ func (s *workflowSuite) TestCloseWorkflowWhenNoNextTime() {
 					Second:     "0",
 				}},
 			},
-			State: &schedpb.ScheduleState{
-				LimitedActions:   true,
-				RemainingActions: 1,
-			},
 			Action: s.defaultAction("myid"),
 		},
 		State: &schedspb.InternalState{
