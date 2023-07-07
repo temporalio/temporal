@@ -51,8 +51,7 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{
 		"workflowType": { "name": "http-basic-workflow" },
 		"taskQueue": { "name": "`+s.taskQueue+`" },
-		"input": [{ "someField": "workflow-arg" }],
-		"requestId": "`+s.randomizeStr("req")+`"
+		"input": [{ "someField": "workflow-arg" }]
 	}`)
 	var startResp struct {
 		RunID string `json:"runId"`
