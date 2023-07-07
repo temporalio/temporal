@@ -383,16 +383,23 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 // UpdateRemoteClusterInfo deprecated
 // Deprecated use UpdateRemoteReaderInfo in the future instead
 func (s *ContextImpl) UpdateRemoteClusterInfo(
-	cluster string,
+	clusterName string,
 	ackTaskID int64,
 	ackTimestamp time.Time,
 ) {
 	s.wLock()
 	defer s.wUnlock()
 
-	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(cluster)
-	remoteClusterInfo.AckedReplicationTaskIDs[s.shardID] = ackTaskID
-	remoteClusterInfo.AckedReplicationTimestamps[s.shardID] = ackTimestamp
+	clusterInfo := s.clusterMetadata.GetAllClusterInfo()
+	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(clusterName)
+	for _, remoteShardID := range common.MapShardID(
+		clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
+		clusterInfo[clusterName].ShardCount,
+		s.shardID,
+	) {
+		remoteClusterInfo.AckedReplicationTaskIDs[remoteShardID] = ackTaskID
+		remoteClusterInfo.AckedReplicationTimestamps[remoteShardID] = ackTimestamp
+	}
 }
 
 // UpdateRemoteReaderInfo do not use streaming replication until remoteClusterInfo is updated to allow both
@@ -1716,10 +1723,27 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 			continue
 		}
 
-		remoteShardID := s.shardID
-		remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
-			AckedTaskId:             v.AckedReplicationTaskIDs[remoteShardID],
-			AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamps[remoteShardID]),
+		for _, remoteShardID := range common.MapShardID(
+			clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
+			clusterInfo[clusterName].ShardCount,
+			s.shardID,
+		) {
+			ackTaskID := v.AckedReplicationTaskIDs[remoteShardID] // default to 0
+			ackTimestamp := v.AckedReplicationTimestamps[remoteShardID]
+			if ackTimestamp.IsZero() {
+				ackTimestamp = time.Unix(0, 0)
+			}
+			if record, ok := remoteClusters[clusterName]; !ok {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			} else if record.AckedTaskId > ackTaskID {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			}
 		}
 	}
 
