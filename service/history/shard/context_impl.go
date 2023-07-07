@@ -1723,10 +1723,27 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 			continue
 		}
 
-		remoteShardID := s.shardID
-		remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
-			AckedTaskId:             v.AckedReplicationTaskIDs[remoteShardID],
-			AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamps[remoteShardID]),
+		for _, remoteShardID := range common.MapShardID(
+			clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
+			clusterInfo[clusterName].ShardCount,
+			s.shardID,
+		) {
+			ackTaskID := v.AckedReplicationTaskIDs[remoteShardID] // default to 0
+			ackTimestamp := v.AckedReplicationTimestamps[remoteShardID]
+			if ackTimestamp.IsZero() {
+				ackTimestamp = time.Unix(0, 0)
+			}
+			if record, ok := remoteClusters[clusterName]; !ok {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			} else if record.AckedTaskId > ackTaskID {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			}
 		}
 	}
 
