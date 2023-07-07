@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package matchingtest_test
 
 import (
 	"sync/atomic"
@@ -33,37 +33,49 @@ import (
 	"go.temporal.io/server/service/matching/matchingtest"
 )
 
-func TestLiveness_Start(t *testing.T) {
+func TestSynchronousClock_Advance(t *testing.T) {
 	t.Parallel()
 
-	var idleCalled atomic.Bool
-
-	ttl := func() time.Duration { return 2999 * time.Millisecond }
 	clock := matchingtest.NewSynchronousTimerFactory()
-	l := newLiveness(timerFactory[*matchingtest.SynchronousTimer](clock), ttl, func() { idleCalled.Store(true) })
-	l.Start()
-	clock.Advance(1 * time.Second)
-	assert.False(t, idleCalled.Load(), "2999ms ttl should not be considered idle after 1s")
-	l.markAlive()
-	clock.Advance(2 * time.Second)
-	assert.False(t, idleCalled.Load(), "markAlive should reset the ttl")
-	clock.Advance(1 * time.Second)
-	assert.True(t, idleCalled.Load(), "2999ms ttl should be considered idle after 3s")
+
+	var fired atomic.Bool
+
+	clock.AfterFunc(1*time.Second, func() { fired.Store(true) })
+	clock.Advance(999 * time.Millisecond)
+	assert.False(t, fired.Load(), "1s timer should not fire after 999ms")
+	clock.Advance(1 * time.Millisecond)
+	assert.True(t, fired.Load(), "1s timer should fire after 1000ms")
 }
 
-func TestLiveness_Stop(t *testing.T) {
+func TestSynchronousTimer_Reset(t *testing.T) {
 	t.Parallel()
 
-	var idleCalled atomic.Bool
-
-	ttl := func() time.Duration { return 1000 * time.Millisecond }
 	clock := matchingtest.NewSynchronousTimerFactory()
-	l := newLiveness(timerFactory[*matchingtest.SynchronousTimer](clock), ttl, func() { idleCalled.Store(true) })
-	l.Start()
+
+	var fired atomic.Bool
+
+	timer := clock.AfterFunc(1*time.Second, func() { fired.Store(true) })
 	clock.Advance(999 * time.Millisecond)
-	assert.False(t, idleCalled.Load(), "1000ms ttl should not be considered idle after 999ms")
-	l.Stop()
+	assert.False(t, fired.Load(), "1s timer should not fire after 999ms")
+	timer.Reset(1 * time.Second)
+	clock.Advance(999 * time.Millisecond)
+	assert.False(t, fired.Load(), "timer reset to 1s should not fire after 999ms")
+	clock.Advance(1 * time.Millisecond)
+	assert.True(t, fired.Load(), "timer reset to 1s should fire after 1000ms")
+}
+
+func TestSynchronousTimer_Stop(t *testing.T) {
+	t.Parallel()
+
+	clock := matchingtest.NewSynchronousTimerFactory()
+
+	var fired atomic.Bool
+
+	timer := clock.AfterFunc(1*time.Second, func() { fired.Store(true) })
+	clock.Advance(999 * time.Millisecond)
+	assert.False(t, fired.Load(), "1s timer should not fire after 999ms")
+	timer.Stop()
 	clock.Advance(1 * time.Second)
-	assert.False(t, idleCalled.Load(), "should not be marked idle after stop even if ttl has passed")
-	l.markAlive() // should not panic
+	assert.False(t, fired.Load(), "stopped timer should not fire even after its duration")
+	timer.Stop() // stop again to make sure it's idempotent
 }

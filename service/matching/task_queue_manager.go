@@ -162,7 +162,7 @@ type (
 		db                   *taskQueueDB
 		taskWriter           *taskWriter
 		taskReader           *taskReader // reads tasks from db and async matches it with poller
-		liveness             *liveness
+		liveness             *liveness[clockworkTimer]
 		taskGC               *taskGC
 		taskAckManager       ackManager   // tracks ackLevel for delivered messages
 		matcher              *TaskMatcher // for matching a task producer with a poller
@@ -261,7 +261,7 @@ func newTaskQueueManager(
 	}
 
 	tlMgr.liveness = newLiveness(
-		clockwork.NewRealClock(),
+		timerFactory[clockworkTimer](clockworkClock{clockwork.NewRealClock()}),
 		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)
