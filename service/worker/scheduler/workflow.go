@@ -489,7 +489,6 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 				s.logger.Error("Failed to delete schedule workflow", "err", err)
 			}
 		}
-
 	}
 	// if run out of actions or no more jobs to run and the schedule workflow is not paused, start a timer to delete the schedule workflow
 	if s.hasMinVersion(DeleteIdleSchedule) && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {

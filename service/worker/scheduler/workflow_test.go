@@ -179,6 +179,15 @@ func (s *workflowSuite) expectTerminate(f func(req *schedspb.TerminateWorkflowRe
 		})
 }
 
+func (s *workflowSuite) expectDeleteScheduleWorkflow(f func(scheduleId string) error) *testsuite.MockCallWrapper {
+	return s.env.OnActivity(new(activities).DeleteScheduleWorkflow, mock.Anything, mock.Anything).Once().Return(
+		func(_ context.Context, scheduleId string) error {
+			// cancel workflow to simulate deletion and prevent further calls to delete
+			s.env.CancelWorkflow()
+			return f(scheduleId)
+		})
+}
+
 // High-level mock helpers. This is a small meta-test-framework: it runs a schedule across
 // multiple workflow executions with continue-as-new, breaking at a variety of points. To do
 // this it has to reinitialize the workflow test framework each time, since the framework only
@@ -1473,4 +1482,92 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		},
 		expected+1,
 	)
+}
+
+func (s *workflowSuite) TestCloseWorkflowWhenNoActions() {
+	scheduleId := "myschedule"
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:30:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
+		s.Equal("myschedule", scheduleId)
+		return nil
+	})
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(15 * time.Minute),
+				}},
+			},
+			State: &schedpb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 2,
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+}
+
+func (s *workflowSuite) TestCloseWorkflowWhenNoNextTime() {
+	scheduleId := "myschedule"
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T01:00:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
+		s.Equal("myschedule", scheduleId)
+		return nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Year:       "2022",
+					Month:      "June",
+					DayOfMonth: "1",
+					Hour:       "1",
+					Minute:     "0",
+					Second:     "0",
+				}},
+			},
+			State: &schedpb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 1,
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
 }
