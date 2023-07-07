@@ -1371,11 +1371,6 @@ func (s *ContextImpl) UnloadForOwnershipLost() {
 	_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 }
 
-// requestStop should only be called by the controller.
-func (s *ContextImpl) requestStop() {
-	_ = s.transition(contextRequestStop{reason: stopReasonUnspecified})
-}
-
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
 	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see

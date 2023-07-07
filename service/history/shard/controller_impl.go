@@ -281,10 +281,8 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 			return shard, nil
 		}
 
-		// If the shard was invalid and still in the historyShards map, it should
-		// be because the shardClosedCallback hasn't yet executed its call to
-		// finishStop, so this call to requestStop should be redundant.
-		shard.requestStop()
+		// If the shard was invalid and still in the historyShards map, the
+		// shardClosedCallback call is in-flight, and will call finishStop.
 		delete(c.historyShards, shardID)
 	}
 
