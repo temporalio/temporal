@@ -30,7 +30,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 )
 
 var (
@@ -41,13 +41,13 @@ var (
 // lru is a concurrent fixed size cache that evicts elements in lru order
 type (
 	lru struct {
-		mut      sync.Mutex
-		byAccess *list.List
-		byKey    map[interface{}]*list.Element
-		maxSize  int
-		ttl      time.Duration
-		pin      bool
-		clock    clockwork.Clock
+		mut        sync.Mutex
+		byAccess   *list.List
+		byKey      map[interface{}]*list.Element
+		maxSize    int
+		ttl        time.Duration
+		pin        bool
+		timeSource clock.TimeSource
 	}
 
 	iteratorImpl struct {
@@ -112,7 +112,7 @@ func (c *lru) Iterator() Iterator {
 	c.mut.Lock()
 	iterator := &iteratorImpl{
 		lru:        c,
-		createTime: c.clock.Now().UTC(),
+		createTime: c.timeSource.Now().UTC(),
 		nextItem:   c.byAccess.Front(),
 	}
 	iterator.prepareNext()
@@ -136,18 +136,18 @@ func New(maxSize int, opts *Options) Cache {
 	if opts == nil {
 		opts = &Options{}
 	}
-	clock := opts.Clock
-	if clock == nil {
-		clock = clockwork.NewRealClock()
+	timeSource := opts.TimeSource
+	if timeSource == nil {
+		timeSource = clock.NewRealTimeSource()
 	}
 
 	return &lru{
-		byAccess: list.New(),
-		byKey:    make(map[interface{}]*list.Element, opts.InitialCapacity),
-		ttl:      opts.TTL,
-		maxSize:  maxSize,
-		pin:      opts.Pin,
-		clock:    clock,
+		byAccess:   list.New(),
+		byKey:      make(map[interface{}]*list.Element, opts.InitialCapacity),
+		ttl:        opts.TTL,
+		maxSize:    maxSize,
+		pin:        opts.Pin,
+		timeSource: timeSource,
 	}
 }
 
@@ -180,7 +180,7 @@ func (c *lru) Get(key interface{}) interface{} {
 
 	entry := element.Value.(*entryImpl)
 
-	if c.isEntryExpired(entry, c.clock.Now().UTC()) {
+	if c.isEntryExpired(entry, c.timeSource.Now().UTC()) {
 		// Entry has expired
 		c.deleteInternal(element)
 		return nil
@@ -297,7 +297,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	if c.ttl != 0 {
-		entry.createTime = c.clock.Now().UTC()
+		entry.createTime = c.timeSource.Now().UTC()
 	}
 
 	if len(c.byKey) >= c.maxSize {

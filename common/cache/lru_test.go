@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 )
 
 type keyType struct {
@@ -100,14 +100,14 @@ func TestGenerics(t *testing.T) {
 func TestLRUWithTTL(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
+	timeSource := clock.NewEventTimeSource()
 	cache := New(5, &Options{
-		TTL:   time.Millisecond * 100,
-		Clock: clock,
+		TTL:        time.Millisecond * 100,
+		TimeSource: timeSource,
 	})
 	cache.Put("A", "foo")
 	assert.Equal(t, "foo", cache.Get("A"))
-	clock.Advance(time.Millisecond * 300)
+	timeSource.Advance(time.Millisecond * 300)
 	assert.Nil(t, cache.Get("A"))
 	assert.Equal(t, 0, cache.Size())
 }
@@ -168,32 +168,32 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 func TestTTL(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
+	timeSource := clock.NewEventTimeSource()
 	cache := New(5, &Options{
-		TTL:   time.Millisecond * 50,
-		Clock: clock,
+		TTL:        time.Millisecond * 50,
+		TimeSource: timeSource,
 	})
 
 	cache.Put("A", t)
 	assert.Equal(t, t, cache.Get("A"))
-	clock.Advance(time.Millisecond * 100)
+	timeSource.Advance(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
 }
 
 func TestTTLWithPin(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
+	timeSource := clock.NewEventTimeSource()
 	cache := New(5, &Options{
-		TTL:   time.Millisecond * 50,
-		Pin:   true,
-		Clock: clock,
+		TTL:        time.Millisecond * 50,
+		Pin:        true,
+		TimeSource: timeSource,
 	})
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("A"))
-	clock.Advance(time.Millisecond * 100)
+	timeSource.Advance(time.Millisecond * 100)
 	assert.Equal(t, t, cache.Get("A"))
 	// release 3 time since put if not exist also increase the counter
 	cache.Release("A")
@@ -205,11 +205,11 @@ func TestTTLWithPin(t *testing.T) {
 func TestMaxSizeWithPin_MidItem(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
+	timeSource := clock.NewEventTimeSource()
 	cache := New(2, &Options{
-		TTL:   time.Millisecond * 50,
-		Pin:   true,
-		Clock: clock,
+		TTL:        time.Millisecond * 50,
+		Pin:        true,
+		TimeSource: timeSource,
 	})
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -235,7 +235,7 @@ func TestMaxSizeWithPin_MidItem(t *testing.T) {
 	cache.Release("A") // A's ref count is 0
 	cache.Release("C") // C's ref count is 0
 
-	clock.Advance(time.Millisecond * 100)
+	timeSource.Advance(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
 	assert.Nil(t, cache.Get("B"))
 	assert.Nil(t, cache.Get("C"))
@@ -244,11 +244,11 @@ func TestMaxSizeWithPin_MidItem(t *testing.T) {
 func TestMaxSizeWithPin_LastItem(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
+	timeSource := clock.NewEventTimeSource()
 	cache := New(2, &Options{
-		TTL:   time.Millisecond * 50,
-		Pin:   true,
-		Clock: clock,
+		TTL:        time.Millisecond * 50,
+		Pin:        true,
+		TimeSource: timeSource,
 	})
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -274,7 +274,7 @@ func TestMaxSizeWithPin_LastItem(t *testing.T) {
 	cache.Release("B") // B's ref count is 0
 	cache.Release("C") // C's ref count is 0
 
-	clock.Advance(time.Millisecond * 100)
+	timeSource.Advance(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
 	assert.Nil(t, cache.Get("B"))
 	assert.Nil(t, cache.Get("C"))

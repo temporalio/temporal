@@ -32,7 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -257,7 +257,7 @@ func newTaskQueueManager(
 	}
 
 	tlMgr.liveness = newLiveness(
-		clockwork.NewRealClock(),
+		clock.NewRealTimeSource(),
 		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)
