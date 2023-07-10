@@ -510,8 +510,10 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
 		func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
 			ready <- struct{}{}
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
 			select {
-			case <-time.After(5 * time.Second):
+			case <-timer.C:
 				wasCanceled <- false
 				return nil, errors.New("timed out")
 			case <-ctx.Done():
@@ -563,8 +565,10 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *persistence.UpdateShardRequest) error {
 			ready <- struct{}{}
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
 			select {
-			case <-time.After(5 * time.Second):
+			case <-timer.C:
 				wasCanceled <- false
 				return errors.New("timed out")
 			case <-ctx.Done():

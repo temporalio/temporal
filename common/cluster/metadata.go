@@ -430,9 +430,12 @@ func (m *metadataImpl) refreshLoop(ctx context.Context) error {
 		case <-timer.C:
 			for err := m.refreshClusterMetadata(ctx); err != nil; err = m.refreshClusterMetadata(ctx) {
 				m.logger.Error("Error refreshing remote cluster metadata", tag.Error(err))
+				refreshTimer := time.NewTimer(m.refreshDuration() / 2)
+
 				select {
-				case <-time.After(m.refreshDuration() / 2):
+				case <-refreshTimer.C:
 				case <-ctx.Done():
+					refreshTimer.Stop()
 					return nil
 				}
 			}

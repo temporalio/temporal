@@ -395,9 +395,11 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 					return nil
 				default:
 					r.logger.Error("Error refreshing namespace cache", tag.Error(err))
+					timer := time.NewTimer(CacheRefreshFailureRetryInterval)
 					select {
-					case <-time.After(CacheRefreshFailureRetryInterval):
+					case <-timer.C:
 					case <-ctx.Done():
+						timer.Stop()
 						return nil
 					}
 				}
