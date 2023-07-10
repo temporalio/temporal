@@ -82,30 +82,12 @@ func (s *archivalSuite) SetupTest() {
 
 func TestArchivalSuite(t *testing.T) {
 	flag.Parse()
-	for _, c := range []struct {
-		Name                     string
-		DurableArchivalIsEnabled bool
-	}{
-		{
-			Name:                     "DurableArchivalIsDisabled",
-			DurableArchivalIsEnabled: false,
-		},
-		{
-			Name:                     "DurableArchivalIsEnabled",
-			DurableArchivalIsEnabled: true,
-		},
-	} {
-		c := c
-		t.Run(c.Name, func(t *testing.T) {
-			s := new(archivalSuite)
-			s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-				dynamicconfig.RetentionTimerJitterDuration:  time.Second,
-				dynamicconfig.ArchivalProcessorArchiveDelay: time.Duration(0),
-				dynamicconfig.DurableArchivalEnabled:        c.DurableArchivalIsEnabled,
-			}
-			suite.Run(t, s)
-		})
+	s := new(archivalSuite)
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.RetentionTimerJitterDuration:  time.Second,
+		dynamicconfig.ArchivalProcessorArchiveDelay: time.Duration(0),
 	}
+	suite.Run(t, s)
 }
 
 func (s *archivalSuite) TestArchival_TimerQueueProcessor() {

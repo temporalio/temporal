@@ -208,8 +208,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := closeEvent.GetEventTime().Add(delay)
 
-			// We can skip visibility archival in the close execution task if we are using the durable archival flow.
-			// The visibility archival will be handled by the archival queue.
+			// This flag is only untrue for old server versions which were using the archival workflow instead of the
+			// archival queue.
 			closeExecutionTask.CanSkipVisibilityArchival = true
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
@@ -670,9 +670,6 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 // itself is also enabled.
 // For both history and visibility, we check that archival is enabled for both the cluster and the namespace.
 func (r *TaskGeneratorImpl) archivalQueueEnabled() bool {
-	if !r.config.DurableArchivalEnabled() {
-		return false
-	}
 	namespaceEntry := r.mutableState.GetNamespaceEntry()
 	return r.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||
