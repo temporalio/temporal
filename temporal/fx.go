@@ -87,7 +87,6 @@ type (
 		app         *fx.App
 		serviceName primitives.ServiceName
 		logger      log.Logger
-		stopChan    chan struct{}
 	}
 
 	ServerFx struct {
@@ -316,13 +315,6 @@ func (svc *ServicesMetadata) Stop(ctx context.Context) {
 	if err != nil {
 		svc.logger.Error("Failed to stop service", tag.Service(svc.serviceName), tag.Error(err))
 	}
-
-	// verify "Start" goroutine returned
-	select {
-	case <-svc.stopChan:
-	case <-stopCtx.Done():
-		svc.logger.Error("Timed out waiting for service to stop", tag.Service(svc.serviceName), tag.NewDurationTag("timeout", serviceStopTimeout))
-	}
 }
 
 type (
@@ -354,13 +346,12 @@ type (
 	}
 )
 
-func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger, stopChan chan struct{}) ServicesGroupOut {
+func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			app:         app,
 			serviceName: serviceName,
 			logger:      logger,
-			stopChan:    stopChan,
 		},
 	}
 }
@@ -375,10 +366,8 @@ func HistoryServiceProvider(
 		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
 		fx.Supply(
-			stopChan,
 			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
@@ -412,7 +401,7 @@ func HistoryServiceProvider(
 		FxLogAdapter,
 	)
 
-	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func MatchingServiceProvider(
@@ -425,10 +414,8 @@ func MatchingServiceProvider(
 		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
 		fx.Supply(
-			stopChan,
 			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
@@ -459,7 +446,7 @@ func MatchingServiceProvider(
 		FxLogAdapter,
 	)
 
-	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func FrontendServiceProvider(
@@ -483,10 +470,8 @@ func genericFrontendServiceProvider(
 		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
 		fx.Supply(
-			stopChan,
 			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
@@ -536,7 +521,7 @@ func genericFrontendServiceProvider(
 		FxLogAdapter,
 	)
 
-	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 func WorkerServiceProvider(
@@ -549,10 +534,8 @@ func WorkerServiceProvider(
 		return ServicesGroupOut{}, nil
 	}
 
-	stopChan := make(chan struct{})
 	app := fx.New(
 		fx.Supply(
-			stopChan,
 			params.EsConfig,
 			params.PersistenceConfig,
 			params.ClusterMetadata,
@@ -583,7 +566,7 @@ func WorkerServiceProvider(
 		FxLogAdapter,
 	)
 
-	return NewService(app, serviceName, params.Logger, stopChan), app.Err()
+	return NewService(app, serviceName, params.Logger), app.Err()
 }
 
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
@@ -1086,6 +1069,16 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("module", e.ModuleName),
 				tag.Error(e.Err))
+		}
+	case *fxevent.Run:
+		if e.Err != nil {
+			l.logger.Error("error returned",
+				tag.ComponentFX,
+				tag.NewStringTag("name", e.Name),
+				tag.NewStringTag("kind", e.Kind),
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Invoking:
 		// Do not log stack as it will make logs hard to read.

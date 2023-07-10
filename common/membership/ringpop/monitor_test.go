@@ -77,12 +77,14 @@ func (s *RpoSuite) TestMonitor() {
 	s.T().Log("Killing host 1")
 	testService.KillHost(testService.hostUUIDs[1])
 
+	timer := time.NewTimer(time.Minute)
 	select {
 	case e := <-listenCh:
+		timer.Stop()
 		s.Equal(1, len(e.HostsRemoved), "ringpop monitor event does not report the removed host")
 		s.Equal(testService.hostAddrs[1], e.HostsRemoved[0].GetAddress(), "ringpop monitor reported that a wrong host was removed")
 		s.Nil(e.HostsAdded, "Unexpected host reported to be added by ringpop monitor")
-	case <-time.After(time.Minute):
+	case <-timer.C:
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 

@@ -58,12 +58,17 @@ type (
 	// Monitor provides membership information for all temporal services.
 	// It can be used to query which member host of a service is responsible for serving a given key.
 	Monitor interface {
+		// Start causes this service to join the membership ring. Services
+		// should not call Start until they are ready to receive requests from
+		// other cluster members.
+		Start()
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
+		// GetResolver returns the service resolver for a service in the cluster.
 		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
-		// GetReachableMembers returns addresses of all members of the ring
+		// GetReachableMembers returns addresses of all members of the ring.
 		GetReachableMembers() ([]string, error)
 		// WaitUntilInitialized blocks until initialization is completed and returns the result
 		// of initialization. The current implementation does log.Fatal if it can't initialize,

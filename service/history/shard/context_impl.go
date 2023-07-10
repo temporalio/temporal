@@ -104,7 +104,7 @@ type (
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
 		eventsCache         events.Cache
-		closeCallback       func(*ContextImpl)
+		closeCallback       CloseCallback
 		config              *configs.Config
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
@@ -128,8 +128,9 @@ type (
 		lifecycleCancel context.CancelFunc
 
 		// state is protected by stateLock
-		stateLock sync.Mutex
-		state     contextState
+		stateLock  sync.Mutex
+		state      contextState
+		stopReason stopReason
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                             sync.RWMutex
@@ -163,8 +164,15 @@ type (
 	contextRequestAcquire    struct{}
 	contextRequestAcquired   struct{ engine Engine }
 	contextRequestLost       struct{}
-	contextRequestStop       struct{}
+	contextRequestStop       struct{ reason stopReason }
 	contextRequestFinishStop struct{}
+
+	stopReason int
+)
+
+const (
+	stopReasonUnspecified stopReason = iota
+	stopReasonOwnershipLost
 )
 
 var _ Context = (*ContextImpl)(nil)
@@ -383,18 +391,27 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 // UpdateRemoteClusterInfo deprecated
 // Deprecated use UpdateRemoteReaderInfo in the future instead
 func (s *ContextImpl) UpdateRemoteClusterInfo(
-	cluster string,
+	clusterName string,
 	ackTaskID int64,
 	ackTimestamp time.Time,
 ) {
 	s.wLock()
 	defer s.wUnlock()
 
-	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(cluster)
-	remoteClusterInfo.AckedReplicationTaskIDs[s.shardID] = ackTaskID
-	remoteClusterInfo.AckedReplicationTimestamps[s.shardID] = ackTimestamp
+	clusterInfo := s.clusterMetadata.GetAllClusterInfo()
+	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(clusterName)
+	for _, remoteShardID := range common.MapShardID(
+		clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
+		clusterInfo[clusterName].ShardCount,
+		s.shardID,
+	) {
+		remoteClusterInfo.AckedReplicationTaskIDs[remoteShardID] = ackTaskID
+		remoteClusterInfo.AckedReplicationTimestamps[remoteShardID] = ackTimestamp
+	}
 }
 
+// UpdateRemoteReaderInfo do not use streaming replication until remoteClusterInfo is updated to allow both
+// streaming & pull based replication
 func (s *ContextImpl) UpdateRemoteReaderInfo(
 	readerID int64,
 	ackTaskID int64,
@@ -1278,7 +1295,7 @@ func (s *ContextImpl) handleReadError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 		return err
 
 	default:
@@ -1313,7 +1330,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 		return err
 
 	default:
@@ -1350,12 +1367,12 @@ func (s *ContextImpl) start() {
 	_ = s.transition(contextRequestAcquire{})
 }
 
-func (s *ContextImpl) Unload() {
-	_ = s.transition(contextRequestStop{})
+func (s *ContextImpl) UnloadForOwnershipLost() {
+	_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 }
 
-// finishStop should only be called by the controller.
-func (s *ContextImpl) finishStop() {
+// FinishStop should only be called by the controller.
+func (s *ContextImpl) FinishStop() {
 	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
@@ -1375,6 +1392,12 @@ func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
+}
+
+func (s *ContextImpl) stoppedForOwnershipLost() bool {
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
+	return s.state >= contextStateStopping && s.stopReason == stopReasonOwnershipLost
 }
 
 func (s *ContextImpl) wLock() {
@@ -1424,13 +1447,13 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		Acquired
 			ShardOwnershipLostError: handleErrorLocked calls transition(contextRequestStop)
 		Stopping
-			controller removes from map and calls finishStop()
+			controller removes from map and calls FinishStop()
 		Stopped
 
 	Stopping can be triggered internally (if we get a ShardOwnershipLostError, or fail to acquire the rangeid
 	lock after several minutes) or externally (from controller, e.g. controller shutting down or admin force-
 	unload shard). If it's triggered internally, we transition to Stopping, then make an asynchronous callback
-	to controller, which will remove us from the map and call finishStop(), which will transition to Stopped and
+	to controller, which will remove us from the map and call FinishStop(), which will transition to Stopped and
 	stop the engine. If it's triggered externally, we'll skip over Stopping and go straight to Stopped.
 
 	If we transition externally to Stopped, and the acquireShard goroutine is still running, we can't kill it,
@@ -1446,8 +1469,8 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	- If state is Acquiring, acquireShard should be running in the background.
 	- Only acquireShard can use contextRequestAcquired (i.e. transition from Acquiring to Acquired).
 	- Once state has reached Acquired at least once, and not reached Stopped, engineFuture must be set.
-	- Only the controller may call start() and finishStop().
-	- The controller must call finishStop() for every ContextImpl it creates.
+	- Only the controller may call start() and FinishStop().
+	- The controller must call FinishStop() for every ContextImpl it creates.
 
 	*/
 
@@ -1456,14 +1479,17 @@ func (s *ContextImpl) transition(request contextRequest) error {
 
 	setStateAcquiring := func() {
 		s.state = contextStateAcquiring
+		s.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
 		go s.acquireShard()
 	}
 
-	setStateStopping := func() {
+	setStateStopping := func(request contextRequestStop) {
 		s.state = contextStateStopping
+		s.stopReason = request.reason
+		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext)
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
-		// This will cause the controller to remove this shard from the map and then call s.finishStop()
+		// This will cause the controller to remove this shard from the map and then call s.FinishStop()
 		if s.closeCallback != nil {
 			go s.closeCallback(s)
 		}
@@ -1471,6 +1497,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 
 	setStateStopped := func() {
 		s.state = contextStateStopped
+		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext)
 		// Do this again in case we skipped the stopping state, which could happen
 		// when calling CloseShardByID or the controller is shutting down.
 		s.lifecycleCancel()
@@ -1478,12 +1505,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 
 	switch s.state {
 	case contextStateInitialized:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
 			setStateAcquiring()
 			return nil
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
@@ -1497,7 +1524,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 			s.state = contextStateAcquired
 			if request.engine != nil {
 				// engineFuture.Set should only be called inside stateLock when state is
-				// Acquiring, so that other code (i.e. finishStop) can know that after a state
+				// Acquiring, so that other code (i.e. FinishStop) can know that after a state
 				// transition to Stopping/Stopped, engineFuture cannot be Set.
 				if s.engineFuture.Ready() {
 					// defensive check, this should never happen
@@ -1516,21 +1543,21 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		case contextRequestLost:
 			return nil // nothing to do, already acquiring
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
 			return nil
 		}
 	case contextStateAcquired:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
 			return nil // nothing to to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
 			return nil
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
@@ -1714,22 +1741,27 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 			continue
 		}
 
-		var taskID *int64
-		var ackTime *time.Time
 		for _, remoteShardID := range common.MapShardID(
 			clusterInfo[s.clusterMetadata.GetCurrentClusterName()].ShardCount,
 			clusterInfo[clusterName].ShardCount,
 			s.shardID,
 		) {
-			if taskID == nil || v.AckedReplicationTaskIDs[remoteShardID] < *taskID {
-				taskID = convert.Int64Ptr(v.AckedReplicationTaskIDs[remoteShardID])
-				ackTime = timestamp.TimePtr(v.AckedReplicationTimestamps[remoteShardID])
+			ackTaskID := v.AckedReplicationTaskIDs[remoteShardID] // default to 0
+			ackTimestamp := v.AckedReplicationTimestamps[remoteShardID]
+			if ackTimestamp.IsZero() {
+				ackTimestamp = time.Unix(0, 0)
 			}
-		}
-
-		remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
-			AckedTaskId:             *taskID,
-			AckedTaskVisibilityTime: ackTime,
+			if record, ok := remoteClusters[clusterName]; !ok {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			} else if record.AckedTaskId > ackTaskID {
+				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             ackTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+				}
+			}
 		}
 	}
 
@@ -1768,7 +1800,7 @@ func (s *ContextImpl) acquireShard() {
 	// 3. The state changes to Stopping or Stopped.
 	//
 	// If the shard controller sees that service resolver has assigned ownership to someone
-	// else, it will call finishStop, which will trigger case 3 above, and also cancel
+	// else, it will call FinishStop, which will trigger case 3 above, and also cancel
 	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
 	// so if we were blocked in any of them, they should return immediately with a context
 	// canceled error.
@@ -1859,9 +1891,13 @@ func (s *ContextImpl) acquireShard() {
 		// We got an non-retryable error, e.g. ShardOwnershipLostError
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
+		reason := stopReasonUnspecified
+		if IsShardOwnershipLostError(err) {
+			reason = stopReasonOwnershipLost
+		}
 		// On any error, initiate shutting down the shard. If we already changed state
 		// because we got a ShardOwnershipLostError, this won't do anything.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: reason})
 	}
 }
 
@@ -1869,7 +1905,7 @@ func newContext(
 	shardID int32,
 	factory EngineFactory,
 	config *configs.Config,
-	closeCallback func(*ContextImpl),
+	closeCallback CloseCallback,
 	logger log.Logger,
 	throttledLogger log.Logger,
 	persistenceExecutionManager persistence.ExecutionManager,

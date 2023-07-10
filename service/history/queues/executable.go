@@ -177,26 +177,24 @@ func (e *executableImpl) Execute() (retErr error) {
 		e.Unlock()
 		return nil
 	}
-
-	ns, _ := e.namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	var namespaceName string
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	if err == nil {
+		namespaceName = ns.Name().String()
+	}
 	var callerInfo headers.CallerInfo
 	switch e.priority {
 	case ctasks.PriorityHigh:
-		callerInfo = headers.NewBackgroundCallerInfo(ns.Name().String())
+		callerInfo = headers.NewBackgroundCallerInfo(namespaceName)
 	default:
 		// priority low or unknown
-		callerInfo = headers.NewPreemptableCallerInfo(ns.Name().String())
+		callerInfo = headers.NewPreemptableCallerInfo(namespaceName)
 	}
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
 		callerInfo,
 	)
 	e.Unlock()
-
-	if !ns.IsOnCluster(e.clusterMetadata.GetCurrentClusterName()) {
-		// Discard task if the namespace is not on the current cluster.
-		return consts.ErrTaskDiscarded
-	}
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {
@@ -233,6 +231,12 @@ func (e *executableImpl) Execute() (retErr error) {
 		// if retErr is not nil, HandleErr will take care of the inMemoryNoUserLatency calculation
 		// Not doing it here as for certain errors latency for the attempt should not be counted
 	}()
+
+	if ns != nil && !ns.IsOnCluster(e.clusterMetadata.GetCurrentClusterName()) {
+		// Discard task if the namespace is not on the current cluster.
+		e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
+		return consts.ErrTaskDiscarded
+	}
 
 	metricsTags, isActive, err := e.executor.Execute(ctx, e)
 	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)

@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"context"
 	"fmt"
 	"net"
 
@@ -112,6 +111,7 @@ func NewServiceProvider(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
 		serviceConfig,
@@ -126,6 +126,7 @@ func NewServiceProvider(
 		grpcListener,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		membershipMonitor,
 	)
 }
 
@@ -599,26 +600,6 @@ func HandlerProvider(
 	return wfHandler
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
-	)
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

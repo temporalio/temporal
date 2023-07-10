@@ -26,10 +26,12 @@ package frontend
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
@@ -42,9 +44,13 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
-var (
-	dcRedirectionMetricsPrefix = "DCRedirection"
+const (
+	dcRedirectionContextHeaderName = "xdc-redirection"
 
+	dcRedirectionMetricsPrefix = "DCRedirection"
+)
+
+var (
 	localAPIResponses = map[string]responseConstructorFn{
 		// Namespace APIs, namespace APIs does not require redirection
 		"DeprecateNamespace": func() any { return &workflowservice.DeprecateNamespaceResponse{} },
@@ -173,6 +179,9 @@ func (i *RedirectionInterceptor) Intercept(
 	if _, isWorkflowHandler := info.Server.(*WorkflowHandler); !isWorkflowHandler {
 		return handler(ctx, req)
 	}
+	if !i.redirectionAllowed(ctx) {
+		return handler(ctx, req)
+	}
 
 	_, methodName := interceptor.SplitMethodName(info.FullMethod)
 	if _, ok := localAPIResponses[methodName]; ok {
@@ -261,4 +270,23 @@ func (i *RedirectionInterceptor) afterCall(
 	if retError != nil {
 		metricsHandler.Counter(metrics.ClientRedirectionFailures.GetMetricName()).Record(1)
 	}
+}
+
+func (i *RedirectionInterceptor) redirectionAllowed(
+	ctx context.Context,
+) bool {
+	// default to allow dc redirection
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return true
+	}
+	values := md.Get(dcRedirectionContextHeaderName)
+	if len(values) == 0 {
+		return true
+	}
+	allowed, err := strconv.ParseBool(values[0])
+	if err != nil {
+		return true
+	}
+	return allowed
 }

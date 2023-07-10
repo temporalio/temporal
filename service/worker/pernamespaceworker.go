@@ -222,12 +222,14 @@ func (wm *perNamespaceWorkerManager) refreshAll() {
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 loop:
 	for {
+		timer := time.NewTimer(refreshInterval)
 		select {
 		case _, ok := <-wm.membershipChangedCh:
+			timer.Stop()
 			if !ok {
 				break loop
 			}
-		case <-time.After(refreshInterval):
+		case <-timer.C:
 		}
 		wm.refreshAll()
 	}
