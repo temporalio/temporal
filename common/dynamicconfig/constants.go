@@ -665,8 +665,6 @@ const (
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 	// ArchivalBackendMaxRPS is the maximum rate of requests per second to the archival backend
 	ArchivalBackendMaxRPS = "history.archivalBackendMaxRPS"
-	// DurableArchivalEnabled is the flag to enable durable archival
-	DurableArchivalEnabled = "history.durableArchivalEnabled"
 
 	// WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.
 	WorkflowExecutionMaxInFlightUpdates = "history.maxInFlightUpdates"
