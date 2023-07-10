@@ -26,6 +26,7 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -71,6 +72,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+)
+
+var (
+	clusterMetadataInitErr = errors.New("failed to initialize current cluster metadata")
 )
 
 type (
@@ -593,7 +598,7 @@ func WorkerServiceProvider(
 // TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
-	config *config.Config,
+	svc *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
@@ -601,22 +606,22 @@ func ApplyClusterMetadataConfigProvider(
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
-	clusterName := persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName)
+	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
 	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
-		&config.Persistence,
+		&svc.Persistence,
 		customDataStoreFactory,
 		logger,
 		nil,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
-		Cfg:                        &config.Persistence,
+		Cfg:                        &svc.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
-		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
@@ -624,24 +629,24 @@ func ApplyClusterMetadataConfigProvider(
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
 	defer clusterMetadataManager.Close()
 
 	var sqlIndexNames []string
 	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
-	if ds := config.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
+	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
 		indexName := ds.GetIndexName()
 		sqlIndexNames = append(sqlIndexNames, indexName)
 		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
-	if ds := config.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
+	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
 		indexName := ds.GetIndexName()
 		sqlIndexNames = append(sqlIndexNames, indexName)
 		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
-	clusterMetadata := config.ClusterMetadata
+	clusterMetadata := svc.ClusterMetadata
 	if len(clusterMetadata.ClusterInformation) > 1 {
 		logger.Warn(
 			"All remote cluster settings under ClusterMetadata.ClusterInformation config will be ignored. "+
@@ -662,14 +667,14 @@ func ApplyClusterMetadataConfigProvider(
 		if updateErr := updateCurrentClusterMetadataRecord(
 			ctx,
 			clusterMetadataManager,
-			config,
+			svc,
 			resp,
 		); updateErr != nil {
-			return config.ClusterMetadata, config.Persistence, updateErr
+			return svc.ClusterMetadata, svc.Persistence, updateErr
 		}
 		// Ignore invalid cluster metadata
 		overwriteCurrentClusterMetadataWithDBRecord(
-			config,
+			svc,
 			resp,
 			logger,
 		)
@@ -678,25 +683,25 @@ func ApplyClusterMetadataConfigProvider(
 		if initErr := initCurrentClusterMetadataRecord(
 			ctx,
 			clusterMetadataManager,
-			config,
+			svc,
 			initialIndexSearchAttributes,
 			logger,
 		); initErr != nil {
-			return config.ClusterMetadata, config.Persistence, initErr
+			return svc.ClusterMetadata, svc.Persistence, initErr
 		}
 	default:
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
-	err = loadClusterInformationFromStore(ctx, config, clusterMetadataManager, logger)
+	err = loadClusterInformationFromStore(ctx, svc, clusterMetadataManager, logger)
 	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
-	return config.ClusterMetadata, config.Persistence, nil
+	return svc.ClusterMetadata, svc.Persistence, nil
 }
 
 // TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
+func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
 	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
@@ -721,8 +726,8 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 		metadata := item.(*persistence.GetClusterMetadataResponse)
 		shardCount := metadata.HistoryShardCount
 		if shardCount == 0 {
-			// This is to add backward compatibility to the config based cluster connection.
-			shardCount = config.Persistence.NumHistoryShards
+			// This is to add backward compatibility to the svc based cluster connection.
+			shardCount = svc.Persistence.NumHistoryShards
 		}
 		newMetadata := cluster.ClusterInformation{
 			Enabled:                metadata.IsConnectionEnabled,
@@ -730,10 +735,10 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 			RPCAddress:             metadata.ClusterAddress,
 			ShardCount:             shardCount,
 		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
+		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
 				logger.Warn(
-					"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
+					"ClusterInformation in ClusterMetadata svc is deprecated. Please use TCTL tool to configure remote cluster connections",
 					tag.Key("clusterInformation"),
 					tag.IgnoredValue(staticClusterMetadata),
 					tag.Value(newMetadata))
@@ -742,7 +747,7 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
 			}
 		}
-		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+		svc.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
 	}
 	return nil
 }
@@ -788,7 +793,7 @@ func initCurrentClusterMetadataRecord(
 	}
 	if !applied {
 		logger.Info("Failed to apple cluster metadata.", tag.ClusterName(currentClusterName))
-		return fmt.Errorf("failed to initialize current cluster metadata")
+		return clusterMetadataInitErr
 	}
 	return nil
 }
@@ -796,11 +801,11 @@ func initCurrentClusterMetadataRecord(
 func updateCurrentClusterMetadataRecord(
 	ctx context.Context,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	config *config.Config,
+	svc *config.Config,
 	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
 ) error {
 	updateDBRecord := false
-	currentClusterMetadata := config.ClusterMetadata
+	currentClusterMetadata := svc.ClusterMetadata
 	currentClusterName := currentClusterMetadata.CurrentClusterName
 	currentCLusterInfo := currentClusterMetadata.ClusterInformation[currentClusterName]
 	// Allow updating cluster metadata if global namespace is disabled
@@ -833,27 +838,27 @@ func updateCurrentClusterMetadataRecord(
 }
 
 func overwriteCurrentClusterMetadataWithDBRecord(
-	config *config.Config,
+	svc *config.Config,
 	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
 	logger log.Logger,
 ) {
-	clusterMetadata := config.ClusterMetadata
+	clusterMetadata := svc.ClusterMetadata
 	if currentClusterDBRecord.IsGlobalNamespaceEnabled && !clusterMetadata.EnableGlobalNamespace {
 		logger.Warn(
 			mismatchLogMessage,
 			tag.Key("clusterMetadata.EnableGlobalNamespace"),
 			tag.IgnoredValue(clusterMetadata.EnableGlobalNamespace),
 			tag.Value(currentClusterDBRecord.IsGlobalNamespaceEnabled))
-		config.ClusterMetadata.EnableGlobalNamespace = currentClusterDBRecord.IsGlobalNamespaceEnabled
+		svc.ClusterMetadata.EnableGlobalNamespace = currentClusterDBRecord.IsGlobalNamespaceEnabled
 	}
 	persistedShardCount := currentClusterDBRecord.HistoryShardCount
-	if config.Persistence.NumHistoryShards != persistedShardCount {
+	if svc.Persistence.NumHistoryShards != persistedShardCount {
 		logger.Warn(
 			mismatchLogMessage,
 			tag.Key("persistence.numHistoryShards"),
-			tag.IgnoredValue(config.Persistence.NumHistoryShards),
+			tag.IgnoredValue(svc.Persistence.NumHistoryShards),
 			tag.Value(persistedShardCount))
-		config.Persistence.NumHistoryShards = persistedShardCount
+		svc.Persistence.NumHistoryShards = persistedShardCount
 	}
 	if currentClusterDBRecord.FailoverVersionIncrement != clusterMetadata.FailoverVersionIncrement {
 		logger.Warn(
@@ -861,7 +866,7 @@ func overwriteCurrentClusterMetadataWithDBRecord(
 			tag.Key("clusterMetadata.FailoverVersionIncrement"),
 			tag.IgnoredValue(clusterMetadata.FailoverVersionIncrement),
 			tag.Value(currentClusterDBRecord.FailoverVersionIncrement))
-		config.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
+		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
 	}
 }
 
