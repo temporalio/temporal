@@ -1234,6 +1234,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
 	})
