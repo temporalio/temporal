@@ -637,8 +637,9 @@ func ApplyClusterMetadataConfigProvider(
 			tag.Key("clusterInformation"))
 	}
 	if _, ok := clusterMetadata.ClusterInformation[clusterMetadata.CurrentClusterName]; !ok {
-		logger.Error("Current cluster setting is missing under lusterMetadata.ClusterInformation",
+		logger.Error("Current cluster setting is missing under clusterMetadata.ClusterInformation",
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
+		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("missing current cluster metadata under clusterMetadata.ClusterInformation")
 	}
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
@@ -775,7 +776,7 @@ func initCurrentClusterMetadataRecord(
 		return err
 	}
 	if !applied {
-		logger.Info("Failed to apple cluster metadata.", tag.ClusterName(currentClusterName))
+		logger.Error("Failed to apple cluster metadata.", tag.ClusterName(currentClusterName))
 		return clusterMetadataInitErr
 	}
 	return nil
