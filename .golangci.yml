@@ -36,6 +36,8 @@ linters-settings:
         disabled: true
       - name: bool-literal-in-expr
         disabled: true
+      - name: confusing-naming
+        disabled: true
       - name: empty-lines
         disabled: true
       - name: error-naming
@@ -91,6 +93,7 @@ linters-settings:
       - name: unhandled-error
         arguments:
           - "fmt.Printf"
+          - "fmt.Println"
 issues:
   # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
   exclude-rules:
