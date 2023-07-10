@@ -32,15 +32,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -49,8 +43,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
@@ -67,38 +59,45 @@ var (
 
 type (
 	ControllerImpl struct {
-		membershipUpdateCh  chan *membership.ChangedEvent
-		engineFactory       EngineFactory
-		status              int32
-		shutdownWG          sync.WaitGroup
-		shutdownCh          chan struct{}
-		contextTaggedLogger log.Logger
-		throttledLogger     log.Logger
-		config              *configs.Config
-
 		sync.RWMutex
-		historyShards               map[int32]*ContextImpl
-		logger                      log.Logger
-		persistenceExecutionManager persistence.ExecutionManager
-		persistenceShardManager     persistence.ShardManager
-		clientBean                  client.Bean
-		historyClient               historyservice.HistoryServiceClient
-		historyServiceResolver      membership.ServiceResolver
-		taggedMetricsHandler        metrics.Handler
-		metricsHandler              metrics.Handler
-		payloadSerializer           serialization.Serializer
-		timeSource                  clock.TimeSource
-		namespaceRegistry           namespace.Registry
-		saProvider                  searchattribute.Provider
-		saMapperProvider            searchattribute.MapperProvider
-		clusterMetadata             cluster.Metadata
-		archivalMetadata            archiver.ArchivalMetadata
-		hostInfoProvider            membership.HostInfoProvider
-		tracer                      trace.Tracer
+		historyShards map[int32]ControllableContext
+
+		config                 *configs.Config
+		contextFactory         ContextFactory
+		contextTaggedLogger    log.Logger
+		historyServiceResolver membership.ServiceResolver
+		hostInfoProvider       membership.HostInfoProvider
+		membershipUpdateCh     chan *membership.ChangedEvent
+		shutdownCh             chan struct{}
+		shutdownWG             sync.WaitGroup
+		status                 int32
+		taggedMetricsHandler   metrics.Handler
 	}
 )
 
 var _ Controller = (*ControllerImpl)(nil)
+
+func ControllerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	historyServiceResolver membership.ServiceResolver,
+	metricsHandler metrics.Handler,
+	hostInfoProvider membership.HostInfoProvider,
+	contextFactory ContextFactory,
+) Controller {
+	hostIdentity := hostInfoProvider.HostInfo().Identity()
+	return &ControllerImpl{
+		config:                 config,
+		contextFactory:         contextFactory,
+		contextTaggedLogger:    log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity)),
+		historyServiceResolver: historyServiceResolver,
+		historyShards:          make(map[int32]ControllableContext),
+		hostInfoProvider:       hostInfoProvider,
+		membershipUpdateCh:     make(chan *membership.ChangedEvent, 10),
+		shutdownCh:             make(chan struct{}),
+		taggedMetricsHandler:   metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope)),
+	}
+}
 
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
@@ -108,14 +107,6 @@ func (c *ControllerImpl) Start() {
 	) {
 		return
 	}
-
-	if c.engineFactory == nil {
-		panic("engineFactory was not injected")
-	}
-
-	hostIdentity := c.hostInfoProvider.HostInfo().Identity()
-	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
-	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
 
 	if err := c.historyServiceResolver.AddListener(
 		shardControllerMembershipUpdateListenerName,
@@ -207,13 +198,11 @@ func (c *ControllerImpl) CloseShardByID(shardID int32) {
 		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
-	shard, newNumShards := c.removeShard(shardID, nil)
+	shard := c.removeShard(shardID, nil)
+
 	// Stop the current shard, if it exists.
 	if shard != nil {
-		shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
-		shard.finishStop()
-		c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
-		shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
+		shard.FinishStop()
 	}
 }
 
@@ -228,26 +217,23 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 	return ids
 }
 
-func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
+func (c *ControllerImpl) shardClosedCallback(shard ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
 		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
 	}()
 
 	c.taggedMetricsHandler.Counter(metrics.ShardContextClosedCounter.GetMetricName()).Record(1)
-	_, newNumShards := c.removeShard(shard.shardID, shard)
+	_ = c.removeShard(shard.GetShardID(), shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
-	shard.finishStop()
-	c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
+	shard.FinishStop()
 }
 
 // getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
-func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (Context, error) {
 	err := c.validateShardId(shardID)
 	if err != nil {
 		return nil, err
@@ -283,63 +269,46 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 
 		// If the shard was invalid and still in the historyShards map, the
 		// shardClosedCallback call is in-flight, and will call finishStop.
-		delete(c.historyShards, shardID)
+		_ = c.removeShardLocked(shardID, shard)
 	}
 
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}
 
-	shard, err := newContext(
-		shardID,
-		c.engineFactory,
-		c.config,
-		c.shardClosedCallback,
-		c.logger,
-		c.throttledLogger,
-		c.persistenceExecutionManager,
-		c.persistenceShardManager,
-		c.clientBean,
-		c.historyClient,
-		c.metricsHandler,
-		c.payloadSerializer,
-		c.timeSource,
-		c.namespaceRegistry,
-		c.saProvider,
-		c.saMapperProvider,
-		c.clusterMetadata,
-		c.archivalMetadata,
-		c.hostInfoProvider,
-	)
+	shard, err := c.contextFactory.CreateContext(shardID, c.shardClosedCallback)
 	if err != nil {
 		return nil, err
 	}
-	shard.start()
 	c.historyShards[shardID] = shard
 	c.taggedMetricsHandler.Counter(metrics.ShardContextCreatedCounter.GetMetricName()).Record(1)
+	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 
-	shard.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
 	return shard, nil
 }
 
-func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*ContextImpl, int64) {
+func (c *ControllerImpl) removeShard(shardID int32, expected ControllableContext) ControllableContext {
 	c.Lock()
 	defer c.Unlock()
+	return c.removeShardLocked(shardID, expected)
+}
 
-	nShards := int64(len(c.historyShards))
+func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableContext) ControllableContext {
 	current, ok := c.historyShards[shardID]
 	if !ok {
-		return nil, nShards
+		return nil
 	}
 	if expected != nil && current != expected {
 		// the shard comparison is a defensive check to make sure we are deleting
 		// what we intend to delete.
-		return nil, nShards
+		return nil
 	}
 
 	delete(c.historyShards, shardID)
+	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
+	c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
 
-	return current, nShards - 1
+	return current
 }
 
 // shardManagementPump is the main event loop for
@@ -462,7 +431,7 @@ func (c *ControllerImpl) doShutdown() {
 	c.Lock()
 	defer c.Unlock()
 	for _, shard := range c.historyShards {
-		shard.finishStop()
+		shard.FinishStop()
 	}
 	c.historyShards = nil
 }
@@ -486,4 +455,8 @@ func IsShardOwnershipLostError(err error) bool {
 	}
 
 	return false
+}
+
+func numShardsTag(n int) tag.ZapTag {
+	return tag.NewInt("numShards", n)
 }

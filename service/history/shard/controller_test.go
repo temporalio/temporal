@@ -36,22 +36,20 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/primitives"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
@@ -88,33 +86,35 @@ func NewTestController(
 	resource *resourcetest.Test,
 	hostInfoProvider *membership.MockHostInfoProvider,
 ) *ControllerImpl {
-	return &ControllerImpl{
-		config:                      config,
-		logger:                      resource.GetLogger(),
-		throttledLogger:             resource.GetThrottledLogger(),
-		contextTaggedLogger:         log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(resource.GetHostInfo().Identity())),
-		persistenceExecutionManager: resource.GetExecutionManager(),
-		persistenceShardManager:     resource.GetShardManager(),
-		clientBean:                  resource.GetClientBean(),
-		historyClient:               resource.GetHistoryClient(),
-		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsHandler:              resource.GetMetricsHandler(),
-		payloadSerializer:           resource.GetPayloadSerializer(),
-		timeSource:                  resource.GetTimeSource(),
-		namespaceRegistry:           resource.GetNamespaceRegistry(),
-		saProvider:                  resource.GetSearchAttributesProvider(),
-		saMapperProvider:            resource.GetSearchAttributesMapperProvider(),
-		clusterMetadata:             resource.GetClusterMetadata(),
-		archivalMetadata:            resource.GetArchivalMetadata(),
-		hostInfoProvider:            hostInfoProvider,
+	contextFactory := ContextFactoryProvider(ContextFactoryParams{
+		ArchivalMetadata:            resource.GetArchivalMetadata(),
+		ClientBean:                  resource.GetClientBean(),
+		ClusterMetadata:             resource.GetClusterMetadata(),
+		Config:                      config,
+		EngineFactory:               engineFactory,
+		HistoryClient:               resource.GetHistoryClient(),
+		HistoryServiceResolver:      resource.GetHistoryServiceResolver(),
+		HostInfoProvider:            hostInfoProvider,
+		Logger:                      resource.GetLogger(),
+		MetricsHandler:              resource.GetMetricsHandler(),
+		NamespaceRegistry:           resource.GetNamespaceRegistry(),
+		PayloadSerializer:           resource.GetPayloadSerializer(),
+		PersistenceExecutionManager: resource.GetExecutionManager(),
+		PersistenceShardManager:     resource.GetShardManager(),
+		SaMapperProvider:            resource.GetSearchAttributesMapperProvider(),
+		SaProvider:                  resource.GetSearchAttributesProvider(),
+		ThrottledLogger:             resource.GetThrottledLogger(),
+		TimeSource:                  resource.GetTimeSource(),
+	})
 
-		status:               common.DaemonStatusInitialized,
-		membershipUpdateCh:   make(chan *membership.ChangedEvent, 10),
-		engineFactory:        engineFactory,
-		shutdownCh:           make(chan struct{}),
-		taggedMetricsHandler: resource.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope)),
-		historyShards:        make(map[int32]*ContextImpl),
-	}
+	return ControllerProvider(
+		config,
+		resource.GetLogger(),
+		resource.GetHistoryServiceResolver(),
+		resource.GetMetricsHandler(),
+		resource.GetHostInfoProvider(),
+		contextFactory,
+	).(*ControllerImpl)
 }
 
 func TestShardControllerSuite(t *testing.T) {
@@ -526,7 +526,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 
 	<-ready
 	// now shard is blocked on GetOrCreateShard
-	s.False(shard.engineFuture.Ready())
+	s.False(shard.(*ContextImpl).engineFuture.Ready())
 
 	start := time.Now()
 	shard.UnloadForOwnershipLost() // this cancels the context so GetOrCreateShard returns immediately
@@ -579,7 +579,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 
 	<-ready
 	// now shard is blocked on UpdateShard
-	s.False(shard.engineFuture.Ready())
+	s.False(shard.(*ContextImpl).engineFuture.Ready())
 
 	start := time.Now()
 	shard.UnloadForOwnershipLost() // this cancels the context so UpdateShard returns immediately
