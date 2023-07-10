@@ -201,15 +201,24 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-
-	namespaceAttribute := task.GetNamespaceTaskAttributes()
-	if namespaceAttribute == nil {
+	switch task.TaskType {
+	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.NamespaceTag(task.GetNamespaceTaskAttributes().GetInfo().GetName()),
+			)
+	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
+		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.StringTag("namespaceId", task.GetTaskQueueUserDataAttributes().GetNamespaceId()),
+			)
+	default:
 		return serviceerror.NewUnavailable(
-			"Namespace replication task does not set namespace task attribute",
+			fmt.Sprintf("Namespace replication task type not supported: %v", task.TaskType),
 		)
 	}
-	p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
-		Record(1, metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()))
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
