@@ -38,6 +38,8 @@ linters-settings:
         disabled: true
       - name: bool-literal-in-expr
         disabled: true
+      - name: confusing-naming
+        disabled: true
       - name: empty-lines
         disabled: true
       - name: error-naming
