@@ -120,7 +120,7 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 		m.backlogCounter.Dec()
 	}
 
-	// TODO the ack level management shuld be done by a dedicated coroutine
+	// TODO the ack level management should be done by a dedicated coroutine
 	//  this is only a temporarily solution
 
 	taskIDs := maps.Keys(m.outstandingTasks)

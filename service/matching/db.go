@@ -296,17 +296,15 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
-// Returns true if we are storing user data in the db. We need to be the root partition,
-// workflow type, unversioned, and also a normal queue.
+// DbStoresUserData returns true if we are storing user data in the db. We need to be the root partition, workflow type,
+// unversioned, and also a normal queue.
 func (db *taskQueueDB) DbStoresUserData() bool {
 	return db.taskQueue.OwnsUserData() && db.taskQueueKind == enumspb.TASK_QUEUE_KIND_NORMAL
 }
 
 // GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
 // will cause cache inconsistency.
-func (db *taskQueueDB) GetUserData(
-	ctx context.Context,
-) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+func (db *taskQueueDB) GetUserData(context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.userData, db.userDataChanged, nil

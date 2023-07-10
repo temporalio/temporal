@@ -249,7 +249,7 @@ func (e *matchingEngineImpl) String() string {
 //
 // Note that stickyInfo is not used as part of the task queue identity. That means that if
 // getTaskQueueManager is called twice with the same taskQueue but different stickyInfo, the
-// properties of the taskQueueManager will depend on which call came first. In general we can
+// properties of the taskQueueManager will depend on which call came first. In general, we can
 // rely on kind being the same for all calls now, but normalName was a later addition to the
 // protocol and is not always set consistently. normalName is only required when using
 // versioning, and SDKs that support versioning will always set it. The current server version
@@ -346,9 +346,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	var expirationTime *time.Time
 	now := timestamp.TimePtr(time.Now().UTC())
 	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
-	if expirationDuration == 0 {
-		// noop
-	} else {
+	if expirationDuration != 0 {
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
@@ -411,9 +409,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	var expirationTime *time.Time
 	now := timestamp.TimePtr(time.Now().UTC())
 	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
-	if expirationDuration == 0 {
-		// noop
-	} else {
+	if expirationDuration != 0 {
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
@@ -458,8 +454,8 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
 			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
 		if err != nil {
-			// Return error for tasks with compatiblity constraints when user data is disabled so they can be retried later.
-			// "default" directive tasks become unversioned.
+			// Return error for tasks with compatiblity constraints when user data is disabled, so they can be retried
+			// later. Any "default" directive tasks become unversioned.
 			if !errors.Is(err, errUserDataDisabled) || directive.GetBuildId() != "" {
 				return err
 			}
@@ -718,13 +714,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	taskID := uuid.New()
 	resp, err := tqm.DispatchQueryTask(ctx, taskID, queryRequest)
 
-	// if get response or error it means that query task was handled by forwarding to another matching host
+	// if we get a response or error it means that query task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
 	if resp != nil || err != nil {
 		return resp, err
 	}
 
-	// if get here it means that dispatch of query task has occurred locally
+	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
 	queryResultCh := make(chan *queryResult, 1)
 	e.lockableQueryTaskMap.put(taskID, queryResultCh)
@@ -751,7 +747,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 }
 
 func (e *matchingEngineImpl) RespondQueryTaskCompleted(
-	ctx context.Context,
+	_ context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 	opMetrics metrics.Handler,
 ) error {
@@ -772,7 +768,7 @@ func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *quer
 }
 
 func (e *matchingEngineImpl) CancelOutstandingPoll(
-	ctx context.Context,
+	_ context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
 	e.pollMap.cancel(request.PollerId)
@@ -800,7 +796,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 }
 
 func (e *matchingEngineImpl) ListTaskQueuePartitions(
-	ctx context.Context,
+	_ context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -872,12 +868,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	}
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		clock := data.GetClock()
-		if clock == nil {
+		clk := data.GetClock()
+		if clk == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
-			clock = &tmp
+			clk = &tmp
 		}
-		updatedClock := hlc.Next(*clock, e.timeSource)
+		updatedClock := hlc.Next(*clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
@@ -1179,12 +1175,12 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 }
 
 func (e *matchingEngineImpl) getAllPartitions(
-	namespace namespace.Name,
+	ns namespace.Name,
 	taskQueue taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
 	var partitionKeys []string
-	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace)
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(ns)
 	if err != nil {
 		return partitionKeys, err
 	}
@@ -1193,7 +1189,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 		return partitionKeys, err
 	}
 
-	n := e.config.NumTaskqueueWritePartitions(namespace.String(), taskQueueID.BaseNameString(), taskQueueType)
+	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueID.BaseNameString(), taskQueueType)
 	for i := 0; i < n; i++ {
 		partitionKeys = append(partitionKeys, taskQueueID.WithPartition(i).FullName())
 	}
@@ -1272,14 +1268,14 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
 	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
-	namespace := namespace.Name("unknown")
+	ns := namespace.Name("unknown")
 	if err == nil {
-		namespace = nsEntry.Name()
+		ns = nsEntry.Name()
 	}
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
 		float64(taskQueueCount),
-		metrics.NamespaceTag(namespace.String()),
+		metrics.NamespaceTag(ns.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.kind.String()),
 	)
