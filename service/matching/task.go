@@ -61,7 +61,7 @@ type (
 		source           enumsspb.TaskSource
 		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
-		backlogCountHint int64
+		backlogCountHint func() int64
 	}
 )
 

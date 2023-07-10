@@ -103,6 +103,11 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	if err != nil {
 		return err
 	} else if !apply {
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
 		return nil
 	}
 	ctx, cancel := newTaskContext(namespaceName)

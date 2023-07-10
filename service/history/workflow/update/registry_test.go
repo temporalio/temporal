@@ -80,7 +80,7 @@ func TestFind(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(store)
+		reg = update.NewRegistry(func() update.UpdateStore { return store })
 	)
 	_, ok := reg.Find(ctx, updateID)
 	require.False(t, ok)
@@ -105,7 +105,7 @@ func TestHasOutgoing(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(store)
+		reg = update.NewRegistry(func() update.UpdateStore { return store })
 	)
 
 	upd, _, err := reg.FindOrCreate(ctx, updateID)
@@ -162,7 +162,7 @@ func TestFindOrCreate(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(store)
+		reg = update.NewRegistry(func() update.UpdateStore { return store })
 	)
 
 	t.Run("new update", func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
 			},
 		}
-		reg = update.NewRegistry(regStore)
+		reg = update.NewRegistry(func() update.UpdateStore { return regStore })
 	)
 
 	upd, found, err := reg.FindOrCreate(ctx, storedAcceptedUpdateID)
@@ -243,7 +243,7 @@ func TestMessageGathering(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx = context.Background()
-		reg = update.NewRegistry(emptyUpdateStore)
+		reg = update.NewRegistry(func() update.UpdateStore { return emptyUpdateStore })
 	)
 	updateID1, updateID2 := t.Name()+"-update-id-1", t.Name()+"-update-id-2"
 	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
@@ -285,9 +285,12 @@ func TestInFlightLimit(t *testing.T) {
 	var (
 		ctx   = context.Background()
 		limit = 1
-		reg   = update.NewRegistry(emptyUpdateStore, update.WithInFlightLimit(
-			func() int { return limit },
-		))
+		reg   = update.NewRegistry(
+			func() update.UpdateStore { return emptyUpdateStore },
+			update.WithInFlightLimit(
+				func() int { return limit },
+			),
+		)
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -351,9 +354,12 @@ func TestTotalLimit(t *testing.T) {
 	var (
 		ctx   = context.Background()
 		limit = 1
-		reg   = update.NewRegistry(emptyUpdateStore, update.WithTotalLimit(
-			func() int { return limit },
-		))
+		reg   = update.NewRegistry(
+			func() update.UpdateStore { return emptyUpdateStore },
+			update.WithTotalLimit(
+				func() int { return limit },
+			),
+		)
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -430,7 +436,7 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 			return nil, expectError
 		},
 	}
-	reg := update.NewRegistry(regStore)
+	reg := update.NewRegistry(func() update.UpdateStore { return regStore })
 	upd, found := reg.Find(context.TODO(), completedUpdateID)
 	require.True(t, found)
 	_, err := upd.WaitOutcome(context.TODO())

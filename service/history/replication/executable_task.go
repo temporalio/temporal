@@ -164,6 +164,17 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	), tag.Error(err))
 	now := time.Now().UTC()
 	e.emitFinishMetrics(now)
+
+	var namespaceName string
+	item := e.namespace.Load()
+	if item != nil {
+		namespaceName = item.(namespace.Name).String()
+	}
+	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.SyncActivityTaskScope),
+		metrics.NamespaceTag(namespaceName),
+	)
 }
 
 func (e *ExecutableTaskImpl) Abort() {

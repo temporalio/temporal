@@ -185,6 +185,5 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
-	config.DurableArchivalEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	return config
 }

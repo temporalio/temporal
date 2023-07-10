@@ -119,18 +119,6 @@ func (m *MocktaskFetcher) EXPECT() *MocktaskFetcherMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method.
-func (m *MocktaskFetcher) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MocktaskFetcherMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MocktaskFetcher)(nil).Start))
-}
-
 // Stop mocks base method.
 func (m *MocktaskFetcher) Stop() {
 	m.ctrl.T.Helper()
