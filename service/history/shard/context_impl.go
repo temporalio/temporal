@@ -128,8 +128,9 @@ type (
 		lifecycleCancel context.CancelFunc
 
 		// state is protected by stateLock
-		stateLock sync.Mutex
-		state     contextState
+		stateLock  sync.Mutex
+		state      contextState
+		stopReason stopReason
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                             sync.RWMutex
@@ -163,8 +164,15 @@ type (
 	contextRequestAcquire    struct{}
 	contextRequestAcquired   struct{ engine Engine }
 	contextRequestLost       struct{}
-	contextRequestStop       struct{}
+	contextRequestStop       struct{ reason stopReason }
 	contextRequestFinishStop struct{}
+
+	stopReason int
+)
+
+const (
+	stopReasonUnspecified stopReason = iota
+	stopReasonOwnershipLost
 )
 
 var _ Context = (*ContextImpl)(nil)
@@ -1287,7 +1295,7 @@ func (s *ContextImpl) handleReadError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 		return err
 
 	default:
@@ -1322,7 +1330,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 		return err
 
 	default:
@@ -1359,8 +1367,8 @@ func (s *ContextImpl) start() {
 	_ = s.transition(contextRequestAcquire{})
 }
 
-func (s *ContextImpl) Unload() {
-	_ = s.transition(contextRequestStop{})
+func (s *ContextImpl) UnloadForOwnershipLost() {
+	_ = s.transition(contextRequestStop{reason: stopReasonOwnershipLost})
 }
 
 // finishStop should only be called by the controller.
@@ -1384,6 +1392,12 @@ func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
+}
+
+func (s *ContextImpl) stoppedForOwnershipLost() bool {
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
+	return s.state >= contextStateStopping && s.stopReason == stopReasonOwnershipLost
 }
 
 func (s *ContextImpl) wLock() {
@@ -1468,8 +1482,9 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		go s.acquireShard()
 	}
 
-	setStateStopping := func() {
+	setStateStopping := func(request contextRequestStop) {
 		s.state = contextStateStopping
+		s.stopReason = request.reason
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
@@ -1487,12 +1502,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 
 	switch s.state {
 	case contextStateInitialized:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
 			setStateAcquiring()
 			return nil
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
@@ -1525,21 +1540,21 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		case contextRequestLost:
 			return nil // nothing to do, already acquiring
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
 			return nil
 		}
 	case contextStateAcquired:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
 			return nil // nothing to to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
 			return nil
 		case contextRequestStop:
-			setStateStopping()
+			setStateStopping(request)
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
@@ -1873,9 +1888,13 @@ func (s *ContextImpl) acquireShard() {
 		// We got an non-retryable error, e.g. ShardOwnershipLostError
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
+		reason := stopReasonUnspecified
+		if IsShardOwnershipLostError(err) {
+			reason = stopReasonOwnershipLost
+		}
 		// On any error, initiate shutting down the shard. If we already changed state
 		// because we got a ShardOwnershipLostError, this won't do anything.
-		_ = s.transition(contextRequestStop{})
+		_ = s.transition(contextRequestStop{reason: reason})
 	}
 }
 

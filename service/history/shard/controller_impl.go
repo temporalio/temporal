@@ -281,7 +281,8 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 			return shard, nil
 		}
 
-		shard.Unload()
+		// If the shard was invalid and still in the historyShards map, the
+		// shardClosedCallback call is in-flight, and will call finishStop.
 		delete(c.historyShards, shardID)
 	}
 

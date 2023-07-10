@@ -483,7 +483,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 	s.NoError(err)
 	s.Equal(1, len(s.shardController.ShardIDs()))
 
-	shard.Unload()
+	shard.UnloadForOwnershipLost()
 
 	for tries := 0; tries < 100 && len(s.shardController.ShardIDs()) != 0; tries++ {
 		// removal from map happens asynchronously
@@ -531,7 +531,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	s.False(shard.engineFuture.Ready())
 
 	start := time.Now()
-	shard.Unload() // this cancels the context so GetOrCreateShard returns immediately
+	shard.UnloadForOwnershipLost() // this cancels the context so GetOrCreateShard returns immediately
 	s.True(<-wasCanceled)
 	s.Less(time.Since(start), 500*time.Millisecond)
 }
@@ -586,7 +586,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	s.False(shard.engineFuture.Ready())
 
 	start := time.Now()
-	shard.Unload() // this cancels the context so UpdateShard returns immediately
+	shard.UnloadForOwnershipLost() // this cancels the context so UpdateShard returns immediately
 	s.True(<-wasCanceled)
 	s.Less(time.Since(start), 500*time.Millisecond)
 }
@@ -684,7 +684,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				}
 			case 2:
 				if _, shard := randomLoadedShard(); shard != nil {
-					shard.Unload()
+					shard.UnloadForOwnershipLost()
 				}
 			case 3:
 				if id, _ := randomLoadedShard(); id >= 0 {
