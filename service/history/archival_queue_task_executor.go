@@ -256,11 +256,8 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		return err
 	}
 	err = e.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID:     e.shardContext.GetShardID(),
-		NamespaceID: task.GetNamespaceID(),
-		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
-		Tasks:       mutableState.PopTasks(),
+		ShardID: e.shardContext.GetShardID(),
+		Tasks:   mutableState.PopTasks(),
 	})
 	return err
 }

@@ -162,11 +162,8 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 		err = s.mockShard.AddTasks(
 			context.Background(),
 			&persistence.AddHistoryTasksRequest{
-				ShardID:     s.mockShard.GetShardID(),
-				NamespaceID: workflowKey.NamespaceID,
-				WorkflowID:  workflowKey.WorkflowID,
-				RunID:       workflowKey.RunID,
-				Tasks:       testTasks,
+				ShardID: s.mockShard.GetShardID(),
+				Tasks:   testTasks,
 			},
 		)
 		s.NoError(err)
@@ -185,12 +182,8 @@ func (s *contextSuite) TestAddTasks_Success() {
 	}
 
 	addTasksRequest := &persistence.AddHistoryTasksRequest{
-		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: tests.NamespaceID.String(),
-		WorkflowID:  tests.WorkflowID,
-		RunID:       tests.RunID,
-
-		Tasks: testTasks,
+		ShardID: s.mockShard.GetShardID(),
+		Tasks:   testTasks,
 	}
 
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)

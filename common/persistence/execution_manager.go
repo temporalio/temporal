@@ -752,10 +752,6 @@ func (m *executionManagerImpl) AddHistoryTasks(
 		ShardID: input.ShardID,
 		RangeID: input.RangeID,
 
-		NamespaceID: input.NamespaceID,
-		WorkflowID:  input.WorkflowID,
-		RunID:       input.RunID,
-
 		Tasks: tasks,
 	})
 }

@@ -74,9 +74,6 @@ func Invoke(
 	return shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: shard.GetShardID(),
 		// RangeID is set by shard
-		NamespaceID: workflowKey.NamespaceID,
-		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
-		Tasks:       mutableState.PopTasks(),
+		Tasks: mutableState.PopTasks(),
 	})
 }

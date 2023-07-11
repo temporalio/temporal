@@ -443,11 +443,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 						}
 						mutableState.EXPECT().PopTasks().Return(popTasks)
 						shardContext.EXPECT().AddTasks(gomock.Any(), &cpersistence.AddHistoryTasksRequest{
-							ShardID:     shardID,
-							NamespaceID: tests.NamespaceID.String(),
-							WorkflowID:  task.WorkflowID,
-							RunID:       task.RunID,
-							Tasks:       popTasks,
+							ShardID: shardID,
+							Tasks:   popTasks,
 						})
 					})
 				}

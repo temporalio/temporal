@@ -503,11 +503,8 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 	}
 
 	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
-		ShardID:     s.ShardID,
-		RangeID:     s.RangeID,
-		NamespaceID: s.WorkflowKey.NamespaceID,
-		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -545,11 +542,8 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	scheduledTasks[1].SetTaskID(50)
 
 	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
-		ShardID:     s.ShardID,
-		RangeID:     s.RangeID,
-		NamespaceID: s.WorkflowKey.NamespaceID,
-		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -604,11 +598,8 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	}
 
 	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
-		ShardID:     s.ShardID,
-		RangeID:     s.RangeID,
-		NamespaceID: s.WorkflowKey.NamespaceID,
-		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},

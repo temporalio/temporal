@@ -74,9 +74,6 @@ func GenerateTask(
 	err = shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: shard.GetShardID(),
 		// RangeID is set by shard
-		NamespaceID: string(namespaceID),
-		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryReplication: {task},
 		},

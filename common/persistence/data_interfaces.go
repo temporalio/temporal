@@ -199,10 +199,6 @@ type (
 		ShardID int32
 		RangeID int64
 
-		NamespaceID string
-		WorkflowID  string
-		RunID       string
-
 		Tasks map[tasks.Category][]tasks.Task
 	}
 

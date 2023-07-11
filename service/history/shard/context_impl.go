@@ -530,10 +530,20 @@ func (s *ContextImpl) addTasksWithoutNotification(
 	request *persistence.AddHistoryTasksRequest,
 ) error {
 	// do not try to get namespace cache within shard lock
-	namespaceID := namespace.ID(request.NamespaceID)
-	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
+	namespaceNames := make(map[namespace.Name]struct{})
+	for _, tasksByCategory := range request.Tasks {
+		for _, task := range tasksByCategory {
+
+			namespaceID := namespace.ID(task.GetNamespaceID())
+			namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+			if err != nil {
+				if common.IsNamespaceNotFoundError(err) {
+					continue
+				}
+				return err
+			}
+			namespaceNames[namespaceEntry.Name()] = struct{}{}
+		}
 	}
 
 	s.wLock()
@@ -549,10 +559,14 @@ func (s *ContextImpl) addTasksWithoutNotification(
 	if err := s.errorByState(); err != nil {
 		return err
 	}
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
-		return err
+
+	for namespaceName := range namespaceNames {
+		if err := s.errorByNamespaceStateLocked(namespaceName); err != nil {
+			return err
+		}
 	}
-	return s.addTasksLocked(ctx, request, namespaceEntry)
+
+	return s.addTasksLocked(ctx, request)
 }
 
 func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
@@ -579,7 +593,6 @@ func (s *ContextImpl) CreateWorkflowExecution(
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -605,8 +618,6 @@ func (s *ContextImpl) CreateWorkflowExecution(
 
 	transferExclusiveMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
 		request.NewWorkflowSnapshot.Tasks,
 		&transferExclusiveMaxReadLevel,
 	); err != nil {
@@ -629,7 +640,6 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
-	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -655,8 +665,6 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 	transferExclusiveMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
 		request.UpdateWorkflowMutation.Tasks,
 		&transferExclusiveMaxReadLevel,
 	); err != nil {
@@ -665,8 +673,6 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
 			&transferExclusiveMaxReadLevel,
 		); err != nil {
@@ -705,7 +711,6 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -732,8 +737,6 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	transferExclusiveMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
 		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
 			request.CurrentWorkflowMutation.Tasks,
 			&transferExclusiveMaxReadLevel,
 		); err != nil {
@@ -741,8 +744,6 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
 		request.ResetWorkflowSnapshot.Tasks,
 		&transferExclusiveMaxReadLevel,
 	); err != nil {
@@ -750,8 +751,6 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	}
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
 			&transferExclusiveMaxReadLevel,
 		); err != nil {
@@ -774,7 +773,6 @@ func (s *ContextImpl) SetWorkflowExecution(
 ) (*persistence.SetWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -800,8 +798,6 @@ func (s *ContextImpl) SetWorkflowExecution(
 
 	transferExclusiveMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
 		request.SetWorkflowSnapshot.Tasks,
 		&transferExclusiveMaxReadLevel,
 	); err != nil {
@@ -850,12 +846,9 @@ func (s *ContextImpl) GetWorkflowExecution(
 func (s *ContextImpl) addTasksLocked(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
-	namespaceEntry *namespace.Namespace,
 ) error {
 	transferExclusiveMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		request.WorkflowID,
 		request.Tasks,
 		&transferExclusiveMaxReadLevel,
 	); err != nil {
@@ -934,7 +927,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 
 	// Do not get namespace cache within shard lock.
-	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
+	_, err = s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
@@ -983,14 +976,10 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					},
 				}
 				addTasksRequest := &persistence.AddHistoryTasksRequest{
-					ShardID:     s.shardID,
-					NamespaceID: key.NamespaceID,
-					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
-
-					Tasks: newTasks,
+					ShardID: s.shardID,
+					Tasks:   newTasks,
 				}
-				err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
+				err := s.addTasksLocked(ctx, addTasksRequest)
 				if OperationPossiblySucceeded(err) {
 					engine.NotifyNewTasks(newTasks)
 				}
@@ -1206,8 +1195,6 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 }
 
 func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
 	newTasks map[tasks.Category][]tasks.Task,
 	transferExclusiveMaxReadLevel *int64,
 ) error {
@@ -1240,8 +1227,8 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 					// Above cases can happen if shard move and new host have a time SKU,
 					// or there is db write delay, or we are simply (re-)generating tasks for an old workflow.
 					s.contextTaggedLogger.Debug("New timer generated has scheduled time earilier than queue read level or current time",
-						tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
-						tag.WorkflowID(workflowID),
+						tag.WorkflowNamespaceID(task.GetNamespaceID()),
+						tag.WorkflowID(task.GetWorkflowID()),
 						tag.Timestamp(ts),
 						tag.CursorTimestamp(s.scheduledTaskMaxReadLevel),
 						tag.ValueShardAllocateTimerBeforeRead)

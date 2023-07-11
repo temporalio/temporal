@@ -389,6 +389,12 @@ func IsNotFoundError(err error) bool {
 	return errors.As(err, &notFoundErr)
 }
 
+// IsNotFoundError checks if the error is a namespace not found error.
+func IsNamespaceNotFoundError(err error) bool {
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+	return errors.As(err, &namespaceNotFoundErr)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
