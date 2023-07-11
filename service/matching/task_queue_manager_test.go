@@ -1041,16 +1041,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0,
-			WaitNewData:              false,
-		}).
-		Return(nil, serviceerror.NewUnavailable("wait a sec")).Times(3)
+	ch := make(chan struct{})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
@@ -1061,24 +1052,46 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
-		}, nil)
+		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			<-ch
+			return nil, serviceerror.NewUnavailable("wait a sec")
+		}).Times(3)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              false,
+		}).
+		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			<-ch
+			return &matchingservice.GetTaskQueueUserDataResponse{
+				TaskQueueHasUserData: true,
+				UserData:             data1,
+			}, nil
+		})
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataMinWaitTime = 10 * time.Second                                          // wait on success
-	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(200 * time.Millisecond) // faster retry on failure
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
+		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
 
 	tq.Start()
 
-	time.Sleep(600 * time.Millisecond)
+	ch <- struct{}{}
+	ch <- struct{}{}
 
-	// at this point it should tried once or twice and gotten unavailable. it should not be
-	// ready yet.
+	// at this point it should have tried two times and gotten unavailable. it should not be ready yet.
 	require.False(t, tq.userDataInitialFetch.Ready())
 
-	// it should succeed between 1-2s
+	ch <- struct{}{}
+	ch <- struct{}{}
+	time.Sleep(100 * time.Millisecond) // time to return
+
+	// now it should be ready
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
@@ -1102,16 +1115,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
-	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
-		gomock.Any(),
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId.String(),
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0,
-			WaitNewData:              false,
-		}).
-		Return(nil, serviceerror.NewUnimplemented("older version")).Times(3)
+	ch := make(chan struct{})
 
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
@@ -1122,27 +1126,49 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			LastKnownUserDataVersion: 0,
 			WaitNewData:              false,
 		}).
-		Return(&matchingservice.GetTaskQueueUserDataResponse{
-			TaskQueueHasUserData: true,
-			UserData:             data1,
-		}, nil)
+		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			<-ch
+			return nil, serviceerror.NewUnimplemented("older version")
+		}).Times(3)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              false,
+		}).
+		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			<-ch
+			return &matchingservice.GetTaskQueueUserDataResponse{
+				TaskQueueHasUserData: true,
+				UserData:             data1,
+			}, nil
+		})
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataMinWaitTime = 10 * time.Second                                          // wait on success
-	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(200 * time.Millisecond) // faster retry on failure
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
+		WithMaximumInterval(50 * time.Millisecond) // faster retry on failure
+
 	tq.Start()
 
-	time.Sleep(600 * time.Millisecond)
+	ch <- struct{}{}
+	ch <- struct{}{}
 
-	// at this point it should tried once or twice and gotten unimplemented. it should be ready already.
+	// at this point it should have tried once gotten unimplemented. it should be ready already.
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 
 	userData, _, err := tq.GetUserData(ctx)
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 
-	// it should succeed between 1-2s
-	time.Sleep(1 * time.Second)
+	ch <- struct{}{}
+	ch <- struct{}{}
+	time.Sleep(100 * time.Millisecond) // time to return
+
 	userData, _, err = tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
