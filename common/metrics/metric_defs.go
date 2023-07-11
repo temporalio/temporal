@@ -1223,6 +1223,7 @@ var (
 	)
 	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
 	ServiceFailures                          = NewCounterDef("service_errors")
+	ServicePanic                             = NewCounterDef("service_panics")
 	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")

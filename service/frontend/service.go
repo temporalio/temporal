@@ -70,6 +70,7 @@ type Config struct {
 
 	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                                          dynamicconfig.IntPropertyFn
+	GlobalRPS                                                    dynamicconfig.IntPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -204,6 +205,7 @@ func NewConfig(
 
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
+		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
@@ -397,14 +399,20 @@ func namespaceRPS(
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	globalRPS := float64(globalRPSFn(namespace))
-	if globalRPS > 0 && frontendResolver != nil {
+	return effectiveRPS(frontendResolver, func() int {
+		return perInstanceRPSFn(namespace)
+	}, func() int {
+		return globalRPSFn(namespace)
+	})
+}
+
+func effectiveRPS(frontendResolver membership.ServiceResolver, hostRPS func() int, globalRPS func() int) float64 {
+	if gRPS := globalRPS(); gRPS > 0 && frontendResolver != nil {
 		hosts := float64(numFrontendHosts(frontendResolver))
-		return globalRPS / hosts
+		return float64(gRPS) / hosts
 	}
 
-	hostRPS := float64(perInstanceRPSFn(namespace))
-	return hostRPS
+	return float64(hostRPS())
 }
 
 func numFrontendHosts(

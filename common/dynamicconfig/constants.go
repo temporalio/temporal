@@ -237,8 +237,10 @@ const (
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize = "frontend.historyMaxPageSize"
-	// FrontendRPS is workflow rate limit per second
+	// FrontendRPS is workflow rate limit per second per-instance
 	FrontendRPS = "frontend.rps"
+	// FrontendGlobalRPS is workflow rate limit per second for the whole cluster
+	FrontendGlobalRPS = "frontend.globalRPS"
 	// FrontendNamespaceReplicationInducingAPIsRPS limits the per second request rate for namespace replication inducing
 	// APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
