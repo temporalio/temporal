@@ -1484,7 +1484,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 	)
 }
 
-func (s *workflowSuite) TestCloseWorkflowWhenNoActions() {
+func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoActions() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -1530,7 +1530,7 @@ func (s *workflowSuite) TestCloseWorkflowWhenNoActions() {
 	})
 }
 
-func (s *workflowSuite) TestCloseWorkflowWhenNoNextTime() {
+func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoNextTime() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
@@ -1557,6 +1557,28 @@ func (s *workflowSuite) TestCloseWorkflowWhenNoNextTime() {
 					Second:     "0",
 				}},
 			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+}
+
+func (s *workflowSuite) TestDeleteScheduleWorkflowWhenempty() {
+	scheduleId := "myschedule"
+	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
+		s.Equal("myschedule", scheduleId)
+		return nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
 			Action: s.defaultAction("myid"),
 		},
 		State: &schedspb.InternalState{

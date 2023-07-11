@@ -60,8 +60,6 @@ const (
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
 	BatchAndCacheTimeQueries
-	// Delete idle schedule after a timer fires
-	DeleteIdleSchedule
 )
 
 const (
@@ -176,7 +174,7 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           DeleteIdleSchedule,
+		Version:                           BatchAndCacheTimeQueries,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -223,6 +221,7 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
+	previousProcessedTime := s.State.LastProcessedTime
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
@@ -238,6 +237,7 @@ func (s *scheduler) run() error {
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
 			false,
 		)
+		previousProcessedTime = s.State.LastProcessedTime
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
@@ -250,6 +250,31 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
+
+		// if schedule is not paused and out of actions or do not have anything scheduled, delete the schedule workflow after retention period is passed
+		if s.tweakables.RetentionTime > 0 && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
+			// if schedule is empty use the previousProcessedTime as last workflow start time
+			lastWorkflowStarTime := s.now().Sub(*previousProcessedTime)
+			if len(s.Info.RecentActions) > 0 {
+				lastWorkflowStarTime = s.now().Sub(*s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime)
+			}
+
+			if lastWorkflowStarTime >= s.tweakables.RetentionTime {
+				activityOptions := workflow.ActivityOptions{
+					ScheduleToCloseTimeout: 1 * time.Hour,
+					StartToCloseTimeout:    5 * time.Second,
+					RetryPolicy: &temporal.RetryPolicy{
+						InitialInterval: 1 * time.Second,
+						MaximumInterval: 60 * time.Second,
+					},
+				}
+				ctx := workflow.WithActivityOptions(s.ctx, activityOptions)
+				err := workflow.ExecuteActivity(ctx, s.a.DeleteScheduleWorkflow, s.State.ScheduleId).Get(s.ctx, nil)
+				if err != nil {
+					s.logger.Error("Failed to delete schedule workflow", "err", err)
+				}
+			}
+		}
 
 		// sleep returns on any of:
 		// 1. requested time elapsed
@@ -479,25 +504,18 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
-	shouldSelfDestruct := false
-	selfDestruct := func() {
-		if shouldSelfDestruct {
-			ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
-			err := workflow.ExecuteLocalActivity(ctx, s.a.DeleteScheduleWorkflow, s.State.ScheduleId).Get(s.ctx, nil)
-			if err != nil {
-				//TODO: do we want to retry here?
-				s.logger.Error("Failed to delete schedule workflow", "err", err)
-			}
-		}
-	}
-	// if run out of actions or no more jobs to run and the schedule workflow is not paused, start a timer to delete the schedule workflow
-	if s.hasMinVersion(DeleteIdleSchedule) && !s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false)) {
-		shouldSelfDestruct = true
-		nextWakeup = s.now().Add(s.tweakables.RetentionTime)
-	}
-	// if we're paused, we don't need to wake up until we get an update
-	if s.tweakables.SleepWhilePaused && s.Schedule.State.Paused {
+	// if we're paused or out of actions, we don't need to wake up until we get an update
+	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
 		nextWakeup = time.Time{}
+	}
+
+	// if run out of actions or no more jobs to run and the schedule workflow is not paused, start a timer to delete the schedule workflow
+	if s.tweakables.RetentionTime > 0 && !s.Schedule.State.Paused && nextWakeup.IsZero() {
+		if len(s.Info.RecentActions) > 0 {
+			nextWakeup = s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime.Add(s.tweakables.RetentionTime)
+		} else {
+			nextWakeup = s.now().Add(s.tweakables.RetentionTime)
+		}
 	}
 
 	if !nextWakeup.IsZero() {
@@ -518,13 +536,10 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 			}
 			sel.AddFuture(s.currentTimer, func(_ workflow.Future) {
 				s.currentTimer = nil
-				selfDestruct()
 			})
 		} else {
 			tmr := workflow.NewTimer(s.ctx, sleepTime)
-			sel.AddFuture(tmr, func(_ workflow.Future) {
-				selfDestruct()
-			})
+			sel.AddFuture(tmr, func(_ workflow.Future) {})
 		}
 	}
 
