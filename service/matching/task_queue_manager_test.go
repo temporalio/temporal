@@ -73,12 +73,6 @@ type tqmTestOpts struct {
 	matchingClientMock *matchingservicemock.MockMatchingServiceClient
 }
 
-func setScoped[T any](ptr *T, val T) func() {
-	prev := *ptr
-	*ptr = val
-	return func() { *ptr = prev }
-}
-
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	return &tqmTestOpts{
 		config:             defaultTestConfig(),
@@ -921,10 +915,6 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	// faster retry on failure
-	// FIXME: move into config
-	defer setScoped(&getUserDataRetryPolicy, backoff.NewExponentialRetryPolicy(200*time.Millisecond))()
-
 	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
 		Data:    mkUserData(1),
@@ -956,7 +946,9 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second                                          // wait on success
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(200 * time.Millisecond) // faster retry on failure
+
 	tq.Start()
 
 	time.Sleep(600 * time.Millisecond)
@@ -983,10 +975,6 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
-
-	// faster retry on failure
-	// FIXME: move into config
-	defer setScoped(&getUserDataRetryPolicy, backoff.NewExponentialRetryPolicy(200*time.Millisecond))()
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -1019,7 +1007,8 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		}, nil)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.config.GetUserDataMinWaitTime = 10 * time.Second                                          // wait on success
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(200 * time.Millisecond) // faster retry on failure
 	tq.Start()
 
 	time.Sleep(600 * time.Millisecond)

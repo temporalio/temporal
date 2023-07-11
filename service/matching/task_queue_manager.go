@@ -76,12 +76,8 @@ var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-					WithMaximumInterval(1 * time.Second).
-					WithExpirationInterval(30 * time.Second)
-
-	// Retry policy for getting user data from root partition. Should retry forever.
-	getUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-				WithMaximumInterval(5 * time.Minute)
+		WithMaximumInterval(1 * time.Second).
+		WithExpirationInterval(30 * time.Second)
 )
 
 type (
@@ -839,7 +835,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 		knownUserData, _, _ := c.GetUserData(ctx)
 		// if we get an error here (probably errUserDataDisabled), let knownUserData be nil so
-		// we start from verison 0.
+		// we start from version 0.
 
 		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -878,7 +874,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, op, getUserDataRetryPolicy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, op, c.config.GetUserDataRetryPolicy, nil)
 		elapsed := time.Since(start)
 
 		// In general we want to start a new call immediately on completion of the previous
