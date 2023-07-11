@@ -34,7 +34,6 @@ import (
 
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
-	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -644,7 +643,8 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
 		MasterClusterName:        c.clusterMetadataConfig.MasterClusterName,
 		CurrentClusterName:       c.clusterMetadataConfig.CurrentClusterName,
-		ClusterInformation:       maps.Clone(c.clusterMetadataConfig.ClusterInformation),
+		InitialFailoverVersion:   c.clusterMetadataConfig.InitialFailoverVersion,
+		ReplicationAddress:       c.clusterMetadataConfig.ReplicationAddress,
 	}
 	if c.workerConfig.EnableReplicator {
 		clusterConfigCopy.EnableGlobalNamespace = true

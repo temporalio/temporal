@@ -107,7 +107,7 @@ const (
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 
-	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
+	clusterMetadataConfig, clusterInfo := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
 	)
@@ -117,7 +117,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
 			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
 			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
-			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
 		}
 	}
 
@@ -193,25 +192,24 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
-	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
-		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
-		clusterInfoMap[clusterName] = clusterInfo
+	for clusterName, info := range clusterInfo {
+		info.ShardCount = options.HistoryConfig.NumHistoryShards
+		clusterInfoMap[clusterName] = info
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
 				ClusterId:                uuid.New(),
-				IsConnectionEnabled:      clusterInfo.Enabled,
+				IsConnectionEnabled:      info.Enabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
-				ClusterAddress:           clusterInfo.RPCAddress,
-				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+				ClusterAddress:           info.RPCAddress,
+				InitialFailoverVersion:   info.InitialFailoverVersion,
 			}})
 		if err != nil {
 			return nil, err
 		}
 	}
-	clusterMetadataConfig.ClusterInformation = clusterInfoMap
 
 	// This will save custom test search attributes to cluster metadata.
 	// Actual Elasticsearch fields are created in setupIndex.

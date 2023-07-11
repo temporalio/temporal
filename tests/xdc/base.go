@@ -39,7 +39,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -95,12 +94,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
 		clusterConfigs[i].Persistence.DBName = "integration_" + s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
-		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
-			Enabled:                true,
-			InitialFailoverVersion: int64(i + 1),
-			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-		}
+		clusterConfigs[i].ClusterMetadata.InitialFailoverVersion = int64(i + 1)
+		clusterConfigs[i].ClusterMetadata.ReplicationAddress = fmt.Sprintf("127.0.0.1:%d134", 7+i)
 	}
 
 	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
@@ -111,8 +106,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster1Address := clusterConfigs[0].ClusterMetadata.ReplicationAddress
+	cluster2Address := clusterConfigs[1].ClusterMetadata.ReplicationAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
 		tests.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{

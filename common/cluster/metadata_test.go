@@ -99,7 +99,7 @@ func (s *metadataSuite) SetupTest() {
 		s.failoverVersionIncrement,
 		s.clusterName,
 		s.clusterName,
-		clusterInfo,
+		DBRecord{clusterInfo},
 		s.mockClusterMetadataStore,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		log.NewNoopLogger(),

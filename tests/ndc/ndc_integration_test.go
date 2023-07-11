@@ -153,7 +153,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 
 	s.registerNamespace()
 
-	s.version = clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].InitialFailoverVersion
+	s.version = clusterConfigs[1].ClusterMetadata.InitialFailoverVersion
 	s.versionIncrement = clusterConfigs[0].ClusterMetadata.FailoverVersionIncrement
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }

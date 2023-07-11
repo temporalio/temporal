@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -187,8 +188,9 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	var err error
 	shardID := int32(10)
+	var clusterInfo map[string]cluster.ClusterInformation
 	if clusterMetadataConfig == nil {
-		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
+		clusterMetadataConfig, clusterInfo = cluster.NewTestClusterMetadataConfig(false, false)
 	}
 	if s.PersistenceHealthSignals == nil {
 		s.PersistenceHealthSignals = persistence.NoopHealthSignalAggregator
@@ -215,7 +217,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, cluster.DBRecord{clusterInfo}, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
 	s.MetadataManager, err = factory.NewMetadataManager()

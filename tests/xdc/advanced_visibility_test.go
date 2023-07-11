@@ -132,8 +132,8 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster1Address := clusterConfigs[0].ClusterMetadata.ReplicationAddress
+	cluster2Address := clusterConfigs[1].ClusterMetadata.ReplicationAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress:               cluster2Address,
 		EnableRemoteClusterConnection: true,
