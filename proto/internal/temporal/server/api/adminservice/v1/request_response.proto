@@ -245,6 +245,7 @@ message DescribeClusterResponse {
     int64 failover_version_increment = 10;
     int64 initial_failover_version = 11;
     bool is_global_namespace_enabled = 12;
+    map<string,string> tags = 13;
 }
 
 message ListClustersRequest {
