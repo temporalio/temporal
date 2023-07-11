@@ -221,7 +221,7 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	previousProcessedTime := s.State.LastProcessedTime
+	var previousProcessedTime *time.Time
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
