@@ -554,7 +554,6 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                5,
 				ReplicationDlqAckLevel: map[string]int64{},
-				QueueAckLevels:         s.queueAckLevels(),
 				QueueStates:            s.queueStates(),
 			},
 		}, nil)
@@ -609,7 +608,6 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	var countCloseWg sync.WaitGroup
 
 	for shardID := int32(1); shardID <= s.config.NumberOfShards; shardID++ {
-		queueAckLevels := s.queueAckLevels()
 		queueStates := s.queueStates()
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
@@ -647,7 +645,6 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 						Owner:                  s.hostInfo.Identity(),
 						RangeId:                5,
 						ReplicationDlqAckLevel: map[string]int64{},
-						QueueAckLevels:         queueAckLevels,
 						QueueStates:            queueStates,
 					},
 				}, nil
@@ -738,7 +735,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 	required bool,
 ) {
 
-	queueAckLevels := s.queueAckLevels()
 	queueStates := s.queueStates()
 
 	minTimes := 0
@@ -759,7 +755,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 				Owner:                  s.hostInfo.Identity(),
 				RangeId:                currentRangeID,
 				ReplicationDlqAckLevel: map[string]int64{},
-				QueueAckLevels:         queueAckLevels,
 				QueueStates:            queueStates,
 			},
 		}, nil).MinTimes(minTimes)
@@ -770,7 +765,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 			RangeId:                newRangeID,
 			StolenSinceRenew:       1,
 			ReplicationDlqAckLevel: map[string]int64{},
-			QueueAckLevels:         queueAckLevels,
 			QueueStates:            queueStates,
 		},
 		PreviousRangeID: currentRangeID,
@@ -779,34 +773,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 		ShardID: shardID,
 		RangeID: newRangeID,
 	}).Return(nil).AnyTimes()
-}
-
-func (s *controllerSuite) queueAckLevels() map[int32]*persistencespb.QueueAckLevel {
-	replicationAck := int64(201)
-	currentClusterTransferAck := int64(210)
-	alternativeClusterTransferAck := int64(320)
-	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
-	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	return map[int32]*persistencespb.QueueAckLevel{
-		tasks.CategoryTransfer.ID(): {
-			AckLevel: currentClusterTransferAck,
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTransferAck,
-				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
-			},
-		},
-		tasks.CategoryTimer.ID(): {
-			AckLevel: currentClusterTimerAck.UnixNano(),
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
-				cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
-			},
-		},
-		tasks.CategoryReplication.ID(): {
-			AckLevel:        replicationAck,
-			ClusterAckLevel: map[string]int64{},
-		},
-	}
 }
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
