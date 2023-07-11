@@ -805,8 +805,6 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	hasFetchedUserData := false
-
 	if c.managesSpecificVersionSet() {
 		// tqm for specific version set doesn't have its own user data
 		c.SetUserDataInitialFetch(errNoUserDataOnVersionedTQM, nil)
@@ -825,6 +823,8 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		return err
 	}
 
+	hasFetchedUserData := false
+
 	op := func(ctx context.Context) error {
 		if !c.config.LoadUserData() {
 			// if disabled, mark disabled and ready, but allow retries so that we notice if
@@ -833,9 +833,11 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			return errUserDataDisabled
 		}
 
-		knownUserData, _, _ := c.GetUserData(ctx)
-		// if we get an error here (probably errUserDataDisabled), let knownUserData be nil so
-		// we start from version 0.
+		knownUserData, _, err := c.GetUserData(ctx)
+		if err != nil {
+			// start with a non-long poll after re-enabling after disable.
+			hasFetchedUserData = false
+		}
 
 		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
 		defer cancel()

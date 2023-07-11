@@ -41,6 +41,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -901,6 +902,126 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
+	tq.Stop()
+}
+
+func TestUserData_FetchDisableEnable(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	// note: using activity here
+	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = tqId
+
+	var loadUserData atomic.Bool
+	loadUserData.Store(true)
+
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithMaximumInterval(100 * time.Millisecond)
+	tq.config.LoadUserData = loadUserData.Load
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+	data2 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 2,
+		Data:    mkUserData(2),
+	}
+	data3 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 3,
+		Data:    mkUserData(3),
+	}
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+			WaitNewData:              false, // first is not long poll
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data1,
+		}, nil)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // second is long poll
+		}).
+		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			// user data should be valid now
+			userData, _, err := tq.GetUserData(ctx)
+			require.NoError(t, err)
+			require.Equal(t, data1, userData)
+
+			loadUserData.Store(false)
+
+			return &matchingservice.GetTaskQueueUserDataResponse{
+				TaskQueueHasUserData: true,
+				UserData:             data2,
+			}, nil
+		})
+
+	// after enabling again:
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0, // sends zero for first request after re-enabling
+			WaitNewData:              false,
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data3,
+		}, nil)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId.String(),
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 3,
+			WaitNewData:              true,
+		}).
+		Return(nil, serviceerror.NewUnavailable("hold on")).AnyTimes()
+
+	tq.Start()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// should have fetched twice but now user data is disabled
+	userData, _, err := tq.GetUserData(ctx)
+	require.Nil(t, userData)
+	require.Equal(t, err, errUserDataDisabled)
+
+	// enable again
+	loadUserData.Store(true)
+
+	// wait for retry
+	time.Sleep(200 * time.Millisecond)
+
+	// should be available now with data3
+	userData, _, err = tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data3, userData)
+
 	tq.Stop()
 }
 
