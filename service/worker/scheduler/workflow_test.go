@@ -1568,7 +1568,7 @@ func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoNextTime() {
 	})
 }
 
-func (s *workflowSuite) TestDeleteScheduleWorkflowWhenempty() {
+func (s *workflowSuite) TestDeleteScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
 	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
 		s.Equal("myschedule", scheduleId)
