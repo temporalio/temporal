@@ -124,7 +124,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm.taskReader.gorogrp.Wait()
 }
 
-func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.T) {
+func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
@@ -159,7 +159,7 @@ func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.
 	tlm.taskReader.gorogrp.Wait()
 }
 
-func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing.T) {
+func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
