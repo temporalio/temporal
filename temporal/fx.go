@@ -75,7 +75,8 @@ import (
 )
 
 var (
-	clusterMetadataInitErr = errors.New("failed to initialize current cluster metadata")
+	clusterMetadataInitErr           = errors.New("failed to initialize current cluster metadata")
+	missingCurrentClusterMetadataErr = errors.New("missing current cluster metadata under clusterMetadata.ClusterInformation")
 )
 
 type (
@@ -639,7 +640,7 @@ func ApplyClusterMetadataConfigProvider(
 	if _, ok := clusterMetadata.ClusterInformation[clusterMetadata.CurrentClusterName]; !ok {
 		logger.Error("Current cluster setting is missing under clusterMetadata.ClusterInformation",
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
-		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("missing current cluster metadata under clusterMetadata.ClusterInformation")
+		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
