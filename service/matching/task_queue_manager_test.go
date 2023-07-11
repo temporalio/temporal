@@ -119,7 +119,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm.taskReader.gorogrp.Wait()
 }
 
-func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testing.T) {
+func TestDeliverBufferTasks_DisableUserData_SendsVersionedToDlq(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
@@ -143,12 +143,13 @@ func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testi
 	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
-	time.Sleep(3 * taskReaderOfferThrottleWait)
+	time.Sleep(taskReaderOfferThrottleWait)
 
-	// count retries with this metric
+	// should be no retries
+	// TODO: this test could eventually be improved to check which tqm the task got redirected to.
+	// for now, this is tested better by integration tests.
 	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
-	require.NotNil(t, errCount, "nil counter probably means dispatch did not get error and blocked trying to load new tqm")
-	require.GreaterOrEqual(t, errCount.Value(), int64(2))
+	require.Nil(t, errCount)
 
 	tlm.taskReader.gorogrp.Cancel()
 	tlm.taskReader.gorogrp.Wait()
