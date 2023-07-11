@@ -700,11 +700,11 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 		Data:    mkUserData(1),
 	}
 
+	loadUserData := make(chan bool)
+
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
-	tq.config.GetUserDataLongPollTimeout = dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond)
-	var loadUserData atomic.Bool
-	loadUserData.Store(true)
-	tq.config.LoadUserData = loadUserData.Load
+	tq.config.GetUserDataLongPollTimeout = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
+	tq.config.LoadUserData = func() bool { return <-loadUserData }
 
 	require.NoError(t, tq.engine.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
@@ -716,14 +716,16 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 
 	tq.Start()
 
+	loadUserData <- true
+	time.Sleep(100 * time.Millisecond)
+
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 	userData, _, err := tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 
-	time.Sleep(200 * time.Millisecond)
-	loadUserData.Store(false)
-	time.Sleep(200 * time.Millisecond)
+	loadUserData <- false
+	time.Sleep(100 * time.Millisecond)
 
 	userData, _, err = tq.GetUserData(ctx)
 	require.Equal(t, err, errUserDataDisabled)
@@ -747,8 +749,8 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 		}))
 	data1.Version++
 
-	loadUserData.Store(true)
-	time.Sleep(200 * time.Millisecond)
+	loadUserData <- true
+	time.Sleep(100 * time.Millisecond)
 
 	userData, _, err = tq.GetUserData(ctx)
 	require.NoError(t, err)
@@ -917,13 +919,12 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	var loadUserData atomic.Bool
-	loadUserData.Store(true)
+	loadUserData := make(chan bool)
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Millisecond // fetch again quickly
-	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithMaximumInterval(100 * time.Millisecond)
-	tq.config.LoadUserData = loadUserData.Load
+	tq.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(10 * time.Millisecond).WithMaximumInterval(10 * time.Millisecond)
+	tq.config.LoadUserData = func() bool { return <-loadUserData }
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
@@ -961,19 +962,10 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 			LastKnownUserDataVersion: 1,
 			WaitNewData:              true, // second is long poll
 		}).
-		DoAndReturn(func(ctx context.Context, in *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
-			// user data should be valid now
-			userData, _, err := tq.GetUserData(ctx)
-			require.NoError(t, err)
-			require.Equal(t, data1, userData)
-
-			loadUserData.Store(false)
-
-			return &matchingservice.GetTaskQueueUserDataResponse{
-				TaskQueueHasUserData: true,
-				UserData:             data2,
-			}, nil
-		})
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			TaskQueueHasUserData: true,
+			UserData:             data2,
+		}, nil)
 
 	// after enabling again:
 
@@ -1004,20 +996,27 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 
 	tq.Start()
 
+	loadUserData <- true
+	loadUserData <- true
+	time.Sleep(100 * time.Millisecond)
+
+	userData, _, err := tq.GetUserData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data2, userData)
+
+	loadUserData <- false
 	time.Sleep(100 * time.Millisecond)
 
 	// should have fetched twice but now user data is disabled
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData(ctx)
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 
 	// enable again
-	loadUserData.Store(true)
+	loadUserData <- true
+	time.Sleep(100 * time.Millisecond)
 
-	// wait for retry
-	time.Sleep(200 * time.Millisecond)
-
-	// should be available now with data3
+	// should be available again with data3
 	userData, _, err = tq.GetUserData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data3, userData)
