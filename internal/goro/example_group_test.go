@@ -52,10 +52,12 @@ func (svc *ExampleService) backgroundLoop1(ctx context.Context) error {
 	fmt.Println("starting backgroundLoop1")
 	defer fmt.Println("stopping backgroundLoop1")
 	for {
+		timer := time.NewTimer(1 * time.Minute)
 		select {
-		case <-time.After(1 * time.Minute):
+		case <-timer.C:
 			// do something every minute
 		case <-ctx.Done():
+			timer.Stop()
 			return nil
 		}
 	}
@@ -65,10 +67,12 @@ func (svc *ExampleService) backgroundLoop2(ctx context.Context) error {
 	fmt.Println("starting backgroundLoop2")
 	defer fmt.Println("stopping backgroundLoop2")
 	for {
+		timer := time.NewTimer(10 * time.Second)
 		select {
-		case <-time.After(10 * time.Second):
+		case <-timer.C:
 			// do something every 10 seconds
 		case <-ctx.Done():
+			timer.Stop()
 			return nil
 		}
 	}

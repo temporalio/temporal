@@ -858,9 +858,11 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < minWaitTime {
+			timer := time.NewTimer(minWaitTime - elapsed)
 			select {
 			case <-ctx.Done():
-			case <-time.After(minWaitTime - elapsed):
+				timer.Stop()
+			case <-timer.C:
 			}
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.

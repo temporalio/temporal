@@ -135,9 +135,9 @@ func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistorySe
 	s.historyClient = client
 }
 
-// StopForTest calls private method finishStop(). In general only the controller
+// StopForTest calls FinishStop(). In general only the controller
 // should call that, but integration tests need to do it also to clean up any
 // background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
-	s.finishStop()
+	s.FinishStop()
 }

@@ -29,6 +29,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 var (
@@ -45,6 +47,7 @@ type (
 		maxSize  int
 		ttl      time.Duration
 		pin      bool
+		clock    clockwork.Clock
 	}
 
 	iteratorImpl struct {
@@ -109,7 +112,7 @@ func (c *lru) Iterator() Iterator {
 	c.mut.Lock()
 	iterator := &iteratorImpl{
 		lru:        c,
-		createTime: time.Now().UTC(),
+		createTime: c.clock.Now().UTC(),
 		nextItem:   c.byAccess.Front(),
 	}
 	iterator.prepareNext()
@@ -133,6 +136,10 @@ func New(maxSize int, opts *Options) Cache {
 	if opts == nil {
 		opts = &Options{}
 	}
+	clock := opts.Clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
 
 	return &lru{
 		byAccess: list.New(),
@@ -140,6 +147,7 @@ func New(maxSize int, opts *Options) Cache {
 		ttl:      opts.TTL,
 		maxSize:  maxSize,
 		pin:      opts.Pin,
+		clock:    clock,
 	}
 }
 
@@ -172,7 +180,7 @@ func (c *lru) Get(key interface{}) interface{} {
 
 	entry := element.Value.(*entryImpl)
 
-	if c.isEntryExpired(entry, time.Now().UTC()) {
+	if c.isEntryExpired(entry, c.clock.Now().UTC()) {
 		// Entry has expired
 		c.deleteInternal(element)
 		return nil
@@ -289,7 +297,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	if c.ttl != 0 {
-		entry.createTime = time.Now().UTC()
+		entry.createTime = c.clock.Now().UTC()
 	}
 
 	if len(c.byKey) >= c.maxSize {

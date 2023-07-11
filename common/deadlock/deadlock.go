@@ -154,9 +154,11 @@ func (lc *loopContext) run(ctx context.Context) error {
 		// unbuffered channel).
 		lc.ping(ctx, []common.Pingable{lc.root})
 
+		timer := time.NewTimer(lc.dd.config.Interval())
 		select {
-		case <-time.After(lc.dd.config.Interval()):
+		case <-timer.C:
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 		}
 	}

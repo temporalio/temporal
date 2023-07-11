@@ -26,6 +26,8 @@ package cache
 
 import (
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -66,6 +68,9 @@ type Options struct {
 
 	// Pin prevents in-use objects from getting evicted.
 	Pin bool
+
+	// Clock is an optional clock to use for time-skipping and testing. If this is nil, a real clock will be used.
+	Clock clockwork.Clock
 }
 
 // SimpleOptions provides options that can be used to configure SimpleCache
