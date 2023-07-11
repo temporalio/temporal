@@ -376,12 +376,11 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 }
 
 // Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-func (c *taskQueueManagerImpl) SetUserDataInitialFetch(disabledError error, firstCall *bool, futureError error) {
+func (c *taskQueueManagerImpl) SetUserDataInitialFetch(disabledError error, futureError error) {
 	// Always set disabled state even if we're not setting the future.
 	c.db.disableUserData(disabledError)
 
-	if *firstCall {
-		*firstCall = false
+	if !c.userDataInitialFetch.Ready() {
 		c.userDataInitialFetch.Set(struct{}{}, futureError)
 		if futureError != nil {
 			// We can't recover from here without starting over, so unload the whole task queue
@@ -763,22 +762,21 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 func (c *taskQueueManagerImpl) loadUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	firstCall := true
 	hasLoadedUserData := false
 
 	for ctx.Err() == nil {
 		if !c.config.LoadUserData() {
 			// if disabled, mark disabled and ready
-			c.SetUserDataInitialFetch(errUserDataDisabled, &firstCall, nil)
+			c.SetUserDataInitialFetch(errUserDataDisabled, nil)
 			hasLoadedUserData = false // load again if re-enabled
 		} else if !hasLoadedUserData {
 			// otherwise try to load from db once
 			err := c.db.loadUserData(ctx)
-			c.SetUserDataInitialFetch(nil, &firstCall, err)
+			c.SetUserDataInitialFetch(nil, err)
 			hasLoadedUserData = err == nil
 		} else {
 			// if already loaded, set enabled
-			c.SetUserDataInitialFetch(nil, &firstCall, nil)
+			c.SetUserDataInitialFetch(nil, nil)
 		}
 		common.InterruptibleSleep(ctx, c.config.GetUserDataLongPollTimeout())
 	}
@@ -811,11 +809,11 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	firstCall := true
+	hasFetchedUserData := false
 
 	if c.managesSpecificVersionSet() {
 		// tqm for specific version set doesn't have its own user data
-		c.SetUserDataInitialFetch(errNoUserDataOnVersionedTQM, &firstCall, nil)
+		c.SetUserDataInitialFetch(errNoUserDataOnVersionedTQM, nil)
 		return nil
 	}
 
@@ -826,7 +824,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if err == errMissingNormalQueueName { // nolint:goerr113
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
-			c.SetUserDataInitialFetch(errUserDataDisabled, &firstCall, nil)
+			c.SetUserDataInitialFetch(errUserDataDisabled, nil)
 		}
 		return err
 	}
@@ -835,7 +833,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if !c.config.LoadUserData() {
 			// if disabled, mark disabled and ready, but allow retries so that we notice if
 			// it's re-enabled
-			c.SetUserDataInitialFetch(errUserDataDisabled, &firstCall, nil)
+			c.SetUserDataInitialFetch(errUserDataDisabled, nil)
 			return errUserDataDisabled
 		}
 
@@ -851,16 +849,16 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			TaskQueue:                fetchSource,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
-			WaitNewData:              !firstCall,
+			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Unimplemented:
 				// This might happen during a deployment. Act like user data is disabled.
-				c.SetUserDataInitialFetch(errUserDataDisabled, &firstCall, nil)
+				c.SetUserDataInitialFetch(errUserDataDisabled, nil)
 			case *serviceerror.FailedPrecondition:
 				// This means the parent has the LoadUserData switch turned off. Act like our switch is off also.
-				c.SetUserDataInitialFetch(errUserDataDisabled, &firstCall, nil)
+				c.SetUserDataInitialFetch(errUserDataDisabled, nil)
 			}
 			return err
 		}
@@ -871,7 +869,8 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if res.GetUserData() != nil {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
-		c.SetUserDataInitialFetch(nil, &firstCall, nil)
+		hasFetchedUserData = true
+		c.SetUserDataInitialFetch(nil, nil)
 		return nil
 	}
 
