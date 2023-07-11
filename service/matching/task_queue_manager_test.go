@@ -1157,12 +1157,12 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	ch <- struct{}{}
 	ch <- struct{}{}
 
-	// at this point it should have tried once gotten unimplemented. it should be ready already.
+	// at this point it should have tried once and gotten unimplemented. it should be ready already.
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 
 	userData, _, err := tq.GetUserData(ctx)
 	require.Nil(t, userData)
-	require.Equal(t, err, errUserDataDisabled)
+	require.NoError(t, err)
 
 	ch <- struct{}{}
 	ch <- struct{}{}

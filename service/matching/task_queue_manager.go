@@ -818,7 +818,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if err == errMissingNormalQueueName { // nolint:goerr113
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
-			c.SetUserDataInitialFetch(errUserDataDisabled, nil)
+			c.SetUserDataInitialFetch(nil, nil)
 		}
 		return err
 	}
@@ -852,8 +852,11 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Unimplemented:
-				// This might happen during a deployment. Act like user data is disabled.
-				c.SetUserDataInitialFetch(errUserDataDisabled, nil)
+				// This might happen during a deployment. The older version couldn't have had any user data,
+				// so we act as if it just returned an empty response and set ourselves ready.
+				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
+				// we don't do a long poll next time.
+				c.SetUserDataInitialFetch(nil, nil)
 			case *serviceerror.FailedPrecondition:
 				// This means the parent has the LoadUserData switch turned off. Act like our switch is off also.
 				c.SetUserDataInitialFetch(errUserDataDisabled, nil)
