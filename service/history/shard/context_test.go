@@ -174,11 +174,24 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 }
 
 func (s *contextSuite) TestAddTasks_Success() {
+	workflowKey := definition.NewWorkflowKey(
+		tests.NamespaceID.String(),
+		tests.WorkflowID,
+		tests.RunID,
+	)
 	testTasks := map[tasks.Category][]tasks.Task{
-		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
-		tasks.CategoryTimer:       {&tasks.ActivityRetryTimerTask{}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
-		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{}}, // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
-		tasks.CategoryVisibility:  {&tasks.DeleteExecutionVisibilityTask{}},
+		tasks.CategoryTransfer: {&tasks.ActivityTask{
+			WorkflowKey: workflowKey,
+		}}, // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryTimer: {&tasks.ActivityRetryTimerTask{
+			WorkflowKey: workflowKey,
+		}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{
+			WorkflowKey: workflowKey,
+		}}, // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryVisibility: {&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+		}},
 	}
 
 	addTasksRequest := &persistence.AddHistoryTasksRequest{
