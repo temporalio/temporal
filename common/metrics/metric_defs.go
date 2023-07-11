@@ -131,79 +131,8 @@ const (
 	AdminClientGetTaskQueueTasksScope = "AdminClientGetTaskQueueTasks"
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
 	AdminClientDeleteWorkflowExecutionScope = "AdminClientDeleteWorkflowExecution"
-
-	// AdminDescribeHistoryHostScope is the metric scope for admin.AdminDescribeHistoryHost
-	AdminDescribeHistoryHostScope = "AdminDescribeHistoryHost"
-	// AdminAddSearchAttributesScope is the metric scope for admin.AdminAddSearchAttributes
-	AdminAddSearchAttributesScope = "AdminAddSearchAttributes"
-	// AdminRemoveSearchAttributesScope is the metric scope for admin.AdminRemoveSearchAttributes
-	AdminRemoveSearchAttributesScope = "AdminRemoveSearchAttributes"
-	// AdminGetSearchAttributesScope is the metric scope for admin.AdminGetSearchAttributes
-	AdminGetSearchAttributesScope = "AdminGetSearchAttributes"
-	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableState
-	AdminRebuildMutableStateScope = "AdminRebuildMutableState"
-	// AdminDescribeMutableStateScope is the metric scope for admin.AdminDescribeMutableState
-	AdminDescribeMutableStateScope = "AdminDescribeMutableState"
-	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
-	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
-	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
-	AdminGetReplicationMessagesScope = "AdminGetReplicationMessages"
-	// AdminGetNamespaceReplicationMessagesScope is the metric scope for admin.GetNamespaceReplicationMessages
-	AdminGetNamespaceReplicationMessagesScope = "AdminGetNamespaceReplicationMessages"
-	// AdminGetDLQReplicationMessagesScope is the metric scope for admin.GetDLQReplicationMessages
-	AdminGetDLQReplicationMessagesScope = "AdminGetDLQReplicationMessages"
-	// AdminReapplyEventsScope is the metric scope for admin.ReapplyEvents
-	AdminReapplyEventsScope = "AdminReapplyEvents"
-	// AdminRefreshWorkflowTasksScope is the metric scope for admin.RefreshWorkflowTasks
-	AdminRefreshWorkflowTasksScope = "AdminRefreshWorkflowTasks"
-	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
-	AdminResendReplicationTasksScope = "AdminResendReplicationTasks"
-	// AdminGetTaskQueueTasksScope is the metric scope for admin.GetTaskQueueTasks
-	AdminGetTaskQueueTasksScope = "AdminGetTaskQueueTasks"
-	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTask
-	AdminRemoveTaskScope = "AdminRemoveTask"
-	// AdminCloseShardScope is the metric scope for admin.AdminCloseShard
-	AdminCloseShardScope = "AdminCloseShard"
-	// AdminGetShardScope is the metric scope for admin.AdminGetShard
-	AdminGetShardScope = "AdminGetShard"
-	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasks
-	AdminListHistoryTasksScope = "AdminListHistoryTasks"
-	// AdminGetDLQMessagesScope is the metric scope for admin.AdminGetDLQMessages
-	AdminGetDLQMessagesScope = "AdminGetDLQMessages"
-	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessages
-	AdminPurgeDLQMessagesScope = "AdminPurgeDLQMessages"
-	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessages
-	AdminMergeDLQMessagesScope = "AdminMergeDLQMessages"
-	// AdminListClusterMembersScope is the metric scope for admin.AdminListClusterMembers
-	AdminListClusterMembersScope = "AdminListClusterMembers"
-	// AdminDescribeClusterScope is the metric scope for admin.AdminDescribeCluster
-	AdminDescribeClusterScope = "AdminDescribeCluster"
-	// AdminListClustersScope is the metric scope for admin.AdminListClusters
-	AdminListClustersScope = "AdminListClusters"
-	// AdminAddOrUpdateRemoteClusterScope is the metric scope for admin.AdminAddOrUpdateRemoteCluster
-	AdminAddOrUpdateRemoteClusterScope = "AdminAddOrUpdateRemoteCluster"
-	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteCluster
-	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
-	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
-	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
-
-	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
-	OperatorAddSearchAttributesScope
-	// OperatorRemoveSearchAttributesScope is the metric scope for operator.RemoveSearchAttributes
-	OperatorRemoveSearchAttributesScope = "OperatorRemoveSearchAttributes"
-	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
-	OperatorListSearchAttributesScope = "OperatorListSearchAttributes"
-	OperatorDeleteNamespaceScope      = "OperatorDeleteNamespace"
-	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteCluster
-	OperatorAddOrUpdateRemoteClusterScope = "OperatorAddOrUpdateRemoteCluster"
-	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteCluster
-	OperatorRemoveRemoteClusterScope = "OperatorRemoveRemoteCluster"
-	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
-	OperatorListClustersScope = "OperatorListClusters"
-	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
-	OperatorDeleteWorkflowExecutionScope = "OperatorDeleteWorkflowExecution"
+	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientStreamWorkflowReplicationMessagesScope = "AdminClientStreamWorkflowReplicationMessages"
 )
 
 // Frontend Client Operations
@@ -707,6 +636,14 @@ const (
 
 // Frontend Scope
 const (
+	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
+
+	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
+	OperatorAddSearchAttributesScope = "OperatorAddSearchAttributes"
+	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
+	OperatorDeleteNamespaceScope = "OperatorDeleteNamespace"
+
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
 	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
 	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
