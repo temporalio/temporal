@@ -1481,6 +1481,7 @@ func (s *versioningIntegSuite) TestDisableUserData() {
 	// First insert some data (we'll try to read it below)
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
+	// unload so that we reload and pick up LoadUserData dynamic config
 	s.unloadTaskQueue(ctx, tq)
 
 	dc := s.testCluster.host.dcClient
@@ -1554,7 +1555,7 @@ func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 		return nil
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -1576,8 +1577,6 @@ func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 
 	// start unversioned worker and let task run there
 	wrk2 := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
-		UseBuildIDForVersioning:          false,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
 	wrk2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
@@ -1605,7 +1604,7 @@ func (s *versioningIntegSuite) TestDisableUserData_QueryTimesOut() {
 		})
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})

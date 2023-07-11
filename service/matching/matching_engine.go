@@ -1497,7 +1497,7 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) && buildId == "" {
 			// When user data disabled, send "default" tasks to unversioned queue.
-			return taskQueue, nil, nil
+			return taskQueue, userDataChanged, nil
 		}
 		return nil, nil, err
 	}
