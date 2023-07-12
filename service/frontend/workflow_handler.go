@@ -878,25 +878,23 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
 
-		// Some errors are too noisy:
-		switch err.(type) {
-		case *serviceerror.NewerBuildExists:
-			// expected when versioned poller is superceded
-		case *serviceerror.FailedPrecondition:
-			// server has LoadUserData switched off and this is a versioned poller
-		default:
-			// for all other errors log:
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-				tag.Timeout(ctxTimeout),
-				tag.Error(err))
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
 		}
 
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
 		return nil, err
 	}
 
@@ -1118,24 +1116,23 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
 		}
 
-		// Some errors are too noisy:
-		switch err.(type) {
-		case *serviceerror.NewerBuildExists:
-			// expected when versioned poller is superceded
-		case *serviceerror.FailedPrecondition:
-			// server has LoadUserData switched off and this is a versioned poller
-		default:
-			// for all other errors log:
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
-				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-				tag.Timeout(ctxTimeout),
-				tag.Error(err))
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
 		}
+
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
 
 		return nil, err
 	}
