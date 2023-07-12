@@ -458,12 +458,7 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
 			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
 		if err != nil {
-			// Return error for tasks with compatiblity constraints when user data is disabled so they can be retried later.
-			// "default" directive tasks become unversioned.
-			if !errors.Is(err, errUserDataDisabled) || directive.GetBuildId() != "" {
-				return err
-			}
-			err = nil
+			return err
 		}
 		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
@@ -957,9 +952,6 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 	}
 	userData, _, err := tqMgr.GetUserData(ctx)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			return &matchingservice.GetWorkerBuildIdCompatibilityResponse{}, nil
-		}
 		return nil, err
 	}
 	return &matchingservice.GetWorkerBuildIdCompatibilityResponse{
@@ -1014,7 +1006,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 			} else if userData.Version < version {
 				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
 				// We rely on client retries in this case to let the system eventually self-heal.
-				return nil, serviceerror.NewFailedPrecondition(
+				return nil, serviceerror.NewInvalidArgument(
 					"requested task queue user data for version greater than known version")
 			}
 		}
@@ -1503,7 +1495,11 @@ func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
 	// Have to look up versioning data.
 	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
 	if err != nil {
-		return taskQueue, userDataChanged, err
+		if errors.Is(err, errUserDataDisabled) && buildId == "" {
+			// When user data disabled, send "default" tasks to unversioned queue.
+			return taskQueue, userDataChanged, nil
+		}
+		return nil, nil, err
 	}
 	data := userData.GetData().GetVersioningData()
 
