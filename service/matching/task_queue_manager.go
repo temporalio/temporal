@@ -776,7 +776,7 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 	return parent.FullName(), nil
 }
 
-func (c *taskQueueManagerImpl) makeBackoff() *backoff.ExponentialRetryPolicy {
+func (c *taskQueueManagerImpl) makeUserDataFetchBackoff() *backoff.ExponentialRetryPolicy {
 	return backoff.NewExponentialRetryPolicy(c.config.GetUserDataRetryBaseInterval).
 		WithMaximumInterval(5 * time.Minute)
 }
@@ -851,7 +851,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, op, c.makeBackoff(), nil)
+		_ = backoff.ThrottleRetryContext(ctx, op, c.makeUserDataFetchBackoff(), nil)
 		elapsed := time.Since(start)
 
 		// In general we want to start a new call immediately on completion of the previous
