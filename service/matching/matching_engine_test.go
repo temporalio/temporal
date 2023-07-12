@@ -566,10 +566,10 @@ func (s *matchingEngineSuite) TestPollWorkflowTask_UserDataDisabled() {
 			},
 		},
 	}, metrics.NoopMetricsHandler)
-	s.Nil(resp)
 	s.Error(err)
+	s.Nil(resp)
 	var failedPrecondition *serviceerror.FailedPrecondition
-	s.True(errors.As(err, &failedPrecondition))
+	s.ErrorAs(err, &failedPrecondition)
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
