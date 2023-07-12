@@ -878,9 +878,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
 
-		// These errors are expected based on certain client behavior. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists
-		if errors.As(err, &newerBuild) {
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
 			return nil, err
 		}
 
@@ -1115,9 +1116,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
 		}
 
-		// These errors are expected based on certain client behavior. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists
-		if errors.As(err, &newerBuild) {
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
 			return nil, err
 		}
 

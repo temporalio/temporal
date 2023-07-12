@@ -547,6 +547,31 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
 }
 
+func (s *matchingEngineSuite) TestPollWorkflowTask_UserDataDisabled() {
+	s.matchingEngine.config.LoadUserData = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueueInfo(false)
+	taskQueue := s.T().Name()
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: "asdf",
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: "asdf",
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: "identity",
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "some_build_id",
+				UseVersioning: true,
+			},
+		},
+	}, metrics.NoopMetricsHandler)
+	s.Error(err)
+	s.Nil(resp)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+}
+
 func (s *matchingEngineSuite) TestAddActivityTasks() {
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_ACTIVITY, false)
 }
