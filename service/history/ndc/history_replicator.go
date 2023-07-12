@@ -303,6 +303,35 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		}
 	}()
 
+	// Handle existing workflows
+	ms, err := wfCtx.LoadMutableState(ctx)
+	switch err.(type) {
+	case *serviceerror.NotFound:
+		// no-opt, continue to replicate workflow state
+	case nil:
+		// workflow exists, do resend.
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
+		if err != nil {
+			return err
+		}
+		lastVersionHistory, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return err
+		}
+		return serviceerrors.NewRetryReplication(
+			"Resend existing workflow history",
+			namespaceID.String(),
+			wid,
+			rid,
+			lastVersionHistory.GetEventId(),
+			lastVersionHistory.GetVersion(),
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	default:
+		return err
+	}
+
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
 		return err
