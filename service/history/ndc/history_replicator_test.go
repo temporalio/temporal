@@ -464,8 +464,8 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() 
 				{
 					Items: []*historyspb.VersionHistoryItem{
 						{
-							1,
-							1,
+							EventId: int64(1),
+							Version: int64(1),
 						},
 					},
 				},

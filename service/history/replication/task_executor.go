@@ -353,7 +353,6 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	default:
 		return err
 	}
-	//TODO: handle resend
 	return err
 }
 
