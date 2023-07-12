@@ -1485,6 +1485,8 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
 
+	s.unloadTaskQueue(ctx, tq)
+
 	// Verify update fails
 	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
