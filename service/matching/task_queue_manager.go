@@ -373,15 +373,14 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 }
 
 // Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
-// disabledError is nil if user data is enabled, non-nil if it should be disabled (and then
-// GetUserData will return that error).
+// userDataEnabledState controls whether GetUserData return an error, and which.
 // futureError is the error to set on the ready future. If this is non-nil, the task queue will
 // be unloaded.
 // Note that this must only be called from a single goroutine since the Ready/Set sequence is
 // potentially racy otherwise.
-func (c *taskQueueManagerImpl) SetUserDataStatus(disabledError error, futureError error) {
-	// Always set disabled state even if we're not setting the future.
-	c.db.disableUserData(disabledError)
+func (c *taskQueueManagerImpl) SetUserDataStatus(userDataEnabledState userDataEnabledState, futureError error) {
+	// Always set enabled state even if we're not setting the future.
+	c.db.setUserDataEnabledState(userDataEnabledState)
 
 	if !c.userDataReady.Ready() {
 		c.userDataReady.Set(struct{}{}, futureError)
@@ -772,16 +771,16 @@ func (c *taskQueueManagerImpl) loadUserData(ctx context.Context) error {
 	for ctx.Err() == nil {
 		if !c.config.LoadUserData() {
 			// if disabled, mark disabled and ready
-			c.SetUserDataStatus(errUserDataDisabled, nil)
+			c.SetUserDataStatus(userDataDisabled, nil)
 			hasLoadedUserData = false // load again if re-enabled
 		} else if !hasLoadedUserData {
 			// otherwise try to load from db once
 			err := c.db.loadUserData(ctx)
-			c.SetUserDataStatus(nil, err)
+			c.SetUserDataStatus(userDataEnabled, err)
 			hasLoadedUserData = err == nil
 		} else {
 			// if already loaded, set enabled
-			c.SetUserDataStatus(nil, nil)
+			c.SetUserDataStatus(userDataEnabled, nil)
 		}
 		common.InterruptibleSleep(ctx, c.config.GetUserDataLongPollTimeout())
 	}
@@ -816,7 +815,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	if c.managesSpecificVersionSet() {
 		// tqm for specific version set doesn't have its own user data
-		c.SetUserDataStatus(errNoUserDataOnVersionedTQM, nil)
+		c.SetUserDataStatus(userDataSpecificVersion, nil)
 		return nil
 	}
 
@@ -827,7 +826,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if err == errMissingNormalQueueName { // nolint:goerr113
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
-			c.SetUserDataStatus(nil, nil)
+			c.SetUserDataStatus(userDataEnabled, nil)
 		}
 		return err
 	}
@@ -840,7 +839,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if !c.config.LoadUserData() {
 			// if disabled, mark disabled and ready, but allow retries so that we notice if
 			// it's re-enabled
-			c.SetUserDataStatus(errUserDataDisabled, nil)
+			c.SetUserDataStatus(userDataDisabled, nil)
 			return errUserDataDisabled
 		}
 
@@ -870,10 +869,10 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 				// so we act as if it just returned an empty response and set ourselves ready.
 				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
 				// we don't do a long poll next time.
-				c.SetUserDataStatus(nil, nil)
+				c.SetUserDataStatus(userDataEnabled, nil)
 			} else if errors.As(err, &failedPrecondErr) {
 				// This means the parent has the LoadUserData switch turned off. Act like our switch is off also.
-				c.SetUserDataStatus(errUserDataDisabled, nil)
+				c.SetUserDataStatus(userDataDisabled, nil)
 			}
 			return err
 		}
@@ -885,7 +884,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
 		hasFetchedUserData = true
-		c.SetUserDataStatus(nil, nil)
+		c.SetUserDataStatus(userDataEnabled, nil)
 		return nil
 	}
 

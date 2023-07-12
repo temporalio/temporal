@@ -46,27 +46,33 @@ import (
 const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
+
+	userDataEnabled userDataEnabledState = iota
+	userDataDisabled
+	userDataSpecificVersion
 )
 
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID      namespace.ID
-		taskQueue        *taskQueueID
-		taskQueueKind    enumspb.TaskQueueKind
-		rangeID          int64
-		ackLevel         int64
-		userData         *persistencespb.VersionedTaskQueueUserData
-		userDataChanged  chan struct{}
-		userDataDisabled error
-		store            persistence.TaskManager
-		logger           log.Logger
-		matchingClient   matchingservice.MatchingServiceClient
+		namespaceID          namespace.ID
+		taskQueue            *taskQueueID
+		taskQueueKind        enumspb.TaskQueueKind
+		rangeID              int64
+		ackLevel             int64
+		userData             *persistencespb.VersionedTaskQueueUserData
+		userDataChanged      chan struct{}
+		userDataEnabledState userDataEnabledState
+		store                persistence.TaskManager
+		logger               log.Logger
+		matchingClient       matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
 		ackLevel int64
 	}
+
+	userDataEnabledState int
 )
 
 var (
@@ -310,10 +316,21 @@ func (db *taskQueueDB) GetUserData(
 ) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
-	if db.userDataDisabled != nil {
-		return nil, nil, db.userDataDisabled
+	return db.getUserDataLocked()
+}
+
+func (db *taskQueueDB) getUserDataLocked() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	switch db.userDataEnabledState {
+	case userDataEnabled:
+		return db.userData, db.userDataChanged, nil
+	case userDataDisabled:
+		return nil, nil, errUserDataDisabled
+	case userDataSpecificVersion:
+		return nil, nil, errNoUserDataOnVersionedTQM
+	default:
+		// shouldn't happen
+		return nil, nil, serviceerror.NewInternal("unexpected user data enabled state")
 	}
-	return db.userData, db.userDataChanged, nil
 }
 
 func (db *taskQueueDB) setUserDataLocked(userData *persistencespb.VersionedTaskQueueUserData) {
@@ -347,11 +364,10 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 	return nil
 }
 
-// disableUserData causes subsequent calls to GetUserData to return this error.
-func (db *taskQueueDB) disableUserData(disabledError error) {
+func (db *taskQueueDB) setUserDataEnabledState(userDataEnabledState userDataEnabledState) {
 	db.Lock()
 	defer db.Unlock()
-	db.userDataDisabled = disabledError
+	db.userDataEnabledState = userDataEnabledState
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
@@ -378,12 +394,13 @@ func (db *taskQueueDB) UpdateUserData(
 	db.Lock()
 	defer db.Unlock()
 
-	if db.userDataDisabled != nil {
-		return nil, false, db.userDataDisabled
+	userData, _, err := db.getUserDataLocked()
+	if err != nil {
+		return nil, false, err
 	}
 
-	preUpdateData := db.userData.GetData()
-	preUpdateVersion := db.userData.GetVersion()
+	preUpdateData := userData.GetData()
+	preUpdateVersion := userData.GetVersion()
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
