@@ -184,6 +184,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -205,7 +206,7 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
 		rand.Int63(),
 	)
 	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
-
+	engine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
 	s.NoError(s.task.HandleErr(err))
 }
 
