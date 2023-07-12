@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -148,27 +149,27 @@ func TestCassandraVisibilityPersistence(t *testing.T) {
 func TestCassandraHistoryV2Persistence(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestCassandraMetadataPersistenceV2(t *testing.T) {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestCassandraQueuePersistence(t *testing.T) {
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestCassandraClusterMetadataPersistence(t *testing.T) {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }

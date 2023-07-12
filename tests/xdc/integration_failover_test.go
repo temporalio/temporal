@@ -80,7 +80,7 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	s.setupSuite([]string{"integ_active", "integ_standby"})
+	s.setupSuite([]string{"active", "standby"})
 }
 
 func (s *integrationClustersTestSuite) SetupTest() {

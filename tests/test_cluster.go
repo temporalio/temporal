@@ -158,7 +158,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
-	testBase.Setup(clusterMetadataConfig)
+	testBase.Setup(clusterMetadataConfig, clusterInfo)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 
 	pConfig := testBase.DefaultTestCluster.Config()
@@ -224,6 +224,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
+		ClusterInfo:                      clusterInfo,
 		PersistenceConfig:                pConfig,
 		MetadataMgr:                      testBase.MetadataManager,
 		ClusterMetadataManager:           testBase.ClusterMetadataManager,

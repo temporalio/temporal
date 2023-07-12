@@ -41,12 +41,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -84,7 +86,7 @@ func (s *userDataReplicationTestSuite) SetupSuite() {
 		// Ensure the scavenger can immediately delete build ids that are not in use.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
-	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
+	s.setupSuite([]string{"active", "standby"})
 }
 
 func (s *userDataReplicationTestSuite) SetupTest() {

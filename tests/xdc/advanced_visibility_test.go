@@ -85,7 +85,7 @@ func TestAdvVisCrossDCTestSuite(t *testing.T) {
 }
 
 var (
-	clusterNameAdvVis              = []string{"active-adv-vis", "standby-adv-vis"}
+	clusterNameAdvVis              = []string{"active", "standby"}
 	clusterReplicationConfigAdvVis = []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: clusterNameAdvVis[0],

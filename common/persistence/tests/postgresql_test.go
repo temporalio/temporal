@@ -160,21 +160,21 @@ func TestPostgreSQL12VisibilityPersistenceSuite(t *testing.T) {
 func TestPostgreSQLHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLClusterMetadataPersistence(t *testing.T) {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
@@ -199,21 +199,21 @@ FAIL: TestPostgreSQLQueuePersistence/TestNamespaceReplicationQueue (0.26s)
 func TestPostgreSQL12HistoryV2PersistenceSuite(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQL12MetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQL12ClusterMetadataPersistence(t *testing.T) {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQL12TestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase.Setup(nil, nil)
 	suite.Run(t, s)
 }
 

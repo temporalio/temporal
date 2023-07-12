@@ -101,6 +101,7 @@ type (
 		dcClient                         *dcClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
+		clusterInfo                      map[string]cluster.ClusterInformation
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
 		clusterMetadataMgr               persistence.ClusterMetadataManager
@@ -137,6 +138,7 @@ type (
 	// TemporalParams contains everything needed to bootstrap Temporal
 	TemporalParams struct {
 		ClusterMetadataConfig            *cluster.Config
+		ClusterInfo                      map[string]cluster.ClusterInformation
 		PersistenceConfig                config.Persistence
 		MetadataMgr                      persistence.MetadataManager
 		ClusterMetadataManager           persistence.ClusterMetadataManager
@@ -171,6 +173,7 @@ func newTemporal(params *TemporalParams) *temporalImpl {
 	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
+		clusterInfo:                      params.ClusterInfo,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		clusterMetadataMgr:               params.ClusterMetadataManager,
@@ -387,6 +390,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+		fx.Provide(func() cluster.DBRecord { return cluster.DBRecord{Record: c.clusterInfo} }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
@@ -481,6 +485,7 @@ func (c *temporalImpl) startHistory(
 				return newSimpleHostInfoProvider(serviceName, hosts)
 			}),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+			fx.Provide(func() cluster.DBRecord { return cluster.DBRecord{Record: c.clusterInfo} }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
@@ -576,6 +581,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+		fx.Provide(func() cluster.DBRecord { return cluster.DBRecord{Record: c.clusterInfo} }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
@@ -670,6 +676,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
+		fx.Provide(func() cluster.DBRecord { return cluster.DBRecord{Record: c.clusterInfo} }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
