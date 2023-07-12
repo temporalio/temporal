@@ -47,32 +47,39 @@ const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
 
-	userDataEnabled userDataEnabledState = iota
+	// userDataEnabled is the default state: user data is enabled.
+	userDataEnabled userDataState = iota
+	// userDataDisabled means user data is disabled due to the LoadUserData dynamic config
+	// being turned off on this node or the parent node. This should cause GetUserData to
+	// return a FailedPrecondition error.
 	userDataDisabled
+	// userDataSpecificVersion means this tqm/db is for a specific version set, which doesn't
+	// have its own user data and it should not be used. This should cause GetUserData to
+	// return an Internal error (access would indicate a bug).
 	userDataSpecificVersion
 )
 
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID          namespace.ID
-		taskQueue            *taskQueueID
-		taskQueueKind        enumspb.TaskQueueKind
-		rangeID              int64
-		ackLevel             int64
-		userData             *persistencespb.VersionedTaskQueueUserData
-		userDataChanged      chan struct{}
-		userDataEnabledState userDataEnabledState
-		store                persistence.TaskManager
-		logger               log.Logger
-		matchingClient       matchingservice.MatchingServiceClient
+		namespaceID     namespace.ID
+		taskQueue       *taskQueueID
+		taskQueueKind   enumspb.TaskQueueKind
+		rangeID         int64
+		ackLevel        int64
+		userData        *persistencespb.VersionedTaskQueueUserData
+		userDataChanged chan struct{}
+		userDataState   userDataState
+		store           persistence.TaskManager
+		logger          log.Logger
+		matchingClient  matchingservice.MatchingServiceClient
 	}
 	taskQueueState struct {
 		rangeID  int64
 		ackLevel int64
 	}
 
-	userDataEnabledState int
+	userDataState int
 )
 
 var (
@@ -320,7 +327,7 @@ func (db *taskQueueDB) GetUserData(
 }
 
 func (db *taskQueueDB) getUserDataLocked() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	switch db.userDataEnabledState {
+	switch db.userDataState {
 	case userDataEnabled:
 		return db.userData, db.userDataChanged, nil
 	case userDataDisabled:
@@ -364,10 +371,10 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 	return nil
 }
 
-func (db *taskQueueDB) setUserDataEnabledState(userDataEnabledState userDataEnabledState) {
+func (db *taskQueueDB) setUserDataState(setUserDataState userDataState) {
 	db.Lock()
 	defer db.Unlock()
-	db.userDataEnabledState = userDataEnabledState
+	db.userDataState = setUserDataState
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
