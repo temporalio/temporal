@@ -309,25 +309,36 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	case *serviceerror.NotFound:
 		// no-opt, continue to replicate workflow state
 	case nil:
-		// workflow exists, do resend.
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
+		// workflow exists, do resend if version histories are not match.
+		localVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		if err != nil {
 			return err
 		}
-		lastVersionHistory, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		localHistoryLastItem, err := versionhistory.GetLastVersionHistoryItem(localVersionHistory)
 		if err != nil {
 			return err
 		}
-		return serviceerrors.NewRetryReplication(
-			"Resend existing workflow history",
-			namespaceID.String(),
-			wid,
-			rid,
-			lastVersionHistory.GetEventId(),
-			lastVersionHistory.GetVersion(),
-			common.EmptyEventID,
-			common.EmptyVersion,
-		)
+		incomingVersionHistory, err := versionhistory.GetCurrentVersionHistory(request.GetWorkflowState().GetExecutionInfo().GetVersionHistories())
+		if err != nil {
+			return err
+		}
+		incomingHistoryLastItem, err := versionhistory.GetLastVersionHistoryItem(incomingVersionHistory)
+		if err != nil {
+			return err
+		}
+		if !versionhistory.IsEqualVersionHistoryItem(localHistoryLastItem, incomingHistoryLastItem) {
+			return serviceerrors.NewRetryReplication(
+				"Failed to sync workflow state due to version history mismatch",
+				namespaceID.String(),
+				wid,
+				rid,
+				localHistoryLastItem.GetEventId(),
+				localHistoryLastItem.GetVersion(),
+				common.EmptyEventID,
+				common.EmptyVersion,
+			)
+		}
+		return nil
 	default:
 		return err
 	}

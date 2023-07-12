@@ -147,7 +147,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		); resendErr != nil {
 			return err
 		}
-		return nil
+		return e.Execute()
 	default:
 		return err
 	}
