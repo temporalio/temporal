@@ -140,7 +140,7 @@ func TestDeliverBufferTasks_RetriesVersionedTaskWhenUserInfoDisabled(t *testing.
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataInitialFetch(nil, nil)
+	tlm.SetUserDataStatus(nil, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(3 * taskReaderOfferThrottleWait)
@@ -175,7 +175,7 @@ func TestDeliverBufferTasks_RetriesUseDefaultTaskWhenUserInfoDisabled(t *testing
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataInitialFetch(nil, nil)
+	tlm.SetUserDataStatus(nil, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(taskReaderOfferThrottleWait)
@@ -1084,7 +1084,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 	ch <- struct{}{}
 
 	// at this point it should have tried two times and gotten unavailable. it should not be ready yet.
-	require.False(t, tq.userDataInitialFetch.Ready())
+	require.False(t, tq.userDataReady.Ready())
 
 	ch <- struct{}{}
 	ch <- struct{}{}
