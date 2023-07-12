@@ -177,9 +177,9 @@ type (
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		userDataReady *future.FutureImpl[struct{}]
-		// lostOwnership controls behavior on Stop: if it's false, we try to write one final
+		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
-		lostOwnership atomic.Bool
+		skipFinalUpdate atomic.Bool
 	}
 )
 
@@ -294,7 +294,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
-		c.lostOwnership.Store(true)
+		c.skipFinalUpdate.Store(true)
 		c.unloadFromEngine()
 		return true
 	}
@@ -336,7 +336,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	// Note that it's fine to GC even if the update ack level fails because we did match the
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 && !c.lostOwnership.Load() {
+	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
 		ctx, cancel := c.newIOContext()
 		defer cancel()
 
@@ -365,8 +365,9 @@ func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	c.initializedError.Set(struct{}{}, err)
 	if err != nil {
-		// We can't recover from here without starting over, so unload the whole task queue
-		c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+		// We can't recover from here without starting over, so unload the whole task queue.
+		// Skip final update since we never initialized.
+		c.skipFinalUpdate.Store(true)
 		c.unloadFromEngine()
 	}
 }
@@ -385,8 +386,9 @@ func (c *taskQueueManagerImpl) SetUserDataStatus(disabledError error, futureErro
 	if !c.userDataReady.Ready() {
 		c.userDataReady.Set(struct{}{}, futureError)
 		if futureError != nil {
-			// We can't recover from here without starting over, so unload the whole task queue
-			c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+			// We can't recover from here without starting over, so unload the whole task queue.
+			// Skip final update since we never initialized.
+			c.skipFinalUpdate.Store(true)
 			c.unloadFromEngine()
 		}
 	}
@@ -655,7 +657,8 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.lostOwnership.Store(true) // not really lost ownership but we want to skip the last write
+			// Skip final update since persistence is having problems.
+			c.skipFinalUpdate.Store(true)
 			c.unloadFromEngine()
 			return
 		}
