@@ -31,6 +31,7 @@ import (
 )
 
 const (
+	CallerTypeOperator    = "operator"
 	CallerTypeAPI         = "api"
 	CallerTypeBackground  = "background"
 	CallerTypePreemptable = "preemptable"

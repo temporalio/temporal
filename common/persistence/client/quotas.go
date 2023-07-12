@@ -39,11 +39,19 @@ type (
 	}
 )
 
+const (
+	// OperatorQPSRatio is the percentage of the rate provided to priority rate limiters that
+	// should be used for operator API calls. Operator API calls have a lower rate limit to
+	// prevent users from abusing this to get high priority for all requests.
+	OperatorQPSRatio = 0.2
+)
+
 var (
 	CallerTypeDefaultPriority = map[string]int{
-		headers.CallerTypeAPI:         1,
-		headers.CallerTypeBackground:  3,
-		headers.CallerTypePreemptable: 4,
+		headers.CallerTypeOperator:    1,
+		headers.CallerTypeAPI:         2,
+		headers.CallerTypeBackground:  4,
+		headers.CallerTypePreemptable: 5,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
@@ -73,12 +81,12 @@ var (
 		// NOTE: we also don't want task loading to consume all persistence request tokens,
 		// and blocks all other operations. This is done by setting the queue host rps limit
 		// dynamic config.
-		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryTransfer):   2,
-		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryTimer):      2,
-		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryVisibility): 2,
+		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryTransfer):   3,
+		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryTimer):      3,
+		p.ConstructHistoryTaskAPI("GetHistoryTasks", tasks.CategoryVisibility): 3,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4}
+	RequestPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
 )
 
 func NewPriorityRateLimiter(
@@ -166,7 +174,11 @@ func newPriorityRateLimiter(
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
+		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(OperatorRateFn(rateFn)))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
+		}
 	}
 
 	return quotas.NewPriorityRateLimiter(
@@ -185,7 +197,11 @@ func newPriorityDynamicRateLimiter(
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
-		rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
+		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, OperatorRateFn(rateFn), dynamicParams, logger)
+		} else {
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
+		}
 	}
 
 	return quotas.NewPriorityRateLimiter(
@@ -211,6 +227,11 @@ func NewNoopPriorityRateLimiter(
 
 func RequestPriorityFn(req quotas.Request) int {
 	switch req.CallerType {
+	case headers.CallerTypeOperator:
+		if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
+			return priority
+		}
+		return CallerTypeDefaultPriority[req.CallerType]
 	case headers.CallerTypeAPI:
 		if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
 			return priority
@@ -226,6 +247,13 @@ func RequestPriorityFn(req quotas.Request) int {
 	default:
 		// default requests to high priority to be consistent with existing behavior
 		return RequestPrioritiesOrdered[0]
+	}
+}
+
+// TODO: maybe unexport this
+func OperatorRateFn(rateFn quotas.RateFn) quotas.RateFn {
+	return func() float64 {
+		return rateFn() * OperatorQPSRatio
 	}
 }
 
