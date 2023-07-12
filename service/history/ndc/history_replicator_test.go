@@ -404,7 +404,6 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_NoClosedWorkflow_Error(
 
 func (s *historyReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() {
 	namespaceID := uuid.New()
-	//namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
 		TreeId:    uuid.New(),
 		BranchId:  uuid.New(),
