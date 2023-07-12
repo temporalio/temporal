@@ -325,6 +325,35 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
 	})
+	switch retryErr := err.(type) {
+	case nil:
+		return nil
+	case *serviceerrors.RetryReplication:
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			e.remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+		switch resendErr.(type) {
+		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+		case nil:
+			// no-op
+		default:
+			e.logger.Error("error resend history for replicate workflow state", tag.Error(resendErr))
+			return err
+		}
+	default:
+		return err
+	}
+	//TODO: handle resend
 	return err
 }
 
