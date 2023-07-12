@@ -48,7 +48,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -71,12 +70,6 @@ type tqmTestOpts struct {
 	config             *Config
 	tqId               *taskQueueID
 	matchingClientMock *matchingservicemock.MockMatchingServiceClient
-}
-
-func setScoped[T any](ptr *T, val T) func() {
-	prev := *ptr
-	*ptr = val
-	return func() { *ptr = prev }
 }
 
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
@@ -803,9 +796,6 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = tqId
 
-	// fast retry on failure
-	defer setScoped(&getUserDataRetryPolicy, backoff.NewExponentialRetryPolicy(10*time.Millisecond))()
-
 	data1 := &persistencespb.VersionedTaskQueueUserData{
 		Version: 1,
 		Data:    mkUserData(1),
@@ -838,6 +828,7 @@ func TestTQMFetchesUserDataFailsAndTriesAgain(t *testing.T) {
 
 	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
+	tq.config.GetUserDataRetryBaseInterval = 10 * time.Millisecond
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, tq.WaitUntilInitialized(ctx))

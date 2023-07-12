@@ -108,8 +108,9 @@ type (
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 
-		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
-		GetUserDataMinWaitTime     time.Duration
+		GetUserDataLongPollTimeout   dynamicconfig.DurationPropertyFn
+		GetUserDataMinWaitTime       time.Duration
+		GetUserDataRetryBaseInterval time.Duration
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
@@ -223,8 +224,9 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(namespace.String(), taskQueueName, taskType)
 		},
-		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
-		GetUserDataMinWaitTime:     1 * time.Second,
+		GetUserDataLongPollTimeout:   config.GetUserDataLongPollTimeout,
+		GetUserDataMinWaitTime:       1 * time.Second,
+		GetUserDataRetryBaseInterval: 1 * time.Second,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(namespace.String(), taskQueueName, taskType)
 		},
