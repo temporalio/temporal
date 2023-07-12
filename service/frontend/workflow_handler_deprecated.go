@@ -417,27 +417,6 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 func (wh *WorkflowHandler) pollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	callTime := time.Now().UTC()
 
-	wh.logger.Debug("Received PollWorkflowTaskQueue")
-	if err := common.ValidateLongPollContextTimeout(
-		ctx,
-		"PollWorkflowTaskQueue",
-		wh.throttledLogger,
-	); err != nil {
-		return nil, err
-	}
-
-	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, errIdentityTooLong
-	}
-
-	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
-		return nil, err
-	}
-
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -506,9 +485,10 @@ func (wh *WorkflowHandler) respondWorkflowTaskCompleted(
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
 
 	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId:     namespaceId.String(),
-		CompleteRequest: request},
-	)
+		NamespaceId:         namespaceId.String(),
+		CompleteRequest:     request,
+		WithNewWorkflowTask: false,
+	})
 	if err != nil {
 		return nil, err
 	}

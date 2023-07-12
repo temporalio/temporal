@@ -1685,3 +1685,15 @@ var (
 	VisibilityPersistenceResourceExhausted = NewCounterDef("visibility_persistence_resource_exhausted")
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
 )
+
+// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
+const (
+	AccessHistoryOld = "AccessHistoryOld"
+	AccessHistoryNew = "AccessHistoryNew"
+
+	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
+	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
+	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
+	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
+	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+)

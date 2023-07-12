@@ -26,6 +26,7 @@ package getworkflowexecutionrawhistoryv2
 
 import (
 	"context"
+
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,7 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/utils"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -76,15 +77,15 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = utils.GeneratePaginationToken(request, response.GetVersionHistories())
+		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
 	} else {
-		pageToken, err = utils.DeserializeRawHistoryToken(request.NextPageToken)
+		pageToken, err = api.DeserializeRawHistoryToken(request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
 		versionHistories := pageToken.GetVersionHistories()
 		if versionHistories == nil {
-			return nil, utils.ErrInvalidVersionHistories
+			return nil, consts.ErrInvalidVersionHistories
 		}
 		targetVersionHistory, err = SetRequestDefaultValueAndGetTargetVersionHistory(
 			request,
@@ -95,7 +96,7 @@ func Invoke(
 		}
 	}
 
-	if err := utils.ValidatePaginationToken(
+	if err := api.ValidatePaginationToken(
 		request,
 		pageToken,
 	); err != nil {
@@ -155,7 +156,7 @@ func Invoke(
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
-		result.NextPageToken, err = utils.SerializeRawHistoryToken(pageToken)
+		result.NextPageToken, err = api.SerializeRawHistoryToken(pageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -170,25 +171,25 @@ func validateGetWorkflowExecutionRawHistoryV2Request(
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
-		return utils.ErrWorkflowIDNotSet
+		return consts.ErrWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
 	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
-		return utils.ErrInvalidRunID
+		return consts.ErrInvalidRunID
 	}
 
 	pageSize := int(request.GetMaximumPageSize())
 	if pageSize <= 0 {
-		return utils.ErrInvalidPageSize
+		return consts.ErrInvalidPageSize
 	}
 
 	if request.GetStartEventId() == common.EmptyEventID &&
 		request.GetStartEventVersion() == common.EmptyVersion &&
 		request.GetEndEventId() == common.EmptyEventID &&
 		request.GetEndEventVersion() == common.EmptyVersion {
-		return utils.ErrInvalidEventQueryRange
+		return consts.ErrInvalidEventQueryRange
 	}
 
 	return nil
@@ -226,7 +227,7 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	if request.GetStartEventId() < 0 {
-		return nil, utils.ErrInvalidFirstNextEventCombination
+		return nil, consts.ErrInvalidFirstNextEventCombination
 	}
 
 	// get branch based on the end event if end event is defined in the request

@@ -51,6 +51,7 @@ func Invoke(
 	ctx context.Context,
 	shard shard.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -87,7 +88,7 @@ func Invoke(
 	var warnings []string
 	var branchTokens [][]byte
 	var startTime, closeTime *time.Time
-	cassVisBackend := shard.GetVisibilityManager().HasStoreName(cassandra.CassandraPersistenceName)
+	cassVisBackend := persistenceVisibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -137,7 +138,7 @@ func Invoke(
 		// we can't guarantee there's no update or record close request for this workflow since
 		// visibility queue processing is async. Operator can call this api again to delete visibility
 		// record again if this happens.
-		if err := shard.GetVisibilityManager().DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),

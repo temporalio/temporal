@@ -217,11 +217,6 @@ func (s *ContextImpl) GetOwner() string {
 	return s.owner
 }
 
-func (s *ContextImpl) GetVisibilityManager() manager.VisibilityManager {
-	// constant from initialization, no need for locks
-	return s.visibilityManager
-}
-
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	// constant from initialization, no need for locks
 	return s.executionManager

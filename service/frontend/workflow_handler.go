@@ -445,28 +445,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
 			&historyservice.GetWorkflowExecutionHistoryRequest{
 				NamespaceId:            namespaceID.String(),
-				Execution:              request.Execution,
-				MaximumPageSize:        request.MaximumPageSize,
-				NextPageToken:          request.NextPageToken,
-				WaitNewEvent:           request.WaitNewEvent,
-				HistoryEventFilterType: request.HistoryEventFilterType,
-				SkipArchival:           request.SkipArchival,
+				Request:                request,
 				SendRawWorkflowHistory: wh.config.SendRawWorkflowHistory(request.GetNamespace()),
 				FollowsNextRunId:       wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID),
 			})
 		if err != nil {
 			return nil, err
 		}
-		return &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History:       response.History,
-			RawHistory:    response.RawHistory,
-			NextPageToken: response.NextPageToken,
-			Archived:      response.Archived,
-		}, nil
+		return response.Response, nil
 	}
 	return wh.getWorkflowExecutionHistory(ctx, request)
 }
@@ -502,7 +492,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
 			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
 				NamespaceId:     namespaceID.String(),
@@ -531,6 +521,27 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	wh.logger.Debug("Received PollWorkflowTaskQueue")
+	if err := common.ValidateLongPollContextTimeout(
+		ctx,
+		"PollWorkflowTaskQueue",
+		wh.throttledLogger,
+	); err != nil {
+		return nil, err
+	}
+
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+		return nil, err
 	}
 
 	return wh.pollWorkflowTaskQueue(ctx, request)
@@ -573,7 +584,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	if wh.config.accessHistory(wh.metricsScope(ctx)) {
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
 		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 		if err != nil {
 			return nil, err
@@ -584,7 +595,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 				NamespaceId:         namespaceID.String(),
 				CompleteRequest:     request,
 				WithNewWorkflowTask: true,
-				MaximumPageSize:     int32(wh.config.HistoryMaxPageSize(request.GetNamespace())),
 			},
 		)
 		if err != nil {

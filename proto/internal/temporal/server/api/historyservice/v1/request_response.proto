@@ -206,7 +206,6 @@ message RespondWorkflowTaskCompletedRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest complete_request = 2;
     bool with_new_workflow_task = 3 [deprecated = true];
-    int32 maximum_page_size = 4;
 }
 
 message RespondWorkflowTaskCompletedResponse {
@@ -697,30 +696,13 @@ message PollWorkflowExecutionUpdateResponse {
 
 message GetWorkflowExecutionHistoryRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    int32 maximum_page_size = 3;
-    // If a `GetWorkflowExecutionHistoryResponse` or a `PollWorkflowTaskQueueResponse` had one of
-    // these, it should be passed here to fetch the next page.
-    bytes next_page_token = 4;
-    // If set to true, the RPC call will not resolve until there is a new event which matches
-    // the `history_event_filter_type`, or a timeout is hit.
-    bool wait_new_event = 5;
-    // Filter returned events such that they match the specified filter type.
-    // Default: HISTORY_EVENT_FILTER_TYPE_ALL_EVENT.
-    temporal.api.enums.v1.HistoryEventFilterType history_event_filter_type = 6;
-    bool skip_archival = 7;
-    bool send_raw_workflow_history = 8;
-    bool follows_next_run_id = 9;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest request = 2;
+    bool send_raw_workflow_history = 3;
+    bool follows_next_run_id = 4;
 }
 
 message GetWorkflowExecutionHistoryResponse {
-    temporal.api.history.v1.History history = 1;
-    // Raw history is an alternate representation of history that may be returned if configured on
-    // the frontend. This is not supported by all SDKs. Either this or `history` will be set.
-    repeated temporal.api.common.v1.DataBlob raw_history = 2;
-    // Will be set if there are more history events than were included in this response
-    bytes next_page_token = 3;
-    bool archived = 4;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse response = 1;
 }
 
 message GetWorkflowExecutionHistoryReverseRequest {

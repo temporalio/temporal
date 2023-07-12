@@ -819,14 +819,14 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
-	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
+	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
-	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
+	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
@@ -840,5 +840,5 @@ func (e *historyEngineImpl) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
-	return forcedeleteworkflowexecution.Invoke(ctx, e.shard, request)
+	return forcedeleteworkflowexecution.Invoke(ctx, e.shard, request, e.persistenceVisibilityMgr)
 }

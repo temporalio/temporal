@@ -34,8 +34,9 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/utils"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -46,6 +47,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -102,12 +104,12 @@ func Invoke(
 		continuationToken.NextEventId = common.EmptyEventID
 		continuationToken.PersistenceToken = nil
 	} else {
-		continuationToken, err = utils.DeserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = api.DeserializeHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, utils.ErrInvalidNextPageToken
+			return nil, consts.ErrInvalidNextPageToken
 		}
 		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, utils.ErrNextPageTokenRunIDMismatch
+			return nil, consts.ErrNextPageTokenRunIDMismatch
 		}
 
 		execution.RunId = continuationToken.GetRunId()
@@ -118,7 +120,7 @@ func Invoke(
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			utils.TrimHistoryNode(
+			api.TrimHistoryNode(
 				ctx,
 				shard,
 				workflowConsistencyChecker,
@@ -133,7 +135,7 @@ func Invoke(
 	history := &historypb.History{}
 	history.Events = []*historypb.HistoryEvent{}
 	// return all events
-	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = utils.GetHistoryReverse(
+	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = api.GetHistoryReverse(
 		ctx,
 		shard,
 		namespaceID,
@@ -143,6 +145,7 @@ func Invoke(
 		request.GetMaximumPageSize(),
 		continuationToken.PersistenceToken,
 		continuationToken.BranchToken,
+		persistenceVisibilityMgr,
 	)
 
 	if err != nil {
@@ -153,7 +156,7 @@ func Invoke(
 		continuationToken = nil
 	}
 
-	nextToken, err := utils.SerializeHistoryToken(continuationToken)
+	nextToken, err := api.SerializeHistoryToken(continuationToken)
 	if err != nil {
 		return nil, err
 	}

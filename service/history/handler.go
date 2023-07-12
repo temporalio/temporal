@@ -2013,7 +2013,7 @@ func (h *Handler) GetWorkflowExecutionHistory(
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
 		namespace.ID(request.GetNamespaceId()),
-		request.GetExecution().GetWorkflowId(),
+		request.Request.GetExecution().GetWorkflowId(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)

@@ -22,12 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package utils
+package api
 
 import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/service/history/consts"
 )
 
 func GeneratePaginationToken(
@@ -62,7 +63,7 @@ func ValidatePaginationToken(
 		request.GetStartEventVersion() != token.GetStartEventVersion() ||
 		request.GetEndEventId() != token.GetEndEventId() ||
 		request.GetEndEventVersion() != token.GetEndEventVersion() {
-		return ErrInvalidPaginationToken
+		return consts.ErrInvalidPaginationToken
 	}
 	return nil
 }

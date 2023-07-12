@@ -138,7 +138,6 @@ message RemoveTaskResponse {
   * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
-    option deprecated = true;
     reserved 1;
     string namespace_id = 9;
     temporal.api.common.v1.WorkflowExecution execution = 2;
@@ -151,7 +150,6 @@ message GetWorkflowExecutionRawHistoryV2Request {
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
-    option deprecated = true;
     bytes next_page_token = 1;
     repeated temporal.api.common.v1.DataBlob history_batches = 2;
     temporal.server.api.history.v1.VersionHistory version_history = 3;
@@ -374,13 +372,11 @@ message GetTaskQueueTasksResponse {
 }
 
 message DeleteWorkflowExecutionRequest {
-    option deprecated = true;
     string namespace = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message DeleteWorkflowExecutionResponse {
-    option deprecated = true;
     repeated string warnings = 1;
 }
 

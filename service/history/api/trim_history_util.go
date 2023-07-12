@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package utils
+package api
 
 import (
 	"context"
@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -40,13 +39,13 @@ import (
 func TrimHistoryNode(
 	ctx context.Context,
 	shard shard.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
-	response, err := api.GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
+	response, err := GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId: namespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

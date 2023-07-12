@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package utils
+package api
 
 import (
 	"context"
@@ -39,7 +39,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -115,6 +117,7 @@ func GetHistory(
 	nextPageToken []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (*historypb.History, []byte, error) {
 
 	var size int
@@ -178,7 +181,7 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
-	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID); err != nil {
+	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
 
@@ -198,6 +201,7 @@ func GetHistoryReverse(
 	pageSize int32,
 	nextPageToken []byte,
 	branchToken []byte,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (*historypb.History, []byte, int64, error) {
 	var size int
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
@@ -226,7 +230,7 @@ func GetHistoryReverse(
 
 	shard.GetMetricsHandler().Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
-	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID); err != nil {
+	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err
 	}
 
@@ -244,14 +248,19 @@ func GetHistoryReverse(
 	return executionHistory, nextPageToken, newNextEventID, nil
 }
 
-func processOutgoingSearchAttributes(shard shard.Context, events []*historypb.HistoryEvent, namespaceId namespace.ID) error {
+func processOutgoingSearchAttributes(
+	shard shard.Context,
+	events []*historypb.HistoryEvent,
+	namespaceId namespace.ID,
+	persistenceVisibilityMgr manager.VisibilityManager,
+) error {
 	namespace, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceId)
 	if err != nil {
 		return err
 	}
-	saTypeMap, err := shard.GetSearchAttributesProvider().GetSearchAttributes(shard.GetVisibilityManager().GetIndexName(), false)
+	saTypeMap, err := shard.GetSearchAttributesProvider().GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(ErrUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
