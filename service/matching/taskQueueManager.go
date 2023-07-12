@@ -76,12 +76,8 @@ var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-					WithMaximumInterval(1 * time.Second).
-					WithExpirationInterval(30 * time.Second)
-
-	// Retry policy for getting user data from root partition. Should retry forever.
-	getUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-				WithMaximumInterval(5 * time.Minute)
+		WithMaximumInterval(1 * time.Second).
+		WithExpirationInterval(30 * time.Second)
 )
 
 type (
@@ -178,9 +174,9 @@ type (
 		clusterMeta      cluster.Metadata
 		goroGroup        goro.Group
 		initializedError *future.FutureImpl[struct{}]
-		// userDataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
-		userDataInitialFetch *future.FutureImpl[struct{}]
+		userDataReady *future.FutureImpl[struct{}]
 	}
 )
 
@@ -250,7 +246,7 @@ func newTaskQueueManager(
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
-		userDataInitialFetch: future.NewFuture[struct{}](),
+		userDataReady:        future.NewFuture[struct{}](),
 	}
 	// poller history is only kept for the base task queue manager
 	if !tlMgr.managesSpecificVersionSet() {
@@ -312,7 +308,11 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	c.goroGroup.Go(c.fetchUserData)
+	if c.db.DbStoresUserData() {
+		c.goroGroup.Go(c.loadUserData)
+	} else {
+		c.goroGroup.Go(c.fetchUserData)
+	}
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
@@ -365,11 +365,22 @@ func (c *taskQueueManagerImpl) SetInitializedError(err error) {
 	}
 }
 
-func (c *taskQueueManagerImpl) SetUserDataInitialFetch(err error) {
-	c.userDataInitialFetch.Set(struct{}{}, err)
-	if err != nil {
-		// We can't recover from here without starting over, so unload the whole task queue
-		c.unloadFromEngine()
+// Sets user data enabled/disabled and marks the future ready (if it's not ready yet).
+// userDataState controls whether GetUserData return an error, and which.
+// futureError is the error to set on the ready future. If this is non-nil, the task queue will
+// be unloaded.
+// Note that this must only be called from a single goroutine since the Ready/Set sequence is
+// potentially racy otherwise.
+func (c *taskQueueManagerImpl) SetUserDataState(userDataState userDataState, futureError error) {
+	// Always set state enabled/disabled even if we're not setting the future since we only set
+	// the future once but the enabled/disabled state may change over time.
+	c.db.setUserDataState(userDataState)
+
+	if !c.userDataReady.Ready() {
+		c.userDataReady.Set(struct{}{}, futureError)
+		if futureError != nil {
+			c.unloadFromEngine()
+		}
 	}
 }
 
@@ -378,7 +389,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.userDataInitialFetch.Get(ctx)
+	_, err = c.userDataReady.Get(ctx)
 	return err
 }
 
@@ -508,20 +519,11 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
 func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	if c.managesSpecificVersionSet() {
-		return nil, nil, errNoUserDataOnVersionedTQM
-	}
-	if !c.config.LoadUserData() {
-		return nil, nil, errUserDataDisabled
-	}
 	return c.db.GetUserData(ctx)
 }
 
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 func (c *taskQueueManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
-	if !c.config.LoadUserData() {
-		return errUserDataDisabled
-	}
 	newData, shouldReplicate, err := c.db.UpdateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
@@ -751,6 +753,31 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 	return c.callerInfoContext(ctx), cancel
 }
 
+func (c *taskQueueManagerImpl) loadUserData(ctx context.Context) error {
+	ctx = c.callerInfoContext(ctx)
+
+	hasLoadedUserData := false
+
+	for ctx.Err() == nil {
+		if !c.config.LoadUserData() {
+			// if disabled, mark disabled and ready
+			c.SetUserDataState(userDataDisabled, nil)
+			hasLoadedUserData = false // load again if re-enabled
+		} else if !hasLoadedUserData {
+			// otherwise try to load from db once
+			err := c.db.loadUserData(ctx)
+			c.SetUserDataState(userDataEnabled, err)
+			hasLoadedUserData = err == nil
+		} else {
+			// if already loaded, set enabled
+			c.SetUserDataState(userDataEnabled, nil)
+		}
+		common.InterruptibleSleep(ctx, c.config.GetUserDataLongPollTimeout())
+	}
+
+	return nil
+}
+
 func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// Sticky queues get data from their corresponding normal queue
@@ -776,21 +803,10 @@ func (c *taskQueueManagerImpl) userDataFetchSource() (string, error) {
 func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	ctx = c.callerInfoContext(ctx)
 
-	if !c.config.LoadUserData() {
-		// if disabled, mark ready now
-		c.SetUserDataInitialFetch(nil)
-		return nil
-	}
 	if c.managesSpecificVersionSet() {
 		// tqm for specific version set doesn't have its own user data
-		c.SetUserDataInitialFetch(nil)
+		c.SetUserDataState(userDataSpecificVersion, nil)
 		return nil
-	}
-	if c.db.DbStoresUserData() {
-		// root workflow partition "owns" user data, read it from db
-		err := c.db.loadUserData(ctx)
-		c.SetUserDataInitialFetch(err)
-		return err
 	}
 
 	// otherwise fetch from parent partition
@@ -798,18 +814,31 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	fetchSource, err := c.userDataFetchSource()
 	if err != nil {
 		if err == errMissingNormalQueueName {
-			// pretend we have no user data
-			c.SetUserDataInitialFetch(nil)
+			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
+			// kick off versioned pollers.
+			c.SetUserDataState(userDataEnabled, nil)
 		}
 		return err
 	}
 
-	firstCall := true
+	// hasFetchedUserData is true if we have gotten a successful reply to GetTaskQueueUserData.
+	// It's used to control whether we do a long poll or a simple get.
+	hasFetchedUserData := false
 
 	op := func(ctx context.Context) error {
+		if !c.config.LoadUserData() {
+			// if disabled, mark disabled and ready, but allow retries so that we notice if
+			// it's re-enabled
+			c.SetUserDataState(userDataDisabled, nil)
+			return errUserDataDisabled
+		}
+
 		knownUserData, _, err := c.GetUserData(ctx)
 		if err != nil {
-			return err
+			// Start with a non-long poll after re-enabling after disable, so that we don't have to wait the
+			// full long poll interval before calling SetUserDataStatus to enable again.
+			// Leave knownUserData as nil and GetVersion will return 0.
+			hasFetchedUserData = false
 		}
 
 		callCtx, cancel := context.WithTimeout(ctx, c.config.GetUserDataLongPollTimeout())
@@ -820,9 +849,21 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			TaskQueue:                fetchSource,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
-			WaitNewData:              !firstCall,
+			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
+			var unimplErr *serviceerror.Unimplemented
+			var failedPrecondErr *serviceerror.FailedPrecondition
+			if errors.As(err, &unimplErr) {
+				// This might happen during a deployment. The older version couldn't have had any user data,
+				// so we act as if it just returned an empty response and set ourselves ready.
+				// Return the error so that we backoff with retry, and do not set hasFetchedUserData so that
+				// we don't do a long poll next time.
+				c.SetUserDataState(userDataEnabled, nil)
+			} else if errors.As(err, &failedPrecondErr) {
+				// This means the parent has the LoadUserData switch turned off. Act like our switch is off also.
+				c.SetUserDataState(userDataDisabled, nil)
+			}
 			return err
 		}
 		// If the root partition returns nil here, then that means our data matched, and we don't need to update.
@@ -832,10 +873,8 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		if res.GetUserData() != nil {
 			c.db.setUserDataForNonOwningPartition(res.GetUserData())
 		}
-		if firstCall {
-			c.SetUserDataInitialFetch(nil)
-			firstCall = false
-		}
+		hasFetchedUserData = true
+		c.SetUserDataState(userDataEnabled, nil)
 		return nil
 	}
 
@@ -843,7 +882,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		_ = backoff.ThrottleRetryContext(ctx, op, getUserDataRetryPolicy, nil)
+		_ = backoff.ThrottleRetryContext(ctx, op, c.config.GetUserDataRetryPolicy, nil)
 		elapsed := time.Since(start)
 
 		// In general we want to start a new call immediately on completion of the previous
@@ -851,10 +890,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < minWaitTime {
-			select {
-			case <-ctx.Done():
-			case <-time.After(minWaitTime - elapsed):
-			}
+			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
 			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
