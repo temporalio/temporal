@@ -287,8 +287,11 @@ func TelemetryInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
+	rateFn := func() float64 {
+		return effectiveRPS(frontendServiceResolver, serviceConfig.RPS, serviceConfig.GlobalRPS)
+	}
 	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
 
 	return interceptor.NewRateLimitInterceptor(

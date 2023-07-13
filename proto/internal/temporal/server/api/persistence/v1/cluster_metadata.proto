@@ -39,6 +39,7 @@ message ClusterMetadata {
     bool is_global_namespace_enabled = 9;
     bool is_connection_enabled = 10;
     bool use_cluster_id_membership = 11;
+    map<string,string> tags = 12;
 }
 
 message IndexSearchAttributes{

@@ -141,9 +141,10 @@ dispatchLoop:
 				}
 				// this should never happen unless there is a bug - don't drop the task
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if !errors.Is(err, errUserDataDisabled) {
-					// If the error is errUserDataDisabled, we're trying to dispatch a versioned task but user data
-					// isn't loaded, so we don't log here since it would be too spammy.
+				if errors.Is(err, errUserDataDisabled) {
+					// We're trying to dispatch a versioned task but user data isn't loaded.
+					// Don't log here since it would be too spammy.
+				} else {
 					tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
 				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
