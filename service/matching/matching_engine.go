@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
@@ -1295,15 +1296,16 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		}
 		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(queryTaskToken)
 	} else {
-		taskToken := &tokenspb.Task{
-			NamespaceId:      task.event.Data.GetNamespaceId(),
-			WorkflowId:       task.event.Data.GetWorkflowId(),
-			RunId:            task.event.Data.GetRunId(),
-			ScheduledEventId: historyResponse.GetScheduledEventId(),
-			StartedEventId:   historyResponse.GetStartedEventId(),
-			Attempt:          historyResponse.GetAttempt(),
-			Clock:            historyResponse.GetClock(),
-		}
+		taskToken := tasktoken.NewWorkflowTaskToken(
+			task.event.Data.GetNamespaceId(),
+			task.event.Data.GetWorkflowId(),
+			task.event.Data.GetRunId(),
+			historyResponse.GetScheduledEventId(),
+			historyResponse.GetStartedEventId(),
+			historyResponse.GetAttempt(),
+			historyResponse.GetClock(),
+			historyResponse.GetVersion(),
+		)
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct := timestamp.TimeValue(task.event.Data.CreateTime)
@@ -1345,17 +1347,17 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      task.event.Data.GetNamespaceId(),
-		WorkflowId:       task.event.Data.GetWorkflowId(),
-		RunId:            task.event.Data.GetRunId(),
-		ScheduledEventId: task.event.Data.GetScheduledEventId(),
-		Attempt:          historyResponse.GetAttempt(),
-		ActivityId:       attributes.GetActivityId(),
-		ActivityType:     attributes.GetActivityType().GetName(),
-		Clock:            historyResponse.GetClock(),
-	}
-
+	taskToken := tasktoken.NewActivityTaskToken(
+		task.event.Data.GetNamespaceId(),
+		task.event.Data.GetWorkflowId(),
+		task.event.Data.GetRunId(),
+		task.event.Data.GetScheduledEventId(),
+		attributes.GetActivityId(),
+		attributes.GetActivityType().GetName(),
+		historyResponse.GetAttempt(),
+		historyResponse.GetClock(),
+		historyResponse.GetVersion(),
+	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
 	return &matchingservice.PollActivityTaskQueueResponse{
