@@ -346,7 +346,8 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			// no-op
+			_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+			return err
 		default:
 			e.logger.Error("error resend history for replicate workflow state", tag.Error(resendErr))
 			return err
@@ -354,9 +355,6 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	default:
 		return err
 	}
-
-	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
-	return err
 }
 
 func (e *taskExecutorImpl) filterTask(

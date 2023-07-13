@@ -406,7 +406,7 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 func (s *nDCIntegrationTestSuite) TestReplicateWorkflowState_PartialReplicated() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-single-branch-test" + uuid.New()
+	workflowID := "replicate-workflow-state-partially-replicated" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"

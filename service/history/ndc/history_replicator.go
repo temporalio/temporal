@@ -307,7 +307,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	ms, err := wfCtx.LoadMutableState(ctx)
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		// no-opt, continue to replicate workflow state
+		// no-op, continue to replicate workflow state
 	case nil:
 		// workflow exists, do resend if version histories are not match.
 		localVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
