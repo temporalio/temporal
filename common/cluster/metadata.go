@@ -98,6 +98,8 @@ type (
 		CurrentClusterName string `yaml:"currentClusterName"`
 		// ClusterInformation contains all cluster names to corresponding information about that cluster
 		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+		// Tag contains customized tag about the current cluster
+		Tags map[string]string `yaml:"tags"`
 	}
 
 	// ClusterInformation contains the information about each cluster which participated in cross DC
@@ -107,8 +109,9 @@ type (
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
 		// Cluster ID allows to explicitly set the ID of the cluster. Optional.
-		ClusterID  string `yaml:"-"`
-		ShardCount int32  `yaml:"-"` // Ignore this field when loading config.
+		ClusterID  string            `yaml:"-"`
+		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
+		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
 		// private field to track cluster information updates
 		version int64
 	}
@@ -589,6 +592,7 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 			InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 			RPCAddress:             getClusterResp.GetClusterAddress(),
 			ShardCount:             getClusterResp.GetHistoryShardCount(),
+			Tags:                   getClusterResp.GetTags(),
 			version:                getClusterResp.Version,
 		}
 	}
