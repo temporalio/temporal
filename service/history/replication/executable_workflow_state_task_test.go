@@ -34,7 +34,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -183,14 +183,49 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 	s.Equal(err, s.task.Execute())
 }
 
-func (s *executableWorkflowStateTaskSuite) TestHandleErr() {
-	err := errors.New("OwO")
-	s.Equal(err, s.task.HandleErr(err))
+func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+	shardContext := shard.NewMockContext(s.controller)
+	engine := shard.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	err := serviceerrors.NewRetryReplication(
+		"",
+		s.task.NamespaceID,
+		s.task.WorkflowID,
+		s.task.RunID,
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+	)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
+	engine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
+	s.NoError(s.task.HandleErr(err))
+}
 
-	err = serviceerror.NewNotFound("")
-	s.Equal(nil, s.task.HandleErr(err))
+func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
+	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+	err := serviceerrors.NewRetryReplication(
+		"",
+		s.task.NamespaceID,
+		s.task.WorkflowID,
+		s.task.RunID,
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+	)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
 
-	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
 }
 
