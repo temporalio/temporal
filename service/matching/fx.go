@@ -106,7 +106,6 @@ func RateLimitInterceptorProvider(
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
 	)
 }
 

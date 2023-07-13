@@ -38,8 +38,7 @@ import (
 )
 
 const (
-	RateLimitDefaultToken = 1
-	CallerSegmentMissing  = -1
+	CallerSegmentMissing = -1
 )
 
 var (
@@ -1057,14 +1056,7 @@ func allow(
 	rateLimiter quotas.RequestRateLimiter,
 ) bool {
 	callerInfo := headers.GetCallerInfo(ctx)
-	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		api,
-		RateLimitDefaultToken,
-		callerInfo.CallerName,
-		callerInfo.CallerType,
-		shardID,
-		callerInfo.CallOrigin,
-	))
+	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(api, callerInfo.CallerName, callerInfo.CallerType, shardID, callerInfo.CallOrigin))
 }
 
 // TODO: change the value returned so it can also be used by

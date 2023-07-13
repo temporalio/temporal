@@ -49,19 +49,19 @@ func (r *RequestRateLimiterAdapterImpl) Allow(
 	now time.Time,
 	request Request,
 ) bool {
-	return r.rateLimiter.AllowN(now, request.Token)
+	return r.rateLimiter.AllowN(now, 1)
 }
 
 func (r *RequestRateLimiterAdapterImpl) Reserve(
 	now time.Time,
 	request Request,
 ) Reservation {
-	return r.rateLimiter.ReserveN(now, request.Token)
+	return r.rateLimiter.ReserveN(now, 1)
 }
 
 func (r *RequestRateLimiterAdapterImpl) Wait(
 	ctx context.Context,
 	request Request,
 ) error {
-	return r.rateLimiter.WaitN(ctx, request.Token)
+	return r.rateLimiter.WaitN(ctx, 1)
 }

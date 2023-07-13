@@ -26,7 +26,6 @@ package quotas
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 )
@@ -123,7 +122,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 	now := time.Now().UTC()
 	reservation := p.Reserve(now, request)
 	if !reservation.OK() {
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return errWouldExceedContextDeadline
 	}
 
 	delay := reservation.DelayFrom(now)
@@ -136,7 +135,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 	}
 	if waitLimit < delay {
 		reservation.CancelAt(now)
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return errWouldExceedContextDeadline
 	}
 
 	t := time.NewTimer(delay)

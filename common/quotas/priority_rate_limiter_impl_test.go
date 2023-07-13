@@ -95,15 +95,13 @@ func (s *priorityStageRateLimiterSuite) TearDownTest() {
 
 func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Allow() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
-	s.highPriorityRateLimiter.EXPECT().AllowN(now, token).Return(true)
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().AllowN(now, 1).Return(true)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.lowPriorityReservation)
 
 	allow := s.rateLimiter.Allow(now, req)
 	s.True(allow)
@@ -111,14 +109,12 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Allow() {
 
 func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
-	s.highPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
+	s.highPriorityRateLimiter.EXPECT().AllowN(now, 1).Return(false)
 
 	allow := s.rateLimiter.Allow(now, req)
 	s.False(allow)
@@ -126,14 +122,12 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
 
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
-	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(true)
+	s.lowPriorityRateLimiter.EXPECT().AllowN(now, 1).Return(true)
 
 	allow := s.rateLimiter.Allow(now, req)
 	s.True(allow)
@@ -141,14 +135,12 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
 
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
-	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
+	s.lowPriorityRateLimiter.EXPECT().AllowN(now, 1).Return(false)
 
 	allow := s.rateLimiter.Allow(now, req)
 	s.False(allow)
@@ -156,16 +148,14 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
 
 func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
 	s.highPriorityReservation.EXPECT().OK().Return(true)
-	s.highPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.highPriorityReservation)
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.highPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
 	s.Equal(NewPriorityReservation(
@@ -176,15 +166,13 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
 
 func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_NotOK() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
 	s.highPriorityReservation.EXPECT().OK().Return(false)
-	s.highPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.highPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.highPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
 	s.Equal(s.highPriorityReservation, reservation)
@@ -192,15 +180,13 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_NotOK() {
 
 func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true)
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
 	s.Equal(NewPriorityReservation(
@@ -211,15 +197,13 @@ func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
 
 func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_NotOK() {
 	now := time.Now()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
 	s.lowPriorityReservation.EXPECT().OK().Return(false)
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(now, 1).Return(s.lowPriorityReservation)
 
 	reservation := s.rateLimiter.Reserve(now, req)
 	s.Equal(s.lowPriorityReservation, reservation)
@@ -228,10 +212,8 @@ func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_NotOK() {
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_AlreadyExpired() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -242,10 +224,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_AlreadyExpired() {
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -256,10 +236,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Error() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	token := 1
 	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -269,9 +246,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.lowPriorityReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.highPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.highPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.highPriorityReservation)
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.Error(err)
@@ -280,10 +257,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Error() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -292,7 +267,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.Error(err)
@@ -300,10 +275,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Cancelled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -318,9 +291,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.lowPriorityReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.highPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.highPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.highPriorityReservation)
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.Error(err)
@@ -328,10 +301,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Cancelled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -345,7 +316,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.Error(err)
@@ -354,10 +325,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_NoError() {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -365,9 +334,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 	s.highPriorityReservation.EXPECT().DelayFrom(gomock.Any()).Return(highPriorityReservationDelay)
 
 	s.highPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.highPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.highPriorityReservation)
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.NoError(err)
@@ -376,10 +345,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_NoError() {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -387,7 +354,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 	s.lowPriorityReservation.EXPECT().DelayFrom(gomock.Any()).Return(lowPriorityReservationDelay)
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.NoError(err)
@@ -395,10 +362,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithoutExpiration() {
 	ctx := context.Background()
-	token := 1
 	req := Request{
 		API:    s.highPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -406,9 +371,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_Without
 	s.highPriorityReservation.EXPECT().DelayFrom(gomock.Any()).Return(highPriorityReservationDelay)
 
 	s.highPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.highPriorityReservation)
+	s.highPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.highPriorityReservation)
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.NoError(err)
@@ -416,10 +381,8 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_Without
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutExpiration() {
 	ctx := context.Background()
-	token := 1
 	req := Request{
 		API:    s.lowPriorityAPIName,
-		Token:  token,
 		Caller: "",
 	}
 
@@ -427,7 +390,7 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutE
 	s.lowPriorityReservation.EXPECT().DelayFrom(gomock.Any()).Return(lowPriorityReservationDelay)
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), token).Return(s.lowPriorityReservation)
+	s.lowPriorityRateLimiter.EXPECT().ReserveN(gomock.Any(), 1).Return(s.lowPriorityReservation)
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.NoError(err)

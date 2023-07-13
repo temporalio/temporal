@@ -31,10 +31,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	readerRequestToken = 1
-)
-
 func NewReaderPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	maxReaders int64,
@@ -81,12 +77,5 @@ func newReaderRequest(
 	// api, caller type, caller segment, and call initiation (origin)
 	// are the same for all the readers, and not related to
 	// priority so leaving those fields empty.
-	return quotas.NewRequest(
-		"",
-		readerRequestToken,
-		strconv.FormatInt(readerID, 10),
-		"",
-		0,
-		"",
-	)
+	return quotas.NewRequest("", strconv.FormatInt(readerID, 10), "", 0, "")
 }

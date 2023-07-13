@@ -113,7 +113,7 @@ func (rl *HealthRequestRateLimiterImpl) Allow(now time.Time, request quotas.Requ
 	if !rl.enabled.Load() {
 		return true
 	}
-	return rl.rateLimiter.AllowN(now, request.Token)
+	return rl.rateLimiter.AllowN(now, 1)
 }
 
 func (rl *HealthRequestRateLimiterImpl) Reserve(now time.Time, request quotas.Request) quotas.Reservation {
@@ -121,7 +121,7 @@ func (rl *HealthRequestRateLimiterImpl) Reserve(now time.Time, request quotas.Re
 	if !rl.enabled.Load() {
 		return quotas.NoopReservation
 	}
-	return rl.rateLimiter.ReserveN(now, request.Token)
+	return rl.rateLimiter.ReserveN(now, 1)
 }
 
 func (rl *HealthRequestRateLimiterImpl) Wait(ctx context.Context, request quotas.Request) error {
@@ -129,7 +129,7 @@ func (rl *HealthRequestRateLimiterImpl) Wait(ctx context.Context, request quotas
 	if !rl.enabled.Load() {
 		return nil
 	}
-	return rl.rateLimiter.WaitN(ctx, request.Token)
+	return rl.rateLimiter.WaitN(ctx, 1)
 }
 
 func (rl *HealthRequestRateLimiterImpl) maybeRefresh() {

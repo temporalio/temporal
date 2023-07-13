@@ -65,7 +65,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
 			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
 			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
-			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", 0, "") },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", "", "", 0, "") },
 			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
 			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
@@ -98,7 +98,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
 			TaskChannelKeyFn:            func(nt *noopTask) int { return rand.Intn(4) },
 			ChannelWeightFn:             func(key int) int { return channelKeyToWeight[key] },
-			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", 0, "") },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", "", "", 0, "") },
 			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
 			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),

@@ -197,10 +197,7 @@ func TelemetryInterceptorProvider(
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {
-	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
+	return interceptor.NewRateLimitInterceptor(configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }))
 }
 
 func ESProcessorConfigProvider(

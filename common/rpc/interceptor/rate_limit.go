@@ -52,13 +52,9 @@ type (
 
 var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
 
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
+func NewRateLimitInterceptor(rateLimiter quotas.RequestRateLimiter) *RateLimitInterceptor {
 	return &RateLimitInterceptor{
 		rateLimiter: rateLimiter,
-		tokens:      tokens,
 	}
 }
 
@@ -69,19 +65,8 @@ func (i *RateLimitInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := SplitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
-	}
 
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller name
-		"", // this interceptor layer does not throttle based on caller type
-		0,  // this interceptor layer does not throttle based on caller segment
-		"", // this interceptor layer does not throttle based on call initiation
-	)) {
+	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(methodName, "", "", 0, "")) {
 		return nil, RateLimitServerBusy
 	}
 	return handler(ctx, req)

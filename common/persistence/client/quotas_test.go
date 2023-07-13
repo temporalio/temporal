@@ -109,14 +109,7 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 
 	var limiter = newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
 
-	var request = quotas.NewRequest(
-		"test-api",
-		1,
-		"test-namespace",
-		"api",
-		-1,
-		"frontend",
-	)
+	var request = quotas.NewRequest("test-api", "test-namespace", "api", -1, "frontend")
 
 	requestTime := time.Now()
 	wasLimited := false
@@ -136,14 +129,7 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 
 	var limiter = newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
 
-	var request = quotas.NewRequest(
-		"test-api",
-		1,
-		"test-namespace",
-		"api",
-		1,
-		"frontend",
-	)
+	var request = quotas.NewRequest("test-api", "test-namespace", "api", 1, "frontend")
 
 	requestTime := time.Now()
 	wasLimited := false

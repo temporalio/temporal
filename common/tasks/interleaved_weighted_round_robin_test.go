@@ -94,7 +94,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 			TaskChannelKeyFn:            func(task *testTask) int { return task.channelKey },
 			ChannelWeightFn:             func(key int) int { return s.channelKeyToWeight[key] },
 			ChannelWeightUpdateCh:       s.channelWeightUpdateCh,
-			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", 0, "") },
+			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", "", "", 0, "") },
 			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
 			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),

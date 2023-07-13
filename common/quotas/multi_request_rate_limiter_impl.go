@@ -26,11 +26,14 @@ package quotas
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 )
 
-var _ RequestRateLimiter = (*MultiRequestRateLimiterImpl)(nil)
+var (
+	errWouldExceedContextDeadline                    = errors.New("rate: Wait(n=1) would exceed context deadline")
+	_                             RequestRateLimiter = (*MultiRequestRateLimiterImpl)(nil)
+)
 
 type (
 	MultiRequestRateLimiterImpl struct {
@@ -101,7 +104,7 @@ func (rl *MultiRequestRateLimiterImpl) Wait(ctx context.Context, request Request
 	now := time.Now().UTC()
 	reservation := rl.Reserve(now, request)
 	if !reservation.OK() {
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return errWouldExceedContextDeadline
 	}
 
 	delay := reservation.DelayFrom(now)
@@ -114,7 +117,7 @@ func (rl *MultiRequestRateLimiterImpl) Wait(ctx context.Context, request Request
 	}
 	if waitLimit < delay {
 		reservation.CancelAt(now)
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return errWouldExceedContextDeadline
 	}
 
 	t := time.NewTimer(delay)

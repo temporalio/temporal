@@ -301,7 +301,6 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 		),
-		map[string]int{},
 	)
 }
 
@@ -362,7 +361,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter)
 }
 
 func NamespaceCountLimitInterceptorProvider(

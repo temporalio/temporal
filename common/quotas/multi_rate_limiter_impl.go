@@ -131,7 +131,7 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	now := time.Now().UTC()
 	reservation := rl.ReserveN(now, numToken)
 	if !reservation.OK() {
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", numToken)
+		return fmt.Errorf("%w: %d tokens", errWouldExceedContextDeadline, numToken)
 	}
 
 	delay := reservation.DelayFrom(now)
@@ -144,7 +144,7 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	}
 	if waitLimit < delay {
 		reservation.CancelAt(now)
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", numToken)
+		return fmt.Errorf("%w: %d tokens", errWouldExceedContextDeadline, numToken)
 	}
 
 	t := time.NewTimer(delay)

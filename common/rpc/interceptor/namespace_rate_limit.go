@@ -36,10 +36,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	NamespaceRateLimitDefaultToken = 1
-)
-
 var (
 	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "namespace rate limit exceeded")
 )
@@ -48,21 +44,15 @@ type (
 	NamespaceRateLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		rateLimiter       quotas.RequestRateLimiter
-		tokens            map[string]int
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptor)(nil).Intercept
 
-func NewNamespaceRateLimitInterceptor(
-	namespaceRegistry namespace.Registry,
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *NamespaceRateLimitInterceptor {
+func NewNamespaceRateLimitInterceptor(namespaceRegistry namespace.Registry, rateLimiter quotas.RequestRateLimiter) *NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		rateLimiter:       rateLimiter,
-		tokens:            tokens,
 	}
 }
 
@@ -73,20 +63,9 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := SplitMethodName(info.FullMethod)
-	token, ok := ni.tokens[methodName]
-	if !ok {
-		token = NamespaceRateLimitDefaultToken
-	}
 
 	namespace := MustGetNamespaceName(ni.namespaceRegistry, req)
-	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		namespace.String(),
-		"", // this interceptor layer does not throttle based on caller type
-		0,  // this interceptor layer does not throttle based on caller segment
-		"", // this interceptor layer does not throttle based on call initiation
-	)) {
+	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(methodName, namespace.String(), "", 0, "")) {
 		return nil, ErrNamespaceRateLimitServerBusy
 	}
 	return handler(ctx, req)
