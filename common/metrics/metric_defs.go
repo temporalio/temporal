@@ -131,79 +131,8 @@ const (
 	AdminClientGetTaskQueueTasksScope = "AdminClientGetTaskQueueTasks"
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
 	AdminClientDeleteWorkflowExecutionScope = "AdminClientDeleteWorkflowExecution"
-
-	// AdminDescribeHistoryHostScope is the metric scope for admin.AdminDescribeHistoryHost
-	AdminDescribeHistoryHostScope = "AdminDescribeHistoryHost"
-	// AdminAddSearchAttributesScope is the metric scope for admin.AdminAddSearchAttributes
-	AdminAddSearchAttributesScope = "AdminAddSearchAttributes"
-	// AdminRemoveSearchAttributesScope is the metric scope for admin.AdminRemoveSearchAttributes
-	AdminRemoveSearchAttributesScope = "AdminRemoveSearchAttributes"
-	// AdminGetSearchAttributesScope is the metric scope for admin.AdminGetSearchAttributes
-	AdminGetSearchAttributesScope = "AdminGetSearchAttributes"
-	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableState
-	AdminRebuildMutableStateScope = "AdminRebuildMutableState"
-	// AdminDescribeMutableStateScope is the metric scope for admin.AdminDescribeMutableState
-	AdminDescribeMutableStateScope = "AdminDescribeMutableState"
-	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
-	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
-	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
-	AdminGetReplicationMessagesScope = "AdminGetReplicationMessages"
-	// AdminGetNamespaceReplicationMessagesScope is the metric scope for admin.GetNamespaceReplicationMessages
-	AdminGetNamespaceReplicationMessagesScope = "AdminGetNamespaceReplicationMessages"
-	// AdminGetDLQReplicationMessagesScope is the metric scope for admin.GetDLQReplicationMessages
-	AdminGetDLQReplicationMessagesScope = "AdminGetDLQReplicationMessages"
-	// AdminReapplyEventsScope is the metric scope for admin.ReapplyEvents
-	AdminReapplyEventsScope = "AdminReapplyEvents"
-	// AdminRefreshWorkflowTasksScope is the metric scope for admin.RefreshWorkflowTasks
-	AdminRefreshWorkflowTasksScope = "AdminRefreshWorkflowTasks"
-	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
-	AdminResendReplicationTasksScope = "AdminResendReplicationTasks"
-	// AdminGetTaskQueueTasksScope is the metric scope for admin.GetTaskQueueTasks
-	AdminGetTaskQueueTasksScope = "AdminGetTaskQueueTasks"
-	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTask
-	AdminRemoveTaskScope = "AdminRemoveTask"
-	// AdminCloseShardScope is the metric scope for admin.AdminCloseShard
-	AdminCloseShardScope = "AdminCloseShard"
-	// AdminGetShardScope is the metric scope for admin.AdminGetShard
-	AdminGetShardScope = "AdminGetShard"
-	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasks
-	AdminListHistoryTasksScope = "AdminListHistoryTasks"
-	// AdminGetDLQMessagesScope is the metric scope for admin.AdminGetDLQMessages
-	AdminGetDLQMessagesScope = "AdminGetDLQMessages"
-	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessages
-	AdminPurgeDLQMessagesScope = "AdminPurgeDLQMessages"
-	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessages
-	AdminMergeDLQMessagesScope = "AdminMergeDLQMessages"
-	// AdminListClusterMembersScope is the metric scope for admin.AdminListClusterMembers
-	AdminListClusterMembersScope = "AdminListClusterMembers"
-	// AdminDescribeClusterScope is the metric scope for admin.AdminDescribeCluster
-	AdminDescribeClusterScope = "AdminDescribeCluster"
-	// AdminListClustersScope is the metric scope for admin.AdminListClusters
-	AdminListClustersScope = "AdminListClusters"
-	// AdminAddOrUpdateRemoteClusterScope is the metric scope for admin.AdminAddOrUpdateRemoteCluster
-	AdminAddOrUpdateRemoteClusterScope = "AdminAddOrUpdateRemoteCluster"
-	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteCluster
-	AdminRemoveRemoteClusterScope = "AdminRemoveRemoteCluster"
-	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecution
-	AdminDeleteWorkflowExecutionScope = "AdminDeleteWorkflowExecution"
-	// AdminStreamWorkflowReplicationMessagesScope is the metric scope for admin.AdminStreamReplicationMessages
-	AdminStreamWorkflowReplicationMessagesScope = "AdminStreamWorkflowReplicationMessages"
-
-	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
-	OperatorAddSearchAttributesScope
-	// OperatorRemoveSearchAttributesScope is the metric scope for operator.RemoveSearchAttributes
-	OperatorRemoveSearchAttributesScope = "OperatorRemoveSearchAttributes"
-	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
-	OperatorListSearchAttributesScope = "OperatorListSearchAttributes"
-	OperatorDeleteNamespaceScope      = "OperatorDeleteNamespace"
-	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteCluster
-	OperatorAddOrUpdateRemoteClusterScope = "OperatorAddOrUpdateRemoteCluster"
-	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteCluster
-	OperatorRemoveRemoteClusterScope = "OperatorRemoveRemoteCluster"
-	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
-	OperatorListClustersScope = "OperatorListClusters"
-	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
-	OperatorDeleteWorkflowExecutionScope = "OperatorDeleteWorkflowExecution"
+	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientStreamWorkflowReplicationMessagesScope = "AdminClientStreamWorkflowReplicationMessages"
 )
 
 // Frontend Client Operations
@@ -707,6 +636,14 @@ const (
 
 // Frontend Scope
 const (
+	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
+
+	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
+	OperatorAddSearchAttributesScope = "OperatorAddSearchAttributes"
+	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
+	OperatorDeleteNamespaceScope = "OperatorDeleteNamespace"
+
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
 	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
 	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
@@ -1223,6 +1160,7 @@ var (
 	)
 	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
 	ServiceFailures                          = NewCounterDef("service_errors")
+	ServicePanic                             = NewCounterDef("service_panics")
 	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
@@ -1246,21 +1184,36 @@ var (
 	LockRequests                             = NewCounterDef("lock_requests")
 	LockFailures                             = NewCounterDef("lock_failures")
 	LockLatency                              = NewTimerDef("lock_latency")
-	ClientRequests                           = NewCounterDef("client_requests")
-	ClientFailures                           = NewCounterDef("client_errors")
-	ClientLatency                            = NewTimerDef("client_latency")
-	ClientRedirectionRequests                = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures                = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency                 = NewTimerDef("client_redirection_latency")
-	StateTransitionCount                     = NewDimensionlessHistogramDef("state_transition_count")
-	HistorySize                              = NewBytesHistogramDef("history_size")
-	HistoryCount                             = NewDimensionlessHistogramDef("history_count")
-	SearchAttributesSize                     = NewBytesHistogramDef("search_attributes_size")
-	MemoSize                                 = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows             = NewCounterDef("wf_too_many_pending_child_workflows")
-	TooManyPendingActivities                 = NewCounterDef("wf_too_many_pending_activities")
-	TooManyPendingCancelRequests             = NewCounterDef("wf_too_many_pending_cancel_requests")
-	TooManyPendingSignalsToExternalWorkflows = NewCounterDef("wf_too_many_pending_external_workflow_signals")
+	ClientRequests                           = NewCounterDef(
+		"client_requests",
+		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
+	)
+	ClientFailures               = NewCounterDef("client_errors")
+	ClientLatency                = NewTimerDef("client_latency")
+	ClientRedirectionRequests    = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures    = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency     = NewTimerDef("client_redirection_latency")
+	StateTransitionCount         = NewDimensionlessHistogramDef("state_transition_count")
+	HistorySize                  = NewBytesHistogramDef("history_size")
+	HistoryCount                 = NewDimensionlessHistogramDef("history_count")
+	SearchAttributesSize         = NewBytesHistogramDef("search_attributes_size")
+	MemoSize                     = NewBytesHistogramDef("memo_size")
+	TooManyPendingChildWorkflows = NewCounterDef(
+		"wf_too_many_pending_child_workflows",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingActivities = NewCounterDef(
+		"wf_too_many_pending_activities",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending activities to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingCancelRequests = NewCounterDef(
+		"wf_too_many_pending_cancel_requests",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending cancel requests to be exceeded. See https://t.mp/limits for more information."),
+	)
+	TooManyPendingSignalsToExternalWorkflows = NewCounterDef(
+		"wf_too_many_pending_external_workflow_signals",
+		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
+	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -1390,49 +1343,52 @@ var (
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
-	MutableStateSize                              = NewBytesHistogramDef("mutable_state_size")
-	ExecutionInfoSize                             = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                            = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                              = NewBytesHistogramDef("activity_info_size")
-	TimerInfoSize                                 = NewBytesHistogramDef("timer_info_size")
-	ChildInfoSize                                 = NewBytesHistogramDef("child_info_size")
-	RequestCancelInfoSize                         = NewBytesHistogramDef("request_cancel_info_size")
-	SignalInfoSize                                = NewBytesHistogramDef("signal_info_size")
-	SignalRequestIDSize                           = NewBytesHistogramDef("signal_request_id_size")
-	BufferedEventsSize                            = NewBytesHistogramDef("buffered_events_size")
-	ActivityInfoCount                             = NewDimensionlessHistogramDef("activity_info_count")
-	TimerInfoCount                                = NewDimensionlessHistogramDef("timer_info_count")
-	ChildInfoCount                                = NewDimensionlessHistogramDef("child_info_count")
-	SignalInfoCount                               = NewDimensionlessHistogramDef("signal_info_count")
-	RequestCancelInfoCount                        = NewDimensionlessHistogramDef("request_cancel_info_count")
-	SignalRequestIDCount                          = NewDimensionlessHistogramDef("signal_request_id_count")
-	BufferedEventsCount                           = NewDimensionlessHistogramDef("buffered_events_count")
-	TaskCount                                     = NewDimensionlessHistogramDef("task_count")
-	TotalActivityCount                            = NewDimensionlessHistogramDef("total_activity_count")
-	TotalUserTimerCount                           = NewDimensionlessHistogramDef("total_user_timer_count")
-	TotalChildExecutionCount                      = NewDimensionlessHistogramDef("total_child_execution_count")
-	TotalRequestCancelExternalCount               = NewDimensionlessHistogramDef("total_request_cancel_external_count")
-	TotalSignalExternalCount                      = NewDimensionlessHistogramDef("total_signal_external_count")
-	TotalSignalCount                              = NewDimensionlessHistogramDef("total_signal_count")
-	WorkflowRetryBackoffTimerCount                = NewCounterDef("workflow_retry_backoff_timer")
-	WorkflowCronBackoffTimerCount                 = NewCounterDef("workflow_cron_backoff_timer")
-	WorkflowDelayedStartBackoffTimerCount         = NewCounterDef("workflow_delayed_start_backoff_timer")
-	WorkflowCleanupDeleteCount                    = NewCounterDef("workflow_cleanup_delete")
-	WorkflowCleanupArchiveCount                   = NewCounterDef("workflow_cleanup_archive")
-	WorkflowCleanupNopCount                       = NewCounterDef("workflow_cleanup_nop")
-	WorkflowCleanupDeleteHistoryInlineCount       = NewCounterDef("workflow_cleanup_delete_history_inline")
-	WorkflowSuccessCount                          = NewCounterDef("workflow_success")
-	WorkflowCancelCount                           = NewCounterDef("workflow_cancel")
-	WorkflowFailedCount                           = NewCounterDef("workflow_failed")
-	WorkflowTimeoutCount                          = NewCounterDef("workflow_timeout")
-	WorkflowTerminateCount                        = NewCounterDef("workflow_terminate")
-	WorkflowContinuedAsNewCount                   = NewCounterDef("workflow_continued_as_new")
-	ReplicationTasksSend                          = NewCounterDef("replication_tasks_send")
-	ReplicationTasksRecv                          = NewCounterDef("replication_tasks_recv")
-	ReplicationTasksRecvBacklog                   = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
-	ReplicationTasksSkipped                       = NewCounterDef("replication_tasks_skipped")
-	ReplicationTasksApplied                       = NewCounterDef("replication_tasks_applied")
-	ReplicationTasksFailed                        = NewCounterDef("replication_tasks_failed")
+	MutableStateSize                              = NewBytesHistogramDef(
+		"mutable_state_size",
+		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
+	)
+	ExecutionInfoSize                       = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize                      = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize                        = NewBytesHistogramDef("activity_info_size")
+	TimerInfoSize                           = NewBytesHistogramDef("timer_info_size")
+	ChildInfoSize                           = NewBytesHistogramDef("child_info_size")
+	RequestCancelInfoSize                   = NewBytesHistogramDef("request_cancel_info_size")
+	SignalInfoSize                          = NewBytesHistogramDef("signal_info_size")
+	SignalRequestIDSize                     = NewBytesHistogramDef("signal_request_id_size")
+	BufferedEventsSize                      = NewBytesHistogramDef("buffered_events_size")
+	ActivityInfoCount                       = NewDimensionlessHistogramDef("activity_info_count")
+	TimerInfoCount                          = NewDimensionlessHistogramDef("timer_info_count")
+	ChildInfoCount                          = NewDimensionlessHistogramDef("child_info_count")
+	SignalInfoCount                         = NewDimensionlessHistogramDef("signal_info_count")
+	RequestCancelInfoCount                  = NewDimensionlessHistogramDef("request_cancel_info_count")
+	SignalRequestIDCount                    = NewDimensionlessHistogramDef("signal_request_id_count")
+	BufferedEventsCount                     = NewDimensionlessHistogramDef("buffered_events_count")
+	TaskCount                               = NewDimensionlessHistogramDef("task_count")
+	TotalActivityCount                      = NewDimensionlessHistogramDef("total_activity_count")
+	TotalUserTimerCount                     = NewDimensionlessHistogramDef("total_user_timer_count")
+	TotalChildExecutionCount                = NewDimensionlessHistogramDef("total_child_execution_count")
+	TotalRequestCancelExternalCount         = NewDimensionlessHistogramDef("total_request_cancel_external_count")
+	TotalSignalExternalCount                = NewDimensionlessHistogramDef("total_signal_external_count")
+	TotalSignalCount                        = NewDimensionlessHistogramDef("total_signal_count")
+	WorkflowRetryBackoffTimerCount          = NewCounterDef("workflow_retry_backoff_timer")
+	WorkflowCronBackoffTimerCount           = NewCounterDef("workflow_cron_backoff_timer")
+	WorkflowDelayedStartBackoffTimerCount   = NewCounterDef("workflow_delayed_start_backoff_timer")
+	WorkflowCleanupDeleteCount              = NewCounterDef("workflow_cleanup_delete")
+	WorkflowCleanupArchiveCount             = NewCounterDef("workflow_cleanup_archive")
+	WorkflowCleanupNopCount                 = NewCounterDef("workflow_cleanup_nop")
+	WorkflowCleanupDeleteHistoryInlineCount = NewCounterDef("workflow_cleanup_delete_history_inline")
+	WorkflowSuccessCount                    = NewCounterDef("workflow_success")
+	WorkflowCancelCount                     = NewCounterDef("workflow_cancel")
+	WorkflowFailedCount                     = NewCounterDef("workflow_failed")
+	WorkflowTimeoutCount                    = NewCounterDef("workflow_timeout")
+	WorkflowTerminateCount                  = NewCounterDef("workflow_terminate")
+	WorkflowContinuedAsNewCount             = NewCounterDef("workflow_continued_as_new")
+	ReplicationTasksSend                    = NewCounterDef("replication_tasks_send")
+	ReplicationTasksRecv                    = NewCounterDef("replication_tasks_recv")
+	ReplicationTasksRecvBacklog             = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
+	ReplicationTasksSkipped                 = NewCounterDef("replication_tasks_skipped")
+	ReplicationTasksApplied                 = NewCounterDef("replication_tasks_applied")
+	ReplicationTasksFailed                  = NewCounterDef("replication_tasks_failed")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1501,76 +1457,79 @@ var (
 	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
 
 	// Worker
-	ExecutorTasksDoneCount                            = NewCounterDef("executor_done")
-	ExecutorTasksErrCount                             = NewCounterDef("executor_err")
-	ExecutorTasksDeferredCount                        = NewCounterDef("executor_deferred")
-	ExecutorTasksDroppedCount                         = NewCounterDef("executor_dropped")
-	StartedCount                                      = NewCounterDef("started")
-	StoppedCount                                      = NewCounterDef("stopped")
-	TaskProcessedCount                                = NewGaugeDef("task_processed")
-	TaskDeletedCount                                  = NewGaugeDef("task_deleted")
-	TaskQueueProcessedCount                           = NewGaugeDef("taskqueue_processed")
-	TaskQueueDeletedCount                             = NewGaugeDef("taskqueue_deleted")
-	TaskQueueOutstandingCount                         = NewGaugeDef("taskqueue_outstanding")
-	HistoryArchiverArchiveNonRetryableErrorCount      = NewCounterDef("history_archiver_archive_non_retryable_error")
-	HistoryArchiverArchiveTransientErrorCount         = NewCounterDef("history_archiver_archive_transient_error")
-	HistoryArchiverArchiveSuccessCount                = NewCounterDef("history_archiver_archive_success")
-	HistoryArchiverTotalUploadSize                    = NewBytesHistogramDef("history_archiver_total_upload_size")
-	HistoryArchiverHistorySize                        = NewBytesHistogramDef("history_archiver_history_size")
-	HistoryArchiverDuplicateArchivalsCount            = NewCounterDef("history_archiver_duplicate_archivals")
-	HistoryArchiverBlobExistsCount                    = NewCounterDef("history_archiver_blob_exists")
-	HistoryArchiverBlobSize                           = NewBytesHistogramDef("history_archiver_blob_size")
-	HistoryWorkflowExecutionCacheLatency              = NewTimerDef("history_workflow_execution_cache_latency")
-	VisibilityArchiverArchiveNonRetryableErrorCount   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount      = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                     = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                      = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                        = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                         = NewCounterDef("scavenger_skips")
-	ExecutionsOutstandingCount                        = NewGaugeDef("executions_outstanding")
-	ArchiverNonRetryableErrorCount                    = NewCounterDef("archiver_non_retryable_error")
-	ArchiverStartedCount                              = NewCounterDef("archiver_started")
-	ArchiverStoppedCount                              = NewCounterDef("archiver_stopped")
-	ArchiverCoroutineStartedCount                     = NewCounterDef("archiver_coroutine_started")
-	ArchiverCoroutineStoppedCount                     = NewCounterDef("archiver_coroutine_stopped")
-	ArchiverHandleHistoryRequestLatency               = NewTimerDef("archiver_handle_history_request_latency")
-	ArchiverHandleVisibilityRequestLatency            = NewTimerDef("archiver_handle_visibility_request_latency")
-	ArchiverUploadWithRetriesLatency                  = NewTimerDef("archiver_upload_with_retries_latency")
-	ArchiverDeleteWithRetriesLatency                  = NewTimerDef("archiver_delete_with_retries_latency")
-	ArchiverUploadFailedAllRetriesCount               = NewCounterDef("archiver_upload_failed_all_retries")
-	ArchiverUploadSuccessCount                        = NewCounterDef("archiver_upload_success")
-	ArchiverDeleteFailedAllRetriesCount               = NewCounterDef("archiver_delete_failed_all_retries")
-	ArchiverDeleteSuccessCount                        = NewCounterDef("archiver_delete_success")
-	ArchiverHandleVisibilityFailedAllRetiresCount     = NewCounterDef("archiver_handle_visibility_failed_all_retries")
-	ArchiverHandleVisibilitySuccessCount              = NewCounterDef("archiver_handle_visibility_success")
-	ArchiverBacklogSizeGauge                          = NewGaugeDef("archiver_backlog_size")
-	ArchiverPumpTimeoutCount                          = NewCounterDef("archiver_pump_timeout")
-	ArchiverPumpSignalThresholdCount                  = NewCounterDef("archiver_pump_signal_threshold")
-	ArchiverPumpTimeoutWithoutSignalsCount            = NewCounterDef("archiver_pump_timeout_without_signals")
-	ArchiverPumpSignalChannelClosedCount              = NewCounterDef("archiver_pump_signal_channel_closed")
-	ArchiverWorkflowStartedCount                      = NewCounterDef("archiver_workflow_started")
-	ArchiverNumPumpedRequestsCount                    = NewCounterDef("archiver_num_pumped_requests")
-	ArchiverNumHandledRequestsCount                   = NewCounterDef("archiver_num_handled_requests")
-	ArchiverPumpedNotEqualHandledCount                = NewCounterDef("archiver_pumped_not_equal_handled")
-	ArchiverHandleAllRequestsLatency                  = NewTimerDef("archiver_handle_all_requests_latency")
-	ArchiverWorkflowStoppingCount                     = NewCounterDef("archiver_workflow_stopping")
-	ScavengerValidationRequestsCount                  = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                  = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                     = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                  = NewCounterDef("add_search_attributes_failures")
-	DeleteNamespaceSuccessCount                       = NewCounterDef("delete_namespace_success")
-	RenameNamespaceSuccessCount                       = NewCounterDef("rename_namespace_success")
-	DeleteExecutionsSuccessCount                      = NewCounterDef("delete_executions_success")
-	DeleteNamespaceFailuresCount                      = NewCounterDef("delete_namespace_failures")
-	UpdateNamespaceFailuresCount                      = NewCounterDef("update_namespace_failures")
-	RenameNamespaceFailuresCount                      = NewCounterDef("rename_namespace_failures")
-	ReadNamespaceFailuresCount                        = NewCounterDef("read_namespace_failures")
-	ListExecutionsFailuresCount                       = NewCounterDef("list_executions_failures")
-	CountExecutionsFailuresCount                      = NewCounterDef("count_executions_failures")
-	DeleteExecutionFailuresCount                      = NewCounterDef("delete_execution_failures")
-	DeleteExecutionNotFoundCount                      = NewCounterDef("delete_execution_not_found")
-	RateLimiterFailuresCount                          = NewCounterDef("rate_limiter_failures")
-	BatcherProcessorSuccess                           = NewCounterDef("batcher_processor_requests")
+	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
+	ExecutorTasksErrCount                           = NewCounterDef("executor_err")
+	ExecutorTasksDeferredCount                      = NewCounterDef("executor_deferred")
+	ExecutorTasksDroppedCount                       = NewCounterDef("executor_dropped")
+	StartedCount                                    = NewCounterDef("started")
+	StoppedCount                                    = NewCounterDef("stopped")
+	TaskProcessedCount                              = NewGaugeDef("task_processed")
+	TaskDeletedCount                                = NewGaugeDef("task_deleted")
+	TaskQueueProcessedCount                         = NewGaugeDef("taskqueue_processed")
+	TaskQueueDeletedCount                           = NewGaugeDef("taskqueue_deleted")
+	TaskQueueOutstandingCount                       = NewGaugeDef("taskqueue_outstanding")
+	HistoryArchiverArchiveNonRetryableErrorCount    = NewCounterDef("history_archiver_archive_non_retryable_error")
+	HistoryArchiverArchiveTransientErrorCount       = NewCounterDef("history_archiver_archive_transient_error")
+	HistoryArchiverArchiveSuccessCount              = NewCounterDef("history_archiver_archive_success")
+	HistoryArchiverTotalUploadSize                  = NewBytesHistogramDef("history_archiver_total_upload_size")
+	HistoryArchiverHistorySize                      = NewBytesHistogramDef("history_archiver_history_size")
+	HistoryArchiverDuplicateArchivalsCount          = NewCounterDef("history_archiver_duplicate_archivals")
+	HistoryArchiverBlobExistsCount                  = NewCounterDef("history_archiver_blob_exists")
+	HistoryArchiverBlobSize                         = NewBytesHistogramDef("history_archiver_blob_size")
+	HistoryWorkflowExecutionCacheLatency            = NewTimerDef("history_workflow_execution_cache_latency")
+	VisibilityArchiverArchiveNonRetryableErrorCount = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount    = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                   = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                    = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                      = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                       = NewCounterDef("scavenger_skips")
+	ExecutionsOutstandingCount                      = NewGaugeDef("executions_outstanding")
+	ArchiverNonRetryableErrorCount                  = NewCounterDef("archiver_non_retryable_error")
+	ArchiverStartedCount                            = NewCounterDef("archiver_started")
+	ArchiverStoppedCount                            = NewCounterDef("archiver_stopped")
+	ArchiverCoroutineStartedCount                   = NewCounterDef("archiver_coroutine_started")
+	ArchiverCoroutineStoppedCount                   = NewCounterDef("archiver_coroutine_stopped")
+	ArchiverHandleHistoryRequestLatency             = NewTimerDef("archiver_handle_history_request_latency")
+	ArchiverHandleVisibilityRequestLatency          = NewTimerDef("archiver_handle_visibility_request_latency")
+	ArchiverUploadWithRetriesLatency                = NewTimerDef("archiver_upload_with_retries_latency")
+	ArchiverDeleteWithRetriesLatency                = NewTimerDef("archiver_delete_with_retries_latency")
+	ArchiverUploadFailedAllRetriesCount             = NewCounterDef("archiver_upload_failed_all_retries")
+	ArchiverUploadSuccessCount                      = NewCounterDef("archiver_upload_success")
+	ArchiverDeleteFailedAllRetriesCount             = NewCounterDef("archiver_delete_failed_all_retries")
+	ArchiverDeleteSuccessCount                      = NewCounterDef("archiver_delete_success")
+	ArchiverHandleVisibilityFailedAllRetiresCount   = NewCounterDef("archiver_handle_visibility_failed_all_retries")
+	ArchiverHandleVisibilitySuccessCount            = NewCounterDef("archiver_handle_visibility_success")
+	ArchiverBacklogSizeGauge                        = NewGaugeDef("archiver_backlog_size")
+	ArchiverPumpTimeoutCount                        = NewCounterDef("archiver_pump_timeout")
+	ArchiverPumpSignalThresholdCount                = NewCounterDef("archiver_pump_signal_threshold")
+	ArchiverPumpTimeoutWithoutSignalsCount          = NewCounterDef("archiver_pump_timeout_without_signals")
+	ArchiverPumpSignalChannelClosedCount            = NewCounterDef("archiver_pump_signal_channel_closed")
+	ArchiverWorkflowStartedCount                    = NewCounterDef("archiver_workflow_started")
+	ArchiverNumPumpedRequestsCount                  = NewCounterDef("archiver_num_pumped_requests")
+	ArchiverNumHandledRequestsCount                 = NewCounterDef("archiver_num_handled_requests")
+	ArchiverPumpedNotEqualHandledCount              = NewCounterDef("archiver_pumped_not_equal_handled")
+	ArchiverHandleAllRequestsLatency                = NewTimerDef("archiver_handle_all_requests_latency")
+	ArchiverWorkflowStoppingCount                   = NewCounterDef("archiver_workflow_stopping")
+	ScavengerValidationRequestsCount                = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                   = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                = NewCounterDef("add_search_attributes_failures")
+	DeleteNamespaceSuccessCount                     = NewCounterDef("delete_namespace_success")
+	RenameNamespaceSuccessCount                     = NewCounterDef("rename_namespace_success")
+	DeleteExecutionsSuccessCount                    = NewCounterDef("delete_executions_success")
+	DeleteNamespaceFailuresCount                    = NewCounterDef("delete_namespace_failures")
+	UpdateNamespaceFailuresCount                    = NewCounterDef("update_namespace_failures")
+	RenameNamespaceFailuresCount                    = NewCounterDef("rename_namespace_failures")
+	ReadNamespaceFailuresCount                      = NewCounterDef("read_namespace_failures")
+	ListExecutionsFailuresCount                     = NewCounterDef("list_executions_failures")
+	CountExecutionsFailuresCount                    = NewCounterDef("count_executions_failures")
+	DeleteExecutionFailuresCount                    = NewCounterDef("delete_execution_failures")
+	DeleteExecutionNotFoundCount                    = NewCounterDef("delete_execution_not_found")
+	RateLimiterFailuresCount                        = NewCounterDef("rate_limiter_failures")
+	BatcherProcessorSuccess                         = NewCounterDef(
+		"batcher_processor_requests",
+		WithDescription("The number of individual workflow execution tasks successfully processed by the batch request processor"),
+	)
 	BatcherProcessorFailures                          = NewCounterDef("batcher_processor_errors")
 	BatcherOperationFailures                          = NewCounterDef("batcher_operation_errors")
 	ElasticsearchBulkProcessorRequests                = NewCounterDef("elasticsearch_bulk_processor_requests")
@@ -1610,10 +1569,19 @@ var (
 	NamespaceReplicationDLQMaxLevelGauge  = NewGaugeDef("namespace_dlq_max_level")
 
 	// Persistence
-	PersistenceRequests                    = NewCounterDef("persistence_requests")
-	PersistenceFailures                    = NewCounterDef("persistence_errors")
-	PersistenceErrorWithType               = NewCounterDef("persistence_error_with_type")
-	PersistenceLatency                     = NewTimerDef("persistence_latency")
+	PersistenceRequests = NewCounterDef(
+		"persistence_requests",
+		WithDescription("Persistence requests, keyed by `operation`"),
+	)
+	PersistenceFailures      = NewCounterDef("persistence_errors")
+	PersistenceErrorWithType = NewCounterDef(
+		"persistence_error_with_type",
+		WithDescription("Persistence errors, keyed by `error_type`"),
+	)
+	PersistenceLatency = NewTimerDef(
+		"persistence_latency",
+		WithDescription("Persistence latency, keyed by `operation`"),
+	)
 	PersistenceShardRPS                    = NewDimensionlessHistogramDef("persistence_shard_rps")
 	PersistenceErrResourceExhaustedCounter = NewCounterDef("persistence_errors_resource_exhausted")
 	VisibilityPersistenceRequests          = NewCounterDef("visibility_persistence_requests")

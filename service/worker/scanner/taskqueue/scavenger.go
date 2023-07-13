@@ -194,11 +194,13 @@ func (s *Scavenger) process(key *p.TaskQueueKey, state *taskQueueState) executor
 func (s *Scavenger) awaitExecutor() {
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
+		timer := time.NewTimer(executorPollInterval)
 		select {
-		case <-time.After(executorPollInterval):
+		case <-timer.C:
 			outstanding = s.executor.TaskCount()
 			s.metricsHandler.Gauge(metrics.TaskQueueOutstandingCount.GetMetricName()).Record(float64(outstanding))
 		case <-s.stopC:
+			timer.Stop()
 			return
 		}
 	}

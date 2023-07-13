@@ -25,6 +25,8 @@
 package tests
 
 import (
+	"sync"
+
 	"github.com/dgryski/go-farm"
 
 	"go.temporal.io/server/common/membership"
@@ -32,40 +34,92 @@ import (
 )
 
 type simpleResolver struct {
-	hosts    []membership.HostInfo
+	mu        sync.Mutex
+	hostInfos []membership.HostInfo
+	listeners map[string]chan<- *membership.ChangedEvent
+
 	hashfunc func([]byte) uint32
 }
 
 // newSimpleResolver returns a service resolver that maintains static mapping
 // between services and host info
-func newSimpleResolver(service primitives.ServiceName, hosts []string) membership.ServiceResolver {
+func newSimpleResolver(service primitives.ServiceName, hosts []string) *simpleResolver {
 	hostInfos := make([]membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
 		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
 	}
-	return &simpleResolver{hostInfos, farm.Fingerprint32}
+	return &simpleResolver{
+		hostInfos: hostInfos,
+		hashfunc:  farm.Fingerprint32,
+		listeners: make(map[string]chan<- *membership.ChangedEvent),
+	}
+}
+
+func (s *simpleResolver) start(hosts []string) {
+	hostInfos := make([]membership.HostInfo, 0, len(hosts))
+	for _, host := range hosts {
+		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
+	}
+	event := &membership.ChangedEvent{
+		HostsAdded: hostInfos,
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.hostInfos = hostInfos
+
+	for _, ch := range s.listeners {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
 }
 
 func (s *simpleResolver) Lookup(key string) (membership.HostInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.hostInfos) == 0 {
+		return nil, membership.ErrInsufficientHosts
+	}
 	hash := int(s.hashfunc([]byte(key)))
-	idx := hash % len(s.hosts)
-	return s.hosts[idx], nil
+	idx := hash % len(s.hostInfos)
+	return s.hostInfos[idx], nil
 }
 
 func (s *simpleResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.listeners[name]
+	if ok {
+		return membership.ErrListenerAlreadyExist
+	}
+	s.listeners[name] = notifyChannel
 	return nil
 }
 
 func (s *simpleResolver) RemoveListener(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.listeners[name]
+	if !ok {
+		return nil
+	}
+	delete(s.listeners, name)
 	return nil
 }
 
 func (s *simpleResolver) MemberCount() int {
-	return len(s.hosts)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.hostInfos)
 }
 
 func (s *simpleResolver) Members() []membership.HostInfo {
-	return s.hosts
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hostInfos
 }
 
 func (s *simpleResolver) RequestRefresh() {

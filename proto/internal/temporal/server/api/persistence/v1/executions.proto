@@ -62,9 +62,7 @@ message ShardInfo {
     map<string, int64> replication_dlq_ack_level = 13;
     reserved 14;
     reserved 15;
-    // Map from task category to ack levels of the corresponding queue processor
-    // Deprecated. Use queue_states instead.
-    map<int32, QueueAckLevel> queue_ack_levels = 16;
+    reserved 16;
     map<int32, QueueState> queue_states = 17;
 }
 

@@ -284,24 +284,26 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 			for i := 0; i < concurrency; i++ {
 				wg.Add(1)
 				go func() {
+					timer := time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-t.fwdr.AddReqTokenC():
+						timer.Stop()
 						if !tc.mustLeakToken {
 							token.release()
 						}
 						atomic.AddInt32(&adds, 1)
-					case <-time.After(time.Millisecond * 200):
-						break
+					case <-timer.C:
 					}
 
+					timer = time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-t.fwdr.PollReqTokenC():
+						timer.Stop()
 						if !tc.mustLeakToken {
 							token.release()
 						}
 						atomic.AddInt32(&polls, 1)
-					case <-time.After(time.Millisecond * 200):
-						break
+					case <-timer.C:
 					}
 					wg.Done()
 				}()

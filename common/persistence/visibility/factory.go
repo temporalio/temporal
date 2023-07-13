@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -63,6 +64,9 @@ func NewManager(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
+	// Log configuration
+	logger.Info("loading new manager with the configuration: ", tag.Key("VisibilityStoreConfig"), tag.Value(persistenceCfg.GetVisibilityStoreConfig()))
+
 	visibilityManager, err := newVisibilityManagerFromDataStoreConfig(
 		persistenceCfg.GetVisibilityStoreConfig(),
 		persistenceResolver,
