@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/pborman/uuid"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -807,7 +807,7 @@ func updateCurrentClusterMetadataRecord(
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
 		updateDBRecord = true
 	}
-	if !reflect.DeepEqual(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
+	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
 		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
 		updateDBRecord = true
 	}

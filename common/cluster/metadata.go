@@ -30,11 +30,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -474,7 +475,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
 				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
-				reflect.DeepEqual(newClusterInfo.Tags, oldClusterInfo.Tags) {
+				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
 			}
