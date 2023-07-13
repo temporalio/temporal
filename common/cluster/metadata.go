@@ -30,6 +30,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -466,12 +467,14 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
 				ShardCount:             newClusterInfo.ShardCount,
+				Tags:                   newClusterInfo.Tags,
 				version:                newClusterInfo.version,
 			}
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
-				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion {
+				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
+				reflect.DeepEqual(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
 			}
@@ -481,6 +484,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
 				RPCAddress:             oldClusterInfo.RPCAddress,
 				ShardCount:             oldClusterInfo.ShardCount,
+				Tags:                   oldClusterInfo.Tags,
 				version:                oldClusterInfo.version,
 			}
 			newEntries[clusterName] = &ClusterInformation{
@@ -488,6 +492,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
 				ShardCount:             newClusterInfo.ShardCount,
+				Tags:                   newClusterInfo.Tags,
 				version:                newClusterInfo.version,
 			}
 		}
