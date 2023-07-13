@@ -251,6 +251,8 @@ const (
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
 	// FrontendMaxNamespaceCountPerInstance limits concurrent task queue polls per namespace per instance
 	FrontendMaxNamespaceCountPerInstance = "frontend.namespaceCount"
+	// FrontendGlobalMaxNamespaceCount limits concurrent task queue polls per namespace per cluster
+	FrontendGlobalMaxNamespaceCount = "frontend.globalNamespaceCount"
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"

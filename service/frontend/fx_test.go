@@ -142,11 +142,11 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			},
 		},
 		{
-			name: "no hosts returned by service resolver acts as if there was one host",
+			name: "no hosts returned by service resolver causes global RPS limit to be ignored",
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
-				tc.expectRateLimit = true
+				tc.expectRateLimit = false
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
 				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
@@ -171,8 +171,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			}
 			tc.configure(&tc)
 
-			// Create a rate limit interceptor which uses the fake clock, and the per instance and global RPS limits
-			// from the test case.
+			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimitInterceptor := RateLimitInterceptorProvider(&Config{
 				RPS: func() int {
 					return tc.perInstanceRPSLimit
@@ -197,17 +196,11 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			defer wg.Wait()
 			wg.Add(1)
 
-			listenerDone := make(chan struct{})
-
+			listener := nettest.NewListener(pipe)
 			go func() {
 				defer wg.Done()
 
-				// This should return an error because Accept returns an error, but we don't assert anything because we
-				// don't actually care whether this returns an error or not.
-				_ = server.Serve(&testListener{
-					Pipe: pipe,
-					done: listenerDone,
-				})
+				_ = server.Serve(listener)
 			}()
 
 			// Create a gRPC client to the fake workflow service.
@@ -218,11 +211,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
 			require.NoError(t, err)
 
-			defer func() {
-				assert.NoError(t, conn.Close())
-				// This causes the server to get an error from its call to Accept and stop itself.
-				close(listenerDone)
-			}()
+			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
 
@@ -258,23 +247,4 @@ func (t *testSvc) StartWorkflowExecution(
 	*workflowservice.StartWorkflowExecutionRequest,
 ) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	return &workflowservice.StartWorkflowExecutionResponse{}, nil
-}
-
-// testListener is a fake listener which uses a nettest.Pipe to simulate a network connection.
-type testListener struct {
-	*nettest.Pipe
-	// We cancel calls to Accept using the done channel so that tests don't hang if they're broken.
-	done <-chan struct{}
-}
-
-func (t testListener) Accept() (net.Conn, error) {
-	return t.Pipe.Accept(t.done)
-}
-
-func (t testListener) Close() error {
-	return nil
-}
-
-func (t testListener) Addr() net.Addr {
-	return &net.TCPAddr{}
 }

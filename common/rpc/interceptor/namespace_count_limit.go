@@ -32,6 +32,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -47,9 +49,11 @@ type (
 	NamespaceCountLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
+		serviceResolver   membership.ServiceResolver
 
-		countFn func(namespace string) int
-		tokens  map[string]int
+		perInstanceCountLimit func(namespace string) int
+		globalCountLimit      func(namespace string) int
+		tokens                map[string]int
 
 		sync.Mutex
 		activeTokensCount map[string]*int32
@@ -61,15 +65,18 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Inter
 func NewNamespaceCountLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	countFn func(namespace string) int,
+	serviceResolver membership.ServiceResolver,
+	perInstanceCountLimit, globalCountLimit func(namespace string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {
 	return &NamespaceCountLimitInterceptor{
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
-		countFn:           countFn,
-		tokens:            tokens,
-		activeTokensCount: make(map[string]*int32),
+		namespaceRegistry:     namespaceRegistry,
+		logger:                logger,
+		serviceResolver:       serviceResolver,
+		perInstanceCountLimit: perInstanceCountLimit,
+		globalCountLimit:      globalCountLimit,
+		tokens:                tokens,
+		activeTokensCount:     make(map[string]*int32),
 	}
 }
 
@@ -94,6 +101,8 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 
 	if token != 0 {
 		nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
+		// frontend.namespaceCount is applied per poller type temporarily to prevent
+		// one poller type to take all token waiting in the long poll.
 		counter := ni.counter(nsName, methodName)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))
@@ -101,14 +110,23 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 		handler := GetMetricsHandlerFromContext(ctx, ni.logger)
 		handler.Gauge(metrics.ServicePendingRequests.GetMetricName()).Record(float64(count))
 
-		// frontend.namespaceCount is applied per poller type temporarily to prevent
-		// one poller type to take all token waiting in the long poll.
-		if int(count) > ni.countFn(nsName.String()) {
+		if !ni.isWithinRequestLimit(nsName, count) {
 			return nil, ErrNamespaceCountLimitServerBusy
 		}
 	}
 
 	return handler(ctx, req)
+}
+
+func (ni *NamespaceCountLimitInterceptor) isWithinRequestLimit(nsName namespace.Name, count int32) bool {
+	limit := quotas.CalculateEffectiveResourceLimit(
+		ni.serviceResolver,
+		quotas.Limits{
+			ClusterLimit:  ni.globalCountLimit(nsName.String()),
+			InstanceLimit: ni.perInstanceCountLimit(nsName.String()),
+		},
+	)
+	return count <= int32(limit)
 }
 
 func (ni *NamespaceCountLimitInterceptor) counter(
