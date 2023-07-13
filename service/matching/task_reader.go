@@ -194,9 +194,9 @@ Loop:
 			}
 			tr.retrier.Reset()
 
-			if len(batch.Tasks) == 0 {
-				tr.tlMgr.taskAckManager.setReadLevelAfterGap(batch.ReadLevel)
-				if !batch.IsReadBatchDone {
+			if len(batch.tasks) == 0 {
+				tr.tlMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
+				if !batch.isReadBatchDone {
 					tr.Signal()
 				}
 				continue Loop
@@ -204,7 +204,7 @@ Loop:
 
 			// only error here is due to context cancellation which we also
 			// handle above
-			_ = tr.addTasksToBuffer(ctx, batch.Tasks)
+			_ = tr.addTasksToBuffer(ctx, batch.tasks)
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
@@ -235,16 +235,16 @@ func (tr *taskReader) getTaskBatchWithRange(
 	return response.Tasks, err
 }
 
-type tasksBatch struct {
-	Tasks           []*persistencespb.AllocatedTaskInfo
-	ReadLevel       int64
-	IsReadBatchDone bool
+type getTasksBatchResponse struct {
+	tasks           []*persistencespb.AllocatedTaskInfo
+	readLevel       int64
+	isReadBatchDone bool
 }
 
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch(ctx context.Context) (*tasksBatch, error) {
+func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
@@ -261,18 +261,18 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) (*tasksBatch, error) {
 		}
 		// return as long as it grabs any tasks
 		if len(tasks) > 0 {
-			return &tasksBatch{
-				Tasks:           tasks,
-				ReadLevel:       upper,
-				IsReadBatchDone: true,
+			return &getTasksBatchResponse{
+				tasks:           tasks,
+				readLevel:       upper,
+				isReadBatchDone: true,
 			}, nil
 		}
 		readLevel = upper
 	}
-	return &tasksBatch{
-		Tasks:           tasks,
-		ReadLevel:       readLevel,
-		IsReadBatchDone: readLevel == maxReadLevel,
+	return &getTasksBatchResponse{
+		tasks:           tasks,
+		readLevel:       readLevel,
+		isReadBatchDone: readLevel == maxReadLevel,
 	}, nil // caller will update readLevel when no task grabbed
 }
 

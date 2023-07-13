@@ -1712,16 +1712,16 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
 	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.EqualValues(0, len(batch.Tasks))
-	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), batch.ReadLevel)
-	s.True(batch.IsReadBatchDone)
+	s.EqualValues(0, len(batch.tasks))
+	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), batch.readLevel)
+	s.True(batch.isReadBatchDone)
 
 	tlMgr.taskAckManager.setReadLevel(0)
 	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.EqualValues(rangeSize, len(batch.Tasks))
-	s.EqualValues(rangeSize, batch.ReadLevel)
-	s.True(batch.IsReadBatchDone)
+	s.EqualValues(rangeSize, len(batch.tasks))
+	s.EqualValues(rangeSize, batch.readLevel)
+	s.True(batch.isReadBatchDone)
 
 	s.setupRecordActivityTaskStartedMock(tl)
 
@@ -1752,8 +1752,8 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
 	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.True(0 < len(batch.Tasks) && len(batch.Tasks) <= rangeSize)
-	s.True(batch.IsReadBatchDone)
+	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
+	s.True(batch.isReadBatchDone)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
@@ -1780,16 +1780,16 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
 	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(batch.Tasks)
-	s.Equal(int64(rangeSize*10), batch.ReadLevel)
-	s.False(batch.IsReadBatchDone)
+	s.Empty(batch.tasks)
+	s.Equal(int64(rangeSize*10), batch.readLevel)
+	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	tlMgr.taskAckManager.setReadLevel(batch.ReadLevel)
+	tlMgr.taskAckManager.setReadLevel(batch.readLevel)
 	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(batch.Tasks)
-	s.Equal(maxReadLevel, batch.ReadLevel)
-	s.True(batch.IsReadBatchDone)
+	s.Empty(batch.tasks)
+	s.Equal(maxReadLevel, batch.readLevel)
+	s.True(batch.isReadBatchDone)
 	s.NoError(err)
 }
 
