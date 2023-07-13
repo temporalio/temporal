@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"golang.org/x/exp/slices"
 
@@ -154,5 +155,37 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 		}
 	}
 
+	s.True(wasLimited)
+}
+
+func (s *quotasSuite) TestOperatorPrioritized() {
+	rateFn := func() float64 { return 5 }
+	limiter := newPriorityRateLimiter(rateFn, RequestPriorityFn)
+
+	operatorRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeOperator,
+		-1,
+		"DescribeWorkflowExecution")
+
+	apiRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"DescribeWorkflowExecution")
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 6; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			wasLimited = true
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
+	}
 	s.True(wasLimited)
 }
