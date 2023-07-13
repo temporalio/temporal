@@ -524,6 +524,11 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		// workflow already finished, no need to process transfer task.
 		return nil
 	}
+	nsRecord := mutableState.GetNamespaceEntry()
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return nil
+	}
 
 	historyResendInfo, err := actionFn(ctx, weContext, mutableState)
 	if err != nil {

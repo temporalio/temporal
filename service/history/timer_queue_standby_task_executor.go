@@ -459,6 +459,11 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		// workflow already finished, no need to process the timer
 		return nil
 	}
+	nsRecord := mutableState.GetNamespaceEntry()
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return nil
+	}
 
 	historyResendInfo, err := actionFn(ctx, executionContext, mutableState)
 	if err != nil {
