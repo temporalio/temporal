@@ -175,7 +175,7 @@ func newPriorityRateLimiter(
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(OperatorRateFn(rateFn)))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(rateFn)))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 		}
@@ -198,7 +198,7 @@ func newPriorityDynamicRateLimiter(
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, OperatorRateFn(rateFn), dynamicParams, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn), dynamicParams, logger)
 		} else {
 			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 		}
@@ -250,8 +250,7 @@ func RequestPriorityFn(req quotas.Request) int {
 	}
 }
 
-// TODO: maybe unexport this
-func OperatorRateFn(rateFn quotas.RateFn) quotas.RateFn {
+func operatorRateFn(rateFn quotas.RateFn) quotas.RateFn {
 	return func() float64 {
 		return rateFn() * OperatorQPSRatio
 	}
