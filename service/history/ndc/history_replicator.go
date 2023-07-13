@@ -303,6 +303,46 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		}
 	}()
 
+	// Handle existing workflows
+	ms, err := wfCtx.LoadMutableState(ctx)
+	switch err.(type) {
+	case *serviceerror.NotFound:
+		// no-op, continue to replicate workflow state
+	case nil:
+		// workflow exists, do resend if version histories are not match.
+		localVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
+		if err != nil {
+			return err
+		}
+		localHistoryLastItem, err := versionhistory.GetLastVersionHistoryItem(localVersionHistory)
+		if err != nil {
+			return err
+		}
+		incomingVersionHistory, err := versionhistory.GetCurrentVersionHistory(request.GetWorkflowState().GetExecutionInfo().GetVersionHistories())
+		if err != nil {
+			return err
+		}
+		incomingHistoryLastItem, err := versionhistory.GetLastVersionHistoryItem(incomingVersionHistory)
+		if err != nil {
+			return err
+		}
+		if !versionhistory.IsEqualVersionHistoryItem(localHistoryLastItem, incomingHistoryLastItem) {
+			return serviceerrors.NewRetryReplication(
+				"Failed to sync workflow state due to version history mismatch",
+				namespaceID.String(),
+				wid,
+				rid,
+				localHistoryLastItem.GetEventId(),
+				localHistoryLastItem.GetVersion(),
+				common.EmptyEventID,
+				common.EmptyVersion,
+			)
+		}
+		return nil
+	default:
+		return err
+	}
+
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
 		return err
