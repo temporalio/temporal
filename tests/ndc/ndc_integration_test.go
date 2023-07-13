@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 
@@ -400,6 +401,80 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 		branch1,
 		historyClient,
 	)
+}
+
+func (s *nDCIntegrationTestSuite) TestReplicateWorkflowState_PartialReplicated() {
+
+	s.setupRemoteFrontendClients()
+	workflowID := "replicate-workflow-state-partially-replicated" + uuid.New()
+	runID := uuid.New()
+	workflowType := "event-generator-workflow-type"
+	taskqueue := "event-generator-taskQueue"
+
+	// active has initial version 1
+	historyClient := s.active.GetHistoryClient()
+	var historyBatch []*historypb.History
+	// standby initial failover version 2
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, 12)
+
+	for s.generator.HasNextVertex() {
+		events := s.generator.GetNextVertices()
+		historyEvents := &historypb.History{}
+		for _, event := range events {
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+		}
+		historyBatch = append(historyBatch, historyEvents)
+	}
+
+	partialHistoryBatch := historyBatch[:1]
+	partialVersionHistory := s.eventBatchesToVersionHistory(nil, partialHistoryBatch)
+	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
+	workflowState := &persistence.WorkflowMutableState{
+		ExecutionState: &persistence.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			RunId:  runID,
+		},
+		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+			NamespaceId: s.namespaceID.String(),
+			WorkflowId:  workflowID,
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories:                  []*historyspb.VersionHistory{versionHistory},
+			},
+		},
+	}
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		taskqueue,
+		partialVersionHistory,
+		partialHistoryBatch,
+		historyClient,
+	)
+	_, err := historyClient.ReplicateWorkflowState(context.Background(), &historyservice.ReplicateWorkflowStateRequest{
+		WorkflowState: workflowState,
+		RemoteCluster: "standby",
+		NamespaceId:   s.namespaceID.String(),
+	})
+	s.Error(err)
+
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		taskqueue,
+		versionHistory,
+		historyBatch,
+		historyClient,
+	)
+	_, err = historyClient.ReplicateWorkflowState(context.Background(), &historyservice.ReplicateWorkflowStateRequest{
+		WorkflowState: workflowState,
+		RemoteCluster: "standby",
+		NamespaceId:   s.namespaceID.String(),
+	})
+	s.NoError(err)
 }
 
 func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
