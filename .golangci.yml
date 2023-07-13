@@ -9,6 +9,7 @@ linters:
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - vet
+    - forbidigo
 run:
   skip-dirs:
     - ^api
@@ -17,6 +18,10 @@ run:
 linters-settings:
   govet:
     fieldalignment: 0
+  forbidigo:
+    forbid:
+      - p: ^time\.After$
+        msg: "time.After may leak resources. Use time.NewTimer instead."
   revive:
     severity: error
     confidence: 0.8
@@ -30,6 +35,8 @@ linters-settings:
       - name: banned-characters
         disabled: true
       - name: bool-literal-in-expr
+        disabled: true
+      - name: confusing-naming
         disabled: true
       - name: empty-lines
         disabled: true
@@ -86,6 +93,7 @@ linters-settings:
       - name: unhandled-error
         arguments:
           - "fmt.Printf"
+          - "fmt.Println"
 issues:
   # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
   exclude-rules:

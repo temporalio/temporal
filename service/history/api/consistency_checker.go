@@ -162,7 +162,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	}
 	if cmpResult > 0 {
 		shardID := c.shardContext.GetShardID()
-		c.shardContext.Unload()
+		c.shardContext.UnloadForOwnershipLost()
 		return nil, &persistence.ShardOwnershipLostError{
 			ShardID: shardID,
 			Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),

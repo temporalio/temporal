@@ -27,6 +27,7 @@ package matching
 import (
 	"time"
 
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -126,6 +127,9 @@ type (
 		// root. When disbled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
 		// See the documentation for constants.MatchingLoadUserData for the implications on versioning.
 		LoadUserData func() bool
+
+		// Retry policy for fetching user data from root partition. Should retry forever.
+		GetUserDataRetryPolicy backoff.RetryPolicy
 	}
 )
 
@@ -257,5 +261,6 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
+		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
 	}
 }

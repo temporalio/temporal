@@ -398,7 +398,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDisableLoadUserDataDefaultTasksBecomeUnversioned() {
+func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
@@ -1470,7 +1470,7 @@ func (s *versioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
-func (s *versioningIntegSuite) TestDisableLoadUserData() {
+func (s *versioningIntegSuite) TestDisableUserData() {
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1481,9 +1481,14 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	// First insert some data (we'll try to read it below)
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
+	// unload so that we reload and pick up LoadUserData dynamic config
+	s.unloadTaskQueue(ctx, tq)
+
 	dc := s.testCluster.host.dcClient
 	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	s.unloadTaskQueue(ctx, tq)
 
 	// Verify update fails
 	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -1506,7 +1511,34 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	s.Require().ErrorAs(err, &failedPreconditionError)
 }
 
-func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData() {
+func (s *versioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
+	tq := s.T().Name()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		return "ok", nil
+	}
+	wrk := worker.New(s.sdkClient, tq, worker.Options{})
+	wrk.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk.Start())
+	defer wrk.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: 5 * time.Second,
+	}, "wf")
+	s.NoError(err)
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("ok", out)
+}
+
+func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1525,7 +1557,7 @@ func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData
 		return nil
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -1535,16 +1567,31 @@ func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue:                tq,
-		WorkflowExecutionTimeout: 5 * time.Second,
+		WorkflowExecutionTimeout: 10 * time.Second,
 	}, "wf")
 	s.Require().NoError(err)
-	err = run.Get(ctx, nil)
-	var timeoutError *temporal.TimeoutError
-	s.Require().ErrorAs(err, &timeoutError)
+
+	// should not run on versioned worker
+	time.Sleep(2 * time.Second)
 	s.Require().Equal(int32(0), runs.Load())
+
+	wrk.Stop()
+
+	// start unversioned worker and let task run there
+	wrk2 := worker.New(s.sdkClient, tq, worker.Options{
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	wrk2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk2.Start())
+	defer wrk2.Stop()
+
+	// now workflow can complete
+	err = run.Get(ctx, nil)
+	s.NoError(err)
+	s.Require().Equal(int32(1), runs.Load())
 }
 
-func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUserData() {
+func (s *versioningIntegSuite) TestDisableUserData_QueryTimesOut() {
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1559,7 +1606,7 @@ func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUser
 		})
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
