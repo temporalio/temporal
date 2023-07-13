@@ -38,12 +38,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/workflow/update"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -437,16 +437,17 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		return nil, err
 	}
 
-	taskToken := &tokenspb.Task{
-		NamespaceId:      namespaceID.String(),
-		WorkflowId:       executionInfo.WorkflowId,
-		RunId:            runID,
-		ScheduledEventId: ai.GetScheduledEventId(),
-		Attempt:          ai.Attempt,
-		ActivityId:       attr.ActivityId,
-		ActivityType:     attr.ActivityType.GetName(),
-		Clock:            shardClock,
-	}
+	taskToken := tasktoken.NewActivityTaskToken(
+		namespaceID.String(),
+		executionInfo.WorkflowId,
+		runID,
+		ai.GetScheduledEventId(),
+		attr.ActivityId,
+		attr.ActivityType.GetName(),
+		ai.Attempt,
+		shardClock,
+		ai.Version,
+	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err
