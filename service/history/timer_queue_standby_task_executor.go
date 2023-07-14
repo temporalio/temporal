@@ -446,6 +446,14 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 			release(retError)
 		}
 	}()
+	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(timerTask.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return consts.ErrTaskDiscarded
+	}
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricHandler, t.logger)
 	if err != nil {
@@ -458,11 +466,6 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	if !mutableState.IsWorkflowExecutionRunning() {
 		// workflow already finished, no need to process the timer
 		return nil
-	}
-	nsRecord := mutableState.GetNamespaceEntry()
-	if !nsRecord.IsOnCluster(t.clusterName) {
-		// discard standby tasks
-		return consts.ErrTaskDiscarded
 	}
 
 	historyResendInfo, err := actionFn(ctx, executionContext, mutableState)

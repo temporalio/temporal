@@ -515,6 +515,15 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
+	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return consts.ErrTaskDiscarded
+	}
+
 	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricHandler, t.logger)
 	if err != nil || mutableState == nil {
 		return err
@@ -523,11 +532,6 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
 		// workflow already finished, no need to process transfer task.
 		return nil
-	}
-	nsRecord := mutableState.GetNamespaceEntry()
-	if !nsRecord.IsOnCluster(t.clusterName) {
-		// discard standby tasks
-		return consts.ErrTaskDiscarded
 	}
 
 	historyResendInfo, err := actionFn(ctx, weContext, mutableState)
