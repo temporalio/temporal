@@ -135,7 +135,7 @@ func (s *activitiesSuite) TestGenerateAndVerifyReplicationTasks_Success() {
 			NamespaceId: mockedNamespaceID,
 			Execution:   &we,
 		}).Return(&historyservice.DescribeMutableStateResponse{
-			CacheMutableState: &persistencepb.WorkflowMutableState{
+			DatabaseMutableState: &persistencepb.WorkflowMutableState{
 				ExecutionState: &persistencepb.WorkflowExecutionState{
 					State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				},
@@ -193,7 +193,7 @@ func (s *activitiesSuite) TestGenerateAndVerifyReplicationTasks_Skipped() {
 	}{
 		{
 			&historyservice.DescribeMutableStateResponse{
-				CacheMutableState: &persistencepb.WorkflowMutableState{
+				DatabaseMutableState: &persistencepb.WorkflowMutableState{
 					ExecutionState: &persistencepb.WorkflowExecutionState{
 						State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 					},

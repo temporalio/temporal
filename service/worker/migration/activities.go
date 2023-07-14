@@ -67,7 +67,8 @@ type (
 	}
 
 	verifyReplicationTasksTimeoutErr struct {
-		Details replicationTasksHeartbeatDetails
+		timeout time.Duration
+		details replicationTasksHeartbeatDetails
 	}
 )
 
@@ -560,7 +561,7 @@ func (a *activities) createReplicationTasks(ctx context.Context, request *genear
 
 		switch err.(type) {
 		case nil:
-			if resp.GetCacheMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+			if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 				a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.GetMetricName()).Record(1)
 				a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
 
@@ -642,7 +643,10 @@ func (a *activities) verifyReplicationTasks(
 }
 
 func (e verifyReplicationTasksTimeoutErr) Error() string {
-	return fmt.Sprintf("Failed to verify replication tasks. Details: %v", e.Details)
+	return fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (retryable). Not found WorkflowExecution: %v,",
+		e.timeout,
+		e.details.LastNotFoundWorkflowExecution,
+	)
 }
 
 const (
@@ -722,10 +726,10 @@ func (a *activities) GenerateAndVerifyReplicationTasks(ctx context.Context, requ
 			}
 
 			// return error to trigger activity retry
-			return fmt.Errorf("verifyReplicationTasks was not able to make progress for more than %v minutes (retryable). Not found WorkflowExecution: %v,",
-				diff.Minutes(),
-				details.LastNotFoundWorkflowExecution,
-			)
+			return verifyReplicationTasksTimeoutErr{
+				timeout: diff,
+				details: details,
+			}
 		}
 
 		time.Sleep(request.VerifyInterval)
