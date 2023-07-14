@@ -1655,6 +1655,12 @@ var (
 	ScheduleCancelWorkflowErrors                              = NewCounterDef("schedule_cancel_workflow_errors")
 	ScheduleTerminateWorkflowErrors                           = NewCounterDef("schedule_terminate_workflow_errors")
 
+	// Force replication
+	EncounterZombieWorkflowCount  = NewCounterDef("encounter_zombie_workflow_count")
+	CreateReplicationTasksLatency = NewTimerDef("create_replication_tasks_latency")
+	VerifyReplicationTaskSuccess  = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTasksLatency = NewTimerDef("verify_replication_tasks_latency")
+
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")
 	NamespaceReplicationDLQAckLevelGauge  = NewGaugeDef("namespace_dlq_ack_level")
