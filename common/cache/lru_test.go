@@ -25,17 +25,29 @@
 package cache
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
 )
 
-type keyType struct {
-	dummyString string
-	dummyInt    int
+type (
+	keyType struct {
+		dummyString string
+		dummyInt    int
+	}
+
+	testEntryWithCacheSize struct {
+		cacheSize int
+	}
+)
+
+func (c *testEntryWithCacheSize) CacheSize() int {
+	return c.cacheSize
 }
 
 func TestLRU(t *testing.T) {
@@ -332,4 +344,51 @@ func TestZeroSizeCache(t *testing.T) {
 	assert.Equal(t, v, t)
 	assert.Nil(t, err)
 	assert.Equal(t, 0, cache.Size())
+}
+
+func TestCache_ItemSizeTooBig(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
+	assert.Equal(t, res, nil)
+
+	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
+	assert.Equal(t, err, ErrItemTooBig)
+	assert.Equal(t, res, nil)
+
+}
+
+func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	numPuts := rand.Intn(1024)
+
+	startWG := sync.WaitGroup{}
+	endWG := sync.WaitGroup{}
+
+	startWG.Add(numPuts)
+	endWG.Add(numPuts)
+
+	go func() {
+		startWG.Wait()
+		assert.True(t, cache.Size() < maxTotalBytes)
+	}()
+	for i := 0; i < numPuts; i++ {
+		go func() {
+			defer endWG.Done()
+
+			startWG.Wait()
+			key := uuid.New()
+			cache.Put(key, &testEntryWithCacheSize{rand.Int()})
+		}()
+		startWG.Done()
+	}
+
+	endWG.Wait()
 }
