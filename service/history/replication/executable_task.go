@@ -172,7 +172,7 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	}
 	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(
 		1,
-		metrics.OperationTag(metrics.SyncActivityTaskScope),
+		metrics.OperationTag(e.metricsTag),
 		metrics.NamespaceTag(namespaceName),
 	)
 }

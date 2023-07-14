@@ -97,8 +97,10 @@ func Invoke(
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
+			if !isRunning ||
+				ai.StartedEventId == common.EmptyEventID ||
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
+				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 

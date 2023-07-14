@@ -30,6 +30,8 @@ linters-settings:
       # Disabled rules
       - name: add-constant
         disabled: true
+      - name: argument-limit
+        disabled: true
       - name: bare-return
         disabled: true
       - name: banned-characters
@@ -78,9 +80,6 @@ linters-settings:
         disabled: true
 
       # Rule tuning
-      - name: argument-limit
-        arguments:
-          - 10
       - name: cognitive-complexity
         arguments:
           - 25
@@ -92,8 +91,9 @@ linters-settings:
           - 3
       - name: unhandled-error
         arguments:
-          - "fmt.Printf"
-          - "fmt.Println"
+          - "fmt.*"
+          - "bytes.Buffer.*"
+          - "strings.Builder.*"
 issues:
   # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
   exclude-rules:

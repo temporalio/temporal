@@ -503,6 +503,15 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
+	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return consts.ErrTaskDiscarded
+	}
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, taskInfo)
 	if err != nil {
 		return err
