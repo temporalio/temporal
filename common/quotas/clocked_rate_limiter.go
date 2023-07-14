@@ -30,15 +30,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 	"golang.org/x/time/rate"
 )
 
-// ClockedRateLimiter wraps a rate.Limiter with a clockwork.Clock. It is used to ensure that the rate limiter respects
-// the time determined by the clock.
+// ClockedRateLimiter wraps a rate.Limiter with a clock.TimeSource. It is used to ensure that the rate limiter respects
+// the time determined by the timeSource.
 type ClockedRateLimiter struct {
 	rateLimiter *rate.Limiter
-	clock       clockwork.Clock
+	timeSource  clock.TimeSource
 }
 
 var (
@@ -47,15 +47,15 @@ var (
 	ErrRateLimiterReservationWouldExceedContextDeadline = errors.New("rate limiter reservation would exceed context deadline")
 )
 
-func NewClockedRateLimiter(rateLimiter *rate.Limiter, clock clockwork.Clock) ClockedRateLimiter {
+func NewClockedRateLimiter(rateLimiter *rate.Limiter, timeSource clock.TimeSource) ClockedRateLimiter {
 	return ClockedRateLimiter{
 		rateLimiter: rateLimiter,
-		clock:       clock,
+		timeSource:  timeSource,
 	}
 }
 
 func (l ClockedRateLimiter) Allow() bool {
-	return l.AllowN(l.clock.Now(), 1)
+	return l.AllowN(l.timeSource.Now(), 1)
 }
 
 func (l ClockedRateLimiter) AllowN(now time.Time, token int) bool {
@@ -63,10 +63,10 @@ func (l ClockedRateLimiter) AllowN(now time.Time, token int) bool {
 }
 
 // ClockedReservation wraps a rate.Reservation with a clockwork.Clock. It is used to ensure that the reservation
-// respects the time determined by the clock.
+// respects the time determined by the timeSource.
 type ClockedReservation struct {
 	reservation *rate.Reservation
-	clock       clockwork.Clock
+	timeSource  clock.TimeSource
 }
 
 func (r ClockedReservation) OK() bool {
@@ -74,7 +74,7 @@ func (r ClockedReservation) OK() bool {
 }
 
 func (r ClockedReservation) Delay() time.Duration {
-	return r.DelayFrom(r.clock.Now())
+	return r.DelayFrom(r.timeSource.Now())
 }
 
 func (r ClockedReservation) DelayFrom(t time.Time) time.Duration {
@@ -82,7 +82,7 @@ func (r ClockedReservation) DelayFrom(t time.Time) time.Duration {
 }
 
 func (r ClockedReservation) Cancel() {
-	r.CancelAt(r.clock.Now())
+	r.CancelAt(r.timeSource.Now())
 }
 
 func (r ClockedReservation) CancelAt(t time.Time) {
@@ -90,12 +90,12 @@ func (r ClockedReservation) CancelAt(t time.Time) {
 }
 
 func (l ClockedRateLimiter) Reserve() ClockedReservation {
-	return l.ReserveN(l.clock.Now(), 1)
+	return l.ReserveN(l.timeSource.Now(), 1)
 }
 
 func (l ClockedRateLimiter) ReserveN(now time.Time, token int) ClockedReservation {
 	reservation := l.rateLimiter.ReserveN(now, token)
-	return ClockedReservation{reservation, l.clock}
+	return ClockedReservation{reservation, l.timeSource}
 }
 
 func (l ClockedRateLimiter) Wait(ctx context.Context) error {
@@ -106,13 +106,9 @@ func (l ClockedRateLimiter) Wait(ctx context.Context) error {
 // the original method uses time.Now(), and does not allow us to pass in a time.Time. Fortunately, it can be built on
 // top of ReserveN. However, there are some optimizations that we can make.
 func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
-	reservation := ClockedReservation{l.rateLimiter.ReserveN(l.clock.Now(), token), l.clock}
+	reservation := ClockedReservation{l.rateLimiter.ReserveN(l.timeSource.Now(), token), l.timeSource}
 	if !reservation.OK() {
-		return fmt.Errorf(
-			"%w: reservation would delay for %v",
-			ErrRateLimiterReservationCannotBeMade,
-			reservation.Delay(),
-		)
+		return fmt.Errorf("%w: WaitN(n=%d)", ErrRateLimiterReservationCannotBeMade, token)
 	}
 
 	waitDuration := reservation.Delay()
@@ -124,23 +120,22 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 
 	// Optimization: if the waitDuration is longer than the context deadline, we can immediately return an error.
 	if deadline, ok := ctx.Deadline(); ok {
-		if l.clock.Now().Add(waitDuration).After(deadline) {
+		if l.timeSource.Now().Add(waitDuration).After(deadline) {
 			reservation.Cancel()
-			return fmt.Errorf(
-				"%w: reservation would delay for %v",
-				ErrRateLimiterReservationWouldExceedContextDeadline,
-				reservation.Delay(),
-			)
+			return fmt.Errorf("%w: WaitN(n=%d)", ErrRateLimiterReservationWouldExceedContextDeadline, token)
 		}
 	}
 
-	timer := l.clock.NewTimer(waitDuration)
+	waitExpired := make(chan struct{})
+	timer := l.timeSource.AfterFunc(waitDuration, func() {
+		close(waitExpired)
+	})
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		reservation.Cancel()
 		return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
-	case <-timer.Chan():
+	case <-waitExpired:
 		return nil
 	}
 }

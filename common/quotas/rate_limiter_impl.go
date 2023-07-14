@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 	"golang.org/x/time/rate"
 )
 
@@ -36,9 +36,9 @@ type (
 	// RateLimiterImpl is a wrapper around the golang rate limiter
 	RateLimiterImpl struct {
 		sync.RWMutex
-		rps   float64
-		burst int
-		clock clockwork.Clock
+		rps        float64
+		burst      int
+		timeSource clock.TimeSource
 		ClockedRateLimiter
 	}
 )
@@ -47,21 +47,21 @@ var _ RateLimiter = (*RateLimiterImpl)(nil)
 
 // NewRateLimiter returns a new rate limiter that can handle dynamic
 // configuration updates
-func NewRateLimiter(newRate float64, newBurst int) *RateLimiterImpl {
-	limiter := rate.NewLimiter(rate.Limit(newRate), newBurst)
-	clock := clockwork.NewRealClock()
+func NewRateLimiter(newRPS float64, newBurst int) *RateLimiterImpl {
+	limiter := rate.NewLimiter(rate.Limit(newRPS), newBurst)
+	ts := clock.NewRealTimeSource()
 	rl := &RateLimiterImpl{
-		rps:                newRate,
+		rps:                newRPS,
 		burst:              newBurst,
-		clock:              clock,
-		ClockedRateLimiter: NewClockedRateLimiter(limiter, clock),
+		timeSource:         ts,
+		ClockedRateLimiter: NewClockedRateLimiter(limiter, ts),
 	}
 
 	return rl
 }
 
 // SetRate set the rate of the rate limiter
-func (rl *RateLimiterImpl) SetRate(rps float64) {
+func (rl *RateLimiterImpl) SetRPS(rps float64) {
 	rl.refreshInternalRateLimiterImpl(&rps, nil)
 }
 
@@ -78,12 +78,12 @@ func (rl *RateLimiterImpl) ReserveN(now time.Time, n int) Reservation {
 	return rl.ClockedRateLimiter.ReserveN(now, n)
 }
 
-// SetRateBurst set the rate & burst of the rate limiter
+// SetRateBurst set the rps & burst of the rate limiter
 func (rl *RateLimiterImpl) SetRateBurst(rps float64, burst int) {
 	rl.refreshInternalRateLimiterImpl(&rps, &burst)
 }
 
-// Rate returns the rate per second for this rate limiter
+// Rate returns the rps for this rate limiter
 func (rl *RateLimiterImpl) Rate() float64 {
 	rl.Lock()
 	defer rl.Unlock()
@@ -119,7 +119,7 @@ func (rl *RateLimiterImpl) refreshInternalRateLimiterImpl(
 	}
 
 	if refresh {
-		now := rl.clock.Now()
+		now := rl.timeSource.Now()
 		rl.SetLimitAt(now, rate.Limit(rl.rps))
 		rl.SetBurstAt(now, rl.burst)
 	}

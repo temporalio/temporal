@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/quotas"
 	"golang.org/x/time/rate"
 )
@@ -38,16 +38,16 @@ import (
 func TestClockedRateLimiter_Allow_NoQuota(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewRealClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 0), clock)
+	ts := clock.NewRealTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 0), ts)
 	assert.False(t, rl.Allow())
 }
 
 func TestClockedRateLimiter_Allow_OneBurst(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 1), ts)
 	assert.True(t, rl.Allow())
 	assert.False(t, rl.Allow())
 }
@@ -55,44 +55,44 @@ func TestClockedRateLimiter_Allow_OneBurst(t *testing.T) {
 func TestClockedRateLimiter_Allow_RPS_TooHigh(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	assert.True(t, rl.Allow())
-	clock.Advance(999 * time.Millisecond)
+	ts.Advance(999 * time.Millisecond)
 	assert.False(t, rl.Allow())
 }
 
 func TestClockedRateLimiter_Allow_RPS_Ok(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	assert.True(t, rl.Allow())
-	clock.Advance(time.Second)
+	ts.Advance(time.Second)
 	assert.True(t, rl.Allow())
 }
 
 func TestClockedRateLimiter_AllowN_Ok(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 10), clock)
-	assert.True(t, rl.AllowN(clock.Now(), 10))
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 10), ts)
+	assert.True(t, rl.AllowN(ts.Now(), 10))
 }
 
 func TestClockedRateLimiter_AllowN_NotOk(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 10), clock)
-	assert.False(t, rl.AllowN(clock.Now(), 11))
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(0, 10), ts)
+	assert.False(t, rl.AllowN(ts.Now(), 11))
 }
 
 func TestClockedRateLimiter_Wait_NoBurst(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 0), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 0), ts)
 	ctx := context.Background()
 	assert.ErrorIs(t, rl.Wait(ctx), quotas.ErrRateLimiterReservationCannotBeMade)
 }
@@ -100,14 +100,13 @@ func TestClockedRateLimiter_Wait_NoBurst(t *testing.T) {
 func TestClockedRateLimiter_Wait_Ok(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	ctx := context.Background()
 	assert.NoError(t, rl.Wait(ctx))
 
 	go func() {
-		clock.BlockUntil(1)
-		clock.Advance(time.Second)
+		ts.Advance(time.Second)
 	}()
 	assert.NoError(t, rl.Wait(ctx))
 }
@@ -115,17 +114,15 @@ func TestClockedRateLimiter_Wait_Ok(t *testing.T) {
 func TestClockedRateLimiter_Wait_Canceled(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	ctx := context.Background()
 
 	ctx, cancel := context.WithCancel(ctx)
 	assert.NoError(t, rl.Wait(ctx))
 
 	go func() {
-		clock.BlockUntil(1)
-		clock.Advance(time.Millisecond * 999)
-		clock.BlockUntil(1)
+		ts.Advance(time.Millisecond * 999)
 		cancel()
 	}()
 	assert.ErrorIs(t, rl.Wait(ctx), quotas.ErrRateLimiterWaitInterrupted)
@@ -134,23 +131,23 @@ func TestClockedRateLimiter_Wait_Canceled(t *testing.T) {
 func TestClockedRateLimiter_Reserve(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	rl.Allow()
 	reservation := rl.Reserve()
-	assert.Equal(t, time.Second, reservation.DelayFrom(clock.Now()))
+	assert.Equal(t, time.Second, reservation.DelayFrom(ts.Now()))
 }
 
 func TestClockedRateLimiter_Wait_DeadlineWouldExceed(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), clock)
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	rl.Allow()
 
 	ctx := context.Background()
 
-	ctx, cancel := context.WithDeadline(ctx, clock.Now().Add(500*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, ts.Now().Add(500*time.Millisecond))
 	t.Cleanup(cancel)
 	assert.ErrorIs(t, rl.Wait(ctx), quotas.ErrRateLimiterReservationWouldExceedContextDeadline)
 }
