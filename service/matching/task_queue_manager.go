@@ -73,8 +73,8 @@ const (
 )
 
 var (
-	// this retry policy is currenly only used for matching persistence operations
-	// that, if failed, the entire task queue needs to be reload
+	// this retry policy is currently only used for matching persistence operations
+	// that, if failed, the entire task queue needs to be reloaded
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
 		WithMaximumInterval(1 * time.Second).
 		WithExpirationInterval(30 * time.Second)
@@ -132,7 +132,7 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
-		// GetUserData returns the verioned user data for this task queue
+		// GetUserData returns the versioned user data for this task queue
 		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
@@ -353,11 +353,10 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.unloadFromEngine()
 }
 
-// managesSpecificVersionSet returns true if this is a tqm for a specific version set in the
-// build-id-based versioning feature. Note that this is a different concept from the overall
-// task queue having versioning data associated with it, which is the usual meaning of
-// "versioned task queue". These task queues are not interacted with directly outside outside
-// of a single matching node.
+// managesSpecificVersionSet returns true if this is a tqm for a specific version set in the build-id-based versioning
+// feature. Note that this is a different concept from the overall task queue having versioning data associated with it,
+// which is the usual meaning of "versioned task queue". These task queues are not interacted with directly outside of
+// a single matching node.
 func (c *taskQueueManagerImpl) managesSpecificVersionSet() bool {
 	return c.taskQueueID.VersionSet() != ""
 }
@@ -441,7 +440,7 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, errRemoteSyncMatchFailed
 	}
 
-	// Ensure that tasks with the "default" versioning directive get spooled in the unversioned queue as they not
+	// Ensure that tasks with the "default" versioning directive get spooled in the unversioned queue as they are not
 	// associated with any version set until their execution is touched by a version specific worker.
 	// "compatible" tasks OTOH are associated with a specific version set and should be stored along with all tasks for
 	// that version set.
@@ -651,7 +650,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 		if err != nil {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task so we just unload the entire task queue
+			// We still can't lose the old task, so we just unload the entire task queue
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
@@ -755,8 +754,8 @@ func (c *taskQueueManagerImpl) LongPollExpirationInterval() time.Duration {
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
+	ns, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
 func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
@@ -896,7 +895,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 		_ = backoff.ThrottleRetryContext(ctx, op, c.config.GetUserDataRetryPolicy, nil)
 		elapsed := time.Since(start)
 
-		// In general we want to start a new call immediately on completion of the previous
+		// In general, we want to start a new call immediately on completion of the previous
 		// one. But if the remote is broken and returns success immediately, we might end up
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.

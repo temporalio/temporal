@@ -124,7 +124,7 @@ type (
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
 
 		// If set to false, matching does not load user data from DB for root partitions or fetch it via RPC from the
-		// root. When disbled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
+		// root. When disabled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
 		// See the documentation for constants.MatchingLoadUserData for the implications on versioning.
 		LoadUserData func() bool
 

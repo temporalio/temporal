@@ -110,7 +110,7 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-// This function is the same between services but uses different config sources.
+// PersistenceRateLimitingParamsProvider is the same between services but uses different config sources.
 // if-case comes from resourceImpl.New.
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
@@ -129,8 +129,8 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
-// This type is used to ensure the replicator only gets set if global namespaces are enabled on this cluster.
-// See NamespaceReplicationQueueProvider below.
+// TaskQueueReplicatorNamespaceReplicationQueue is used to ensure the replicator only gets set if global namespaces are
+// enabled on this cluster. See NamespaceReplicationQueueProvider below.
 type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 func NamespaceReplicationQueueProvider(
