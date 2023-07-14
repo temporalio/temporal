@@ -71,6 +71,16 @@ type (
 	}
 )
 
+// State Diagram
+//
+//		     NOT_CREATED
+//		         │
+//		         │
+//		 CREATED_TO_BE_VERIFIED
+//		         │
+//		┌────────┴─────────┐
+//		│                  │
+//	 VERIFIED      VERIFIED_SKIPPED
 const (
 	NOT_CREATED            VerifyStatus = 0
 	CREATED_TO_BE_VERIFIED VerifyStatus = 1
@@ -559,12 +569,12 @@ func (a *activities) createReplicationTasks(ctx context.Context, request *genear
 				continue
 			}
 
-			if !r.isCreatedToBeVerified() {
+			// Only create replication task if it hasn't been already created
+			if r.isNotCreated() {
 				err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 
 				switch err.(type) {
 				case nil:
-					// replication task was created
 					r.Status = CREATED_TO_BE_VERIFIED
 				case *serviceerror.NotFound:
 					// rare case but in case if execution was deleted after above DescribeMutableState
@@ -607,6 +617,7 @@ func (a *activities) verifyReplicationTasks(
 			continue
 		}
 
+		// Check if execution exists on remote cluster
 		_, err := remoteClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: request.Namespace,
 			Execution: &we,
@@ -666,6 +677,19 @@ func (a *activities) GenerateAndVerifyReplicationTasks(ctx context.Context, requ
 
 	activity.RecordHeartbeat(ctx, details)
 
+	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
+	//  1. replication lag
+	//  2. Zombie workflow execution
+	//  3. workflow execution was deleted (due to retention) after replication task was created
+	//  4. workflow execution was not applied succesfully on target cluster (i.e, bug)
+	//
+	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
+	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
+	// being verified. If no progress is made for long enough, then
+	//  - more than RetryableTimeout, the activity fails with retryable error and activity will restart. This gives us the chance
+	//    to identify case #2 and #3 by rerunning createReplicationTasks.
+	//  - more than NonRetryableTimeout, it means potentially we encountered #4. The activity returns
+	//    non-retryable error and force-replication workflow will restarted.
 	for {
 		var verified, progress bool
 		var err error
