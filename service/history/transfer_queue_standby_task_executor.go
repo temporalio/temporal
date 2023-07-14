@@ -527,7 +527,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	nsRecord := mutableState.GetNamespaceEntry()
 	if !nsRecord.IsOnCluster(t.clusterName) {
 		// discard standby tasks
-		return nil
+		return consts.ErrTaskDiscarded
 	}
 
 	historyResendInfo, err := actionFn(ctx, weContext, mutableState)

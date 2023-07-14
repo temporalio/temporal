@@ -462,7 +462,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	nsRecord := mutableState.GetNamespaceEntry()
 	if !nsRecord.IsOnCluster(t.clusterName) {
 		// discard standby tasks
-		return nil
+		return consts.ErrTaskDiscarded
 	}
 
 	historyResendInfo, err := actionFn(ctx, executionContext, mutableState)
