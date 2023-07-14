@@ -85,8 +85,7 @@ type (
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
 
-		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
-		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
+		GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
 		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
 		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error

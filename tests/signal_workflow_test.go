@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/consts"
 )
 
 func (s *functionalSuite) TestSignalWorkflow() {
@@ -842,8 +842,7 @@ func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		}
 
 		if attemptCount == 2 {
-			ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(time.Second)
-			_, err := s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: id,

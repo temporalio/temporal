@@ -351,20 +351,6 @@ func (mr *MockContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockContext)(nil).GetHistoryClient))
 }
 
-// GetImmediateQueueExclusiveHighReadWatermark mocks base method.
-func (m *MockContext) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetImmediateQueueExclusiveHighReadWatermark")
-	ret0, _ := ret[0].(tasks.Key)
-	return ret0
-}
-
-// GetImmediateQueueExclusiveHighReadWatermark indicates an expected call of GetImmediateQueueExclusiveHighReadWatermark.
-func (mr *MockContextMockRecorder) GetImmediateQueueExclusiveHighReadWatermark() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImmediateQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetImmediateQueueExclusiveHighReadWatermark))
-}
-
 // GetLogger mocks base method.
 func (m *MockContext) GetLogger() log.Logger {
 	m.ctrl.T.Helper()
@@ -433,6 +419,20 @@ func (m *MockContext) GetPayloadSerializer() serialization.Serializer {
 func (mr *MockContextMockRecorder) GetPayloadSerializer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPayloadSerializer", reflect.TypeOf((*MockContext)(nil).GetPayloadSerializer))
+}
+
+// GetQueueExclusiveHighReadWatermark mocks base method.
+func (m *MockContext) GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQueueExclusiveHighReadWatermark", category)
+	ret0, _ := ret[0].(tasks.Key)
+	return ret0
+}
+
+// GetQueueExclusiveHighReadWatermark indicates an expected call of GetQueueExclusiveHighReadWatermark.
+func (mr *MockContextMockRecorder) GetQueueExclusiveHighReadWatermark(category interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetQueueExclusiveHighReadWatermark), category)
 }
 
 // GetQueueState mocks base method.
@@ -726,21 +726,6 @@ func (m *MockContext) UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel i
 func (mr *MockContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateReplicatorDLQAckLevel), sourCluster, ackLevel)
-}
-
-// UpdateScheduledQueueExclusiveHighReadWatermark mocks base method.
-func (m *MockContext) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScheduledQueueExclusiveHighReadWatermark")
-	ret0, _ := ret[0].(tasks.Key)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateScheduledQueueExclusiveHighReadWatermark indicates an expected call of UpdateScheduledQueueExclusiveHighReadWatermark.
-func (mr *MockContextMockRecorder) UpdateScheduledQueueExclusiveHighReadWatermark() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).UpdateScheduledQueueExclusiveHighReadWatermark))
 }
 
 // UpdateWorkflowExecution mocks base method.
@@ -1066,20 +1051,6 @@ func (mr *MockControllableContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryClient))
 }
 
-// GetImmediateQueueExclusiveHighReadWatermark mocks base method.
-func (m *MockControllableContext) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetImmediateQueueExclusiveHighReadWatermark")
-	ret0, _ := ret[0].(tasks.Key)
-	return ret0
-}
-
-// GetImmediateQueueExclusiveHighReadWatermark indicates an expected call of GetImmediateQueueExclusiveHighReadWatermark.
-func (mr *MockControllableContextMockRecorder) GetImmediateQueueExclusiveHighReadWatermark() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImmediateQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockControllableContext)(nil).GetImmediateQueueExclusiveHighReadWatermark))
-}
-
 // GetLogger mocks base method.
 func (m *MockControllableContext) GetLogger() log.Logger {
 	m.ctrl.T.Helper()
@@ -1162,6 +1133,20 @@ func (m *MockControllableContext) GetPingChecks() []common.PingCheck {
 func (mr *MockControllableContextMockRecorder) GetPingChecks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockControllableContext)(nil).GetPingChecks))
+}
+
+// GetQueueExclusiveHighReadWatermark mocks base method.
+func (m *MockControllableContext) GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQueueExclusiveHighReadWatermark", category)
+	ret0, _ := ret[0].(tasks.Key)
+	return ret0
+}
+
+// GetQueueExclusiveHighReadWatermark indicates an expected call of GetQueueExclusiveHighReadWatermark.
+func (mr *MockControllableContextMockRecorder) GetQueueExclusiveHighReadWatermark(category interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockControllableContext)(nil).GetQueueExclusiveHighReadWatermark), category)
 }
 
 // GetQueueState mocks base method.
@@ -1469,21 +1454,6 @@ func (m *MockControllableContext) UpdateReplicatorDLQAckLevel(sourCluster string
 func (mr *MockControllableContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicatorDLQAckLevel", reflect.TypeOf((*MockControllableContext)(nil).UpdateReplicatorDLQAckLevel), sourCluster, ackLevel)
-}
-
-// UpdateScheduledQueueExclusiveHighReadWatermark mocks base method.
-func (m *MockControllableContext) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScheduledQueueExclusiveHighReadWatermark")
-	ret0, _ := ret[0].(tasks.Key)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateScheduledQueueExclusiveHighReadWatermark indicates an expected call of UpdateScheduledQueueExclusiveHighReadWatermark.
-func (mr *MockControllableContextMockRecorder) UpdateScheduledQueueExclusiveHighReadWatermark() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockControllableContext)(nil).UpdateScheduledQueueExclusiveHighReadWatermark))
 }
 
 // UpdateWorkflowExecution mocks base method.

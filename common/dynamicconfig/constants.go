@@ -538,6 +538,8 @@ const (
 	// Only inspected when an instance first creates a history client, so changes
 	// to this require a restart to take effect.
 	HistoryClientOwnershipCachingEnabled = "history.clientOwnershipCachingEnabled"
+	// ShardIOConcurrency controls the concurrency of persistence operations in shard context
+	ShardIOConcurrency = "history.shardIOConcurrency"
 	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay = "history.standbyClusterDelay"
 	// StandbyTaskMissingEventsResendDelay is the amount of time standby cluster's will wait (if events are missing)

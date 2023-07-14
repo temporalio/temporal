@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/semaphore"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
@@ -133,13 +135,12 @@ type (
 		stopReason stopReason
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
-		rwLock                             sync.RWMutex
-		lastUpdated                        time.Time
-		shardInfo                          *persistencespb.ShardInfo
-		taskSequenceNumber                 int64
-		maxTaskSequenceNumber              int64
-		immediateTaskExclusiveMaxReadLevel int64
-		scheduledTaskMaxReadLevel          time.Time
+		rwLock      sync.RWMutex
+		lastUpdated time.Time
+		shardInfo   *persistencespb.ShardInfo
+
+		ioSemaphore    *semaphore.Weighted
+		taskKeyManager *taskKeyManager
 
 		// exist only in memory
 		remoteClusterInfos      map[string]*remoteClusterInfo
@@ -246,21 +247,26 @@ func (s *ContextImpl) GetEngine(
 func (s *ContextImpl) AssertOwnership(
 	ctx context.Context,
 ) error {
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	s.wLock()
-	defer s.wUnlock()
 
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return err
 	}
 
-	err := s.persistenceShardManager.AssertShardOwnership(ctx, &persistence.AssertShardOwnershipRequest{
+	request := &persistence.AssertShardOwnershipRequest{
 		ShardID: s.shardID,
 		RangeID: s.getRangeIDLocked(),
-	})
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0); err != nil {
-		return err
 	}
-	return nil
+	s.wUnlock()
+
+	err := s.persistenceShardManager.AssertShardOwnership(ctx, request)
+	return s.handleWriteError(request.RangeID, err)
 }
 
 func (s *ContextImpl) NewVectorClock() (*clockspb.VectorClock, error) {
@@ -278,8 +284,8 @@ func (s *ContextImpl) CurrentVectorClock() *clockspb.VectorClock {
 	s.rLock()
 	defer s.rUnlock()
 
-	clock := s.taskSequenceNumber
-	return vclock.NewVectorClock(s.clusterMetadata.GetClusterID(), s.shardID, clock)
+	nextTaskKey := s.taskKeyManager.peekNextTaskKey(tasks.CategoryTransfer)
+	return vclock.NewVectorClock(s.clusterMetadata.GetClusterID(), s.shardID, nextTaskKey.TaskID)
 }
 
 func (s *ContextImpl) GenerateTaskID() (int64, error) {
@@ -304,36 +310,13 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
-	s.rLock()
-	defer s.rUnlock()
-	return tasks.NewImmediateKey(s.immediateTaskExclusiveMaxReadLevel)
-}
-
-func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
-	s.rLock()
-	defer s.rUnlock()
-
-	return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0)
-}
-
-func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error) {
+func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
+	category tasks.Category,
+) tasks.Key {
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByState(); err != nil {
-		return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0), err
-	}
-
-	currentTime := s.timeSource.Now()
-
-	// Truncation here is just to make sure max read level has the same precision as the old logic
-	// in case existing code can't work correctly with precision higher than 1ms.
-	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
-	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
-	s.scheduledTaskMaxReadLevel = util.MaxTime(s.scheduledTaskMaxReadLevel, newMaxReadLevel)
-
-	return tasks.NewKey(s.scheduledTaskMaxReadLevel, 0), nil
+	return s.taskKeyManager.getExclusiveReaderHighWatermark(category)
 }
 
 func (s *ContextImpl) GetQueueState(
@@ -356,36 +339,28 @@ func (s *ContextImpl) SetQueueState(
 	category tasks.Category,
 	state *persistencespb.QueueState,
 ) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	categoryID := category.ID()
-	s.shardInfo.QueueStates[categoryID] = state
-
-	s.shardInfo.StolenSinceRenew = 0
-	return s.updateShardInfoLocked()
+	return s.updateShardInfo(func() {
+		categoryID := category.ID()
+		s.shardInfo.QueueStates[categoryID] = state
+	})
 }
 
 func (s *ContextImpl) UpdateReplicationQueueReaderState(
 	readerID int64,
 	readerState *persistencespb.QueueReaderState,
 ) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	categoryID := tasks.CategoryReplication.ID()
-	queueState, ok := s.shardInfo.QueueStates[categoryID]
-	if !ok {
-		queueState = &persistencespb.QueueState{
-			ExclusiveReaderHighWatermark: nil,
-			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
+	return s.updateShardInfo(func() {
+		categoryID := tasks.CategoryReplication.ID()
+		queueState, ok := s.shardInfo.QueueStates[categoryID]
+		if !ok {
+			queueState = &persistencespb.QueueState{
+				ExclusiveReaderHighWatermark: nil,
+				ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
+			}
+			s.shardInfo.QueueStates[categoryID] = queueState
 		}
-		s.shardInfo.QueueStates[categoryID] = queueState
-	}
-	queueState.ReaderStates[readerID] = readerState
-
-	s.shardInfo.StolenSinceRenew = 0
-	return s.updateShardInfoLocked()
+		queueState.ReaderStates[readerID] = readerState
+	})
 }
 
 // UpdateRemoteClusterInfo deprecated
@@ -447,12 +422,9 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	sourceCluster string,
 	ackLevel int64,
 ) error {
-	s.wLock()
-	defer s.wUnlock()
-
-	s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
-	s.shardInfo.StolenSinceRenew = 0
-	if err := s.updateShardInfoLocked(); err != nil {
+	if err := s.updateShardInfo(func() {
+		s.shardInfo.ReplicationDlqAckLevel[sourceCluster] = ackLevel
+	}); err != nil {
 		return err
 	}
 
@@ -480,7 +452,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 		return
 	}
 
-	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
+	maxReplicationTaskID := s.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID - 1
 	if s.errorByState() != nil {
 		// if shard state is not acquired, we don't know that's the max taskID
 		// as there might be in-flight requests
@@ -514,45 +486,20 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
-	err = s.addTasksWithoutNotification(ctx, request)
+	err = s.addTasks(ctx, request)
 	if OperationPossiblySucceeded(err) {
 		engine.NotifyNewTasks(request.Tasks)
 	}
 	return err
-}
-
-func (s *ContextImpl) addTasksWithoutNotification(
-	ctx context.Context,
-	request *persistence.AddHistoryTasksRequest,
-) error {
-	// do not try to get namespace cache within shard lock
-	namespaceID := namespace.ID(request.NamespaceID)
-	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	s.wLock()
-	defer s.wUnlock()
-
-	// timeout check should be done within the shard lock, in case of shard lock contention
-	ctx, cancel, err := s.newDetachedContext(ctx)
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
-	if err := s.errorByState(); err != nil {
-		return err
-	}
-	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
-		return err
-	}
-	return s.addTasksLocked(ctx, request, namespaceEntry)
 }
 
 func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
@@ -577,47 +524,56 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	s.wLock()
-	defer s.wUnlock()
 
 	// timeout check should be done within the shard lock, in case of shard lock contention
 	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	defer cancel()
 
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
 	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
-	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
+	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
 		request.NewWorkflowSnapshot.Tasks,
-		&transferExclusiveMaxReadLevel,
-	); err != nil {
+	)
+	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
+
+	s.wUnlock()
 	resp, err := s.executionManager.CreateWorkflowExecution(ctx, request)
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferExclusiveMaxReadLevel); err != nil {
+	requestCompletionFn(err)
+
+	if err = s.handleWriteError(request.RangeID, err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -629,56 +585,57 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
-	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	s.wLock()
-	defer s.wUnlock()
 
 	// timeout check should be done within the shard lock, in case of shard lock contention
 	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	defer cancel()
 
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
 	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
-	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
-		request.UpdateWorkflowMutation.Tasks,
-		&transferExclusiveMaxReadLevel,
-	); err != nil {
+	taskMaps := make([]map[tasks.Category][]tasks.Task, 0, 2)
+	taskMaps = append(taskMaps, request.UpdateWorkflowMutation.Tasks)
+	if request.NewWorkflowSnapshot != nil {
+		taskMaps = append(taskMaps, request.NewWorkflowSnapshot.Tasks)
+	}
+	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(taskMaps...)
+	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
-			request.NewWorkflowSnapshot.Tasks,
-			&transferExclusiveMaxReadLevel,
-		); err != nil {
-			return nil, err
-		}
 		s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 	}
 
-	currentRangeID := s.getRangeIDLocked()
-	request.RangeID = currentRangeID
+	request.RangeID = s.getRangeIDLocked()
+	s.wUnlock()
+
 	resp, err := s.executionManager.UpdateWorkflowExecution(ctx, request)
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferExclusiveMaxReadLevel); err != nil {
+	requestCompletionFn(err)
+	if err = s.handleWriteError(request.RangeID, err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -705,64 +662,57 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	s.wLock()
-	defer s.wUnlock()
 
 	// timeout check should be done within the shard lock, in case of shard lock contention
 	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	defer cancel()
 
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
 	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
-	transferExclusiveMaxReadLevel := int64(0)
+	taskMaps := make([]map[tasks.Category][]tasks.Task, 0, 3)
 	if request.CurrentWorkflowMutation != nil {
-		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
-			request.CurrentWorkflowMutation.Tasks,
-			&transferExclusiveMaxReadLevel,
-		); err != nil {
-			return nil, err
-		}
+		taskMaps = append(taskMaps, request.CurrentWorkflowMutation.Tasks)
 	}
-	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
-		request.ResetWorkflowSnapshot.Tasks,
-		&transferExclusiveMaxReadLevel,
-	); err != nil {
-		return nil, err
-	}
+	taskMaps = append(taskMaps, request.ResetWorkflowSnapshot.Tasks)
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDAndTimestampLocked(
-			namespaceEntry,
-			workflowID,
-			request.NewWorkflowSnapshot.Tasks,
-			&transferExclusiveMaxReadLevel,
-		); err != nil {
-			return nil, err
-		}
+		taskMaps = append(taskMaps, request.NewWorkflowSnapshot.Tasks)
 	}
 
-	currentRangeID := s.getRangeIDLocked()
-	request.RangeID = currentRangeID
+	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(taskMaps...)
+	if err != nil {
+		s.wUnlock()
+		return nil, err
+	}
+
+	request.RangeID = s.getRangeIDLocked()
+	s.wUnlock()
+
 	resp, err := s.executionManager.ConflictResolveWorkflowExecution(ctx, request)
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferExclusiveMaxReadLevel); err != nil {
+	requestCompletionFn(err)
+	if err = s.handleWriteError(request.RangeID, err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -774,44 +724,50 @@ func (s *ContextImpl) SetWorkflowExecution(
 ) (*persistence.SetWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
-	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer s.ioSemaphore.Release(1)
+
 	s.wLock()
-	defer s.wUnlock()
 
 	// timeout check should be done within the shard lock, in case of shard lock contention
 	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 	defer cancel()
 
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
 	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
-	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		workflowID,
+	snapShotRequestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
 		request.SetWorkflowSnapshot.Tasks,
-		&transferExclusiveMaxReadLevel,
-	); err != nil {
+	)
+	if err != nil {
+		s.wUnlock()
 		return nil, err
 	}
 
-	currentRangeID := s.getRangeIDLocked()
-	request.RangeID = currentRangeID
+	request.RangeID = s.getRangeIDLocked()
+	s.wUnlock()
+
 	resp, err := s.executionManager.SetWorkflowExecution(ctx, request)
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferExclusiveMaxReadLevel); err != nil {
+	snapShotRequestCompletionFn(err)
+	if err = s.handleWriteError(request.RangeID, err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -849,24 +805,51 @@ func (s *ContextImpl) GetWorkflowExecution(
 	return resp, nil
 }
 
-func (s *ContextImpl) addTasksLocked(
+func (s *ContextImpl) addTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
-	namespaceEntry *namespace.Namespace,
 ) error {
-	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDAndTimestampLocked(
-		namespaceEntry,
-		request.WorkflowID,
+
+	// do not try to get namespace cache within shard lock
+	namespaceID := namespace.ID(request.NamespaceID)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
+	s.wLock()
+
+	// timeout check should be done within the shard lock, in case of shard lock contention
+	ctx, cancel, err := s.newDetachedContext(ctx)
+	if err != nil {
+		s.wUnlock()
+		return err
+	}
+	defer cancel()
+
+	if err := s.errorByState(); err != nil {
+		s.wUnlock()
+		return err
+	}
+	if err := s.errorByNamespaceStateLocked(namespaceEntry.Name()); err != nil {
+		s.wUnlock()
+		return err
+	}
+
+	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
 		request.Tasks,
-		&transferExclusiveMaxReadLevel,
-	); err != nil {
+	)
+	if err != nil {
+		s.wUnlock()
 		return err
 	}
 
 	request.RangeID = s.getRangeIDLocked()
-	err := s.executionManager.AddHistoryTasks(ctx, request)
-	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferExclusiveMaxReadLevel)
+	s.wUnlock()
+
+	err = s.executionManager.AddHistoryTasks(ctx, request)
+	requestCompletionFn(err)
+	return s.handleWriteError(request.RangeID, err)
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
@@ -936,7 +919,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 
 	// Do not get namespace cache within shard lock.
-	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
+	_, err = s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
@@ -948,6 +931,23 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}
 
+	validateCtxAndShardState := func() (context.Context, context.CancelFunc, error) {
+		s.wLock()
+		defer s.wUnlock()
+
+		ctx, cancel, err := s.newDetachedContext(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err := s.errorByState(); err != nil {
+			cancel()
+			return nil, nil, err
+		}
+
+		return ctx, cancel, nil
+	}
+
 	// Don't acquire shard lock if all stages that require lock are already processed.
 	if !stage.IsProcessed(
 		tasks.DeleteWorkflowExecutionStageVisibility |
@@ -956,18 +956,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 		// Wrap stage 1, 2, and 3 with function to release shard lock with defer after stage 3.
 		if err = func() error {
-			s.wLock()
-			defer s.wUnlock()
 
-			ctx, cancel, err := s.newDetachedContext(ctx)
-			if err != nil {
+			if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
 				return err
 			}
-			defer cancel()
-
-			if err := s.errorByState(); err != nil {
-				return err
-			}
+			defer s.ioSemaphore.Release(1)
 
 			// Stage 1. Delete visibility.
 			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
@@ -975,7 +968,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				newTasks := map[tasks.Category][]tasks.Task{
 					tasks.CategoryVisibility: {
 						&tasks.DeleteExecutionVisibilityTask{
-							// TaskID is set by addTasksLocked
+							// TaskID is set by addTasks
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							StartTime:                      startTime,
@@ -992,7 +985,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 					Tasks: newTasks,
 				}
-				err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
+				err := s.addTasks(ctx, addTasksRequest)
 				if OperationPossiblySucceeded(err) {
 					engine.NotifyNewTasks(newTasks)
 				}
@@ -1003,6 +996,10 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
 
 			// Stage 2. Delete current workflow execution pointer.
+			ctx, cancel, err := validateCtxAndShardState()
+			if err != nil {
+				return err
+			}
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {
 				delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 					ShardID:     s.shardID,
@@ -1017,9 +1014,14 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
+			cancel()
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageCurrent)
 
 			// Stage 3. Delete workflow mutable state.
+			ctx, cancel, err = validateCtxAndShardState()
+			if err != nil {
+				return err
+			}
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageMutableState) {
 				delRequest := &persistence.DeleteWorkflowExecutionRequest{
 					ShardID:     s.shardID,
@@ -1031,6 +1033,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
+			cancel()
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageMutableState)
 			return nil
 		}(); err != nil {
@@ -1103,25 +1106,16 @@ func (s *ContextImpl) errorByNamespaceStateLocked(
 }
 
 func (s *ContextImpl) generateTaskIDLocked() (int64, error) {
-	if err := s.updateRangeIfNeededLocked(); err != nil {
+	taskKey, err := s.taskKeyManager.generateTaskKey(tasks.CategoryTransfer)
+	if err != nil {
 		return -1, err
 	}
-
-	taskID := s.taskSequenceNumber
-	s.taskSequenceNumber++
-
-	return taskID, nil
-}
-
-func (s *ContextImpl) updateRangeIfNeededLocked() error {
-	if s.taskSequenceNumber < s.maxTaskSequenceNumber {
-		return nil
-	}
-
-	return s.renewRangeLocked(false)
+	return taskKey.TaskID, nil
 }
 
 func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
+	s.taskKeyManager.drainTaskRequests()
+
 	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
@@ -1130,9 +1124,11 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
+
+	previousRangeID := s.getRangeIDLocked()
 	err := s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
-		PreviousRangeID: s.shardInfo.GetRangeId(),
+		PreviousRangeID: previousRangeID,
 	})
 	if err != nil {
 		// Failure in updating shard to grab new RangeID
@@ -1140,125 +1136,126 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 			tag.StoreOperationUpdateShard,
 			tag.Error(err),
 			tag.ShardRangeID(updatedShardInfo.GetRangeId()),
-			tag.PreviousShardRangeID(s.shardInfo.GetRangeId()),
+			tag.PreviousShardRangeID(previousRangeID),
 		)
-		return s.handleWriteErrorLocked(err)
+		return s.handleWriteErrorLocked(previousRangeID, err)
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
 	s.contextTaggedLogger.Info("Range updated for shardID",
 		tag.ShardRangeID(updatedShardInfo.RangeId),
 		tag.PreviousShardRangeID(s.shardInfo.RangeId),
-		tag.Number(s.taskSequenceNumber),
-		tag.NextNumber(s.maxTaskSequenceNumber),
 	)
 
-	s.taskSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
-	s.maxTaskSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
-	s.immediateTaskExclusiveMaxReadLevel = s.taskSequenceNumber
 	s.shardInfo = trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
+	s.taskKeyManager.setRangeID(s.shardInfo.RangeId)
 
 	return nil
 }
 
-func (s *ContextImpl) updateMaxReadLevelLocked(rl int64) {
-	if rl > s.immediateTaskExclusiveMaxReadLevel {
-		s.contextTaggedLogger.Debug("Updating MaxTaskID", tag.MaxLevel(rl))
-		s.immediateTaskExclusiveMaxReadLevel = rl
-	}
-}
-
-func (s *ContextImpl) updateShardInfoLocked() error {
+func (s *ContextImpl) updateShardInfo(
+	updateFnLocked func(),
+) error {
+	s.wLock()
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return err
 	}
 
-	var err error
+	updateFnLocked()
+	s.shardInfo.StolenSinceRenew = 0
+
 	now := cclock.NewRealTimeSource().Now()
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
+		s.wUnlock()
 		return nil
 	}
+
+	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
+	previousLastUpdate := s.lastUpdated
+	s.lastUpdated = now
+
 	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
-	// since linter is against any logging control ¯\_(ツ)_/¯, e.g.
-	//  "flag-parameter: parameter 'verboseLogging' seems to be a control flag, avoid control coupling (revive)"
-	var logger log.Logger = log.NewNoopLogger()
-	if s.config.EmitShardLagLog() {
-		logger = s.contextTaggedLogger
+	s.emitShardInfoMetricsLogsLocked(updatedShardInfo.QueueStates)
+	request := &persistence.UpdateShardRequest{
+		ShardInfo:       updatedShardInfo,
+		PreviousRangeID: s.shardInfo.GetRangeId(),
 	}
-	emitShardInfoMetricsLogsLocked(
-		s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope)),
-		logger,
-		updatedShardInfo.QueueStates,
-		s.immediateTaskExclusiveMaxReadLevel,
-		s.scheduledTaskMaxReadLevel,
-	)
+	s.wUnlock()
+
+	// TODO: check if release shard lock is safe here
+
+	if err := s.ioSemaphore.Acquire(s.lifecycleCtx, 1); err != nil {
+		return err
+	}
+	defer s.ioSemaphore.Release(1)
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
-	err = s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
-		ShardInfo:       updatedShardInfo,
-		PreviousRangeID: s.shardInfo.GetRangeId(),
-	})
+
+	err := s.persistenceShardManager.UpdateShard(ctx, request)
 	if err != nil {
-		return s.handleWriteErrorLocked(err)
+		s.wLock()
+		defer s.wUnlock()
+		// revert lastUpdated time so that operation can be retried
+		s.lastUpdated = util.MaxTime(previousLastUpdate, s.lastUpdated)
+		return s.handleWriteErrorLocked(request.PreviousRangeID, err)
 	}
 
-	s.lastUpdated = now
 	return nil
 }
 
-func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
-	newTasks map[tasks.Category][]tasks.Task,
-	transferExclusiveMaxReadLevel *int64,
-) error {
-	now := s.timeSource.Now()
-	minScheduledTaskTS := util.MaxTime(s.scheduledTaskMaxReadLevel, now)
-	for category, tasksByCategory := range newTasks {
-		for _, task := range tasksByCategory {
-			// set taskID
-			id, err := s.generateTaskIDLocked()
-			if err != nil {
-				return err
+func (s *ContextImpl) emitShardInfoMetricsLogsLocked(
+	queueStates map[int32]*persistencespb.QueueState,
+) {
+	emitShardLagLog := s.config.EmitShardLagLog()
+
+	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+
+Loop:
+	for categoryID, queueState := range queueStates {
+		category, ok := tasks.GetCategoryByID(categoryID)
+		if !ok {
+			continue Loop
+		}
+
+		switch category.Type() {
+		case tasks.CategoryTypeImmediate:
+			minTaskKey := getMinTaskKey(queueState)
+			if minTaskKey == nil {
+				continue Loop
 			}
-			s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
-			task.SetTaskID(id)
-			*transferExclusiveMaxReadLevel = id + 1
-
-			// for immediate task, visibility timestamp is only used for emitting task processing metrics.
-			// always set it's value to now so that the metrics emitted only include task processing latency.
-			if category.Type() == tasks.CategoryTypeImmediate {
-				task.SetVisibilityTime(now)
-			}
-
-			// if scheduled task, move task timestamp forward if needed
-			if category.Type() == tasks.CategoryTypeScheduled {
-				ts := task.GetVisibilityTime()
-				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(minScheduledTaskTS) {
-					// make sure scheduled task timestamp is higher than
-					// 1. max read level, so that queue processor can read the task back.
-					// 2. current time. Otherwise the task timestamp is in the past and causes aritical load latency in queue processor metrics.
-					// Above cases can happen if shard move and new host have a time SKU,
-					// or there is db write delay, or we are simply (re-)generating tasks for an old workflow.
-					s.contextTaggedLogger.Debug("New timer generated has scheduled time earilier than queue read level or current time",
-						tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
-						tag.WorkflowID(workflowID),
-						tag.Timestamp(ts),
-						tag.CursorTimestamp(s.scheduledTaskMaxReadLevel),
-						tag.ValueShardAllocateTimerBeforeRead)
-					task.SetVisibilityTime(minScheduledTaskTS.Add(persistence.ScheduledTaskMinPrecision))
-				}
-
-				s.contextTaggedLogger.Debug("Assigning new timer",
-					tag.Timestamp(task.GetVisibilityTime()),
-					tag.TaskID(task.GetTaskID()),
-					tag.MaxQueryLevel(s.scheduledTaskMaxReadLevel),
+			lag := s.taskKeyManager.getExclusiveReaderHighWatermark(category).TaskID - minTaskKey.TaskID
+			if emitShardLagLog && lag > logWarnImmediateTaskLag {
+				s.contextTaggedLogger.Warn(
+					"Shard queue lag exceeds warn threshold.",
+					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
 				)
 			}
+			metricsHandler.Histogram(
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
+				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+
+		case tasks.CategoryTypeScheduled:
+			minTaskKey := getMinTaskKey(queueState)
+			if minTaskKey == nil {
+				continue Loop
+			}
+			lag := s.taskKeyManager.getExclusiveReaderHighWatermark(category).FireTime.Sub(minTaskKey.FireTime)
+			if emitShardLagLog && lag > logWarnScheduledTaskLag {
+				s.contextTaggedLogger.Warn(
+					"Shard queue lag exceeds warn threshold.",
+					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
+				)
+			}
+			metricsHandler.Timer(
+				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
+			).Record(lag, metrics.TaskCategoryTag(category.Name()))
+		default:
+			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
 	}
-	return nil
 }
 
 func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
@@ -1305,16 +1302,31 @@ func (s *ContextImpl) handleReadError(err error) error {
 	}
 }
 
-func (s *ContextImpl) handleWriteErrorLocked(err error) error {
-	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
-	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0)
+func (s *ContextImpl) handleWriteError(
+	requestRangeID int64,
+	err error,
+) error {
+	s.wLock()
+	defer s.wUnlock()
+
+	return s.handleWriteErrorLocked(s.shardInfo.GetRangeId(), err)
 }
 
-func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
+func (s *ContextImpl) handleWriteErrorLocked(
+	requestRangeID int64,
+	err error,
+) error {
+
+	if requestRangeID != s.getRangeIDLocked() {
+		return err
+	}
+
+	if valid := s.IsValid(); !valid {
+		return err
+	}
 	switch err.(type) {
 	case nil:
 		// Persistence success: update max read level
-		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return nil
 
 	case *persistence.AppendHistoryTimeoutError:
@@ -1324,7 +1336,11 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError,
-		*serviceerror.ResourceExhausted:
+		*persistence.InvalidPersistenceRequestError,
+		*persistence.TransactionSizeLimitError,
+		*serviceerror.ResourceExhausted,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
 		// Persistence failure that means the write was definitely not committed:
 		// No special handling required for these errors.
 		return err
@@ -1615,7 +1631,7 @@ func (s *ContextImpl) updateHandoverNamespacePendingTaskID() {
 		return
 	}
 
-	maxReplicationTaskID := s.immediateTaskExclusiveMaxReadLevel - 1
+	maxReplicationTaskID := s.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID - 1
 	for namespaceName, handoverInfo := range s.handoverNamespaces {
 		if handoverInfo.MaxReplicationTaskID == pendingMaxReplicationTaskID {
 			s.handoverNamespaces[namespaceName].MaxReplicationTaskID = maxReplicationTaskID
@@ -1716,7 +1732,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	s.shardInfo = shardInfo
 	s.remoteClusterInfos = remoteClusterInfos
-	s.scheduledTaskMaxReadLevel = scheduledTaskMaxReadLevel
+	s.taskKeyManager.setTaskMinScheduledTime(scheduledTaskMaxReadLevel)
 
 	return nil
 }
@@ -1831,9 +1847,13 @@ func (s *ContextImpl) acquireShard() {
 		//   outer function will do nothing, since the state was already changed.
 		// transition(contextRequestLost) for other transient errors:
 		//   This will do nothing, since state is already Acquiring.
+		if err := s.ioSemaphore.Acquire(s.lifecycleCtx, 1); err != nil {
+			return err
+		}
 		s.wLock()
 		err = s.renewRangeLocked(true)
 		s.wUnlock()
+		s.ioSemaphore.Release(1)
 		if err != nil {
 			return err
 		}
@@ -1906,7 +1926,8 @@ func (s *ContextImpl) acquireShard() {
 func newContext(
 	shardID int32,
 	factory EngineFactory,
-	config *configs.Config,
+	historyConfig *configs.Config,
+	persistenceConfig config.Persistence,
 	closeCallback CloseCallback,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -1929,6 +1950,11 @@ func newContext(
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
+	ioConcurrency := historyConfig.ShardIOConcurrency()
+	if persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil {
+		ioConcurrency = 1
+	}
+
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -1937,7 +1963,7 @@ func newContext(
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
-		config:                  config,
+		config:                  historyConfig,
 		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
@@ -1956,7 +1982,16 @@ func newContext(
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
+		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
 	}
+	shardContext.taskKeyManager = newTaskKeyManager(
+		timeSource,
+		historyConfig,
+		shardContext.GetLogger(),
+		func() error {
+			return shardContext.renewRangeLocked(false)
+		},
+	)
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
 		shardContext.GetConfig().EventsCacheMaxSizeBytes(),
@@ -2084,6 +2119,7 @@ func OperationPossiblySucceeded(err error) bool {
 		*persistence.ShardOwnershipLostError,
 		*persistence.InvalidPersistenceRequestError,
 		*persistence.TransactionSizeLimitError,
+		*persistence.AppendHistoryTimeoutError, // this means task operations is not started
 		*serviceerror.ResourceExhausted,
 		*serviceerror.NotFound,
 		*serviceerror.NamespaceNotFound:

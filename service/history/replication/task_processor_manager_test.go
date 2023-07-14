@@ -142,7 +142,7 @@ func (s *taskProcessorManagerSuite) TearDownTest() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
 	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
@@ -172,7 +172,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
 	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{

@@ -247,7 +247,7 @@ func (s *StreamSenderImpl) sendCatchUp() (int64, error) {
 			catchupBeginInclusiveWatermark = readerState.Scopes[0].Range.InclusiveMin.TaskId
 		}
 	}
-	catchupEndExclusiveWatermark := s.shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
+	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 	if err := s.sendTasks(
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
@@ -264,7 +264,7 @@ func (s *StreamSenderImpl) sendLive(
 	for {
 		select {
 		case <-newTaskNotificationChan:
-			endExclusiveWatermark := s.shardContext.GetImmediateQueueExclusiveHighReadWatermark().TaskID
+			endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 			if err := s.sendTasks(
 				beginInclusiveWatermark,
 				endExclusiveWatermark,
