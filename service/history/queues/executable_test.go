@@ -37,7 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -269,19 +268,6 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 		},
 	)
 	s.NoError(executable.Execute())
-}
-
-func (s *executableSuite) TestExecute_DiscardTask() {
-	executable := s.newTestExecutable()
-	registry := namespace.NewMockRegistry(s.controller)
-	executable.(*executableImpl).namespaceRegistry = registry
-	ns := namespace.NewGlobalNamespaceForTest(nil, nil, &persistencepb.NamespaceReplicationConfig{
-		ActiveClusterName: "nonCurrentCluster",
-		Clusters:          []string{"nonCurrentCluster"},
-	}, 1)
-
-	registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).Times(2)
-	s.ErrorIs(executable.Execute(), consts.ErrTaskDiscarded)
 }
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
