@@ -207,7 +207,7 @@ func (s *activitiesSuite) TestGenerateAndVerifyReplicationTasks_Skipped() {
 		{
 			nil, serviceerror.NewNotFound(""),
 			VERIFY_SKIPPED,
-			reasonNotFoundWorkflow,
+			reasonWorkflowNotFound,
 			nil,
 		},
 		{

@@ -89,7 +89,7 @@ const (
 	VERIFY_SKIPPED         VerifyStatus = 3
 
 	reasonZombieWorkflow   = "Zombie workflow"
-	reasonNotFoundWorkflow = "not found workflow"
+	reasonWorkflowNotFound = "Workflow not found"
 )
 
 func (r VerifyResult) isNotCreated() bool {
@@ -543,6 +543,11 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 }
 
 func (a *activities) createReplicationTasks(ctx context.Context, request *genearteAndVerifyReplicationTasksRequest, detail *replicationTasksHeartbeatDetails) error {
+	start := time.Now()
+	defer func() {
+		a.forceReplicationMetricsHandler.Timer(metrics.CreateReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+	}()
+
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
 	for i := 0; i < len(request.Executions); i++ {
@@ -580,7 +585,7 @@ func (a *activities) createReplicationTasks(ctx context.Context, request *genear
 				case *serviceerror.NotFound:
 					// rare case but in case if execution was deleted after above DescribeMutableState
 					r.Status = VERIFY_SKIPPED
-					r.Reason = reasonNotFoundWorkflow
+					r.Reason = reasonWorkflowNotFound
 				default:
 					a.logger.Error(fmt.Sprintf("createReplicationTasks failed to generate replication task. Error: %v", err), tags...)
 					return err
@@ -589,7 +594,7 @@ func (a *activities) createReplicationTasks(ctx context.Context, request *genear
 
 		case *serviceerror.NotFound:
 			r.Status = VERIFY_SKIPPED
-			r.Reason = reasonNotFoundWorkflow
+			r.Reason = reasonWorkflowNotFound
 
 		default:
 			return err
@@ -605,6 +610,11 @@ func (a *activities) verifyReplicationTasks(
 	detail *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
 ) (verified bool, progress bool, err error) {
+	start := time.Now()
+	defer func() {
+		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+	}()
+
 	progress = false
 	for i := 0; i < len(request.Executions); i++ {
 		r := &detail.Results[i]
@@ -673,11 +683,9 @@ func (a *activities) GenerateAndVerifyReplicationTasks(ctx context.Context, requ
 		activity.RecordHeartbeat(ctx, details)
 	}
 
-	start := time.Now()
 	if err := a.createReplicationTasks(ctx, request, &details); err != nil {
 		return err
 	}
-	a.forceReplicationMetricsHandler.Timer(metrics.CreateReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
 
 	activity.RecordHeartbeat(ctx, details)
 
@@ -698,11 +706,9 @@ func (a *activities) GenerateAndVerifyReplicationTasks(ctx context.Context, requ
 		var verified, progress bool
 		var err error
 
-		start := time.Now()
 		if verified, progress, err = a.verifyReplicationTasks(ctx, request, &details, remoteClient); err != nil {
 			return err
 		}
-		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
 
 		if progress {
 			details.CheckPoint = time.Now()
