@@ -604,8 +604,8 @@ func (a *activities) verifyReplicationTasks(
 	request *genearteAndVerifyReplicationTasksRequest,
 	detail *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
-) (bool, bool, error) {
-	progress := false
+) (verified bool, progress bool, err error) {
+	progress = false
 	for i := 0; i < len(request.Executions); i++ {
 		r := &detail.Results[i]
 		we := request.Executions[i]
