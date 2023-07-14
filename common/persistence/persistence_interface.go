@@ -725,4 +725,77 @@ type (
 		ClusterMember
 		RecordExpiry time.Time
 	}
+
+	QueueV2 interface {
+		Closeable
+		EnqueueMessage(ctx context.Context, request InternalEnqueueMessageRequest) (*InternalEnqueueMessageResponse, error)
+		ReadMessages(ctx context.Context, request InternalReadMessagesRequest) (*InternalReadMessagesResponse, error)
+		RangeDeleteMessages(ctx context.Context, request InternalRangeDeleteMessagesRequest) (*InternalRangeDeleteMessagesResponse, error)
+
+		CreateQueue(ctx context.Context, request InternalCreateQueueRequest) (*InternalCreateQueueResponse, error)
+		ListQueues(ctx context.Context, request InternalListQueuesRequest) (*InternalListQueuesResponse, error)
+	}
+
+	MessageMetadata struct {
+		ID int64
+	}
+
+	Message struct {
+		MetaData MessageMetadata
+		Data     commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+		Blob      commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageResponse struct {
+		Metadata MessageMetadata
+	}
+
+	InternalReadMessagesRequest struct {
+		QueueType     QueueV2Type
+		QueueName     string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalReadMessagesResponse struct {
+		Messages      []Message
+		NextPageToken []byte
+	}
+
+	// delete all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
+		// empty
+	}
+
+	InternalCreateQueueRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+	}
+
+	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	InternalListQueuesRequest struct {
+		QueueType QueueV2Type
+
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalListQueuesResponse struct {
+		QueueNames    []string
+		NextPageToken []byte
+	}
 )

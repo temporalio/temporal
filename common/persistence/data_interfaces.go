@@ -57,6 +57,15 @@ const (
 	NamespaceReplicationQueueType QueueType = iota + 1
 )
 
+// QueueV2Type is an enum that represents various queue types in persistence
+type QueueV2Type int32
+
+const (
+	QueueV2TypeUnspecified QueueV2Type = iota
+	QueueV2TypeHistoryNormal
+	QueueV2TypeHistoryDLQ
+)
+
 // Create Workflow Execution Mode
 const (
 	// CreateWorkflowModeBrandNew fail if current record exists
