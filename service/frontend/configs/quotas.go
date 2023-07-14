@@ -35,10 +35,6 @@ import (
 const (
 	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
 	OperatorPriority = 0
-	// OperatorQPSRatio is the percentage of the rate provided to priority rate limiters that
-	// should be used for operator API calls. Operator API calls have a lower rate limit to
-	// prevent users from abusing this to get high priority for all requests.
-	OperatorQPSRatio = 0.2
 )
 
 var (
@@ -150,7 +146,7 @@ type (
 	}
 
 	operatorRateBurstImpl struct {
-		operatorRateRatio float64
+		operatorRateRatio dynamicconfig.FloatPropertyFn
 		baseRateBurstFn   quotas.RateBurst
 	}
 )
@@ -180,15 +176,16 @@ func (c *NamespaceRateBurstImpl) Burst() int {
 
 func newOperatorRateBurst(
 	baseRateBurstFn quotas.RateBurst,
+	operatorRateRatio dynamicconfig.FloatPropertyFn,
 ) *operatorRateBurstImpl {
 	return &operatorRateBurstImpl{
-		operatorRateRatio: OperatorQPSRatio,
+		operatorRateRatio: operatorRateRatio,
 		baseRateBurstFn:   baseRateBurstFn,
 	}
 }
 
 func (c *operatorRateBurstImpl) Rate() float64 {
-	return c.operatorRateRatio * c.baseRateBurstFn.Rate()
+	return c.operatorRateRatio() * c.baseRateBurstFn.Rate()
 }
 
 func (c *operatorRateBurstImpl) Burst() int {
@@ -200,13 +197,14 @@ func NewRequestToRateLimiter(
 	visibilityRateBurstFn quotas.RateBurst,
 	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
 	otherRateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
-	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
-	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn)
+	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
+	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
+	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
+	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn, operatorRPSRatio)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter
@@ -226,11 +224,12 @@ func NewRequestToRateLimiter(
 
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range ExecutionAPIPrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn), time.Minute))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 		}
@@ -248,11 +247,12 @@ func NewExecutionPriorityRateLimiter(
 
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range VisibilityAPIPrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn), time.Minute))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 		}
@@ -270,11 +270,12 @@ func NewVisibilityPriorityRateLimiter(
 
 func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range NamespaceReplicationInducingAPIPrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn), time.Minute))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 		}
@@ -292,11 +293,12 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 
 func NewOtherAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range OtherAPIPrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn), time.Minute))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
 		}

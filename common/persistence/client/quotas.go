@@ -39,39 +39,32 @@ type (
 	}
 )
 
-const (
-	// OperatorQPSRatio is the percentage of the rate provided to priority rate limiters that
-	// should be used for operator API calls. Operator API calls have a lower rate limit to
-	// prevent users from abusing this to get high priority for all requests.
-	OperatorQPSRatio = 0.2
-)
-
 var (
 	CallerTypeDefaultPriority = map[string]int{
-		headers.CallerTypeOperator:    1,
+		headers.CallerTypeOperator:    0,
 		headers.CallerTypeAPI:         2,
 		headers.CallerTypeBackground:  4,
 		headers.CallerTypePreemptable: 5,
 	}
 
 	APITypeCallOriginPriorityOverride = map[string]int{
-		"StartWorkflowExecution":           0,
-		"SignalWithStartWorkflowExecution": 0,
-		"SignalWorkflowExecution":          0,
-		"RequestCancelWorkflowExecution":   0,
-		"TerminateWorkflowExecution":       0,
-		"GetWorkflowExecutionHistory":      0,
-		"UpdateWorkflowExecution":          0,
+		"StartWorkflowExecution":           1,
+		"SignalWithStartWorkflowExecution": 1,
+		"SignalWorkflowExecution":          1,
+		"RequestCancelWorkflowExecution":   1,
+		"TerminateWorkflowExecution":       1,
+		"GetWorkflowExecutionHistory":      1,
+		"UpdateWorkflowExecution":          1,
 	}
 
 	BackgroundTypeAPIPriorityOverride = map[string]int{
-		"GetOrCreateShard": 0,
-		"UpdateShard":      0,
+		"GetOrCreateShard": 1,
+		"UpdateShard":      1,
 
 		// This is a preprequisite for checkpointing queue process progress
-		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryTransfer):   0,
-		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryTimer):      0,
-		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryVisibility): 0,
+		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryTransfer):   1,
+		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryTimer):      1,
+		p.ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", tasks.CategoryVisibility): 1,
 
 		// Task resource isolation assumes task can always be loaded.
 		// When one namespace has high load, all task processing goroutines
@@ -94,6 +87,7 @@ func NewPriorityRateLimiter(
 	hostMaxQPS PersistenceMaxQps,
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	logger log.Logger,
@@ -102,13 +96,13 @@ func NewPriorityRateLimiter(
 
 	return quotas.NewMultiRequestRateLimiter(
 		// per shardID+namespaceID rate limiters
-		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// per namespaceID rate limiters
-		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn),
+		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, healthSignals, dynamicParams, logger),
+		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, healthSignals, dynamicParams, logger),
 		// basic host-level rate limiter
-		newPriorityRateLimiter(hostRateFn, requestPriorityFn),
+		newPriorityRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio),
 	)
 }
 
@@ -116,6 +110,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 	perShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
 ) quotas.RequestRateLimiter {
 	return quotas.NewMapRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) && hasCallerSegment(req) {
@@ -126,6 +121,7 @@ func newPerShardPerNamespacePriorityRateLimiter(
 				return float64(perShardNamespaceMaxQPS(req.Caller))
 			},
 				requestPriorityFn,
+				operatorRPSRatio,
 			)
 		}
 		return quotas.NoopRequestRateLimiter
@@ -145,6 +141,7 @@ func newPriorityNamespaceRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
 ) quotas.RequestRateLimiter {
 	return quotas.NewNamespaceRequestRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if hasCaller(req) {
@@ -162,6 +159,7 @@ func newPriorityNamespaceRateLimiter(
 					return namespaceQPS
 				},
 				requestPriorityFn,
+				operatorRPSRatio,
 			)
 		}
 		return quotas.NoopRequestRateLimiter
@@ -171,11 +169,12 @@ func newPriorityNamespaceRateLimiter(
 func newPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(rateFn)))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 		}
@@ -190,6 +189,7 @@ func newPriorityRateLimiter(
 func newPriorityDynamicRateLimiter(
 	rateFn quotas.RateFn,
 	requestPriorityFn quotas.RequestPriorityFn,
+	operatorRPSRatio OperatorRPSRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
 	logger log.Logger,
@@ -198,7 +198,7 @@ func newPriorityDynamicRateLimiter(
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn), dynamicParams, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn, operatorRPSRatio), dynamicParams, logger)
 		} else {
 			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
 		}
@@ -228,9 +228,6 @@ func NewNoopPriorityRateLimiter(
 func RequestPriorityFn(req quotas.Request) int {
 	switch req.CallerType {
 	case headers.CallerTypeOperator:
-		if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
-			return priority
-		}
 		return CallerTypeDefaultPriority[req.CallerType]
 	case headers.CallerTypeAPI:
 		if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
@@ -250,9 +247,9 @@ func RequestPriorityFn(req quotas.Request) int {
 	}
 }
 
-func operatorRateFn(rateFn quotas.RateFn) quotas.RateFn {
+func operatorRateFn(rateFn quotas.RateFn, operatorRPSRatio OperatorRPSRatio) quotas.RateFn {
 	return func() float64 {
-		return rateFn() * OperatorQPSRatio
+		return operatorRPSRatio() * rateFn()
 	}
 }
 

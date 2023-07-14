@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 )
@@ -32,10 +33,6 @@ import (
 const (
 	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
 	OperatorPriority = 0
-	// OperatorQPSRatio is the percentage of the rate provided to priority rate limiters that
-	// should be used for operator API calls. Operator API calls have a lower rate limit to
-	// prevent users from abusing this to get high priority for all requests.
-	OperatorQPSRatio = 0.2
 )
 
 var (
@@ -95,11 +92,12 @@ var (
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn)))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
 		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
 		}
@@ -117,8 +115,9 @@ func NewPriorityRateLimiter(
 
 func operatorRateFn(
 	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RateFn {
 	return func() float64 {
-		return rateFn() * OperatorQPSRatio
+		return operatorRPSRatio() * rateFn()
 	}
 }

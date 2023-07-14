@@ -31,11 +31,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/quotas"
 	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -89,7 +89,8 @@ func (s *quotasSuite) TestAPIs() {
 
 func (s *quotasSuite) TestOperatorPrioritized() {
 	rateFn := func() float64 { return 5 }
-	limiter := NewPriorityRateLimiter(rateFn)
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
 
 	operatorRequest := quotas.NewRequest(
 		"QueryWorkflow",

@@ -38,7 +38,8 @@ import (
 )
 
 var (
-	testRateBurstFn = quotas.NewDefaultIncomingRateBurst(func() float64 { return 5 })
+	testRateBurstFn        = quotas.NewDefaultIncomingRateBurst(func() float64 { return 5 })
+	testOperatorRPSRatioFn = func() float64 { return 0.2 }
 )
 
 type (
@@ -271,22 +272,22 @@ func (s *quotasSuite) TestAllAPIs() {
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {
-	limiter := NewExecutionPriorityRateLimiter(testRateBurstFn)
+	limiter := NewExecutionPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "DescribeWorkflowExecution")
 }
 
 func (s *quotasSuite) TestOperatorPriority_Visibility() {
-	limiter := NewVisibilityPriorityRateLimiter(testRateBurstFn)
+	limiter := NewVisibilityPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "ListOpenWorkflowExecutions")
 }
 
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
-	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn)
+	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
 }
 
 func (s *quotasSuite) TestOperatorPriority_Other() {
-	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn)
+	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "DescribeNamespace")
 }
 
