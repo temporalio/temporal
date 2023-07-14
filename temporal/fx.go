@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -719,6 +720,7 @@ func loadClusterInformationFromStore(ctx context.Context, svc *config.Config, cl
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
 			ShardCount:             shardCount,
+			Tags:                   metadata.Tags,
 		}
 		if staticClusterMetadata, ok := svc.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
 			if metadata.ClusterName != svc.ClusterMetadata.CurrentClusterName {
@@ -770,6 +772,7 @@ func initCurrentClusterMetadataRecord(
 				IsConnectionEnabled:      currentClusterInfo.Enabled,
 				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				IndexSearchAttributes:    initialIndexSearchAttributes,
+				Tags:                     svc.ClusterMetadata.Tags,
 			},
 		})
 	if err != nil {
@@ -804,7 +807,10 @@ func updateCurrentClusterMetadataRecord(
 		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
 		updateDBRecord = true
 	}
-	// TODO: Add cluster tags
+	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
+		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
+		updateDBRecord = true
+	}
 
 	if !updateDBRecord {
 		return nil

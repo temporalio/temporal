@@ -288,7 +288,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error = nil
+	var leaseErr error
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
@@ -505,7 +505,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Active poll-er
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), &pollMetadata{})
+	tlm.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))

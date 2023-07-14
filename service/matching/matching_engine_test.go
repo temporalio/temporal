@@ -95,7 +95,6 @@ type (
 
 const (
 	matchingTestNamespace = "matching-test"
-	matchingTestTaskQueue = "matching-test-taskqueue"
 )
 
 func TestMatchingEngineSuite(t *testing.T) {
@@ -495,7 +494,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 	}
 
-	// add multiple workflow tasks, but matching should not keeping polling new tasks
+	// add multiple workflow tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
 	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 	s.NoError(err)
@@ -527,7 +526,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 	}
 
-	// add multiple activity tasks, but matching should not keeping polling new tasks
+	// add multiple activity tasks, but matching should not keep polling new tasks
 	// upon getting namespace handover error when recording start for the first task
 	_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 	s.NoError(err)
@@ -804,7 +803,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 }
 
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
+	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 
 	runID := uuid.NewRandom().String()
@@ -1006,7 +1005,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
 	s.T().Skip("Racy - times out ~50% of the time running locally with --race")
-	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
+	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(20 * time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
@@ -1724,7 +1723,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.True(ok, "taskQueueManger doesn't implement taskQueueManager interface")
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
-	// wait until all tasks are read by the task pump and enqeued into the in-memory buffer
+	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
 	expectedBufSize := util.Min(cap(tlMgr.taskReader.taskBuffer), taskCount)
 	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
@@ -1736,18 +1735,18 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
 	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
+	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.EqualValues(0, len(tasks))
-	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), readLevel)
-	s.True(isReadBatchDone)
+	s.EqualValues(0, len(batch.tasks))
+	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), batch.readLevel)
+	s.True(batch.isReadBatchDone)
 
 	tlMgr.taskAckManager.setReadLevel(0)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.EqualValues(rangeSize, len(tasks))
-	s.EqualValues(rangeSize, readLevel)
-	s.True(isReadBatchDone)
+	s.EqualValues(rangeSize, len(batch.tasks))
+	s.EqualValues(rangeSize, batch.readLevel)
+	s.True(batch.isReadBatchDone)
 
 	s.setupRecordActivityTaskStartedMock(tl)
 
@@ -1776,10 +1775,10 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-	tasks, _, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
-	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
-	s.True(isReadBatchDone)
+	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
+	s.True(batch.isReadBatchDone)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
@@ -1805,17 +1804,17 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(tasks)
-	s.Equal(int64(rangeSize*10), readLevel)
-	s.False(isReadBatchDone)
+	batch, err := tlMgr.taskReader.getTaskBatch(context.Background())
+	s.Empty(batch.tasks)
+	s.Equal(int64(rangeSize*10), batch.readLevel)
+	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	tlMgr.taskAckManager.setReadLevel(readLevel)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(tasks)
-	s.Equal(maxReadLevel, readLevel)
-	s.True(isReadBatchDone)
+	tlMgr.taskAckManager.setReadLevel(batch.readLevel)
+	batch, err = tlMgr.taskReader.getTaskBatch(context.Background())
+	s.Empty(batch.tasks)
+	s.Equal(maxReadLevel, batch.readLevel)
+	s.True(batch.isReadBatchDone)
 	s.NoError(err)
 }
 
@@ -2731,7 +2730,7 @@ func (m *testTaskManager) String() string {
 }
 
 // GetTaskQueueData implements persistence.TaskManager
-func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
+func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2742,7 +2741,7 @@ func (m *testTaskManager) GetTaskQueueUserData(ctx context.Context, request *per
 }
 
 // UpdateTaskQueueUserData implements persistence.TaskManager
-func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
+func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2753,19 +2752,19 @@ func (m *testTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *
 }
 
 // ListTaskQueueUserDataEntries implements persistence.TaskManager
-func (*testTaskManager) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
+func (*testTaskManager) ListTaskQueueUserDataEntries(context.Context, *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {
 	// No need to implement this for unit tests
 	panic("unimplemented")
 }
 
 // GetTaskQueuesByBuildId implements persistence.TaskManager
-func (*testTaskManager) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+func (*testTaskManager) GetTaskQueuesByBuildId(context.Context, *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
 	// No need to implement this for unit tests
 	panic("unimplemented")
 }
 
 // CountTaskQueuesByBuildId implements persistence.TaskManager
-func (*testTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
+func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
 	// This is only used to validate that the build id to task queue mapping is enforced (at the time of writing), report 0.
 	return 0, nil
 }

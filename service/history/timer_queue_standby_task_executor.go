@@ -435,6 +435,15 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
+	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(timerTask.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+	if !nsRecord.IsOnCluster(t.clusterName) {
+		// discard standby tasks
+		return consts.ErrTaskDiscarded
+	}
+
 	executionContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, timerTask)
 	if err != nil {
 		return err
