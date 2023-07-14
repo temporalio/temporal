@@ -50,8 +50,8 @@ func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 		func(_ context.Context, request *persistence.SaveClusterMetadataRequest) (bool, error) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, cfg.ClusterMetadata.CurrentClusterName, request.ClusterName)
-			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
-			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
+			require.Equal(t, cfg.ClusterMetadata.ReplicationAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, cfg.Persistence.NumHistoryShards, request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
 			require.Equal(t, int64(0), request.Version)
@@ -79,8 +79,8 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 		func(_ context.Context, request *persistence.SaveClusterMetadataRequest) (bool, error) {
 			require.Equal(t, cfg.ClusterMetadata.EnableGlobalNamespace, request.IsGlobalNamespaceEnabled)
 			require.Equal(t, "", request.ClusterName)
-			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].RPCAddress, request.ClusterAddress)
-			require.Equal(t, cfg.ClusterMetadata.ClusterInformation[cfg.ClusterMetadata.CurrentClusterName].InitialFailoverVersion, request.InitialFailoverVersion)
+			require.Equal(t, cfg.ClusterMetadata.ReplicationAddress, request.ClusterAddress)
+			require.Equal(t, cfg.ClusterMetadata.InitialFailoverVersion, request.InitialFailoverVersion)
 			require.Equal(t, int32(0), request.HistoryShardCount)
 			require.Equal(t, cfg.ClusterMetadata.FailoverVersionIncrement, request.FailoverVersionIncrement)
 			require.Equal(t, int64(1), request.Version)

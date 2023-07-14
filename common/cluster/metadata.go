@@ -96,8 +96,10 @@ type (
 		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster
 		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+
+		InitialFailoverVersion int64  `yaml:"initialFailoverVersion"`
+		ReplicationAddress     string `yaml:"replicationAddress"`
+		ClusterID              string `yaml:"-"`
 	}
 
 	// ClusterInformation contains the information about each cluster which participated in cross DC
@@ -111,6 +113,10 @@ type (
 		ShardCount int32  `yaml:"-"` // Ignore this field when loading config.
 		// private field to track cluster information updates
 		version int64
+	}
+
+	DBRecord struct {
+		Record map[string]ClusterInformation
 	}
 
 	metadataImpl struct {
@@ -149,12 +155,12 @@ func NewMetadata(
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
-	clusterInfo map[string]ClusterInformation,
+	dbRecord DBRecord,
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	refreshDuration dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
 ) Metadata {
-	if len(clusterInfo) == 0 {
+	if len(dbRecord.Record) == 0 {
 		panic("Empty cluster information")
 	} else if len(masterClusterName) == 0 {
 		panic("Master cluster name is empty")
@@ -164,19 +170,19 @@ func NewMetadata(
 		panic("Version increment <= 0 or > 2147483647")
 	}
 
-	versionToClusterName := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
-	if _, ok := clusterInfo[currentClusterName]; !ok {
+	versionToClusterName := updateVersionToClusterName(dbRecord.Record, failoverVersionIncrement)
+	if _, ok := dbRecord.Record[currentClusterName]; !ok {
 		panic("Current cluster is not specified in cluster info")
 	}
-	if _, ok := clusterInfo[masterClusterName]; !ok {
+	if _, ok := dbRecord.Record[masterClusterName]; !ok {
 		panic("Master cluster is not specified in cluster info")
 	}
-	if len(versionToClusterName) != len(clusterInfo) {
+	if len(versionToClusterName) != len(dbRecord.Record) {
 		panic("Cluster info initial versions have duplicates")
 	}
 
 	copyClusterInfo := make(map[string]ClusterInformation)
-	for k, v := range clusterInfo {
+	for k, v := range dbRecord.Record {
 		copyClusterInfo[k] = v
 	}
 	if refreshDuration == nil {
@@ -199,6 +205,7 @@ func NewMetadata(
 
 func NewMetadataFromConfig(
 	config *Config,
+	record DBRecord,
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.Logger,
@@ -208,7 +215,7 @@ func NewMetadataFromConfig(
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		record,
 		clusterMetadataStore,
 		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
 		logger,
@@ -217,13 +224,14 @@ func NewMetadataFromConfig(
 
 func NewMetadataForTest(
 	config *Config,
+	clusterInfo map[string]ClusterInformation,
 ) Metadata {
 	return NewMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		DBRecord{Record: clusterInfo},
 		nil,
 		nil,
 		log.NewNoopLogger(),

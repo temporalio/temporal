@@ -29,16 +29,22 @@ const (
 	TestCurrentClusterInitialFailoverVersion = int64(1)
 	// TestAlternativeClusterInitialFailoverVersion is initial failover version for alternative cluster
 	TestAlternativeClusterInitialFailoverVersion = int64(2)
+	// TestOptionalClusterInitialFailoverVersion is initial failover version for optional cluster
+	TestOptionalClusterInitialFailoverVersion = int64(3)
 	// TestFailoverVersionIncrement is failover version increment used for test
 	TestFailoverVersionIncrement = int64(10)
 	// TestCurrentClusterName is current cluster used for test
 	TestCurrentClusterName = "active"
 	// TestAlternativeClusterName is alternative cluster used for test
 	TestAlternativeClusterName = "standby"
+	// TestOptionalClusterName is an optional cluster used for test
+	TestOptionalClusterName = "other"
 	// TestCurrentClusterFrontendAddress is the ip port address of current cluster
 	TestCurrentClusterFrontendAddress = "127.0.0.1:7134"
 	// TestAlternativeClusterFrontendAddress is the ip port address of alternative cluster
 	TestAlternativeClusterFrontendAddress = "127.0.0.1:8134"
+	// TestOptionalClusterFrontendAddress is the ip port address of optional cluster
+	TestOptionalClusterFrontendAddress = "127.0.0.1:9134"
 )
 
 var (
@@ -58,6 +64,12 @@ var (
 			RPCAddress:             TestAlternativeClusterFrontendAddress,
 			ShardCount:             4,
 		},
+		TestOptionalClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: TestOptionalClusterInitialFailoverVersion,
+			RPCAddress:             TestOptionalClusterFrontendAddress,
+			ShardCount:             4,
+		},
 	}
 
 	// TestSingleDCAllClusterNames is the all cluster names used for test
@@ -73,7 +85,7 @@ var (
 )
 
 // NewTestClusterMetadataConfig return an cluster metadata config
-func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *Config {
+func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) (*Config, map[string]ClusterInformation) {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
@@ -85,8 +97,7 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 			FailoverVersionIncrement: TestFailoverVersionIncrement,
 			MasterClusterName:        masterClusterName,
 			CurrentClusterName:       TestCurrentClusterName,
-			ClusterInformation:       TestAllClusterInfo,
-		}
+		}, TestAllClusterInfo
 	}
 
 	return &Config{
@@ -94,6 +105,5 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 		FailoverVersionIncrement: TestFailoverVersionIncrement,
 		MasterClusterName:        TestCurrentClusterName,
 		CurrentClusterName:       TestCurrentClusterName,
-		ClusterInformation:       TestSingleDCClusterInfo,
-	}
+	}, TestSingleDCClusterInfo
 }
