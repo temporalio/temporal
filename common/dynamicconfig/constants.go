@@ -501,6 +501,9 @@ const (
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
 	AcquireShardConcurrency = "history.acquireShardConcurrency"
+	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
+	// shard ownership information, instead of checking membership for each request.
+	HistoryClientOwnershipCachingEnabled = "history.clientOwnershipCachingEnabled"
 	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay = "history.standbyClusterDelay"
 	// StandbyTaskMissingEventsResendDelay is the amount of time standby cluster's will wait (if events are missing)
