@@ -32,13 +32,15 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
 )
 
 const (
 	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
-	driverName = "postgres"
+	driverName = "pgx"
 )
 
 const (

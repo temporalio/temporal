@@ -28,21 +28,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	postgresqlschemaV96 "go.temporal.io/server/schema/postgresql/v96"
 )
 
-// ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
-// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
-const ErrDupEntryCode = pq.ErrorCode("23505")
-
 func (pdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*pq.Error)
-	return ok && sqlErr.Code == ErrDupEntryCode
+	sqlErr, ok := err.(*pgconn.PgError)
+	return ok && sqlErr.Code == pgerrcode.UniqueViolation
 }
 
 // db represents a logical connection to mysql database
