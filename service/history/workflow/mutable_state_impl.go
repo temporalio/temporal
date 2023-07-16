@@ -182,6 +182,7 @@ type (
 		checksum *persistencespb.Checksum
 
 		taskGenerator       TaskGenerator
+		ephemeralMessages   EphemeralMessages
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
 
@@ -282,6 +283,7 @@ func NewMutableState(
 		s.metricsHandler,
 	)
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
+	s.ephemeralMessages = NewEphemeralMessages()
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
 	return s
@@ -452,6 +454,10 @@ func (ms *MutableStateImpl) GetCurrentBranchToken() ([]byte, error) {
 		return nil, err
 	}
 	return currentVersionHistory.GetBranchToken(), nil
+}
+
+func (ms *MutableStateImpl) GetEphemeralMessages() EphemeralMessages {
+	return ms.ephemeralMessages
 }
 
 func (ms *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) ([]byte, int64, error) {

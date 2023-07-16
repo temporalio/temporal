@@ -1252,6 +1252,43 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	return resp, nil
 }
 
+func (h *Handler) NotifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.NotifyChildExecutionCompletionRecordedRequest,
+) (_ *historyservice.NotifyChildExecutionCompletionRecordedResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	if request.ParentExecution == nil {
+		return nil, h.convertError(errWorkflowExecutionNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.ParentExecution.GetWorkflowId())
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.NotifyChildExecutionCompletionRecorded(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
+}
+
 func (h *Handler) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,

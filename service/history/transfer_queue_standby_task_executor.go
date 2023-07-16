@@ -249,6 +249,12 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 
+		ephemeralMessageKey := workflow.NewEphemeralMessageChildCompletionKey(
+			executionInfo.ParentInitiatedId,
+			executionInfo.ParentInitiatedVersion,
+		)
+		_, ephemeralMessageExists := mutableState.GetEphemeralMessages().Get(ephemeralMessageKey)
+
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -290,6 +296,21 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		if verifyCompletionRecorded {
+			if ephemeralMessageExists {
+				t.shard.GetLogger().Info("notification optimized",
+					tag.ShardID(t.shard.GetShardID()),
+					tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID))
+				mutableState.GetEphemeralMessages().Remove(ephemeralMessageKey)
+				return nil, nil
+			}
+			t.shard.GetLogger().Info("notification not optimized",
+				tag.ShardID(t.shard.GetShardID()),
+				tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+				tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+				tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID))
+
 			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
 				ParentExecution: &commonpb.WorkflowExecution{

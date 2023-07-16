@@ -275,6 +275,21 @@ func (c *retryableClient) MergeDLQMessages(
 	return resp, err
 }
 
+func (c *retryableClient) NotifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.NotifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	var resp *historyservice.NotifyChildExecutionCompletionRecordedResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.NotifyChildExecutionCompletionRecorded(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,

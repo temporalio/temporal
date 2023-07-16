@@ -230,6 +230,26 @@ func (c *clientImpl) GetReplicationStatus(
 	return response, nil
 }
 
+func (c *clientImpl) NotifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.NotifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetChildExecution().GetWorkflowId())
+	var response *historyservice.NotifyChildExecutionCompletionRecordedResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.NotifyChildExecutionCompletionRecorded(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,

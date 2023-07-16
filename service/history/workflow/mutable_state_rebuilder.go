@@ -31,6 +31,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -39,8 +40,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -48,6 +52,11 @@ import (
 )
 
 type (
+	ChildWorkflowInfoGetter interface {
+		GetInitiatedEventId() int64
+		GetWorkflowExecution() *commonpb.WorkflowExecution
+	}
+
 	MutableStateRebuilder interface {
 		ApplyEvents(
 			ctx context.Context,
@@ -63,9 +72,12 @@ type (
 		shard             shard.Context
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
+		historyClient     historyservice.HistoryServiceClient
 		logger            log.Logger
 
 		mutableState MutableState
+
+		crossWorkflowNotification []func() error
 	}
 )
 
@@ -83,11 +95,13 @@ func NewMutableStateRebuilder(
 ) *MutableStateRebuilderImpl {
 
 	return &MutableStateRebuilderImpl{
-		shard:             shard,
-		clusterMetadata:   shard.GetClusterMetadata(),
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		logger:            logger,
-		mutableState:      mutableState,
+		shard:                     shard,
+		clusterMetadata:           shard.GetClusterMetadata(),
+		namespaceRegistry:         shard.GetNamespaceRegistry(),
+		historyClient:             shard.GetHistoryClient(),
+		logger:                    logger,
+		mutableState:              mutableState,
+		crossWorkflowNotification: make([]func() error, 0),
 	}
 }
 
@@ -427,6 +441,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+			b.notifyChildWorkflow(event.GetChildWorkflowExecutionCompletedEventAttributes())
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCompletedEvent(
 				event,
 			); err != nil {
@@ -434,6 +449,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+			b.notifyChildWorkflow(event.GetChildWorkflowExecutionFailedEventAttributes())
 			if err := b.mutableState.ReplicateChildWorkflowExecutionFailedEvent(
 				event,
 			); err != nil {
@@ -441,6 +457,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+			b.notifyChildWorkflow(event.GetChildWorkflowExecutionCanceledEventAttributes())
 			if err := b.mutableState.ReplicateChildWorkflowExecutionCanceledEvent(
 				event,
 			); err != nil {
@@ -448,6 +465,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+			b.notifyChildWorkflow(event.GetChildWorkflowExecutionTimedOutEventAttributes())
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTimedOutEvent(
 				event,
 			); err != nil {
@@ -455,6 +473,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			b.notifyChildWorkflow(event.GetChildWorkflowExecutionTerminatedEventAttributes())
 			if err := b.mutableState.ReplicateChildWorkflowExecutionTerminatedEvent(
 				event,
 			); err != nil {
@@ -693,4 +712,45 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		}
 	}
 	return newRunMutableState, nil
+}
+
+func (b *MutableStateRebuilderImpl) notifyChildWorkflow(
+	childWorkflowInfoGetter ChildWorkflowInfoGetter,
+) {
+	childInfo, ok := b.mutableState.GetPendingChildExecutionInfos()[childWorkflowInfoGetter.GetInitiatedEventId()]
+	if !ok {
+		return
+	}
+	parentWorkflowKey := b.mutableState.GetWorkflowKey()
+	childWorkflowKey := definition.NewWorkflowKey(
+		parentWorkflowKey.NamespaceID,
+		childWorkflowInfoGetter.GetWorkflowExecution().WorkflowId,
+		childWorkflowInfoGetter.GetWorkflowExecution().RunId,
+	)
+	parentInitiatedID := childInfo.InitiatedEventId
+	parentInitiatedVersion := childInfo.Version
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, err := b.historyClient.NotifyChildExecutionCompletionRecorded(ctx, &historyservice.NotifyChildExecutionCompletionRecordedRequest{
+			NamespaceId: parentWorkflowKey.NamespaceID,
+			ParentExecution: &commonpb.WorkflowExecution{
+				WorkflowId: parentWorkflowKey.WorkflowID,
+				RunId:      parentWorkflowKey.RunID,
+			},
+			ParentInitiatedId:      parentInitiatedID,
+			ParentInitiatedVersion: parentInitiatedVersion,
+			ChildExecution: &commonpb.WorkflowExecution{
+				WorkflowId: childWorkflowKey.WorkflowID,
+				RunId:      childWorkflowKey.RunID,
+			},
+		})
+		switch err.(type) {
+		case nil, *serviceerror.NotFound:
+			b.logger.Info("successfully notified")
+			// noop
+		default:
+			b.logger.Debug("unable to notify parent workflow about child workflow finish event", tag.Error(err))
+		}
+	}()
 }

@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
+	"go.temporal.io/server/service/history/api/notifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -600,6 +601,13 @@ func (e *historyEngineImpl) IsWorkflowTaskValid(
 	req *historyservice.IsWorkflowTaskValidRequest,
 ) (*historyservice.IsWorkflowTaskValidResponse, error) {
 	return isworkflowtaskvalid.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) NotifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	req *historyservice.NotifyChildExecutionCompletionRecordedRequest,
+) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	return notifychildworkflowcompletionrecorded.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
