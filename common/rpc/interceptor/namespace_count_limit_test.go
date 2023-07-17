@@ -197,10 +197,10 @@ func (tc *testCase) createInterceptor(ctrl *gomock.Controller) *NamespaceCountLi
 	registry.EXPECT().GetNamespace(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	logger := log.NewNoopLogger()
 	instanceCounter := quotastest.NewFakeInstanceCounter(tc.instances)
-	perInstanceCountLimit := func(namespace string) int {
+	perInstanceCountLimit := func(ns string) int {
 		return tc.perInstanceLimit
 	}
-	globalCountLimit := func(namespace string) int {
+	globalCountLimit := func(ns string) int {
 		return tc.globalCountLimit
 	}
 	interceptor := NewNamespaceCountLimitInterceptor(

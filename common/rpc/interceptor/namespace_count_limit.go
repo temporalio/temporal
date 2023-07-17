@@ -65,7 +65,7 @@ func NewNamespaceCountLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	instanceCounter quotas.InstanceCounter,
-	perInstanceCountLimit, globalCountLimit func(namespace string) int,
+	perInstanceCountLimit, globalCountLimit func(ns string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {
 	return &NamespaceCountLimitInterceptor{
