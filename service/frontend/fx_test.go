@@ -153,12 +153,12 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			},
 		},
 		{
-			name: "no hosts returned by service resolver acts as if there was one host",
+			name: "no hosts causes global RPS limit to be ignored",
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
-				tc.expectRateLimit = true
+				tc.expectRateLimit = false
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
 				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
