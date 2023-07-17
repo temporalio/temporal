@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 
@@ -49,7 +48,7 @@ type (
 	NamespaceCountLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
-		serviceResolver   membership.ServiceResolver
+		instanceCounter   quotas.InstanceCounter
 
 		perInstanceCountLimit func(namespace string) int
 		globalCountLimit      func(namespace string) int
@@ -65,14 +64,14 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Inter
 func NewNamespaceCountLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	serviceResolver membership.ServiceResolver,
+	instanceCounter quotas.InstanceCounter,
 	perInstanceCountLimit, globalCountLimit func(namespace string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {
 	return &NamespaceCountLimitInterceptor{
 		namespaceRegistry:     namespaceRegistry,
 		logger:                logger,
-		serviceResolver:       serviceResolver,
+		instanceCounter:       instanceCounter,
 		perInstanceCountLimit: perInstanceCountLimit,
 		globalCountLimit:      globalCountLimit,
 		tokens:                tokens,
@@ -120,7 +119,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 
 func (ni *NamespaceCountLimitInterceptor) isWithinRequestLimit(nsName namespace.Name, count int32) bool {
 	limit := quotas.CalculateEffectiveResourceLimit(
-		ni.serviceResolver,
+		ni.instanceCounter,
 		quotas.Limits{
 			ClusterLimit:  ni.globalCountLimit(nsName.String()),
 			InstanceLimit: ni.perInstanceCountLimit(nsName.String()),

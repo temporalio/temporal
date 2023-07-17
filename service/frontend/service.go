@@ -73,6 +73,7 @@ type Config struct {
 	RPS                                                          dynamicconfig.IntPropertyFn
 	GlobalRPS                                                    dynamicconfig.IntPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
+	GlobalNamespaceReplicationInducingAPIsRPS                    dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceCountPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -209,6 +210,7 @@ func NewConfig(
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
+		GlobalNamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendGlobalNamespaceReplicationInducingAPIsRPS, 100),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),

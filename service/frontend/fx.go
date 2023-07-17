@@ -298,7 +298,15 @@ func RateLimitInterceptorProvider(
 			},
 		)
 	}
-	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
+	namespaceReplicationInducingRateFn := func() float64 {
+		return quotas.CalculateEffectiveResourceLimit(
+			frontendServiceResolver,
+			quotas.Limits{
+				InstanceLimit: serviceConfig.NamespaceReplicationInducingAPIsRPS(),
+				ClusterLimit:  serviceConfig.GlobalNamespaceReplicationInducingAPIsRPS(),
+			},
+		)
+	}
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
