@@ -51,33 +51,33 @@ import (
 )
 
 type (
-	SourceTaskConvertorImpl struct {
+	SourceTaskConverterImpl struct {
 		historyEngine           shard.Engine
 		namespaceCache          namespace.Registry
 		clientClusterShardCount int32
 		clientClusterName       string
 		clientShardKey          ClusterShardKey
 	}
-	SourceTaskConvertor interface {
+	SourceTaskConverter interface {
 		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
 	}
-	SourceTaskConvertorFactory func(
+	SourceTaskConverterProvider func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
 		clientClusterShardCount int32,
 		clientClusterName string,
 		clientShardKey ClusterShardKey,
-	) SourceTaskConvertor
+	) SourceTaskConverter
 )
 
-func NewSourceTaskConvertor(
+func NewSourceTaskConverter(
 	historyEngine shard.Engine,
 	namespaceCache namespace.Registry,
 	clientClusterShardCount int32,
 	clientClusterName string,
 	clientShardKey ClusterShardKey,
-) *SourceTaskConvertorImpl {
-	return &SourceTaskConvertorImpl{
+) *SourceTaskConverterImpl {
+	return &SourceTaskConverterImpl{
 		historyEngine:           historyEngine,
 		namespaceCache:          namespaceCache,
 		clientClusterShardCount: clientClusterShardCount,
@@ -86,7 +86,7 @@ func NewSourceTaskConvertor(
 	}
 }
 
-func (c *SourceTaskConvertorImpl) Convert(
+func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 	if namespaceEntry, err := c.namespaceCache.GetNamespaceByID(

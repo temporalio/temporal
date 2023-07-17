@@ -98,7 +98,7 @@ type (
 		tracer                       trace.Tracer
 
 		replicationTaskFetcherFactory   replication.TaskFetcherFactory
-		replicationTaskConvertorFactory replication.SourceTaskConvertorFactory
+		replicationTaskConvertorFactory replication.SourceTaskConverterProvider
 		streamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 
@@ -125,7 +125,7 @@ type (
 		TracerProvider               trace.TracerProvider
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
-		ReplicationTaskConvertorFactory replication.SourceTaskConvertorFactory
+		ReplicationTaskConvertorFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 )

@@ -65,9 +65,9 @@ func ReplicationTaskFetcherFactoryProvider(
 	)
 }
 
-func ReplicationTaskConvertorFactoryProvider() SourceTaskConvertorFactory {
-	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConvertor {
-		return NewSourceTaskConvertor(
+func ReplicationTaskConvertorFactoryProvider() SourceTaskConverterProvider {
+	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConverter {
+		return NewSourceTaskConverter(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
 			clientClusterShardCount,

@@ -58,7 +58,7 @@ type (
 		server        historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext  shard.Context
 		historyEngine shard.Engine
-		taskConvertor SourceTaskConvertor
+		taskConvertor SourceTaskConverter
 		metrics       metrics.Handler
 		logger        log.Logger
 
@@ -73,7 +73,7 @@ func NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	historyEngine shard.Engine,
-	taskConvertor SourceTaskConvertor,
+	taskConvertor SourceTaskConverter,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamSenderImpl {
