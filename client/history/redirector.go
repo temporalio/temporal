@@ -65,11 +65,17 @@ type (
 )
 
 func (t operationTarget) validate() error {
-	if t.shardID == 0 && len(t.address) == 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid client target"))
-	}
-	if t.shardID <= 0 {
+	if t.shardID < 0 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", t.shardID))
+	}
+	if t.shardID == 0 {
+		if len(t.address) == 0 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid client target"))
+		}
+	} else {
+		if len(t.address) != 0 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid client target"))
+		}
 	}
 	return nil
 }
