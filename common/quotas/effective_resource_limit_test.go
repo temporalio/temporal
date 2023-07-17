@@ -22,59 +22,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package quotas_test
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/quotastest"
 )
 
-func TestPipe_Accept(t *testing.T) {
+func TestEffectiveResourceLimit(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
+	assert.Equal(t, 5.0, quotas.CalculateEffectiveResourceLimit(
+		quotastest.NewFakeInstanceCounter(4),
+		quotas.Limits{
+			InstanceLimit: 10,
+			ClusterLimit:  20,
+		},
+	))
 }
 
-func TestPipe_ClientCanceled(t *testing.T) {
+func TestEffectiveResourceLimit_NoPerClusterLimit(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
+		quotastest.NewFakeInstanceCounter(4),
+		quotas.Limits{
+			InstanceLimit: 10,
+			ClusterLimit:  0,
+		},
+	))
 }
 
-func TestPipe_ServerCanceled(t *testing.T) {
+func TestEffectiveResourceLimit_NoHosts(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
+		quotastest.NewFakeInstanceCounter(0),
+		quotas.Limits{
+			InstanceLimit: 10,
+			ClusterLimit:  20,
+		},
+	))
+}
+
+func TestEffectiveResourceLimit_NilInstanceCounter(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(nil, quotas.Limits{
+		InstanceLimit: 10,
+		ClusterLimit:  20,
+	}))
 }
