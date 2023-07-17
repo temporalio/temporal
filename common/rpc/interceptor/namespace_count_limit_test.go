@@ -58,6 +58,7 @@ type testCase struct {
 // limit error when requests would exceed the concurrent poller limit for a namespace.
 func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []testCase{
 		{
 			name:               "no limit hit",
@@ -143,6 +144,7 @@ func (tc *testCase) run(t *testing.T) {
 
 	// Clean up by unblocking all the requests.
 	handler.Unblock()
+
 	for i := 0; i < tc.numBlockedRequests; i++ {
 		assert.NoError(t, <-handler.errs)
 	}
@@ -169,6 +171,7 @@ func (tc *testCase) spawnBlockedRequests(
 			handler.errs <- err
 		}()
 	}
+
 	for i := 0; i < tc.numBlockedRequests; i++ {
 		<-handler.started
 	}
@@ -177,6 +180,7 @@ func (tc *testCase) spawnBlockedRequests(
 func (tc *testCase) createInterceptor(ctrl *gomock.Controller) *NamespaceCountLimitInterceptor {
 	registry := namespace.NewMockRegistry(ctrl)
 	registry.EXPECT().GetNamespace(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+
 	logger := log.NewNoopLogger()
 	perInstanceCountLimit := func(ns string) int {
 		return tc.perInstanceLimit
@@ -187,6 +191,7 @@ func (tc *testCase) createInterceptor(ctrl *gomock.Controller) *NamespaceCountLi
 		perInstanceCountLimit,
 		tc.tokens,
 	)
+
 	return interceptor
 }
 
@@ -210,5 +215,6 @@ func (h testRequestHandler) Unblock() {
 func (h testRequestHandler) Handle(context.Context, interface{}) (interface{}, error) {
 	h.started <- struct{}{}
 	<-h.respond
+
 	return nil, nil
 }
