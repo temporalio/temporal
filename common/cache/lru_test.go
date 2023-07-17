@@ -362,7 +362,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 
 	go func() {
 		startWG.Wait()
-		assert.True(t, cache.Size() <= maxTotalBytes)
+		assert.True(t, cache.Size() < maxTotalBytes)
 	}()
 	for i := 0; i < numPuts; i++ {
 		go func() {
