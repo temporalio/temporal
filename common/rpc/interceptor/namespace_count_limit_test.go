@@ -39,15 +39,16 @@ import (
 type testCase struct {
 	// name of the test case
 	name string
-	// request to be intercepted
+	// request to be intercepted by the NamespaceCountLimitInterceptor
 	request interface{}
 	// numBlockedRequests is the number of pending requests that will be blocked before the final request is sent.
 	numBlockedRequests int
-	// perInstanceLimit is the limit on the number of pending requests per instance. It is ignored if globalCountLimit
-	// is used.
+	// perInstanceLimit is the limit on the number of pending requests per-instance.
 	perInstanceLimit int
-	methodName       string
-	// tokens is a map of method names to the number of tokens that will be consumed by that method.
+	// methodName is the fully-qualified name of the gRPC method being intercepted.
+	methodName string
+	// tokens is a map of method slugs (e.g. just the part of the method name after the final slash) to the number of
+	// tokens that will be consumed by that method.
 	tokens map[string]int
 	// expectRateLimit is true if the interceptor should respond with a rate limit error.
 	expectRateLimit bool
@@ -124,9 +125,12 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 // rate limited or not.
 func (tc *testCase) run(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	handler := tc.createRequestHandler()
 	interceptor := tc.createInterceptor(ctrl)
-	handler, errs := tc.createBlockedPollRequests(interceptor)
+	// Spawn a bunch of blocked requests in the background.
+	tc.spawnBlockedRequests(handler, interceptor)
 
+	// With all the blocked requests in flight, send the final request and verify whether it is rate limited or not.
 	_, err := interceptor.Intercept(context.Background(), tc.request, &grpc.UnaryServerInfo{
 		FullMethod: tc.methodName,
 	}, noOpHandler)
@@ -136,30 +140,38 @@ func (tc *testCase) run(t *testing.T) {
 	} else {
 		assert.NoError(t, err)
 	}
+
+	// Clean up by unblocking all the requests.
 	handler.Unblock()
 	for i := 0; i < tc.numBlockedRequests; i++ {
-		assert.NoError(t, <-errs)
+		assert.NoError(t, <-handler.errs)
 	}
 }
 
-func (tc *testCase) createBlockedPollRequests(interceptor *NamespaceCountLimitInterceptor) (testRequestHandler, chan error) {
-	handler := testRequestHandler{
+func (tc *testCase) createRequestHandler() *testRequestHandler {
+	return &testRequestHandler{
 		started: make(chan struct{}),
 		respond: make(chan struct{}),
+		errs:    make(chan error, tc.numBlockedRequests),
 	}
-	errs := make(chan error, tc.numBlockedRequests)
+}
+
+// spawnBlockedRequests sends a bunch of requests to the interceptor which will block until signaled.
+func (tc *testCase) spawnBlockedRequests(
+	handler *testRequestHandler,
+	interceptor *NamespaceCountLimitInterceptor,
+) {
 	for i := 0; i < tc.numBlockedRequests; i++ {
 		go func() {
 			_, err := interceptor.Intercept(context.Background(), tc.request, &grpc.UnaryServerInfo{
 				FullMethod: tc.methodName,
 			}, handler.Handle)
-			errs <- err
+			handler.errs <- err
 		}()
 	}
 	for i := 0; i < tc.numBlockedRequests; i++ {
 		<-handler.started
 	}
-	return handler, errs
 }
 
 func (tc *testCase) createInterceptor(ctrl *gomock.Controller) *NamespaceCountLimitInterceptor {
@@ -187,6 +199,7 @@ func noOpHandler(context.Context, interface{}) (interface{}, error) {
 type testRequestHandler struct {
 	started chan struct{}
 	respond chan struct{}
+	errs    chan error
 }
 
 func (h testRequestHandler) Unblock() {
