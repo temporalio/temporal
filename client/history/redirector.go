@@ -123,11 +123,11 @@ func (r *basicRedirector) redirectLoop(ctx context.Context, address rpcAddress, 
 		}
 		clientConn := r.connections.getOrCreateClientConn(address)
 		err := op(ctx, clientConn.historyClient)
-		if s, ok := err.(*serviceerrors.ShardOwnershipLost); ok && len(s.OwnerHost) != 0 {
-			// TODO: consider emitting a metric for number of redirects
-			address = rpcAddress(s.OwnerHost)
-		} else {
+		solErr, ok := err.(*serviceerrors.ShardOwnershipLost)
+		if !ok || len(solErr.OwnerHost) == 0 {
 			return err
 		}
+		// TODO: consider emitting a metric for number of redirects
+		address = rpcAddress(solErr.OwnerHost)
 	}
 }
