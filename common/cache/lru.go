@@ -36,8 +36,6 @@ import (
 var (
 	// ErrCacheFull is returned if Put fails due to cache being filled with pinned elements
 	ErrCacheFull = errors.New("cache capacity is fully occupied with pinned elements")
-	// ErrItemTooBig is returned if Put fails due to item size being bigger than cache capacity
-	ErrItemTooBig = errors.New("new put item size is bigger than cache capacity")
 )
 
 // lru is a concurrent fixed size cache that evicts elements in lru order
@@ -257,7 +255,10 @@ func (c *lru) Release(key interface{}) {
 	entry.refCount--
 }
 
-// Size returns the current size of the lru, useful if cache is not full
+// Size returns the current size of the lru, useful if cache is not full. This size is calculated by summing
+// the size of all entries in the cache. And the entry size is calculated by the size of the value.
+// The size of the value is calculated implementing the Sizeable interface. If the value does not implement
+// the Sizeable interface, the size is 1.
 func (c *lru) Size() int {
 	c.mut.Lock()
 	defer c.mut.Unlock()
@@ -270,11 +271,6 @@ func (c *lru) Size() int {
 func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) (interface{}, error) {
 	if c.maxSize == 0 {
 		return nil, nil
-	}
-
-	size := getSize(value)
-	if size > c.maxSize {
-		return nil, ErrItemTooBig
 	}
 
 	c.mut.Lock()
@@ -306,7 +302,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	entry := &entryImpl{
 		key:   key,
 		value: value,
-		size:  size,
+		size:  getSize(value),
 	}
 
 	if c.pin {
@@ -317,16 +313,17 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		entry.createTime = c.clock.Now().UTC()
 	}
 
-	if c.currSize >= c.maxSize {
-		c.evictOnceInternal()
-	}
-	if c.currSize >= c.maxSize {
+	c.currSize += entry.Size()
+
+	c.tryEvictUntilEnoughSpace()
+	// If there is still not enough space, remove the new entry size from the current size and return an error
+	if c.currSize > c.maxSize {
+		c.currSize -= entry.Size()
 		return nil, ErrCacheFull
 	}
 
 	element := c.byAccess.PushFront(entry)
 	c.byKey[key] = element
-	c.currSize += entry.Size()
 	return nil, nil
 }
 
@@ -336,13 +333,13 @@ func (c *lru) deleteInternal(element *list.Element) {
 	delete(c.byKey, entry.key)
 }
 
-func (c *lru) evictOnceInternal() {
+// tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry
+func (c *lru) tryEvictUntilEnoughSpace() {
 	element := c.byAccess.Back()
-	for element != nil {
+	for c.currSize > c.maxSize && element != nil {
 		entry := element.Value.(*entryImpl)
 		if entry.refCount == 0 {
 			c.deleteInternal(element)
-			return
 		}
 
 		// entry.refCount > 0

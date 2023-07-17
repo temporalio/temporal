@@ -346,21 +346,6 @@ func TestZeroSizeCache(t *testing.T) {
 	assert.Equal(t, 0, cache.Size())
 }
 
-func TestCache_ItemSizeTooBig(t *testing.T) {
-	t.Parallel()
-
-	maxTotalBytes := 10
-	cache := NewLRU(maxTotalBytes)
-
-	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
-	assert.Equal(t, res, nil)
-
-	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
-	assert.Equal(t, err, ErrItemTooBig)
-	assert.Equal(t, res, nil)
-
-}
-
 func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	t.Parallel()
 
@@ -377,7 +362,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 
 	go func() {
 		startWG.Wait()
-		assert.True(t, cache.Size() < maxTotalBytes)
+		assert.True(t, cache.Size() <= maxTotalBytes)
 	}()
 	for i := 0; i < numPuts; i++ {
 		go func() {
