@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"fmt"
 	"math"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -62,7 +61,7 @@ func loadShardInfoCompatibilityCheckWithoutReplication(
 
 		queueCategory, ok := tasks.GetCategoryByID(queueCategoryID)
 		if !ok {
-			panic(fmt.Sprintf("unable to find queue category by queye category ID: %v", queueCategoryID))
+			continue
 		}
 		minCursor := convertPersistenceAckLevelToTaskKey(queueCategory.Type(), queueAckLevel.AckLevel)
 		if queueCategory.Type() == tasks.CategoryTypeImmediate && minCursor.TaskID > 0 {
@@ -165,7 +164,7 @@ func storeShardInfoCompatibilityCheckWithoutReplication(
 
 		queueCategory, ok := tasks.GetCategoryByID(queueCategoryID)
 		if !ok {
-			panic(fmt.Sprintf("unable to find queue category by queye category ID: %v", queueCategoryID))
+			continue
 		}
 
 		// for compatability, update ack level and cluster ack level as well
