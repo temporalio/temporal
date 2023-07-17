@@ -905,7 +905,6 @@ func (p *executionPersistenceClient) ReadHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranch(ctx, request)
@@ -919,7 +918,6 @@ func (p *executionPersistenceClient) ReadHistoryBranchReverse(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchReverseScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranchReverse(ctx, request)
@@ -934,7 +932,6 @@ func (p *executionPersistenceClient) ReadHistoryBranchByBatch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadHistoryBranchByBatch(ctx, request)
@@ -949,7 +946,6 @@ func (p *executionPersistenceClient) ReadRawHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceReadRawHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ReadRawHistoryBranch(ctx, request)
@@ -964,7 +960,6 @@ func (p *executionPersistenceClient) ForkHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceForkHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.ForkHistoryBranch(ctx, request)
@@ -979,7 +974,6 @@ func (p *executionPersistenceClient) DeleteHistoryBranch(
 	startTime := time.Now().UTC()
 	defer func() {
 		latency := time.Since(startTime)
-		p.healthSignals.Record(CallerSegmentMissing, caller, latency, retErr)
 		p.recordRequestMetrics(metrics.PersistenceDeleteHistoryBranchScope, caller, latency, retErr)
 	}()
 	return p.persistence.DeleteHistoryBranch(ctx, request)
