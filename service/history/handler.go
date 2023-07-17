@@ -97,8 +97,9 @@ type (
 		controller                   shard.Controller
 		tracer                       trace.Tracer
 
-		replicationTaskFetcherFactory replication.TaskFetcherFactory
-		streamReceiverMonitor         replication.StreamReceiverMonitor
+		replicationTaskFetcherFactory   replication.TaskFetcherFactory
+		replicationTaskConvertorFactory replication.SourceTaskConvertorFactory
+		streamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 
 	NewHandlerArgs struct {
@@ -123,8 +124,9 @@ type (
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 
-		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
-		StreamReceiverMonitor         replication.StreamReceiverMonitor
+		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
+		ReplicationTaskConvertorFactory replication.SourceTaskConvertorFactory
+		StreamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 )
 
@@ -1930,9 +1932,9 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		server,
 		shardContext,
 		engine,
-		replication.NewSourceTaskConvertor(
+		h.replicationTaskConvertorFactory(
 			engine,
-			shardContext.GetNamespaceRegistry(),
+			shardContext,
 			clientShardCount,
 			clientClusterName,
 			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
