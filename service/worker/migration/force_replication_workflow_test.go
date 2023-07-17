@@ -359,10 +359,10 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 	_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.Error(t, err)
-	assert.Equal(t, len(iceptor.recordedHeartbeats), 2)
-	assert.Equal(t, []byte(nil), iceptor.recordedHeartbeats[1].NextPageToken)
-	assert.Equal(t, 1, iceptor.recordedHeartbeats[1].IndexInPage)
-	env.SetHeartbeatDetails(iceptor.recordedHeartbeats[1])
+	assert.Equal(t, len(iceptor.seedRecordedHeartbeats), 2)
+	assert.Equal(t, []byte(nil), iceptor.seedRecordedHeartbeats[1].NextPageToken)
+	assert.Equal(t, 1, iceptor.seedRecordedHeartbeats[1].IndexInPage)
+	env.SetHeartbeatDetails(iceptor.seedRecordedHeartbeats[1])
 	_, err = env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.NoError(t, err)
 }
@@ -372,8 +372,9 @@ type heartbeatRecordingInterceptor struct {
 	interceptor.WorkerInterceptorBase
 	interceptor.ActivityInboundInterceptorBase
 	interceptor.ActivityOutboundInterceptorBase
-	recordedHeartbeats []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
-	T                  *testing.T
+	seedRecordedHeartbeats        []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
+	replicationRecordedHeartbeats []replicationTasksHeartbeatDetails
+	T                             *testing.T
 }
 
 func (i *heartbeatRecordingInterceptor) InterceptActivity(ctx context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
@@ -387,8 +388,13 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 }
 
 func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
-	d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails)
-	assert.True(i.T, ok, "invalid heartbeat details")
-	i.recordedHeartbeats = append(i.recordedHeartbeats, d)
+	if d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails); ok {
+		i.seedRecordedHeartbeats = append(i.seedRecordedHeartbeats, d)
+	} else if d, ok := details[0].(replicationTasksHeartbeatDetails); ok {
+		i.replicationRecordedHeartbeats = append(i.replicationRecordedHeartbeats, d)
+	} else {
+		assert.Fail(i.T, "invalid heartbeat details")
+	}
+
 	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
 }
