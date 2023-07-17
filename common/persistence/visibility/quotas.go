@@ -46,9 +46,9 @@ func newPriorityRateLimiter(
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range PrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn(maxQPS)))
-		} else {
 			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(maxQPS, operatorRPSRatio)))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn(maxQPS)))
 		}
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {

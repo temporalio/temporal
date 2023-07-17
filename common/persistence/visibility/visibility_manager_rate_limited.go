@@ -38,7 +38,6 @@ import (
 
 const (
 	RateLimitDefaultToken = 1
-	CallerSegmentMissing  = -1
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerRateLimited)(nil)
@@ -88,7 +87,7 @@ func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,
 ) error {
-	if ok := allow(ctx, "RecordWorkflowExecutionStarted", request.ShardID, m.writeRateLimiter); !ok {
+	if ok := allow(ctx, "RecordWorkflowExecutionStarted", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.RecordWorkflowExecutionStarted(ctx, request)
@@ -98,7 +97,7 @@ func (m *visibilityManagerRateLimited) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionClosedRequest,
 ) error {
-	if ok := allow(ctx, "RecordWorkflowExecutionClosed", request.ShardID, m.writeRateLimiter); !ok {
+	if ok := allow(ctx, "RecordWorkflowExecutionClosed", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.RecordWorkflowExecutionClosed(ctx, request)
@@ -108,7 +107,7 @@ func (m *visibilityManagerRateLimited) UpsertWorkflowExecution(
 	ctx context.Context,
 	request *manager.UpsertWorkflowExecutionRequest,
 ) error {
-	if ok := allow(ctx, "UpsertWorkflowExecution", request.ShardID, m.writeRateLimiter); !ok {
+	if ok := allow(ctx, "UpsertWorkflowExecution", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.UpsertWorkflowExecution(ctx, request)
@@ -118,7 +117,7 @@ func (m *visibilityManagerRateLimited) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
-	if ok := allow(ctx, "DeleteWorkflowExecution", CallerSegmentMissing, m.writeRateLimiter); !ok {
+	if ok := allow(ctx, "DeleteWorkflowExecution", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.DeleteWorkflowExecution(ctx, request)
@@ -130,7 +129,7 @@ func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListOpenWorkflowExecutions", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListOpenWorkflowExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListOpenWorkflowExecutions(ctx, request)
@@ -140,7 +139,7 @@ func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListClosedWorkflowExecutions", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListClosedWorkflowExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListClosedWorkflowExecutions(ctx, request)
@@ -150,7 +149,7 @@ func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByType(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListOpenWorkflowExecutionsByType", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListOpenWorkflowExecutionsByType", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListOpenWorkflowExecutionsByType(ctx, request)
@@ -160,7 +159,7 @@ func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByType(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListClosedWorkflowExecutionsByType", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListClosedWorkflowExecutionsByType", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListClosedWorkflowExecutionsByType(ctx, request)
@@ -170,7 +169,7 @@ func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByWorkflowID(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListOpenWorkflowExecutionsByWorkflowID", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListOpenWorkflowExecutionsByWorkflowID", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
@@ -180,7 +179,7 @@ func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByWorkflowID(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListClosedWorkflowExecutionsByWorkflowID", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListClosedWorkflowExecutionsByWorkflowID", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
@@ -190,7 +189,7 @@ func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByStatus(
 	ctx context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListClosedWorkflowExecutionsByStatus", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListClosedWorkflowExecutionsByStatus", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListClosedWorkflowExecutionsByStatus(ctx, request)
@@ -200,7 +199,7 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ListWorkflowExecutions", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ListWorkflowExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ListWorkflowExecutions(ctx, request)
@@ -210,7 +209,7 @@ func (m *visibilityManagerRateLimited) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "ScanWorkflowExecutions", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "ScanWorkflowExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.ScanWorkflowExecutions(ctx, request)
@@ -220,7 +219,7 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	if ok := allow(ctx, "CountWorkflowExecutions", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "CountWorkflowExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.CountWorkflowExecutions(ctx, request)
@@ -230,7 +229,7 @@ func (m *visibilityManagerRateLimited) GetWorkflowExecution(
 	ctx context.Context,
 	request *manager.GetWorkflowExecutionRequest,
 ) (*manager.GetWorkflowExecutionResponse, error) {
-	if ok := allow(ctx, "GetWorkflowExecution", CallerSegmentMissing, m.readRateLimiter); !ok {
+	if ok := allow(ctx, "GetWorkflowExecution", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
 	return m.delegate.GetWorkflowExecution(ctx, request)
@@ -239,16 +238,16 @@ func (m *visibilityManagerRateLimited) GetWorkflowExecution(
 func allow(
 	ctx context.Context,
 	api string,
-	shardID int32,
 	rateLimiter quotas.RequestRateLimiter,
 ) bool {
 	callerInfo := headers.GetCallerInfo(ctx)
+	// Currently only CallerType is used. See common/persistence/visibility/quotas.go for rate limiter details.
 	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		api,
 		RateLimitDefaultToken,
 		callerInfo.CallerName,
 		callerInfo.CallerType,
-		shardID,
+		-1,
 		callerInfo.CallOrigin,
 	))
 }
