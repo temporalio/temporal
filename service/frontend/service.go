@@ -408,26 +408,12 @@ func namespaceRPS(
 
 func effectiveRPS(frontendResolver membership.ServiceResolver, hostRPS func() int, globalRPS func() int) float64 {
 	if gRPS := globalRPS(); gRPS > 0 && frontendResolver != nil {
-		hosts := float64(numFrontendHosts(frontendResolver))
-		return float64(gRPS) / hosts
+		if numHosts := frontendResolver.MemberCount(); numHosts > 0 {
+			return float64(gRPS) / float64(numHosts)
+		}
 	}
 
 	return float64(hostRPS())
-}
-
-func numFrontendHosts(
-	frontendResolver membership.ServiceResolver,
-) int {
-	defaultHosts := 1
-	if frontendResolver == nil {
-		return defaultHosts
-	}
-
-	ringSize := frontendResolver.MemberCount()
-	if ringSize < defaultHosts {
-		return defaultHosts
-	}
-	return ringSize
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
