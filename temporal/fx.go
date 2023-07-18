@@ -598,7 +598,7 @@ func ApplyClusterMetadataConfigProvider(
 		&svc.Persistence,
 		customDataStoreFactory,
 		logger,
-		nil,
+		metrics.NoopMetricsHandler,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
