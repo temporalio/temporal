@@ -205,11 +205,10 @@ message RecordActivityTaskStartedResponse {
 message RespondWorkflowTaskCompletedRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest complete_request = 2;
-    bool with_new_workflow_task = 3 [deprecated = true];
 }
 
 message RespondWorkflowTaskCompletedResponse {
-    RecordWorkflowTaskStartedResponse started_response = 1;
+    RecordWorkflowTaskStartedResponse started_response = 1 [deprecated = true];
     repeated temporal.api.workflowservice.v1.PollActivityTaskQueueResponse activity_tasks = 2;
     int64 reset_history_event_id = 3;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse new_workflow_task = 4;
