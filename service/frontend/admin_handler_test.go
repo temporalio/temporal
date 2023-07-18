@@ -1470,22 +1470,30 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServer
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
 	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
 
-	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(2)
+	waitGroupStart := sync.WaitGroup{}
+	waitGroupStart.Add(2)
+	waitGroupEnd := sync.WaitGroup{}
+	waitGroupEnd.Add(2)
 	channel := make(chan struct{})
 
 	clientCluster.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesRequest, error) {
-		defer waitGroup.Done()
+		waitGroupStart.Done()
+		waitGroupStart.Wait()
+
+		defer waitGroupEnd.Done()
 		return nil, serviceerror.NewUnavailable("random error")
 	})
 	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
-		defer waitGroup.Done()
+		waitGroupStart.Done()
+		waitGroupStart.Wait()
+
+		defer waitGroupEnd.Done()
 		<-channel
 		return nil, serviceerror.NewUnavailable("random error")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
-	waitGroup.Wait()
+	waitGroupEnd.Wait()
 }
 
 func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClientBroken() {
@@ -1507,20 +1515,28 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
 	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
 
-	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(2)
+	waitGroupStart := sync.WaitGroup{}
+	waitGroupStart.Add(2)
+	waitGroupEnd := sync.WaitGroup{}
+	waitGroupEnd.Add(2)
 	channel := make(chan struct{})
 
 	clientCluster.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesRequest, error) {
-		defer waitGroup.Done()
+		waitGroupStart.Done()
+		waitGroupStart.Wait()
+
+		defer waitGroupEnd.Done()
 		<-channel
 		return nil, serviceerror.NewUnavailable("random error")
 	})
 	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
-		defer waitGroup.Done()
+		waitGroupStart.Done()
+		waitGroupStart.Wait()
+
+		defer waitGroupEnd.Done()
 		return nil, serviceerror.NewUnavailable("random error")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
-	waitGroup.Wait()
+	waitGroupEnd.Wait()
 }
