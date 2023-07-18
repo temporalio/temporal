@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/quotas"
@@ -78,7 +79,7 @@ func (i *RateLimitInterceptor) Intercept(
 		methodName,
 		token,
 		"", // this interceptor layer does not throttle based on caller name
-		"", // this interceptor layer does not throttle based on caller type
+		headers.GetValues(ctx, headers.CallerTypeHeaderName)[0],
 		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation
 	)) {

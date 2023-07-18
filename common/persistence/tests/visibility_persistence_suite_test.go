@@ -87,6 +87,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		s.SearchAttributesMapperProvider,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetFloatPropertyFn(0.2),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),

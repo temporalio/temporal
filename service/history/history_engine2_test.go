@@ -260,6 +260,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
+	expectedResponse.Version = tests.GlobalNamespaceEntry.FailoverVersion()
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
 	expectedResponse.ScheduledTime = wt.ScheduledTime
 	expectedResponse.StartedEventId = wt.ScheduledEventID + 1

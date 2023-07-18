@@ -386,7 +386,7 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 	// Note data may be nil here, findVersion will return -1 then.
 	setIdx, indexInSet := worker_versioning.FindBuildId(data, caps.BuildId)
 	if setIdx < 0 {
-		// A poller is using a build ID but we don't know about that build ID. See comments in
+		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
 		return nil
@@ -444,7 +444,7 @@ func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId strin
 	// Note data may be nil here, findVersion will return -1 then.
 	setIdx, indexInSet := worker_versioning.FindBuildId(data, buildId)
 	if setIdx < 0 {
-		// A poller is using a build ID but we don't know about that build ID. See comments in
+		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForAdd. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
 		return nil
@@ -457,7 +457,7 @@ func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId strin
 }
 
 // getSetID returns an arbitrary but consistent member of the set.
-// We want Add and Poll requests for the same set to converge on a single id so we can match
+// We want Add and Poll requests for the same set to converge on a single id, so we can match
 // them, but we don't have a single id for a set in the general case: in rare cases we may have
 // multiple ids (due to failovers). We can do this by picking an arbitrary id in the set, e.g.
 // the first. If the versioning data changes in any way, we'll re-resolve the set id, so this

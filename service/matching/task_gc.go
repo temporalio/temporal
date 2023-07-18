@@ -57,13 +57,13 @@ func newTaskGC(db *taskQueueDB, config *taskQueueConfig) *taskGC {
 	return &taskGC{db: db, config: config}
 }
 
-// Run deletes a batch of completed tasks, if its possible to do so
+// Run deletes a batch of completed tasks, if it's possible to do so
 // Only attempts deletion if size or time thresholds are met
 func (tgc *taskGC) Run(ctx context.Context, ackLevel int64) {
 	tgc.tryDeleteNextBatch(ctx, ackLevel, false)
 }
 
-// RunNow deletes a batch of completed tasks if its possible to do so
+// RunNow deletes a batch of completed tasks if it's possible to do so
 // This method attempts deletions without waiting for size/time threshold to be met
 func (tgc *taskGC) RunNow(ctx context.Context, ackLevel int64) {
 	tgc.tryDeleteNextBatch(ctx, ackLevel, true)
