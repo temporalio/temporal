@@ -70,7 +70,6 @@ type (
 		InsertIntoQueueV2Messages(ctx context.Context, row []QueueV2MessageRow) (sql.Result, error)
 		SelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) ([]QueueMessageRow, error)
 		RangeSelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesRangeFilter) ([]QueueMessageRow, error)
-		DeleteFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) (sql.Result, error)
 		RangeDeleteFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesRangeFilter) (sql.Result, error)
 
 		GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter QueueV2Filter) (int64, error)

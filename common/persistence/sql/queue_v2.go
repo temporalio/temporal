@@ -142,27 +142,64 @@ func (q *sqlQueueV2) ListQueues(
 	ctx context.Context,
 	request persistence.InternalListQueuesRequest,
 ) (*persistence.InternalListQueuesResponse, error) {
+	var minMessageID int64
+	var numRows int64
+	var queueNames []string
 	if len(request.NextPageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(request.NextPageToken)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken))
 		}
+		minMessageID = lastReadMessageID
 	}
-	return nil, nil
+	err := q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
+		rows, err := tx.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
+			QueueType:    request.QueueType,
+			PageSize:     request.PageSize,
+			MinMessageID: minMessageID,
+		},
+		)
+		switch err {
+		case nil:
+			numRows = int64(len(rows))
+			for _, row := range rows {
+				queueNames = append(queueNames, row.QueueName)
+			}
+			return nil
+		case sql.ErrNoRows:
+			return nil
+		default:
+			return fmt.Errorf("failed to fetch list of queues: %v", err)
+		}
+	})
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(err.Error())
+	}
+	return &persistence.InternalListQueuesResponse{
+		QueueNames:    queueNames,
+		NextPageToken: serializePageToken(int64(minMessageID + numRows)),
+	}, nil
+
 }
 
 func (q *sqlQueueV2) RangeDeleteMessages(
 	ctx context.Context,
 	request persistence.InternalRangeDeleteMessagesRequest,
 ) (*persistence.InternalRangeDeleteMessagesResponse, error) {
-	_, err := q.Db.RangeDeleteFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesRangeFilter{
+	ackLevel, version, err := q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
+	if err != nil {
+		return nil, err
+	}
+	_, err = q.Db.RangeDeleteFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesRangeFilter{
 		QueueType:    request.QueueType,
+		MinMessageID: ackLevel,
 		MaxMessageID: request.InclusiveMaxMessageMetadata.ID,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
-	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+
+	return &persistence.InternalRangeDeleteMessagesResponse{}, q.updateAckLevel(ctx, request, version)
 }
 
 func (q *sqlQueueV2) ReadMessages(
@@ -177,29 +214,11 @@ func (q *sqlQueueV2) ReadMessages(
 		}
 		minMessageID = lastReadMessageID
 	} else {
-		// get current ack level and assign to minMessageID
-		err := q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
-			metadataPayload, err := tx.SelectFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataFilter{
-				QueueType: request.QueueType,
-				QueueName: request.QueueName,
-			},
-			)
-			switch err {
-			case nil:
-				minMessageID, err = getAckLevelFromQueueV2Metadata(metadataPayload.Payload, metadataPayload.PayloadEncoding)
-				if err != nil {
-					return fmt.Errorf("failed to get queue with type and name: %v, %v. got error: %v", request.QueueType, request.QueueName, err)
-				}
-				return nil
-			case sql.ErrNoRows:
-				return serviceerror.NewUnavailable(fmt.Sprintf("queue of Type %v and with Name %v could not be found", request.QueueType, request.QueueName))
-			default:
-				return fmt.Errorf("failed to get queue with type and name: %v, %v", request.QueueType, request.QueueName)
-			}
-		})
+		ackLevel, _, err := q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(err.Error())
+			return nil, err
 		}
+		minMessageID = ackLevel
 	}
 
 	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesRangeFilter{
@@ -230,6 +249,43 @@ func (q *sqlQueueV2) ReadMessages(
 		NextPageToken: persistence.InternalReadMessagePageToken{MessageID: lastReadMessageID, PageToken: newPagingToken},
 	}
 	return response, nil
+}
+
+func (q *sqlQueueV2) getCurrentAckLevelAndVersion(
+	ctx context.Context,
+	queueType persistence.QueueV2Type,
+	queueName string,
+) (ackLevel int64, version int64, err error) {
+	// get current ack level and assign to minMessageID
+	err = q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
+		metaDataRow, err := tx.SelectFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataFilter{
+			QueueType: queueType,
+			QueueName: queueName,
+		},
+		)
+		switch err {
+		case nil:
+			ackLevel, err = getAckLevelFromQueueV2Metadata(metaDataRow.Payload, metaDataRow.PayloadEncoding)
+			if err != nil {
+				return fmt.Errorf("failed to get queue with type and name: %v, %v. got error: %v", queueType, queueName, err)
+			}
+			return nil
+		case sql.ErrNoRows:
+			return serviceerror.NewUnavailable(fmt.Sprintf("queue of Type %v and with Name %v could not be found", queueType, queueName))
+		default:
+			return fmt.Errorf("failed to get queue with type and name: %v, %v", queueType, queueName)
+		}
+	})
+	if err != nil {
+		return 0, 0, serviceerror.NewUnavailable(err.Error())
+	}
+
+	return ackLevel, version, nil
+}
+
+func (q *sqlQueueV2) updateAckLevel(ctx context.Context, request persistence.InternalRangeDeleteMessagesRequest, version int64) error {
+
+	return nil
 }
 
 // TODO: add these to to common/persistence/serialization/blob.go at some point
