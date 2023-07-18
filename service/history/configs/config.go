@@ -42,6 +42,7 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 
 	RPS                                   dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
@@ -326,6 +327,7 @@ func NewConfig(
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),

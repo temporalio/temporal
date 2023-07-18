@@ -306,6 +306,7 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
 	)
@@ -365,6 +366,7 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				serviceConfig.OperatorRPSRatio,
 			)
 		},
 	)
@@ -414,6 +416,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -437,6 +440,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
