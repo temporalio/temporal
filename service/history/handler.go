@@ -98,7 +98,7 @@ type (
 		tracer                       trace.Tracer
 
 		replicationTaskFetcherFactory   replication.TaskFetcherFactory
-		replicationTaskConvertorFactory replication.SourceTaskConverterProvider
+		replicationTaskConverterFactory replication.SourceTaskConverterProvider
 		streamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 
@@ -125,7 +125,7 @@ type (
 		TracerProvider               trace.TracerProvider
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
-		ReplicationTaskConvertorFactory replication.SourceTaskConverterProvider
+		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
 		StreamReceiverMonitor           replication.StreamReceiverMonitor
 	}
 )
@@ -1932,7 +1932,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		server,
 		shardContext,
 		engine,
-		h.replicationTaskConvertorFactory(
+		h.replicationTaskConverterFactory(
 			engine,
 			shardContext,
 			clientShardCount,

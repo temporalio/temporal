@@ -43,7 +43,7 @@ import (
 
 var Module = fx.Options(
 	fx.Provide(ReplicationTaskFetcherFactoryProvider),
-	fx.Provide(ReplicationTaskConvertorFactoryProvider),
+	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
@@ -65,7 +65,7 @@ func ReplicationTaskFetcherFactoryProvider(
 	)
 }
 
-func ReplicationTaskConvertorFactoryProvider() SourceTaskConverterProvider {
+func ReplicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
 	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
