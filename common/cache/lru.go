@@ -36,6 +36,8 @@ import (
 var (
 	// ErrCacheFull is returned if Put fails due to cache being filled with pinned elements
 	ErrCacheFull = errors.New("cache capacity is fully occupied with pinned elements")
+	// ErrCacheItemTooLarge is returned if Put fails due to item size being larger than max cache capacity
+	ErrCacheItemTooLarge = errors.New("cache item size is larger than max cache capacity")
 )
 
 // lru is a concurrent fixed size cache that evicts elements in lru order
@@ -272,11 +274,13 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	if c.maxSize == 0 {
 		return nil, nil
 	}
+	entrySize := getSize(value)
+	if entrySize >= c.maxSize {
+		return nil, ErrCacheItemTooLarge
+	}
 
 	c.mut.Lock()
 	defer c.mut.Unlock()
-
-	entrySize := getSize(value)
 
 	c.currSize += entrySize
 	c.tryEvictUntilEnoughSpace()

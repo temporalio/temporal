@@ -346,6 +346,21 @@ func TestZeroSizeCache(t *testing.T) {
 	assert.Equal(t, 0, cache.Size())
 }
 
+func TestCache_ItemSizeTooLarge(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
+	assert.Equal(t, res, nil)
+
+	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
+	assert.Equal(t, err, ErrCacheItemTooLarge)
+	assert.Equal(t, res, nil)
+
+}
+
 func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	t.Parallel()
 
