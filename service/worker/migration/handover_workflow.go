@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -40,18 +41,10 @@ import (
 )
 
 const (
-	forceReplicationWorkflowName  = "force-replication"
 	namespaceHandoverWorkflowName = "namespace-handover"
-
-	defaultListWorkflowsPageSize = 1000
-	defaultPageCountPerExecution = 200
-	maxPageCountPerExecution     = 1000
 
 	minimumAllowedLaggingSeconds  = 5
 	minimumHandoverTimeoutSeconds = 30
-
-	defaultPageSizeForTaskQueueUserDataReplication = 20
-	defaultRPSForTaskQueueUserDataReplication      = 1.0
 )
 
 type (
@@ -68,15 +61,17 @@ type (
 	}
 
 	activities struct {
-		historyShardCount         int32
-		executionManager          persistence.ExecutionManager
-		taskManager               persistence.TaskManager
-		namespaceRegistry         namespace.Registry
-		historyClient             historyservice.HistoryServiceClient
-		frontendClient            workflowservice.WorkflowServiceClient
-		logger                    log.Logger
-		metricsHandler            metrics.Handler
-		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		historyShardCount              int32
+		executionManager               persistence.ExecutionManager
+		taskManager                    persistence.TaskManager
+		namespaceRegistry              namespace.Registry
+		historyClient                  historyservice.HistoryServiceClient
+		frontendClient                 workflowservice.WorkflowServiceClient
+		clientFactory                  serverClient.Factory
+		logger                         log.Logger
+		metricsHandler                 metrics.Handler
+		forceReplicationMetricsHandler metrics.Handler
+		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
 	}
 
 	replicationStatus struct {

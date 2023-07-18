@@ -135,6 +135,7 @@ func Invoke(
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
 			response.HeartbeatDetails = ai.LastHeartbeatDetails
+			response.Version = ai.Version
 
 			response.WorkflowType = mutableState.GetWorkflowType()
 			response.WorkflowNamespace = namespace.String()

@@ -418,7 +418,7 @@ func (s *ContextImpl) UpdateRemoteReaderInfo(
 	ackTimestamp time.Time,
 ) error {
 	clusterID, shardID := ReplicationReaderIDToClusterShardID(readerID)
-	clusterName, _, ok := ClusterNameInfoFromClusterID(s.clusterMetadata.GetAllClusterInfo(), clusterID)
+	clusterName, _, ok := clusterNameInfoFromClusterID(s.clusterMetadata.GetAllClusterInfo(), clusterID)
 	if !ok {
 		// cluster is not present in cluster metadata map
 		return serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
@@ -1120,7 +1120,7 @@ func (s *ContextImpl) updateRangeIfNeededLocked() error {
 }
 
 func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
-	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1154,7 +1154,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	s.taskSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
 	s.maxTaskSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.immediateTaskExclusiveMaxReadLevel = s.taskSequenceNumber
-	s.shardInfo = loadShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(updatedShardInfo))
+	s.shardInfo = trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
 
 	return nil
 }
@@ -1176,7 +1176,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
-	updatedShardInfo := storeShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
 	// since linter is against any logging control ¯\_(ツ)_/¯, e.g.
 	//  "flag-parameter: parameter 'verboseLogging' seems to be a control flag, avoid control coupling (revive)"
 	var logger log.Logger = log.NewNoopLogger()
@@ -1667,7 +1667,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		return err
 	}
 	*ownershipChanged = resp.ShardInfo.Owner != s.owner
-	shardInfo := loadShardInfoCompatibilityCheck(s.clusterMetadata, copyShardInfo(resp.ShardInfo))
+	shardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(resp.ShardInfo))
 	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
@@ -1971,13 +1971,6 @@ func newContext(
 
 // TODO: why do we need a deep copy here?
 func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
-	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
-	for category, ackLevels := range shardInfo.QueueAckLevels {
-		queueAckLevels[category] = &persistencespb.QueueAckLevel{
-			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
-		}
-	}
 	// need to ser/de to make a deep copy of queue state
 	queueStates := make(map[int32]*persistencespb.QueueState, len(shardInfo.QueueStates))
 	for k, v := range shardInfo.QueueStates {
@@ -1993,7 +1986,6 @@ func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInf
 		StolenSinceRenew:       shardInfo.StolenSinceRenew,
 		ReplicationDlqAckLevel: maps.Clone(shardInfo.ReplicationDlqAckLevel),
 		UpdateTime:             shardInfo.UpdateTime,
-		QueueAckLevels:         queueAckLevels,
 		QueueStates:            queueStates,
 	}
 }
@@ -2099,4 +2091,35 @@ func OperationPossiblySucceeded(err error) bool {
 	default:
 		return true
 	}
+}
+
+func trimShardInfo(
+	allClusterInfo map[string]cluster.ClusterInformation,
+	shardInfo *persistencespb.ShardInfo,
+) *persistencespb.ShardInfo {
+	if shardInfo.QueueStates != nil && shardInfo.QueueStates[tasks.CategoryIDReplication] != nil {
+		for readerID := range shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates {
+			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
+			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
+			if !found || !clusterInfo.Enabled {
+				delete(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates, readerID)
+			}
+		}
+		if len(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates) == 0 {
+			delete(shardInfo.QueueStates, tasks.CategoryIDReplication)
+		}
+	}
+	return shardInfo
+}
+
+func clusterNameInfoFromClusterID(
+	allClusterInfo map[string]cluster.ClusterInformation,
+	clusterID int64,
+) (string, cluster.ClusterInformation, bool) {
+	for name, info := range allClusterInfo {
+		if info.InitialFailoverVersion == clusterID {
+			return name, info, true
+		}
+	}
+	return "", cluster.ClusterInformation{}, false
 }

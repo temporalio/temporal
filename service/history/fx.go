@@ -198,7 +198,7 @@ func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{},
 	)
 }
@@ -225,6 +225,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -249,6 +250,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
