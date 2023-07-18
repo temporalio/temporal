@@ -28,9 +28,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/metadata"
+
+	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives"
@@ -1444,4 +1449,78 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 
 	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServerBroken() {
+	clientClusterShardID := historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
+	}
+	serverClusterShardID := historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
+	}
+	clusterShardMD := historyclient.EncodeClusterShardMD(
+		clientClusterShardID,
+		serverClusterShardID,
+	)
+	ctx := metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
+	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
+	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(2)
+	channel := make(chan struct{})
+
+	clientCluster.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesRequest, error) {
+		defer waitGroup.Done()
+		return nil, serviceerror.NewUnavailable("random error")
+	})
+	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
+		defer waitGroup.Done()
+		<-channel
+		return nil, serviceerror.NewUnavailable("random error")
+	})
+	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
+	close(channel)
+	waitGroup.Wait()
+}
+
+func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClientBroken() {
+	clientClusterShardID := historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
+	}
+	serverClusterShardID := historyclient.ClusterShardID{
+		ClusterID: rand.Int31(),
+		ShardID:   rand.Int31(),
+	}
+	clusterShardMD := historyclient.EncodeClusterShardMD(
+		clientClusterShardID,
+		serverClusterShardID,
+	)
+	ctx := metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	clientCluster := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesServer(s.controller)
+	clientCluster.EXPECT().Context().Return(ctx).AnyTimes()
+	serverCluster := historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesClient(s.controller)
+	s.mockHistoryClient.EXPECT().StreamWorkflowReplicationMessages(ctx).Return(serverCluster, nil)
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(2)
+	channel := make(chan struct{})
+
+	clientCluster.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesRequest, error) {
+		defer waitGroup.Done()
+		<-channel
+		return nil, serviceerror.NewUnavailable("random error")
+	})
+	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
+		defer waitGroup.Done()
+		return nil, serviceerror.NewUnavailable("random error")
+	})
+	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
+	close(channel)
+	waitGroup.Wait()
 }
