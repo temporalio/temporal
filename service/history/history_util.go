@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package forcedeleteworkflowexecution
+package history
 
 import (
 	"context"
@@ -32,6 +32,7 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -44,14 +45,14 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
 )
 
-func Invoke(
+func forceDeleteWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+	persistenceExecutionMgr persistence.ExecutionManager,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	logger log.Logger,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -60,22 +61,15 @@ func Invoke(
 	}
 	execution := request.Execution
 
-	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
-		execution.GetWorkflowId(),
-		shard.GetConfig().NumberOfShards,
-	)
-	logger := log.With(shard.GetLogger(),
+	logger = log.With(logger,
 		tag.WorkflowNamespaceID(request.NamespaceId),
 		tag.WorkflowID(execution.WorkflowId),
 		tag.WorkflowRunID(execution.RunId),
 	)
 
-	persistenceExecutionManager := shard.GetExecutionManager()
-
 	if execution.RunId == "" {
-		resp, err := persistenceExecutionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     shardID,
+		resp, err := persistenceExecutionMgr.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+			ShardID:     request.Shard,
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.WorkflowId,
 		})
@@ -90,8 +84,8 @@ func Invoke(
 	var startTime, closeTime *time.Time
 	cassVisBackend := persistenceVisibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
-	resp, err := persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
-		ShardID:     shardID,
+	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+		ShardID:     request.Shard,
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
@@ -120,10 +114,10 @@ func Invoke(
 			} else if executionInfo.GetCloseTime() != nil {
 				closeTime = executionInfo.GetCloseTime()
 			} else {
-				completionEvent, err := getWorkflowCompletionEvent(ctx, shardID, resp.State, persistenceExecutionManager)
+				completionEvent, err := getWorkflowCompletionEvent(ctx, request.Shard, resp.State, persistenceExecutionMgr)
 				if err != nil {
 					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
-					shard.GetLogger().Warn(warnMsg, tag.Error(err))
+					logger.Warn(warnMsg, tag.Error(err))
 					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 				} else {
 					closeTime = completionEvent.GetEventTime()
@@ -150,8 +144,8 @@ func Invoke(
 		}
 	}
 
-	if err := persistenceExecutionManager.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
-		ShardID:     shardID,
+	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     request.Shard,
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
@@ -159,8 +153,8 @@ func Invoke(
 		return nil, err
 	}
 
-	if err := persistenceExecutionManager.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
-		ShardID:     shardID,
+	if err := persistenceExecutionMgr.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     request.Shard,
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
@@ -169,12 +163,12 @@ func Invoke(
 	}
 
 	for _, branchToken := range branchTokens {
-		if err := persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     shardID,
+		if err := persistenceExecutionMgr.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			ShardID:     request.Shard,
 			BranchToken: branchToken,
 		}); err != nil {
 			warnMsg := "Failed to delete history branch, skip"
-			shard.GetLogger().Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
+			logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
 			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
 		}
 	}

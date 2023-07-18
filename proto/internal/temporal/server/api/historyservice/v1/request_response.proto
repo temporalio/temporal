@@ -742,7 +742,8 @@ message GetWorkflowExecutionRawHistoryV2Response {
 
 message ForceDeleteWorkflowExecutionRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
+    int32 shard = 2;
+    temporal.api.common.v1.WorkflowExecution execution = 3;
 }
 
 message ForceDeleteWorkflowExecutionResponse {

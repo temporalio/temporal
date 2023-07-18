@@ -2085,27 +2085,13 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	h.startWG.Wait()
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
-		namespace.ID(request.GetNamespaceId()),
-		request.GetExecution().GetWorkflowId(),
+	return forceDeleteWorkflowExecution(
+		ctx,
+		request,
+		h.persistenceExecutionManager,
+		h.persistenceVisibilityManager,
+		h.logger,
 	)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	return engine.ForceDeleteWorkflowExecution(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

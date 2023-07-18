@@ -1557,10 +1557,13 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
+
 	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
+				Shard:       shardID,
 				Execution:   request.Execution,
 			})
 		if err != nil {
