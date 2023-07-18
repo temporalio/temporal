@@ -97,9 +97,9 @@ type (
 		controller                   shard.Controller
 		tracer                       trace.Tracer
 
-		replicationTaskFetcherFactory   replication.TaskFetcherFactory
-		replicationTaskConverterFactory replication.SourceTaskConverterProvider
-		streamReceiverMonitor           replication.StreamReceiverMonitor
+		replicationTaskFetcherFactory    replication.TaskFetcherFactory
+		replicationTaskConverterProvider replication.SourceTaskConverterProvider
+		streamReceiverMonitor            replication.StreamReceiverMonitor
 	}
 
 	NewHandlerArgs struct {
@@ -1932,7 +1932,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		server,
 		shardContext,
 		engine,
-		h.replicationTaskConverterFactory(
+		h.replicationTaskConverterProvider(
 			engine,
 			shardContext,
 			clientShardCount,
