@@ -40,20 +40,23 @@ const (
 	templateEnqueueMessageQueryV2   = `INSERT INTO queue_v2 (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateGetLastMessageIDQueryV2 = `SELECT message_id FROM queue WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1`
 	templateDeleteMessagesQueryV2   = `DELETE FROM queue WHERE queue_type = ? and queue_name = ? and message_id > ? and message_id <= ?`
+	templateGetMessagesQueryV2      = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and queue_name = ? and partition = ? and message_id > ? LIMIT ?`
 
 	templateInsertQueueMetadataQueryV2          = `INSERT INTO queue_metadata_v2 (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateGetQueuesListQueryV2                = `SELECT queue_name FROM queue_metadata_v2 WHERE queue_type=?`
 	templateGetCurrentAckLevelAndVersionQueryV2 = `SELECT metadata_payload, metadata_encoding, version FROM queue_metadata_v2 WHERE queue_type = ? and queue_name = ?`
 	templateUpdateQueueMetadataQueryV2          = `UPDATE queue_metadata SET metadata_payload = ?, metadata_encoding= ?, version = ? WHERE queue_type = ? and queue_name = ? IF version = ?`
+
+	EmptyPartition = 0
 )
 
 type (
 	QueueStoreV2 struct {
-		queueType persistence.QueueV2Type
-		session   gocql.Session
-		logger    log.Logger
+		session gocql.Session
+		logger  log.Logger
 	}
 
+	// TODO: add a proto at some point
 	QueueV2MetadataPayload struct {
 		AckLevel int64
 	}
@@ -65,9 +68,8 @@ func NewQueueStoreV2(
 	logger log.Logger,
 ) (persistence.QueueV2, error) {
 	return &QueueStoreV2{
-		queueType: queueType,
-		session:   session,
-		logger:    logger,
+		session: session,
+		logger:  logger,
 	}, nil
 }
 
@@ -96,13 +98,12 @@ func (q *QueueStoreV2) CreateQueue(
 }
 
 func (q *QueueStoreV2) EnqueueMessage(ctx context.Context, request persistence.InternalEnqueueMessageRequest) (*persistence.InternalEnqueueMessageResponse, error) {
-	partition := 0
-	lastMessageID, err := q.getLastMessageID(ctx, request, partition)
+	lastMessageID, err := q.getLastMessageID(ctx, request, EmptyPartition)
 	if err != nil {
 		return nil, err
 	}
 
-	messageID, err := q.tryEnqueue(ctx, request, lastMessageID+1, partition)
+	messageID, err := q.tryEnqueue(ctx, request, lastMessageID+1, EmptyPartition)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +112,51 @@ func (q *QueueStoreV2) EnqueueMessage(ctx context.Context, request persistence.I
 }
 
 func (q *QueueStoreV2) ReadMessages(ctx context.Context, request persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
-	return nil, nil
+	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
+	var minMessageID int64
+	var pageToken *[]byte
+	if request.NextPageToken.PageToken != nil {
+		minMessageID = request.NextPageToken.MessageID
+		pageToken = &request.NextPageToken.PageToken
+	} else {
+		ackLevel, _, err := q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
+		if err != nil {
+			return nil, err
+		}
+		minMessageID = ackLevel
+	}
+
+	query := q.session.Query(templateGetMessagesQueryV2,
+		request.QueueType,
+		request.QueueName,
+		EmptyPartition,
+		minMessageID,
+	).WithContext(ctx)
+	iter := query.PageSize(request.PageSize).PageState(*pageToken).Iter()
+
+	var result []persistence.Message
+	message := make(map[string]interface{})
+	for iter.MapScan(message) {
+		queueMessage := convertQueueV2Message(message)
+		result = append(result, *queueMessage)
+		message = make(map[string]interface{})
+	}
+
+	var nextPageToken []byte
+	if len(iter.PageState()) > 0 {
+		nextPageToken = iter.PageState()
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
+	}
+
+	return &persistence.InternalReadMessagesResponse{Messages: result,
+		NextPageToken: persistence.InternalReadMessagePageToken{
+			MessageID: minMessageID,
+			PageToken: nextPageToken,
+		},
+	}, nil
 }
 
 func (q *QueueStoreV2) RangeDeleteMessages(ctx context.Context, request persistence.InternalRangeDeleteMessagesRequest) (*persistence.InternalRangeDeleteMessagesResponse, error) {
@@ -148,6 +193,12 @@ func (q *QueueStoreV2) ListQueues(ctx context.Context, request persistence.Inter
 	}
 
 	return &response, nil
+}
+
+func (q *QueueStoreV2) Close() {
+	if q.session != nil {
+		q.session.Close()
+	}
 }
 
 func (q *QueueStoreV2) tryEnqueue(
@@ -250,13 +301,6 @@ func (q *QueueStoreV2) updateAckLevel(ctx context.Context, request persistence.I
 		// TODO: do we need to limit the number of retries?
 	}
 	return nil
-
-}
-
-func (q *QueueStoreV2) Close() {
-	if q.session != nil {
-		q.session.Close()
-	}
 }
 
 // TODO: add these to to common/persistence/serialization/blob.go at some point
@@ -282,4 +326,20 @@ func getAckLevelFromQueueV2Metadata(payload []byte, encoding string) (int64, err
 		return 0, err
 	}
 	return queueMetadata.AckLevel, nil
+}
+
+func convertQueueV2Message(
+	message map[string]interface{},
+) *persistence.Message {
+
+	id := message["message_id"].(int64)
+	data := message["message_payload"].([]byte)
+	encoding := message["message_encoding"].(string)
+	if encoding == "" {
+		encoding = enumspb.ENCODING_TYPE_PROTO3.String()
+	}
+	return &persistence.Message{
+		MetaData: persistence.MessageMetadata{ID: id},
+		Data:     *persistence.NewDataBlob(data, encoding),
+	}
 }
