@@ -1976,14 +1976,14 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	}
 
 	shutdownChan := channel.NewShutdownOnce()
-	go func() error {
+	go func() {
 		defer shutdownChan.Shutdown()
 
 		for !shutdownChan.IsShutdown() {
 			req, err := clientCluster.Recv()
 			if err != nil {
 				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
-				return err
+				return
 			}
 			switch attr := req.GetAttributes().(type) {
 			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
@@ -1993,24 +1993,24 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 					},
 				}); err != nil {
 					logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
-					return err
+					return
 				}
 			default:
-				return serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))
+				))))
+				return
 			}
 		}
-		return nil
 	}()
-	go func() error {
+	go func() {
 		defer shutdownChan.Shutdown()
 
 		for !shutdownChan.IsShutdown() {
 			resp, err := serverCluster.Recv()
 			if err != nil {
 				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-				return err
+				return
 			}
 			switch attr := resp.GetAttributes().(type) {
 			case *historyservice.StreamWorkflowReplicationMessagesResponse_Messages:
@@ -2020,15 +2020,15 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 					},
 				}); err != nil {
 					logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-					return err
+					return
 				}
 			default:
-				return serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))
+				))))
+				return
 			}
 		}
-		return nil
 	}()
 	<-shutdownChan.Channel()
 	return nil
