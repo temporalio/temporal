@@ -57,6 +57,8 @@ type (
 		Visibility
 		QueueMessage
 		QueueMetadata
+		QueueV2Message
+		QueueV2Metadata
 
 		MatchingTask
 		MatchingTaskQueue

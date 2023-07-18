@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.11",
+  "MinCompatibleVersion": "1.0",
+  "Description": "add queue_metadata_v2 and queue_v2 tables for DLQ ",
+  "SchemaUpdateCqlFiles": [
+    "queue_v2.sql"
+  ]
+}
