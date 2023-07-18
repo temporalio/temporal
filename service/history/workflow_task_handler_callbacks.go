@@ -322,8 +322,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			scheduledEventID := token.GetScheduledEventId()
 			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
 
-			if workflowTask == nil || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID ||
-				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) {
+			if workflowTask == nil ||
+				workflowTask.StartedEventID == common.EmptyEventID ||
+				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
+				workflowTask.Attempt != token.Attempt ||
+				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
@@ -411,9 +414,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	ms := workflowContext.GetMutableState()
 
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
-	if !ms.IsWorkflowExecutionRunning() || currentWorkflowTask == nil || currentWorkflowTask.Attempt != token.Attempt ||
+	if !ms.IsWorkflowExecutionRunning() ||
+		currentWorkflowTask == nil ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
-		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) {
+		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
+		currentWorkflowTask.Attempt != token.Attempt ||
+		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
@@ -848,6 +854,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	}
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
+	response.Version = workflowTask.Version
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)

@@ -1,4 +1,8 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,29 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+package cache
 
-import "temporal/server/api/persistence/v1/predicates.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
+// SizeGetter is an interface that can be implemented by cache entries to provide their size
+type (
+	SizeGetter interface {
+		CacheSize() int
+	}
+)
 
-message QueueState {
-    map<int64, QueueReaderState> reader_states = 1;
-    TaskKey exclusive_reader_high_watermark = 2;
-}
-
-message QueueReaderState {
-    repeated QueueSliceScope scopes = 1;
-}
-
-message QueueSliceScope {
-    QueueSliceRange range = 1;
-    Predicate predicate = 2;
-}
-
-message QueueSliceRange {
-    TaskKey inclusive_min = 1;
-    TaskKey exclusive_max = 2;
+func getSize(value interface{}) int {
+	if v, ok := value.(SizeGetter); ok {
+		return v.CacheSize()
+	}
+	// if the object does not have a CacheSize() method, assume is count limit cache, which size should be 1
+	return 1
 }

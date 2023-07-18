@@ -31,6 +31,7 @@ import (
 )
 
 const (
+	CallerTypeOperator    = "operator"
 	CallerTypeAPI         = "api"
 	CallerTypeBackground  = "background"
 	CallerTypePreemptable = "preemptable"
@@ -113,7 +114,7 @@ func SetCallerInfo(
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{
 		callerNameHeaderName: info.CallerName,
-		callerTypeHeaderName: info.CallerType,
+		CallerTypeHeaderName: info.CallerType,
 		callOriginHeaderName: info.CallOrigin,
 	})
 }
@@ -133,7 +134,7 @@ func SetCallerType(
 	ctx context.Context,
 	callerType string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callerTypeHeaderName: callerType})
+	return setIncomingMD(ctx, map[string]string{CallerTypeHeaderName: callerType})
 }
 
 // SetOrigin set call origin in the context.
@@ -168,7 +169,7 @@ func setIncomingMD(
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
-	values := GetValues(ctx, callerNameHeaderName, callerTypeHeaderName, callOriginHeaderName)
+	values := GetValues(ctx, callerNameHeaderName, CallerTypeHeaderName, callOriginHeaderName)
 	return CallerInfo{
 		CallerName: values[0],
 		CallerType: values[1],

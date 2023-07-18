@@ -117,19 +117,11 @@ func (s *queueBaseSuite) TearDownTest() {
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
-	ackLevel := int64(1024)
-	rangeID := int64(10)
-
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 0,
-			RangeId: rangeID,
-			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-				tasks.CategoryIDTransfer: {
-					AckLevel: ackLevel,
-				},
-			},
+			RangeId: int64(10),
 		},
 		s.config,
 	)
@@ -150,7 +142,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 	)
 
 	s.Len(base.readerGroup.Readers(), 0)
-	s.Equal(ackLevel+1, base.nonReadableScope.Range.InclusiveMin.TaskID)
+	s.Equal(int64(1), base.nonReadableScope.Range.InclusiveMin.TaskID)
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
@@ -326,11 +318,6 @@ func (s *queueBaseSuite) TestStartStop() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 10,
-			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-				tasks.CategoryIDTransfer: {
-					AckLevel: 1024,
-				},
-			},
 		},
 		s.config,
 	)

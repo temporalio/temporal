@@ -888,11 +888,6 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	taggedMetricsHandler, startTime := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
-	defer func() {
-		taggedMetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
-	}()
-
 	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
 		request,
 	); err != nil {
@@ -903,7 +898,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if err != nil {
 		return nil, err
 	}
-	taggedMetricsHandler = taggedMetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String()))
 
 	execution := request.Execution
 	var pageToken *tokenspb.RawHistoryContinuation
@@ -990,12 +984,11 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
-	// namespaces along with the individual namespaces stats
 	adh.metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
 		int64(size),
-		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope))
-	taggedMetricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
+	)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
@@ -1916,13 +1909,6 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	return targetBranch, nil
-}
-
-// startRequestProfile initiates recording of request metrics
-func (adh *AdminHandler) startRequestProfile(operation string) (metrics.Handler, time.Time) {
-	metricsScope := adh.metricsHandler.WithTags(metrics.OperationTag(operation))
-	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
-	return metricsScope, time.Now().UTC()
 }
 
 func (adh *AdminHandler) getWorkflowCompletionEvent(

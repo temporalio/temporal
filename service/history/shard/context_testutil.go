@@ -72,13 +72,9 @@ func NewTestContext(
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := resourceTest.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	if shardInfo.QueueAckLevels == nil {
-		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
-	}
 	if shardInfo.QueueStates == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
-	shardInfo = loadShardInfoCompatibilityCheckWithoutReplication(shardInfo)
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		owner:               shardInfo.GetOwner(),

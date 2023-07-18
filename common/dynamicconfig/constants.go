@@ -119,6 +119,9 @@ const (
 	// ShardPerNsRPSWarnPercent is the per-shard per-namespace RPS limit for warning as a percentage of ShardRPSWarnLimit
 	// these warning are not emitted if the value is set to 0 or less
 	ShardPerNsRPSWarnPercent = "system.shardPerNsRPSWarnPercent"
+	// OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
+	// operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)
+	OperatorRPSRatio = "system.operatorRPSRatio"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
