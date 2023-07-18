@@ -57,7 +57,5 @@ type (
 		UpdateQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
 		SelectFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
 		SelectNameFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataTypeFilter) ([]QueueV2MetadataRow, error)
-
-		LockQueueV2Metadata(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
 	}
 )

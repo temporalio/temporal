@@ -28,6 +28,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -284,7 +285,57 @@ func (q *sqlQueueV2) getCurrentAckLevelAndVersion(
 }
 
 func (q *sqlQueueV2) updateAckLevel(ctx context.Context, request persistence.InternalRangeDeleteMessagesRequest, version int64) error {
+	queueMetadata := QueueV2MetadataPayload{
+		AckLevel: request.InclusiveMaxMessageMetadata.ID,
+	}
+	blob, err := convertQueueV2MetadataToBlob(&queueMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to update ack level: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+	}
 
+	for {
+		err = q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
+			result, err := tx.UpdateQueueV2Metadata(ctx, &sqlplugin.QueueV2MetadataRow{
+				QueueType:       request.QueueType,
+				QueueName:       request.QueueName,
+				Payload:         blob.Data,
+				PayloadEncoding: blob.EncodingType.String(),
+				Version:         version,
+			},
+			)
+			switch err {
+			case nil:
+				rowsAffected, err := result.RowsAffected()
+				if err != nil {
+					return fmt.Errorf("rowsAffected returned error for queue metadata %v: %v", request.QueueType, err)
+				}
+				if rowsAffected != 1 {
+					return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encountered concurrent write."}
+				}
+				return nil
+			default:
+				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
+			}
+
+		})
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, &persistence.ConditionFailedError{}) {
+			return err
+		}
+
+		var ackLevel int64
+		ackLevel, version, err = q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
+		if err != nil {
+			return fmt.Errorf("failed to get ack level from queue metadata: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+		}
+		if ackLevel >= request.InclusiveMaxMessageMetadata.ID {
+			break
+		}
+		// otherwise repeat until we get it right
+		// TODO: do we need to limit the number of retries?
+	}
 	return nil
 }
 
