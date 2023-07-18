@@ -475,6 +475,12 @@ const (
 	HistoryCacheMaxSize = "history.cacheMaxSize"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
+	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
+	// will wait on workflow lock acquisition. Requires service restart to take effect.
+	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
+	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
+	// before joining membership after starting.
+	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// EventsCacheInitialSize is initial size of events cache
