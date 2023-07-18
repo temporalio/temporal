@@ -276,6 +276,16 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
+	entrySize := getSize(value)
+
+	c.currSize += entrySize
+	c.tryEvictUntilEnoughSpace()
+	// If there is still not enough space, remove the new entry size from the current size and return an error
+	if c.currSize > c.maxSize {
+		c.currSize -= entrySize
+		return nil, ErrCacheFull
+	}
+
 	elt := c.byKey[key]
 	if elt != nil {
 		entry := elt.Value.(*entryImpl)
@@ -302,7 +312,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	entry := &entryImpl{
 		key:   key,
 		value: value,
-		size:  getSize(value),
+		size:  entrySize,
 	}
 
 	if c.pin {
@@ -311,15 +321,6 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 
 	if c.ttl != 0 {
 		entry.createTime = c.clock.Now().UTC()
-	}
-
-	c.currSize += entry.Size()
-
-	c.tryEvictUntilEnoughSpace()
-	// If there is still not enough space, remove the new entry size from the current size and return an error
-	if c.currSize > c.maxSize {
-		c.currSize -= entry.Size()
-		return nil, ErrCacheFull
 	}
 
 	element := c.byAccess.PushFront(entry)
