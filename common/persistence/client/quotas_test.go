@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"golang.org/x/exp/slices"
 
@@ -104,12 +105,13 @@ func (s *quotasSuite) TestCallOriginDefined() {
 }
 
 func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
-	var namespaceMaxRPS = func(namespace string) int { return 1 }
-	var hostMaxRPS = func() int { return 1 }
+	namespaceMaxRPS := func(namespace string) int { return 1 }
+	hostMaxRPS := func() int { return 1 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
 
-	var limiter = newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+	limiter := newPriorityNamespaceRateLimiter(namespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
 
-	var request = quotas.NewRequest(
+	request := quotas.NewRequest(
 		"test-api",
 		1,
 		"test-namespace",
@@ -131,12 +133,13 @@ func (s *quotasSuite) TestPriorityNamespaceRateLimiter_DoesLimit() {
 }
 
 func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
-	var perShardNamespaceMaxRPS = func(namespace string) int { return 1 }
-	var hostMaxRPS = func() int { return 1 }
+	perShardNamespaceMaxRPS := func(namespace string) int { return 1 }
+	hostMaxRPS := func() int { return 1 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
 
-	var limiter = newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn)
+	limiter := newPerShardPerNamespacePriorityRateLimiter(perShardNamespaceMaxRPS, hostMaxRPS, RequestPriorityFn, operatorRPSRatioFn)
 
-	var request = quotas.NewRequest(
+	request := quotas.NewRequest(
 		"test-api",
 		1,
 		"test-namespace",
@@ -154,5 +157,38 @@ func (s *quotasSuite) TestPerShardNamespaceRateLimiter_DoesLimit() {
 		}
 	}
 
+	s.True(wasLimited)
+}
+
+func (s *quotasSuite) TestOperatorPrioritized() {
+	rateFn := func() float64 { return 5 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	limiter := newPriorityRateLimiter(rateFn, RequestPriorityFn, operatorRPSRatioFn)
+
+	operatorRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeOperator,
+		-1,
+		"DescribeWorkflowExecution")
+
+	apiRequest := quotas.NewRequest(
+		"DescribeWorkflowExecution",
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"DescribeWorkflowExecution")
+
+	requestTime := time.Now()
+	wasLimited := false
+
+	for i := 0; i < 6; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			wasLimited = true
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
+	}
 	s.True(wasLimited)
 }
