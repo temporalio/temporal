@@ -355,7 +355,7 @@ func TestCache_ItemSizeTooLarge(t *testing.T) {
 	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
 	assert.Equal(t, res, nil)
 
-	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
+	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
 	assert.Equal(t, err, ErrCacheItemTooLarge)
 	assert.Equal(t, res, nil)
 

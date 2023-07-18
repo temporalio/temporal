@@ -275,7 +275,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		return nil, nil
 	}
 	entrySize := getSize(value)
-	if entrySize >= c.maxSize {
+	if entrySize > c.maxSize {
 		return nil, ErrCacheItemTooLarge
 	}
 
