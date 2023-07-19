@@ -83,30 +83,35 @@ func (v *taskValidatorImpl) maybeValidate(
 	if IsTaskExpired(task) {
 		return false
 	}
-	if !v.shouldValidate(task) {
+	if !v.preValidate(task) {
 		return true
 	}
 	valid, err := v.isTaskValid(task, taskType)
 	if err != nil {
 		return true
 	}
-	v.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         task.TaskId,
-		validationTime: time.Now().UTC(),
-	}
+	v.postValidate(task)
 	return valid
 }
 
-func (v *taskValidatorImpl) shouldValidate(
+// preValidate track a task and return if validation should be done
+func (v *taskValidatorImpl) preValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
 	if v.lastValidatedTaskInfo.taskID != task.TaskId {
-		// this task has not been validated
-
-		// after timeout attempting to dispatch the task, check whether the task is still valid
-		if task.Data.CreateTime != nil && time.Since(*task.Data.CreateTime) > taskReaderValidationThreshold {
-			return true
+		// first time seen the task, caller should try to dispatch first
+		if task.Data.CreateTime != nil {
+			v.lastValidatedTaskInfo = taskValidationInfo{
+				taskID:         task.TaskId,
+				validationTime: *task.Data.CreateTime, // task is valid when created
+			}
+		} else {
+			v.lastValidatedTaskInfo = taskValidationInfo{
+				taskID:         task.TaskId,
+				validationTime: time.Now().UTC(), // if no creation time specified, use now
+			}
 		}
+		return false
 	} else {
 		// this task has been validated before
 		if time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
@@ -114,6 +119,16 @@ func (v *taskValidatorImpl) shouldValidate(
 		}
 	}
 	return false
+}
+
+// postValidate update tracked task info
+func (v *taskValidatorImpl) postValidate(
+	task *persistencespb.AllocatedTaskInfo,
+) {
+	v.lastValidatedTaskInfo = taskValidationInfo{
+		taskID:         task.TaskId,
+		validationTime: time.Now().UTC(),
+	}
 }
 
 func (v *taskValidatorImpl) isTaskValid(

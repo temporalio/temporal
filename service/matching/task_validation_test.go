@@ -93,45 +93,51 @@ func (s *taskValidatorSuite) TeardownTest() {
 	s.controller.Finish()
 }
 
-func (s *taskValidatorSuite) TestShouldValidate_NewTask_Validate() {
+func (s *taskValidatorSuite) TestPreValidate_NewTask_Skip_WithCreationTIme() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.Data.ScheduledEventId - 1,
+		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()),
 	}
-	s.task.Data.CreateTime = timestamp.TimePtr(time.Now().Add(-2 * taskReaderValidationThreshold))
+	s.task.Data.CreateTime = timestamp.TimePtr(time.Unix(0, rand.Int63()))
 
-	shouldValidate := s.taskValidator.shouldValidate(s.task)
-	s.True(shouldValidate)
-}
-
-func (s *taskValidatorSuite) TestShouldValidate_NewTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.Data.ScheduledEventId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
-	}
-	s.task.Data.CreateTime = timestamp.TimePtr(time.Now().Add(2 * taskReaderValidationThreshold))
-
-	shouldValidate := s.taskValidator.shouldValidate(s.task)
+	shouldValidate := s.taskValidator.preValidate(s.task)
 	s.False(shouldValidate)
+	s.Equal(taskValidationInfo{
+		taskID:         s.task.TaskId,
+		validationTime: *s.task.Data.CreateTime,
+	}, s.taskValidator.lastValidatedTaskInfo)
 }
 
-func (s *taskValidatorSuite) TestShouldValidate_ExistingTask_Validate() {
+func (s *taskValidatorSuite) TestPreValidate_NewTask_Skip_WithoutCreationTIme() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.Data.ScheduledEventId,
+		taskID:         s.task.TaskId - 1,
+		validationTime: time.Unix(0, rand.Int63()),
+	}
+	s.task.Data.CreateTime = nil
+
+	shouldValidate := s.taskValidator.preValidate(s.task)
+	s.False(shouldValidate)
+	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
+	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+}
+
+func (s *taskValidatorSuite) TestPreValidate_ExistingTask_Validate() {
+	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(-2 * taskReaderValidationThreshold),
 	}
 
-	shouldValidate := s.taskValidator.shouldValidate(s.task)
-	s.False(shouldValidate)
+	shouldValidate := s.taskValidator.preValidate(s.task)
+	s.True(shouldValidate)
 }
 
-func (s *taskValidatorSuite) TestShouldValidate_ExistingTask_Skip() {
+func (s *taskValidatorSuite) TestPreValidate_ExistingTask_Skip() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.Data.ScheduledEventId,
+		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(2 * taskReaderValidationThreshold),
 	}
 
-	shouldValidate := s.taskValidator.shouldValidate(s.task)
+	shouldValidate := s.taskValidator.preValidate(s.task)
 	s.False(shouldValidate)
 }
 
