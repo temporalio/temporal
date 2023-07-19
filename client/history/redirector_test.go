@@ -53,7 +53,7 @@ type (
 	}
 )
 
-func TestCachingRedirectorSuite(t *testing.T) {
+func TestBasicRedirectorSuite(t *testing.T) {
 	s := new(basicRedirectorSuite)
 	suite.Run(t, s)
 }
