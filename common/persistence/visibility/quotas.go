@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package visibility
 
 import (
 	"go.temporal.io/server/common/dynamicconfig"
@@ -36,57 +36,38 @@ const (
 )
 
 var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":                        1,
-		"AddWorkflowTask":                        1,
-		"CancelOutstandingPoll":                  1,
-		"DescribeTaskQueue":                      1,
-		"ListTaskQueuePartitions":                1,
-		"PollActivityTaskQueue":                  1,
-		"PollWorkflowTaskQueue":                  1,
-		"QueryWorkflow":                          1,
-		"RespondQueryTaskCompleted":              1,
-		"GetWorkerBuildIdCompatibility":          1,
-		"UpdateWorkerBuildIdCompatibility":       1,
-		"GetTaskQueueUserData":                   1,
-		"ApplyTaskQueueUserDataReplicationEvent": 1,
-		"GetBuildIdTaskQueueMapping":             1,
-		"ForceUnloadTaskQueue":                   1,
-		"UpdateTaskQueueUserData":                1,
-		"ReplicateTaskQueueUserData":             1,
-	}
-
-	APIPrioritiesOrdered = []int{0, 1}
+	PrioritiesOrdered = []int{OperatorPriority, 1}
 )
 
-func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
+func newPriorityRateLimiter(
+	maxQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range APIPrioritiesOrdered {
+	for priority := range PrioritiesOrdered {
 		if priority == OperatorPriority {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(operatorRateFn(maxQPS, operatorRPSRatio)))
 		} else {
-			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn(maxQPS)))
 		}
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if req.CallerType == headers.CallerTypeOperator {
 			return OperatorPriority
 		}
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
+		// default to lowest priority
+		return PrioritiesOrdered[len(PrioritiesOrdered)-1]
 	}, rateLimiters)
 }
 
-func operatorRateFn(
-	rateFn quotas.RateFn,
-	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RateFn {
+func rateFn(maxQPS dynamicconfig.IntPropertyFn) quotas.RateFn {
 	return func() float64 {
-		return operatorRPSRatio() * rateFn()
+		return float64(maxQPS())
+	}
+}
+
+func operatorRateFn(maxQPS dynamicconfig.IntPropertyFn, operatorRPSRatio dynamicconfig.FloatPropertyFn) quotas.RateFn {
+	return func() float64 {
+		return float64(maxQPS()) * operatorRPSRatio()
 	}
 }
