@@ -71,6 +71,7 @@ type Config struct {
 	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                                          dynamicconfig.IntPropertyFn
 	GlobalRPS                                                    dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                                             dynamicconfig.FloatPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -206,6 +207,7 @@ func NewConfig(
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
+		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
@@ -408,26 +410,12 @@ func namespaceRPS(
 
 func effectiveRPS(frontendResolver membership.ServiceResolver, hostRPS func() int, globalRPS func() int) float64 {
 	if gRPS := globalRPS(); gRPS > 0 && frontendResolver != nil {
-		hosts := float64(numFrontendHosts(frontendResolver))
-		return float64(gRPS) / hosts
+		if numHosts := frontendResolver.MemberCount(); numHosts > 0 {
+			return float64(gRPS) / float64(numHosts)
+		}
 	}
 
 	return float64(hostRPS())
-}
-
-func numFrontendHosts(
-	frontendResolver membership.ServiceResolver,
-) int {
-	defaultHosts := 1
-	if frontendResolver == nil {
-		return defaultHosts
-	}
-
-	ringSize := frontendResolver.MemberCount()
-	if ringSize < defaultHosts {
-		return defaultHosts
-	}
-	return ringSize
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

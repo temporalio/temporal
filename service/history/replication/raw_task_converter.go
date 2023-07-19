@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination raw_task_converter_mock.go
+
 package replication
 
 import (
@@ -42,36 +44,80 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-func convertTask(
-	ctx context.Context,
-	task tasks.Task,
-	shardID int32,
-	workflowCache wcache.Cache,
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-) (*replicationspb.ReplicationTask, error) {
-	switch task := task.(type) {
-	case *tasks.SyncActivityTask:
-		return convertActivityStateReplicationTask(ctx, task, workflowCache)
-	case *tasks.SyncWorkflowStateTask:
-		return convertWorkflowStateReplicationTask(ctx, task, workflowCache)
-	case *tasks.HistoryReplicationTask:
-		return convertHistoryReplicationTask(
-			ctx,
-			task,
-			shardID,
-			workflowCache,
-			executionManager,
-			logger,
-		)
-	default:
-		return nil, errUnknownReplicationTask
+type (
+	SourceTaskConverterImpl struct {
+		historyEngine           shard.Engine
+		namespaceCache          namespace.Registry
+		clientClusterShardCount int32
+		clientClusterName       string
+		clientShardKey          ClusterShardKey
 	}
+	SourceTaskConverter interface {
+		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
+	}
+	SourceTaskConverterProvider func(
+		historyEngine shard.Engine,
+		shardContext shard.Context,
+		clientClusterShardCount int32,
+		clientClusterName string,
+		clientShardKey ClusterShardKey,
+	) SourceTaskConverter
+)
+
+func NewSourceTaskConverter(
+	historyEngine shard.Engine,
+	namespaceCache namespace.Registry,
+	clientClusterShardCount int32,
+	clientClusterName string,
+	clientShardKey ClusterShardKey,
+) *SourceTaskConverterImpl {
+	return &SourceTaskConverterImpl{
+		historyEngine:           historyEngine,
+		namespaceCache:          namespaceCache,
+		clientClusterShardCount: clientClusterShardCount,
+		clientClusterName:       clientClusterName,
+		clientShardKey:          clientShardKey,
+	}
+}
+
+func (c *SourceTaskConverterImpl) Convert(
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	if namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
+		namespace.ID(task.GetNamespaceID()),
+	); err == nil {
+		shouldProcessTask := false
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if c.clientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+		if !shouldProcessTask {
+			return nil, nil
+		}
+	}
+	// if there is error, then blindly send the task, better safe than sorry
+
+	clientShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), c.clientClusterShardCount)
+	if clientShardID != c.clientShardKey.ShardID {
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
+	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+	return replicationTask, nil
 }
 
 func convertActivityStateReplicationTask(

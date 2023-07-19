@@ -371,6 +371,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	var a *activities
 	var futures []workflow.Future
 	var workflowExecutions []commonpb.WorkflowExecution
+	var lastActivityErr error
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
 		var replicationTaskFuture workflow.Future
@@ -394,10 +395,17 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		pendingActivities++
 		selector.AddFuture(replicationTaskFuture, func(f workflow.Future) {
 			pendingActivities--
+
+			if err := f.Get(ctx, nil); err != nil {
+				lastActivityErr = err
+			}
 		})
 
-		if pendingActivities == params.ConcurrentActivityCount {
+		if pendingActivities >= params.ConcurrentActivityCount {
 			selector.Select(ctx) // this will block until one of the in-flight activities completes
+			if lastActivityErr != nil {
+				return lastActivityErr
+			}
 		}
 
 		futures = append(futures, replicationTaskFuture)

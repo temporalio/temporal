@@ -43,23 +43,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	SourceTaskConvertorImpl struct {
-		historyEngine           shard.Engine
-		namespaceCache          namespace.Registry
-		clientClusterShardCount int32
-		clientClusterName       string
-		clientShardKey          ClusterShardKey
-	}
-	SourceTaskConvertor interface {
-		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
-	}
 	StreamSender interface {
 		IsValid() bool
 		Key() ClusterShardKeyPair
@@ -69,7 +58,7 @@ type (
 		server        historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext  shard.Context
 		historyEngine shard.Engine
-		taskConvertor SourceTaskConvertor
+		taskConverter SourceTaskConverter
 		metrics       metrics.Handler
 		logger        log.Logger
 
@@ -84,7 +73,7 @@ func NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
 	historyEngine shard.Engine,
-	taskConvertor SourceTaskConvertor,
+	taskConverter SourceTaskConverter,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamSenderImpl {
@@ -92,7 +81,7 @@ func NewStreamSender(
 		server:        server,
 		shardContext:  shardContext,
 		historyEngine: historyEngine,
-		taskConvertor: taskConvertor,
+		taskConverter: taskConverter,
 		metrics:       shardContext.GetMetricsHandler(),
 		logger:        shardContext.GetLogger(),
 
@@ -334,7 +323,7 @@ Loop:
 		if err != nil {
 			return err
 		}
-		task, err := s.taskConvertor.Convert(item)
+		task, err := s.taskConverter.Convert(item)
 		if err != nil {
 			return err
 		}
@@ -368,54 +357,4 @@ Loop:
 			},
 		},
 	})
-}
-
-func NewSourceTaskConvertor(
-	historyEngine shard.Engine,
-	namespaceCache namespace.Registry,
-	clientClusterShardCount int32,
-	clientClusterName string,
-	clientShardKey ClusterShardKey,
-) *SourceTaskConvertorImpl {
-	return &SourceTaskConvertorImpl{
-		historyEngine:           historyEngine,
-		namespaceCache:          namespaceCache,
-		clientClusterShardCount: clientClusterShardCount,
-		clientClusterName:       clientClusterName,
-		clientShardKey:          clientShardKey,
-	}
-}
-
-func (c *SourceTaskConvertorImpl) Convert(
-	task tasks.Task,
-) (*replicationspb.ReplicationTask, error) {
-	if namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
-		namespace.ID(task.GetNamespaceID()),
-	); err == nil {
-		shouldProcessTask := false
-	FilterLoop:
-		for _, targetCluster := range namespaceEntry.ClusterNames() {
-			if c.clientClusterName == targetCluster {
-				shouldProcessTask = true
-				break FilterLoop
-			}
-		}
-		if !shouldProcessTask {
-			return nil, nil
-		}
-	}
-	// if there is error, then blindly send the task, better safe than sorry
-
-	clientShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), c.clientClusterShardCount)
-	if clientShardID != c.clientShardKey.ShardID {
-		return nil, nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	defer cancel()
-	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-	return replicationTask, nil
 }
