@@ -491,10 +491,6 @@ const (
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
-	// EventsCacheInitialSize is initial size of events cache
-	EventsCacheInitialSize = "history.eventsCacheInitialSize"
-	// EventsCacheMaxSize is max size of events cache
-	EventsCacheMaxSize = "history.eventsCacheMaxSize"
 	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
 	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
 	// EventsCacheMaxSizeBytes is max size of events cache in bytes
