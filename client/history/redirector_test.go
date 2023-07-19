@@ -48,7 +48,7 @@ type (
 		*require.Assertions
 
 		controller  *gomock.Controller
-		connections *Mockconnections
+		connections *MockconnectionPool
 		resolver    *membership.MockServiceResolver
 	}
 )
@@ -62,7 +62,7 @@ func (s *basicRedirectorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.connections = NewMockconnections(s.controller)
+	s.connections = NewMockconnectionPool(s.controller)
 	s.resolver = membership.NewMockServiceResolver(s.controller)
 }
 

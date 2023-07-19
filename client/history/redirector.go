@@ -48,7 +48,7 @@ type (
 	clientOperation func(ctx context.Context, client historyservice.HistoryServiceClient) error
 
 	basicRedirector struct {
-		connections            connections
+		connections            connectionPool
 		historyServiceResolver membership.ServiceResolver
 	}
 )
@@ -62,7 +62,7 @@ func shardLookup(resolver membership.ServiceResolver, shardID int32) (rpcAddress
 }
 
 func newBasicRedirector(
-	connections connections,
+	connections connectionPool,
 	historyServiceResolver membership.ServiceResolver,
 ) *basicRedirector {
 	return &basicRedirector{

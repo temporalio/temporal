@@ -54,7 +54,7 @@ const (
 )
 
 type clientImpl struct {
-	connections     connections
+	connections     connectionPool
 	logger          log.Logger
 	numberOfShards  int32
 	redirector      redirector
@@ -70,7 +70,7 @@ func NewClient(
 	rpcFactory common.RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := newConnections(historyServiceResolver, rpcFactory)
+	connections := newConnectionPool(historyServiceResolver, rpcFactory)
 	return &clientImpl{
 		connections:     connections,
 		logger:          logger,

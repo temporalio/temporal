@@ -44,7 +44,7 @@ type (
 
 	rpcAddress string
 
-	connectionsImpl struct {
+	connectionPoolImpl struct {
 		mu struct {
 			sync.RWMutex
 			conns map[rpcAddress]clientConnection
@@ -54,17 +54,17 @@ type (
 		rpcFactory             common.RPCFactory
 	}
 
-	connections interface {
+	connectionPool interface {
 		getOrCreateClientConn(addr rpcAddress) clientConnection
 		getAllClientConns() []clientConnection
 	}
 )
 
-func newConnections(
+func newConnectionPool(
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory common.RPCFactory,
-) *connectionsImpl {
-	c := &connectionsImpl{
+) *connectionPoolImpl {
+	c := &connectionPoolImpl{
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
 	}
@@ -72,7 +72,7 @@ func newConnections(
 	return c
 }
 
-func (c *connectionsImpl) getOrCreateClientConn(addr rpcAddress) clientConnection {
+func (c *connectionPoolImpl) getOrCreateClientConn(addr rpcAddress) clientConnection {
 	c.mu.RLock()
 	cc, ok := c.mu.conns[addr]
 	c.mu.RUnlock()
@@ -97,7 +97,7 @@ func (c *connectionsImpl) getOrCreateClientConn(addr rpcAddress) clientConnectio
 	return cc
 }
 
-func (c *connectionsImpl) getAllClientConns() []clientConnection {
+func (c *connectionPoolImpl) getAllClientConns() []clientConnection {
 	hostInfos := c.historyServiceResolver.Members()
 
 	var clientConns []clientConnection

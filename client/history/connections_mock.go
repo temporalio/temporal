@@ -34,31 +34,31 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// Mockconnections is a mock of connections interface.
-type Mockconnections struct {
+// MockconnectionPool is a mock of connectionPool interface.
+type MockconnectionPool struct {
 	ctrl     *gomock.Controller
-	recorder *MockconnectionsMockRecorder
+	recorder *MockconnectionPoolMockRecorder
 }
 
-// MockconnectionsMockRecorder is the mock recorder for Mockconnections.
-type MockconnectionsMockRecorder struct {
-	mock *Mockconnections
+// MockconnectionPoolMockRecorder is the mock recorder for MockconnectionPool.
+type MockconnectionPoolMockRecorder struct {
+	mock *MockconnectionPool
 }
 
-// NewMockconnections creates a new mock instance.
-func NewMockconnections(ctrl *gomock.Controller) *Mockconnections {
-	mock := &Mockconnections{ctrl: ctrl}
-	mock.recorder = &MockconnectionsMockRecorder{mock}
+// NewMockconnectionPool creates a new mock instance.
+func NewMockconnectionPool(ctrl *gomock.Controller) *MockconnectionPool {
+	mock := &MockconnectionPool{ctrl: ctrl}
+	mock.recorder = &MockconnectionPoolMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *Mockconnections) EXPECT() *MockconnectionsMockRecorder {
+func (m *MockconnectionPool) EXPECT() *MockconnectionPoolMockRecorder {
 	return m.recorder
 }
 
 // getAllClientConns mocks base method.
-func (m *Mockconnections) getAllClientConns() []clientConnection {
+func (m *MockconnectionPool) getAllClientConns() []clientConnection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getAllClientConns")
 	ret0, _ := ret[0].([]clientConnection)
@@ -66,13 +66,13 @@ func (m *Mockconnections) getAllClientConns() []clientConnection {
 }
 
 // getAllClientConns indicates an expected call of getAllClientConns.
-func (mr *MockconnectionsMockRecorder) getAllClientConns() *gomock.Call {
+func (mr *MockconnectionPoolMockRecorder) getAllClientConns() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAllClientConns", reflect.TypeOf((*Mockconnections)(nil).getAllClientConns))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAllClientConns", reflect.TypeOf((*MockconnectionPool)(nil).getAllClientConns))
 }
 
 // getOrCreateClientConn mocks base method.
-func (m *Mockconnections) getOrCreateClientConn(addr rpcAddress) clientConnection {
+func (m *MockconnectionPool) getOrCreateClientConn(addr rpcAddress) clientConnection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getOrCreateClientConn", addr)
 	ret0, _ := ret[0].(clientConnection)
@@ -80,7 +80,7 @@ func (m *Mockconnections) getOrCreateClientConn(addr rpcAddress) clientConnectio
 }
 
 // getOrCreateClientConn indicates an expected call of getOrCreateClientConn.
-func (mr *MockconnectionsMockRecorder) getOrCreateClientConn(addr interface{}) *gomock.Call {
+func (mr *MockconnectionPoolMockRecorder) getOrCreateClientConn(addr interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getOrCreateClientConn", reflect.TypeOf((*Mockconnections)(nil).getOrCreateClientConn), addr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getOrCreateClientConn", reflect.TypeOf((*MockconnectionPool)(nil).getOrCreateClientConn), addr)
 }
