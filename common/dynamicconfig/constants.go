@@ -495,6 +495,10 @@ const (
 	EventsCacheInitialSize = "history.eventsCacheInitialSize"
 	// EventsCacheMaxSize is max size of events cache
 	EventsCacheMaxSize = "history.eventsCacheMaxSize"
+	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
+	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
+	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
 	// AcquireShardInterval is interval that timer used to acquire shard

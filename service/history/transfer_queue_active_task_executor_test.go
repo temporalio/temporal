@@ -175,8 +175,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSize(),
-		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
+		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
 		false,
