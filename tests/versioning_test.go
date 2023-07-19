@@ -1539,15 +1539,21 @@ func (s *versioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
 }
 
 func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
+	// force one partition so that we can unload the task queue
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
-	dc := s.testCluster.host.dcClient
-	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 
 	s.unloadTaskQueue(ctx, tq)
 
