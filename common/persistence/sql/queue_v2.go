@@ -143,21 +143,21 @@ func (q *sqlQueueV2) ListQueues(
 	ctx context.Context,
 	request persistence.InternalListQueuesRequest,
 ) (*persistence.InternalListQueuesResponse, error) {
-	var minMessageID int64
+	var pageOffset int64
 	var numRows int64
 	var queueNames []string
 	if len(request.NextPageToken) != 0 {
-		lastReadMessageID, err := deserializePageToken(request.NextPageToken)
+		lastRow, err := deserializePageToken(request.NextPageToken)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken))
 		}
-		minMessageID = lastReadMessageID
+		pageOffset = lastRow
 	}
 	err := q.txExecute(ctx, "EnqueueMessage", func(tx sqlplugin.Tx) error {
 		rows, err := tx.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
-			QueueType:    request.QueueType,
-			PageSize:     request.PageSize,
-			MinMessageID: minMessageID,
+			QueueType:  request.QueueType,
+			PageSize:   request.PageSize,
+			PageOffset: pageOffset,
 		},
 		)
 		switch err {
@@ -178,7 +178,7 @@ func (q *sqlQueueV2) ListQueues(
 	}
 	return &persistence.InternalListQueuesResponse{
 		QueueNames:    queueNames,
-		NextPageToken: serializePageToken(int64(minMessageID + numRows)),
+		NextPageToken: serializePageToken(int64(pageOffset + numRows)),
 	}, nil
 
 }
@@ -191,8 +191,10 @@ func (q *sqlQueueV2) RangeDeleteMessages(
 	if err != nil {
 		return nil, err
 	}
-	_, err = q.Db.RangeDeleteFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesRangeFilter{
+	_, err = q.Db.RangeDeleteFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
 		QueueType:    request.QueueType,
+		QueueName:    request.QueueName,
+		Partition:    EmptyPartition,
 		MinMessageID: ackLevel,
 		MaxMessageID: request.InclusiveMaxMessageMetadata.ID,
 	})
@@ -222,8 +224,10 @@ func (q *sqlQueueV2) ReadMessages(
 		minMessageID = ackLevel
 	}
 
-	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesRangeFilter{
+	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
 		QueueType:    request.QueueType,
+		QueueName:    request.QueueName,
+		Partition:    EmptyPartition,
 		MinMessageID: minMessageID,
 		PageSize:     request.PageSize,
 	})

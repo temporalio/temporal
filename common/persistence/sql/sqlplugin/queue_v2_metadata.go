@@ -47,9 +47,9 @@ type (
 	}
 
 	QueueV2MetadataTypeFilter struct {
-		QueueType    persistence.QueueV2Type
-		PageSize     int
-		MinMessageID int64
+		QueueType  persistence.QueueV2Type
+		PageSize   int
+		PageOffset int64
 	}
 
 	QueueV2Metadata interface {

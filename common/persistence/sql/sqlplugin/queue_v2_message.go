@@ -42,22 +42,14 @@ type (
 		MessageEncoding string
 	}
 
-	// QueueMessagesFilter
-	QueueV2MessagesFilter struct {
-		QueueType persistence.QueueV2Type
-		QueueName string
-		Partition int64
-		MessageID int64
-	}
-
 	// QueueMessagesRangeFilter
-	QueueV2MessagesRangeFilter struct {
+	QueueV2MessagesFilter struct {
 		QueueType    persistence.QueueV2Type
 		QueueName    string
 		Partition    int64
 		MinMessageID int64
-		MaxMessageID int64
-		PageSize     int
+		MaxMessageID int64 // used for RangeDelete
+		PageSize     int   // used for RangeSelect
 	}
 
 	QueueV2Filter struct {
@@ -68,9 +60,8 @@ type (
 
 	QueueV2Message interface {
 		InsertIntoQueueV2Messages(ctx context.Context, row []QueueV2MessageRow) (sql.Result, error)
-		SelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) ([]QueueMessageRow, error)
-		RangeSelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesRangeFilter) ([]QueueMessageRow, error)
-		RangeDeleteFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesRangeFilter) (sql.Result, error)
+		RangeSelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) ([]QueueV2MessageRow, error)
+		RangeDeleteFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) (sql.Result, error)
 
 		GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter QueueV2Filter) (int64, error)
 	}
