@@ -58,7 +58,7 @@ type (
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext  *shard.MockContext
 		historyEngine *shard.MockEngine
-		taskConvertor *MockSourceTaskConvertor
+		taskConverter *MockSourceTaskConverter
 
 		clientShardKey ClusterShardKey
 		serverShardKey ClusterShardKey
@@ -87,7 +87,7 @@ func (s *streamSenderSuite) SetupTest() {
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
 	s.shardContext = shard.NewMockContext(s.controller)
 	s.historyEngine = shard.NewMockEngine(s.controller)
-	s.taskConvertor = NewMockSourceTaskConvertor(s.controller)
+	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), rand.Int31())
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), rand.Int31())
@@ -99,7 +99,7 @@ func (s *streamSenderSuite) SetupTest() {
 		s.server,
 		s.shardContext,
 		s.historyEngine,
-		s.taskConvertor,
+		s.taskConverter,
 		s.clientShardKey,
 		s.serverShardKey,
 	)
@@ -375,9 +375,9 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConvertor.EXPECT().Convert(item0).Return(task0, nil)
-	s.taskConvertor.EXPECT().Convert(item1).Return(nil, nil)
-	s.taskConvertor.EXPECT().Convert(item2).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1).Return(nil, nil)
+	s.taskConverter.EXPECT().Convert(item2).Return(task2, nil)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
