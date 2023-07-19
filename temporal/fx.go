@@ -587,6 +587,7 @@ func ApplyClusterMetadataConfigProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	metricsHandler metrics.Handler,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
@@ -598,7 +599,7 @@ func ApplyClusterMetadataConfigProvider(
 		&svc.Persistence,
 		customDataStoreFactory,
 		logger,
-		metrics.NoopMetricsHandler,
+		metricsHandler,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -607,7 +608,7 @@ func ApplyClusterMetadataConfigProvider(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
-		MetricsHandler:             nil,
+		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
 	})
 	defer factory.Close()

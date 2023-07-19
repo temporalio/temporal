@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -96,6 +97,7 @@ func (s *ServerImpl) Start(ctx context.Context) error {
 		s.persistenceFactoryProvider,
 		s.logger,
 		s.so.customDataStoreFactory,
+		s.so.metricHandler,
 	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -165,6 +167,7 @@ func initSystemNamespaces(
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	metricsHandler metrics.Handler,
 ) error {
 	clusterName := persistenceClient.ClusterName(currentClusterName)
 	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
@@ -182,7 +185,7 @@ func initSystemNamespaces(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
-		MetricsHandler:             nil,
+		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
 	})
 	defer factory.Close()
