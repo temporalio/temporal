@@ -38,14 +38,12 @@ type (
 )
 
 // CalculateEffectiveResourceLimit returns the effective resource limit for a host given the per instance and per
-// cluster limits. If the per cluster limit is not set, the per instance limit is returned. If the per cluster limit
-// is set, the per instance limit is ignored. The effective limit is calculated by dividing the per cluster limit by
-// the number of hosts in the cluster. If the number of hosts is not available, it is assumed to be 1. The "resource"
-// here could be requests per second, total number of active requests, etc.
+// cluster limits. The "resource" here could be requests per second, total number of active requests, etc. The
+// cluster-wide limit is used if and only if it is configured to a value greater than zero and the number of instances
+// that membership reports is greater than zero. Otherwise, the per-instance limit is used.
 func CalculateEffectiveResourceLimit(instanceCounter InstanceCounter, limits Limits) float64 {
-	// TODO: Determine if we can remove the nil check here.
 	if clusterLimit := limits.ClusterLimit; clusterLimit > 0 && instanceCounter != nil {
-		if clusterSize := instanceCounter.MemberCount(); clusterSize >= 1 {
+		if clusterSize := instanceCounter.MemberCount(); clusterSize > 0 {
 			return float64(clusterLimit) / float64(clusterSize)
 		}
 	}
