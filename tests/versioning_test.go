@@ -399,6 +399,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 }
 
 func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned() {
+	// force one partition so that we can unload the task queue
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
@@ -1481,13 +1482,11 @@ func (s *versioningIntegSuite) TestDisableUserData() {
 	// First insert some data (we'll try to read it below)
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
-	// unload so that we reload and pick up LoadUserData dynamic config
-	s.unloadTaskQueue(ctx, tq)
-
 	dc := s.testCluster.host.dcClient
 	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
 
+	// unload so that we reload and pick up LoadUserData dynamic config
 	s.unloadTaskQueue(ctx, tq)
 
 	// Verify update fails
