@@ -591,7 +591,7 @@ func ApplyClusterMetadataConfigProvider(
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
-
+	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
 	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
@@ -644,6 +644,7 @@ func ApplyClusterMetadataConfigProvider(
 			tag.ClusterName(clusterMetadata.CurrentClusterName))
 		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
 	}
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: clusterMetadata.CurrentClusterName},
