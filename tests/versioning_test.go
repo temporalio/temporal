@@ -1591,19 +1591,28 @@ func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 	s.Require().Equal(int32(1), runs.Load())
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_QueryTimesOut() {
+func (s *versioningIntegSuite) TestDisableUserData_QueryFails() {
+	// force one partition so that we can unload the task queue
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
 	var runs atomic.Int32
 	wf := func(ctx workflow.Context) error {
-		return workflow.SetQueryHandler(ctx, "query", func() (string, error) {
+		workflow.SetQueryHandler(ctx, "query", func() (string, error) {
 			runs.Add(1)
 			return "response", nil
 		})
+		return nil
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          v1,
@@ -1620,16 +1629,18 @@ func (s *versioningIntegSuite) TestDisableUserData_QueryTimesOut() {
 	}, "wf")
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
-	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	// wait for it to complete
+	s.NoError(run.Get(ctx, nil))
+
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 
 	s.unloadTaskQueue(ctx, tq)
 
 	_, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
-	var deadlineExceededError *serviceerror.DeadlineExceeded
-	s.Require().ErrorAs(err, &deadlineExceededError)
-	s.Require().Equal(int32(0), runs.Load())
+	var failedPrecond *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecond, err)
+	s.Equal(int32(0), runs.Load())
 }
 
 func (s *versioningIntegSuite) TestDescribeTaskQueue() {
