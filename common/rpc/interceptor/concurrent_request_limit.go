@@ -45,41 +45,46 @@ var (
 )
 
 type (
-	NamespaceCountLimitInterceptor struct {
+	// ConcurrentRequestLimitInterceptor intercepts requests to the server and enforces a limit on the number of
+	// requests that can be in-flight at any given time, according to the configured quotas.
+	ConcurrentRequestLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
-		instanceCounter   quotas.InstanceCounter
-
-		perInstanceCountLimit func(namespace string) int
-		globalCountLimit      func(namespace string) int
-		tokens                map[string]int
+		memberCounter     quotas.MemberCounter
+		limiter           quotas.ClusterAwareNamespaceSpecificQuotaCalculator
+		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
+		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
+		tokens map[string]int
 
 		sync.Mutex
 		activeTokensCount map[string]*int32
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*ConcurrentRequestLimitInterceptor)(nil).Intercept
 
-func NewNamespaceCountLimitInterceptor(
+func NewConcurrentRequestLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	instanceCounter quotas.InstanceCounter,
+	memberCounter quotas.MemberCounter,
 	perInstanceCountLimit, globalCountLimit func(ns string) int,
 	tokens map[string]int,
-) *NamespaceCountLimitInterceptor {
-	return &NamespaceCountLimitInterceptor{
-		namespaceRegistry:     namespaceRegistry,
-		logger:                logger,
-		instanceCounter:       instanceCounter,
-		perInstanceCountLimit: perInstanceCountLimit,
-		globalCountLimit:      globalCountLimit,
-		tokens:                tokens,
-		activeTokensCount:     make(map[string]*int32),
+) *ConcurrentRequestLimitInterceptor {
+	return &ConcurrentRequestLimitInterceptor{
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
+		memberCounter:     memberCounter,
+		limiter: quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    memberCounter,
+			PerInstanceQuota: perInstanceCountLimit,
+			GlobalQuota:      globalCountLimit,
+		},
+		tokens:            tokens,
+		activeTokensCount: make(map[string]*int32),
 	}
 }
 
-func (ni *NamespaceCountLimitInterceptor) Intercept(
+func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -117,18 +122,12 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func (ni *NamespaceCountLimitInterceptor) isWithinRequestLimit(nsName namespace.Name, count int32) bool {
-	limit := quotas.CalculateEffectiveResourceLimit(
-		ni.instanceCounter,
-		quotas.Limits{
-			ClusterLimit:  ni.globalCountLimit(nsName.String()),
-			InstanceLimit: ni.perInstanceCountLimit(nsName.String()),
-		},
-	)
+func (ni *ConcurrentRequestLimitInterceptor) isWithinRequestLimit(nsName namespace.Name, count int32) bool {
+	limit := ni.limiter.GetQuota(nsName.String())
 	return count <= int32(limit)
 }
 
-func (ni *NamespaceCountLimitInterceptor) counter(
+func (ni *ConcurrentRequestLimitInterceptor) counter(
 	namespace namespace.Name,
 	methodName string,
 ) *int32 {
@@ -145,7 +144,7 @@ func (ni *NamespaceCountLimitInterceptor) counter(
 	return counter
 }
 
-func (ni *NamespaceCountLimitInterceptor) getTokenKey(
+func (ni *ConcurrentRequestLimitInterceptor) getTokenKey(
 	namespace namespace.Name,
 	methodName string,
 ) string {

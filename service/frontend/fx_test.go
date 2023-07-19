@@ -49,6 +49,8 @@ type testCase struct {
 	globalRPSLimit int
 	// perInstanceRPSLimit is the RPS limit for each frontend host
 	perInstanceRPSLimit int
+	// operatorRPSRatio is the ratio of the global RPS limit that is reserved for operator requests
+	operatorRPSRatio float64
 	// expectRateLimit is true if the interceptor should return a rate limit error
 	expectRateLimit bool
 	// numRequests is the number of requests to send to the interceptor
@@ -74,6 +76,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 	numHosts := 10
 	lowGlobalRPSLimit := lowPerInstanceRPSLimit * numHosts
 	highGlobalRPSLimit := highPerInstanceRPSLimit * numHosts
+	operatorRPSRatio := 0.2
 
 	testCases := []testCase{
 		{
@@ -81,6 +84,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
 			},
 		},
@@ -89,6 +93,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
 			},
 		},
@@ -97,6 +102,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 			},
 		},
@@ -105,6 +111,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = highGlobalRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 			},
 		},
@@ -113,6 +120,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 			},
 		},
@@ -121,6 +129,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = lowPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
 			},
 		},
@@ -129,6 +138,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = 0
 				tc.perInstanceRPSLimit = 0
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = true
 			},
 		},
@@ -137,15 +147,17 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 				tc.serviceResolver = nil
 			},
 		},
 		{
-			name: "no hosts returned by service resolver causes global RPS limit to be ignored",
+			name: "no hosts causes global RPS limit to be ignored",
 			configure: func(tc *testCase) {
 				tc.globalRPSLimit = lowPerInstanceRPSLimit
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
 				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
@@ -184,6 +196,9 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				},
 				GlobalNamespaceReplicationInducingAPIsRPS: func() int {
 					return tc.globalRPSLimit
+				},
+				OperatorRPSRatio: func() float64 {
+					return tc.operatorRPSRatio
 				},
 			}, tc.serviceResolver)
 

@@ -210,7 +210,7 @@ func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 	env.AssertExpectations(t)
 }
 
-func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
+func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -246,6 +246,58 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 		Namespace:               "test-ns",
 		Query:                   "",
 		ConcurrentActivityCount: 2,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mock generate replication tasks error")
+	env.AssertExpectations(t)
+}
+
+func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	totalPageCount := 4
+	currentPageCount := 0
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		currentPageCount++
+		if currentPageCount < totalPageCount {
+			return &listWorkflowsResponse{
+				Executions:    []commonpb.WorkflowExecution{},
+				NextPageToken: []byte("fake-page-token"),
+			}, nil
+		}
+		// your mock function implementation
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+		}, nil
+	})
+
+	// Only expect GenerateReplicationTasks to execute once and workflow will then fail because of
+	// non-retryable error.
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError("mock generate replication tasks error", "", nil),
+	).Times(1)
+
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 1,
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,

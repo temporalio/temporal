@@ -137,7 +137,7 @@ func GrpcServerOptionsProvider(
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
-	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
+	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
@@ -289,24 +289,16 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := func() float64 {
-		return quotas.CalculateEffectiveResourceLimit(
-			frontendServiceResolver,
-			quotas.Limits{
-				InstanceLimit: serviceConfig.RPS(),
-				ClusterLimit:  serviceConfig.GlobalRPS(),
-			},
-		)
-	}
-	namespaceReplicationInducingRateFn := func() float64 {
-		return quotas.CalculateEffectiveResourceLimit(
-			frontendServiceResolver,
-			quotas.Limits{
-				InstanceLimit: serviceConfig.NamespaceReplicationInducingAPIsRPS(),
-				ClusterLimit:  serviceConfig.GlobalNamespaceReplicationInducingAPIsRPS(),
-			},
-		)
-	}
+	rateFn := quotas.ClusterAwareQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.RPS,
+		GlobalQuota:      serviceConfig.GlobalRPS,
+	}.GetQuota
+	namespaceReplicationInducingRateFn := quotas.ClusterAwareQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.NamespaceReplicationInducingAPIsRPS,
+		GlobalQuota:      serviceConfig.GlobalNamespaceReplicationInducingAPIsRPS,
+	}.GetQuota
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
@@ -314,6 +306,7 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
 	)
@@ -341,31 +334,21 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	rateFn := func(namespace string) float64 {
-		return namespaceRPS(
-			serviceConfig.MaxNamespaceRPSPerInstance,
-			globalNamespaceRPS,
-			frontendServiceResolver,
-			namespace,
-		)
-	}
-
-	visibilityRateFn := func(namespace string) float64 {
-		return namespaceRPS(
-			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-			globalNamespaceVisibilityRPS,
-			frontendServiceResolver,
-			namespace,
-		)
-	}
-	namespaceReplicationInducingRateFn := func(ns string) float64 {
-		return namespaceRPS(
-			serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
-			globalNamespaceNamespaceReplicationInducingAPIsRPS,
-			frontendServiceResolver,
-			ns,
-		)
-	}
+	rateFn := namespaceRPS(
+		frontendServiceResolver,
+		serviceConfig.MaxNamespaceRPSPerInstance,
+		globalNamespaceRPS,
+	)
+	visibilityRateFn := namespaceRPS(
+		frontendServiceResolver,
+		serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+		globalNamespaceVisibilityRPS,
+	)
+	namespaceReplicationInducingRateFn := namespaceRPS(
+		frontendServiceResolver,
+		serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+		globalNamespaceNamespaceReplicationInducingAPIsRPS,
+	)
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
@@ -373,6 +356,7 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				serviceConfig.OperatorRPSRatio,
 			)
 		},
 	)
@@ -384,13 +368,13 @@ func NamespaceCountLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	logger log.SnTaggedLogger,
 	serviceResolver membership.ServiceResolver,
-) *interceptor.NamespaceCountLimitInterceptor {
-	return interceptor.NewNamespaceCountLimitInterceptor(
+) *interceptor.ConcurrentRequestLimitInterceptor {
+	return interceptor.NewConcurrentRequestLimitInterceptor(
 		namespaceRegistry,
 		logger,
 		serviceResolver,
-		serviceConfig.MaxNamespaceCountPerInstance,
-		serviceConfig.GlobalMaxNamespaceCount,
+		serviceConfig.MaxConcurrentTaskQueuePollsPerInstance,
+		serviceConfig.GlobalMaxConcurrentTaskQueuePolls,
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
@@ -425,6 +409,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -448,6 +433,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,

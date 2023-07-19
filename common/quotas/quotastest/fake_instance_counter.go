@@ -22,57 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas_test
+package quotastest
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/quotas/quotastest"
-)
-
-func TestEffectiveResourceLimit(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 5.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
+// NewFakeMemberCounter returns a new fake quotas.MemberCounter that always returns numInstances.
+func NewFakeMemberCounter(numInstances int) memberCounter {
+	return memberCounter{numInstances: numInstances}
 }
 
-func TestEffectiveResourceLimit_NoPerClusterLimit(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  0,
-		},
-	))
+type memberCounter struct {
+	numInstances int
 }
 
-func TestEffectiveResourceLimit_NoHosts(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(0),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
-}
-
-func TestEffectiveResourceLimit_NilInstanceCounter(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(nil, quotas.Limits{
-		InstanceLimit: 10,
-		ClusterLimit:  20,
-	}))
+func (c memberCounter) MemberCount() int {
+	return c.numInstances
 }

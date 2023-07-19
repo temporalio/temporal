@@ -31,7 +31,7 @@ import (
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination reservation_mock.go
 
 type (
-	// Reservation holds information about events that are permitted by a Limiter to happen after a delay
+	// Reservation holds information about events that are permitted by a ClusterAwareQuotaCalculator to happen after a delay
 	Reservation interface {
 		// OK returns whether the limiter can provide the requested number of tokens
 		OK() bool

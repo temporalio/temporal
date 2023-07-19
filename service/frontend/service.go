@@ -72,12 +72,13 @@ type Config struct {
 	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                                          dynamicconfig.IntPropertyFn
 	GlobalRPS                                                    dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                                             dynamicconfig.FloatPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
 	GlobalNamespaceReplicationInducingAPIsRPS                    dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceCountPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalMaxNamespaceCount                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentTaskQueuePollsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalMaxConcurrentTaskQueuePolls                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -209,13 +210,14 @@ func NewConfig(
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
+		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 		GlobalNamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendGlobalNamespaceReplicationInducingAPIsRPS, 100),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
-		MaxNamespaceCountPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
-		GlobalMaxNamespaceCount:                                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxNamespaceCount, 0),
+		MaxConcurrentTaskQueuePollsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentTaskQueuePollsPerInstance, 1200),
+		GlobalMaxConcurrentTaskQueuePolls:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentTaskQueuePolls, 0),
 		MaxNamespaceVisibilityRPSPerInstance:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
@@ -398,16 +400,12 @@ func (s *Service) Stop() {
 	s.logger.Info("frontend stopped")
 }
 
-func namespaceRPS(
-	perInstanceRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	globalRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	frontendResolver membership.ServiceResolver,
-	namespace string,
-) float64 {
-	return quotas.CalculateEffectiveResourceLimit(frontendResolver, quotas.Limits{
-		InstanceLimit: perInstanceRPSFn(namespace),
-		ClusterLimit:  globalRPSFn(namespace),
-	})
+func namespaceRPS(frontendResolver membership.ServiceResolver, perInstanceRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter, globalRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter) func(ns string) float64 {
+	return quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		MemberCounter:    frontendResolver,
+		PerInstanceQuota: perInstanceRPSFn,
+		GlobalQuota:      globalRPSFn,
+	}.GetQuota
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

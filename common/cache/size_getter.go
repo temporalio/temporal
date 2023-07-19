@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,17 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotastest
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
 
-// NewFakeInstanceCounter returns a new fake quotas.InstanceCounter that always returns numInstances.
-func NewFakeInstanceCounter(numInstances int) instanceCounter {
-	return instanceCounter{numInstances: numInstances}
-}
+package cache
 
-type instanceCounter struct {
-	numInstances int
-}
+// SizeGetter is an interface that can be implemented by cache entries to provide their size
+type (
+	SizeGetter interface {
+		CacheSize() int
+	}
+)
 
-func (c instanceCounter) MemberCount() int {
-	return c.numInstances
+func getSize(value interface{}) int {
+	if v, ok := value.(SizeGetter); ok {
+		return v.CacheSize()
+	}
+	// if the object does not have a CacheSize() method, assume is count limit cache, which size should be 1
+	return 1
 }

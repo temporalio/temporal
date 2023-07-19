@@ -119,6 +119,9 @@ const (
 	// ShardPerNsRPSWarnPercent is the per-shard per-namespace RPS limit for warning as a percentage of ShardRPSWarnLimit
 	// these warning are not emitted if the value is set to 0 or less
 	ShardPerNsRPSWarnPercent = "system.shardPerNsRPSWarnPercent"
+	// OperatorRPSRatio is the percentage of the rate limit provided to priority rate limiters that should be used for
+	// operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20% if not specified)
+	OperatorRPSRatio = "system.operatorRPSRatio"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
@@ -253,10 +256,12 @@ const (
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
-	// FrontendMaxNamespaceCountPerInstance limits concurrent task queue polls per namespace per instance
-	FrontendMaxNamespaceCountPerInstance = "frontend.namespaceCount"
-	// FrontendGlobalMaxNamespaceCount limits concurrent task queue polls per namespace per cluster
-	FrontendGlobalMaxNamespaceCount = "frontend.globalNamespaceCount"
+	// FrontendMaxConcurrentTaskQueuePollsPerInstance limits concurrent task queue polls per namespace, per-instance.
+	// The name `frontend.namespaceCount` is kept for backwards compatibility.
+	FrontendMaxConcurrentTaskQueuePollsPerInstance = "frontend.namespaceCount"
+	// FrontendGlobalMaxConcurrentTaskQueuePolls limits concurrent task queue polls per namespace for the whole
+	// cluster. The name `frontend.globalNamespaceCount` is kept for consistency with the per-instance limit name.
+	FrontendGlobalMaxConcurrentTaskQueuePolls = "frontend.globalNamespaceCount"
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"
@@ -486,15 +491,18 @@ const (
 	HistoryCacheMaxSize = "history.cacheMaxSize"
 	// HistoryCacheTTL is TTL of history cache
 	HistoryCacheTTL = "history.cacheTTL"
+	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
+	// will wait on workflow lock acquisition. Requires service restart to take effect.
+	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
-	// EventsCacheInitialSize is initial size of events cache
-	EventsCacheInitialSize = "history.eventsCacheInitialSize"
-	// EventsCacheMaxSize is max size of events cache
-	EventsCacheMaxSize = "history.eventsCacheMaxSize"
+	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
+	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
+	// EventsCacheMaxSizeBytes is max size of events cache in bytes
+	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
 	// AcquireShardInterval is interval that timer used to acquire shard

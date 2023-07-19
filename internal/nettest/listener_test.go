@@ -27,6 +27,7 @@ package nettest
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 )
@@ -37,7 +38,6 @@ func ExampleListener() {
 	server := http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("hello"))
-			w.WriteHeader(200)
 		}),
 	}
 	go func() {
@@ -54,8 +54,7 @@ func ExampleListener() {
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	var buf [5]byte
-	_, _ = resp.Body.Read(buf[:])
+	buf, _ := io.ReadAll(resp.Body)
 	_ = server.Close()
 	fmt.Println(string(buf[:]))
 	// Output: hello
