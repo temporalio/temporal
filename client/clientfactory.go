@@ -125,13 +125,13 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return nil, err
 	}
 
-	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
-		return historyservice.NewHistoryServiceClient(connection), nil
-	}
-	clientCache := common.NewClientCache(keyResolver, clientProvider)
-	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
+	client := history.NewClient(
+		resolver,
+		cf.logger,
+		cf.numberOfHistoryShards,
+		cf.rpcFactory,
+		timeout,
+	)
 	if cf.metricsHandler != nil {
 		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}

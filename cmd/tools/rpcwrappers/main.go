@@ -152,17 +152,17 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 	if path := pathToField(t, "ShardId", "request", 1); path != "" {
-		return fmt.Sprintf("client, err := c.getClientForShardID(%s)", path)
+		return fmt.Sprintf("shardID := %s", path)
 	}
 	if path := pathToField(t, "WorkflowId", "request", 4); path != "" {
-		return fmt.Sprintf("client, err := c.getClientForWorkflowID(request.NamespaceId, %s)", path)
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", path)
 	}
 	if path := pathToField(t, "TaskToken", "request", 2); path != "" {
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 `, path)
 	}
 	// slice needs a tiny bit of extra handling for namespace
@@ -171,7 +171,7 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	if len(%s) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path, path)
+	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path, path)
 	}
 	panic("I don't know how to get a client from a " + t.String())
 }
@@ -311,9 +311,6 @@ func (c *clientImpl) {{.Method}}(
 	opts ...grpc.CallOption,
 ) ({{.ResponseType}}, error) {
 	{{.GetClient}}
-	if err != nil {
-		return nil, err
-	}
 	var response {{.ResponseType}}
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -322,8 +319,7 @@ func (c *clientImpl) {{.Method}}(
 		response, err = client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
-	err = c.executeWithRedirect(ctx, client, op)
-	if err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
