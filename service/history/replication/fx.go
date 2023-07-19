@@ -38,10 +38,12 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var Module = fx.Options(
 	fx.Provide(ReplicationTaskFetcherFactoryProvider),
+	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
@@ -61,6 +63,17 @@ func ReplicationTaskFetcherFactoryProvider(
 		clusterMetadata,
 		clientBean,
 	)
+}
+
+func ReplicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConverter {
+		return NewSourceTaskConverter(
+			historyEngine,
+			shardContext.GetNamespaceRegistry(),
+			clientClusterShardCount,
+			clientClusterName,
+			clientShardKey)
+	}
 }
 
 func ReplicationTaskExecutorProvider() TaskExecutorProvider {

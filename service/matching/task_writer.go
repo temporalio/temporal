@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -76,10 +77,13 @@ type (
 	}
 )
 
-// errShutdown indicates that the task queue is shutting down
-var errShutdown = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
+var (
+	// errShutdown indicates that the task queue is shutting down
+	errShutdown            = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
+	errNonContiguousBlocks = errors.New("previous block end is not equal to current block")
 
-var noTaskIDs = taskIDBlock{start: 1, end: 0}
+	noTaskIDs = taskIDBlock{start: 1, end: 0}
+)
 
 func newTaskWriter(
 	tlMgr *taskQueueManagerImpl,
@@ -310,7 +314,12 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
 		return taskIDBlock{},
-			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
+			fmt.Errorf(
+				"%w: allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v",
+				errNonContiguousBlocks,
+				prevBlockEnd,
+				currBlock,
+			)
 	}
 	state, err := w.renewLeaseWithRetry(ctx, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {

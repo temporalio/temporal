@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
@@ -159,9 +158,6 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 ) (_ *operatorservice.AddSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, startTime := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
-	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
-
 	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
@@ -192,6 +188,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	// `skip-schema-update` is set. This is for backward compatibility using
 	// standard visibility.
 	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
+		scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorAddSearchAttributesScope))
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 		if err != nil {
 			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
@@ -548,9 +545,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 ) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, startTime := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
-	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
-
 	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
@@ -586,6 +580,8 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
+	scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorDeleteNamespaceScope))
+
 	// Wait for workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
@@ -607,8 +603,6 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, startTime := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
-	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -619,7 +613,6 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
 			errUnableConnectRemoteClusterMessage,
 			request.GetFrontendAddress(),
@@ -629,7 +622,6 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 
 	err = h.validateRemoteClusterMetadata(resp)
 	if err != nil {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidRemoteClusterInfo, err))
 	}
 
@@ -644,7 +636,6 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 
@@ -658,15 +649,14 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
 	})
 	if err != nil {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	if !applied {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
@@ -677,8 +667,6 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
-	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	var isClusterNameExist bool
 	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
@@ -695,7 +683,6 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToDeleteClusterInfo, err))
 	}
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
@@ -706,8 +693,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	scope, startTime := h.startRequestProfile(metrics.OperatorListClustersScope)
-	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -721,7 +706,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 		NextPageToken: request.GetNextPageToken(),
 	})
 	if err != nil {
-		scope.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		return nil, err
 	}
 
@@ -776,11 +760,4 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		}
 	}
 	return nil
-}
-
-// startRequestProfile initiates recording of request metrics
-func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.Handler, time.Time) {
-	metricsScope := h.metricsHandler.WithTags(metrics.OperationTag(operation))
-	metricsScope.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
-	return metricsScope, time.Now().UTC()
 }

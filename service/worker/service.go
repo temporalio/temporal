@@ -27,15 +27,14 @@ package worker
 import (
 	"context"
 	"math/rand"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
@@ -72,6 +71,7 @@ type (
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
+		membershipMonitor      membership.Monitor
 		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
@@ -88,8 +88,6 @@ type (
 
 		metricsHandler metrics.Handler
 
-		status           int32
-		stopC            chan struct{}
 		sdkClientFactory sdk.ClientFactory
 		esClient         esclient.Client
 		config           *Config
@@ -112,6 +110,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
+		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
 		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -158,11 +157,9 @@ func NewService(
 	}
 
 	s := &Service{
-		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
 		esClient:                  esClient,
-		stopC:                     make(chan struct{}),
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
@@ -172,6 +169,7 @@ func NewService(
 		executionManager:          executionManager,
 		persistenceBean:           persistenceBean,
 		workerServiceResolver:     workerServiceResolver,
+		membershipMonitor:         membershipMonitor,
 		hostInfo:                  hostInfoProvider.HostInfo(),
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
@@ -366,6 +364,7 @@ func NewConfig(
 			true,
 		),
 		PersistenceDynamicRateLimitingParams: dc.GetMapProperty(dynamicconfig.WorkerPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
+		OperatorRPSRatio:                     dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 
 		VisibilityPersistenceMaxReadQPS:   visibility.GetVisibilityPersistenceMaxReadQPS(dc, enableReadFromES),
 		VisibilityPersistenceMaxWriteQPS:  visibility.GetVisibilityPersistenceMaxWriteQPS(dc, enableReadFromES),
@@ -378,14 +377,6 @@ func NewConfig(
 
 // Start is called to start the service
 func (s *Service) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
 	s.logger.Info(
 		"worker starting",
 		tag.ComponentWorker,
@@ -399,6 +390,8 @@ func (s *Service) Start() {
 	// The service is now started up
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
+
+	s.membershipMonitor.Start()
 
 	s.ensureSystemNamespaceExists(context.TODO())
 	s.startScanner()
@@ -428,21 +421,10 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 		tag.Address(s.hostInfo.GetAddress()),
 	)
-	<-s.stopC
 }
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	close(s.stopC)
-
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()

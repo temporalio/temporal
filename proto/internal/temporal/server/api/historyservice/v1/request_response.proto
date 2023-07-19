@@ -176,6 +176,7 @@ message RecordWorkflowTaskStartedResponse {
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
+    int64 version = 17;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -198,6 +199,7 @@ message RecordActivityTaskStartedResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
     temporal.server.api.clock.v1.VectorClock clock = 8;
+    int64 version = 9;
 }
 
 message RespondWorkflowTaskCompletedRequest {

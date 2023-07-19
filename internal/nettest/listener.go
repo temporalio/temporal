@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,24 +22,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package flusher
+package nettest
 
-import (
-	"go.temporal.io/server/common/future"
-)
+import "net"
 
-type (
-	Writer[T any] interface {
-		Write(items []T) error
+// NewListener returns a net.Listener which uses the given Pipe to simulate a network connection.
+func NewListener(pipe *Pipe) *PipeListener {
+	return &PipeListener{
+		Pipe: pipe,
+		done: make(chan struct{}),
 	}
+}
 
-	Flusher[T any] interface {
-		Buffer(item T) future.Future[struct{}]
-		Flush()
-	}
+// PipeListener is a net.Listener which uses a Pipe to simulate a network connection.
+type PipeListener struct {
+	*Pipe
+	// We cancel calls to Accept using the done channel so that tests don't hang if they're broken.
+	done chan struct{}
+}
 
-	FlushItem[T any] struct {
-		Item   T
-		Future *future.FutureImpl[struct{}]
-	}
-)
+var _ net.Listener = (*PipeListener)(nil)
+
+func (t *PipeListener) Accept() (net.Conn, error) {
+	return t.Pipe.Accept(t.done)
+}
+
+func (t *PipeListener) Close() error {
+	close(t.done)
+	return nil
+}
+
+func (t *PipeListener) Addr() net.Addr {
+	return &net.TCPAddr{}
+}

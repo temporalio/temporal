@@ -112,11 +112,11 @@ func (v *taskValidatorImpl) preValidate(
 			}
 		}
 		return false
-	} else {
-		// this task has been validated before
-		if time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
-			return true
-		}
+	}
+
+	// this task has been validated before
+	if time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
+		return true
 	}
 	return false
 }

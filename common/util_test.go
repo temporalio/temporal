@@ -270,9 +270,8 @@ func Test_FromConfigToRetryPolicy(t *testing.T) {
 }
 
 func TestIsContextDeadlineExceededErr(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
 	defer cancel()
-	time.Sleep(10 * time.Millisecond)
 	require.True(t, IsContextDeadlineExceededErr(ctx.Err()))
 	require.True(t, IsContextDeadlineExceededErr(serviceerror.NewDeadlineExceeded("something")))
 

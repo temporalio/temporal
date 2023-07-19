@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"net"
 
 	"go.uber.org/fx"
@@ -199,7 +198,7 @@ func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{},
 	)
 }
@@ -226,6 +225,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -250,6 +250,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
@@ -289,26 +290,6 @@ func ArchivalClientProvider(
 	)
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc *Service, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
-	)
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

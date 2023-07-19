@@ -51,13 +51,18 @@ type (
 	}
 
 	ForceReplicationParams struct {
-		Namespace               string
-		Query                   string // query to list workflows for replication
+		Namespace               string `validate:"required"`
+		Query                   string `validate:"required"` // query to list workflows for replication
 		ConcurrentActivityCount int
 		OverallRps              float64 // RPS for enqueuing of replication tasks
 		ListWorkflowsPageSize   int     // PageSize of ListWorkflow, will paginate through results.
 		PageCountPerExecution   int     // number of pages to be processed before continue as new, max is 1000.
 		NextPageToken           []byte  // used by continue as new
+
+		// Used for verifying workflow executions were replicated successfully on target cluster.
+		EnableVerification      bool
+		TargetClusterEndpoint   string `validate:"required"`
+		VerifyIntervalInSeconds int    `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
 		LastCloseTime                      time.Time
@@ -97,6 +102,15 @@ type (
 		RPS         float64
 	}
 
+	genearteAndVerifyReplicationTasksRequest struct {
+		Namespace             string
+		NamespaceID           string
+		RPS                   float64
+		TargetClusterEndpoint string
+		VerifyInterval        time.Duration `validate:"gte=0"`
+		Executions            []commonpb.WorkflowExecution
+	}
+
 	metadataRequest struct {
 		Namespace string
 	}
@@ -115,9 +129,17 @@ var (
 )
 
 const (
+	forceReplicationWorkflowName               = "force-replication"
 	forceReplicationStatusQueryType            = "force-replication-status"
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
+
+	defaultListWorkflowsPageSize                   = 100
+	defaultPageCountPerExecution                   = 200
+	maxPageCountPerExecution                       = 1000
+	defaultPageSizeForTaskQueueUserDataReplication = 20
+	defaultRPSForTaskQueueUserDataReplication      = 1.0
+	defaultVerifyIntervalInSeconds                 = 5
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
@@ -252,20 +274,29 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
+
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
 	}
+
 	if params.OverallRps <= 0 {
 		params.OverallRps = float64(params.ConcurrentActivityCount)
 	}
+
 	if params.ListWorkflowsPageSize <= 0 {
 		params.ListWorkflowsPageSize = defaultListWorkflowsPageSize
 	}
+
 	if params.PageCountPerExecution <= 0 {
 		params.PageCountPerExecution = defaultPageCountPerExecution
 	}
+
 	if params.PageCountPerExecution > maxPageCountPerExecution {
 		params.PageCountPerExecution = maxPageCountPerExecution
+	}
+
+	if params.VerifyIntervalInSeconds <= 0 {
+		params.VerifyIntervalInSeconds = defaultVerifyIntervalInSeconds
 	}
 
 	return nil
@@ -340,21 +371,41 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	var a *activities
 	var futures []workflow.Future
 	var workflowExecutions []commonpb.WorkflowExecution
+	var lastActivityErr error
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
-		replicationTaskFuture := workflow.ExecuteActivity(actx, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
-			NamespaceID: namespaceID,
-			Executions:  workflowExecutions,
-			RPS:         params.OverallRps / float64(params.ConcurrentActivityCount),
-		})
+		var replicationTaskFuture workflow.Future
+		if params.EnableVerification {
+			replicationTaskFuture = workflow.ExecuteActivity(actx, a.GenerateAndVerifyReplicationTasks, &genearteAndVerifyReplicationTasksRequest{
+				TargetClusterEndpoint: params.TargetClusterEndpoint,
+				Namespace:             params.Namespace,
+				NamespaceID:           namespaceID,
+				Executions:            workflowExecutions,
+				RPS:                   params.OverallRps / float64(params.ConcurrentActivityCount),
+				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+			})
+		} else {
+			replicationTaskFuture = workflow.ExecuteActivity(actx, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
+				NamespaceID: namespaceID,
+				Executions:  workflowExecutions,
+				RPS:         params.OverallRps / float64(params.ConcurrentActivityCount),
+			})
+		}
 
 		pendingActivities++
 		selector.AddFuture(replicationTaskFuture, func(f workflow.Future) {
 			pendingActivities--
+
+			if err := f.Get(ctx, nil); err != nil {
+				lastActivityErr = err
+			}
 		})
 
-		if pendingActivities == params.ConcurrentActivityCount {
+		if pendingActivities >= params.ConcurrentActivityCount {
 			selector.Select(ctx) // this will block until one of the in-flight activities completes
+			if lastActivityErr != nil {
+				return lastActivityErr
+			}
 		}
 
 		futures = append(futures, replicationTaskFuture)

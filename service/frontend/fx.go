@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"context"
 	"fmt"
 	"net"
 
@@ -112,6 +111,7 @@ func NewServiceProvider(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
 		serviceConfig,
@@ -126,6 +126,7 @@ func NewServiceProvider(
 		grpcListener,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		membershipMonitor,
 	)
 }
 
@@ -286,8 +287,17 @@ func TelemetryInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
+	rateFn := func() float64 {
+		return quotas.CalculateEffectiveResourceLimit(
+			frontendServiceResolver,
+			quotas.Limits{
+				InstanceLimit: serviceConfig.RPS(),
+				ClusterLimit:  serviceConfig.GlobalRPS(),
+			},
+		)
+	}
 	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
 
 	return interceptor.NewRateLimitInterceptor(
@@ -296,6 +306,7 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
 	)
@@ -355,6 +366,7 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				serviceConfig.OperatorRPSRatio,
 			)
 		},
 	)
@@ -404,6 +416,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -427,6 +440,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
@@ -599,26 +613,6 @@ func HandlerProvider(
 	return wfHandler
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc *Service, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
-	)
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

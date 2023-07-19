@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -140,7 +141,7 @@ dispatchLoop:
 
 				// if task is still valid (truly valid or unable to verify if task is valid)
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if err == errUserDataDisabled {
+				if errors.Is(err, errUserDataDisabled) {
 					// We're trying to dispatch a versioned task but user data isn't loaded.
 					// Don't log here since it would be too spammy.
 				} else {
@@ -182,30 +183,30 @@ Loop:
 			return nil
 
 		case <-tr.notifyC:
-			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch(ctx)
+			batch, err := tr.getTaskBatch(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				// TODO: Should we ever stop retrying on db errors?
 				if common.IsResourceExhausted(err) {
-					tr.backoff(taskReaderThrottleRetryDelay)
+					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.backoff(tr.retrier.NextBackOff())
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff())
 				}
 				continue Loop
 			}
 			tr.retrier.Reset()
 
-			if len(tasks) == 0 {
-				tr.tlMgr.taskAckManager.setReadLevelAfterGap(readLevel)
-				if !isReadBatchDone {
+			if len(batch.tasks) == 0 {
+				tr.tlMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
+				if !batch.isReadBatchDone {
 					tr.Signal()
 				}
 				continue Loop
 			}
 
-			// only error here is due to context cancelation which we also
+			// only error here is due to context cancellation which we also
 			// handle above
-			_ = tr.addTasksToBuffer(ctx, tasks)
+			_ = tr.addTasksToBuffer(ctx, batch.tasks)
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
@@ -236,10 +237,16 @@ func (tr *taskReader) getTaskBatchWithRange(
 	return response.Tasks, err
 }
 
+type getTasksBatchResponse struct {
+	tasks           []*persistencespb.AllocatedTaskInfo
+	readLevel       int64
+	isReadBatchDone bool
+}
+
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch(ctx context.Context) ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
+func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
@@ -252,15 +259,23 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) ([]*persistencespb.Alloc
 		}
 		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
-			return nil, readLevel, true, err
+			return nil, err
 		}
 		// return as long as it grabs any tasks
 		if len(tasks) > 0 {
-			return tasks, upper, true, nil
+			return &getTasksBatchResponse{
+				tasks:           tasks,
+				readLevel:       upper,
+				isReadBatchDone: true,
+			}, nil
 		}
 		readLevel = upper
 	}
-	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
+	return &getTasksBatchResponse{
+		tasks:           tasks,
+		readLevel:       readLevel,
+		isReadBatchDone: readLevel == maxReadLevel,
+	}, nil // caller will update readLevel when no task grabbed
 }
 
 func (tr *taskReader) addTasksToBuffer(
@@ -316,7 +331,7 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.GetMetricName()).Record(float64(maxReadLevel - ackLevel))
 }
 
-func (tr *taskReader) backoff(duration time.Duration) {
+func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
 	tr.backoffTimerLock.Lock()
 	defer tr.backoffTimerLock.Unlock()
 

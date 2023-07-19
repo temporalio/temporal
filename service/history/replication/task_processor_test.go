@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -114,13 +113,6 @@ func (s *taskProcessorSuite) SetupTest() {
 		&persistencespb.ShardInfo{
 			ShardId: s.shardID,
 			RangeId: 1,
-			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-				tasks.CategoryReplication.ID(): {
-					ClusterAckLevel: map[string]int64{
-						cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
-					},
-				},
-			},
 		},
 		s.config,
 	)
