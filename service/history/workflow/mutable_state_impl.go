@@ -4628,6 +4628,8 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 		return err
 	}
 
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
 	//  since we only generate at most one activity & user timer,
@@ -5105,6 +5107,22 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	default:
 		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
+}
+
+func (ms *MutableStateImpl) closeTransactionCollapseUpsertVisibilityTasks() {
+	// check if we have >= 2 tasks that are all upsert visibility with the same version
+	visTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	if len(visTasks) < 2 {
+		return
+	}
+	for _, task := range visTasks {
+		if task.GetType() != enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION ||
+			task.GetVersion() != visTasks[0].GetVersion() {
+			return
+		}
+	}
+	// collapse to one
+	ms.InsertTasks[tasks.CategoryVisibility] = visTasks[:1]
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {
