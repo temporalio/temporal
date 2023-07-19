@@ -26,9 +26,7 @@ package history
 
 import (
 	"context"
-	"fmt"
-
-	"go.temporal.io/api/serviceerror"
+	"errors"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -38,47 +36,22 @@ import (
 )
 
 type (
-	// An operationTarget represents the intended destination for a history
-	// client operation. If shardID == 0, the operation is for a specific history
-	// instance at address. Otherwise, the operation is intended for whichever
-	// instance owns the shard.
-	operationTarget struct {
-		shardID int32
-		address rpcAddress
-	}
-
 	// A redirector executes a client operation against a history instance.
 	// If the operation is intended for the owner of a shard, and the request
 	// returns a shard ownership lost error with a hint for a new shard owner,
 	// the redirector will retry the request to the new owner.
 	redirector interface {
-		clientForTarget(operationTarget) (historyservice.HistoryServiceClient, error)
-		execute(context.Context, operationTarget, clientOperation) error
+		clientForShardID(int32) (historyservice.HistoryServiceClient, error)
+		execute(context.Context, int32, clientOperation) error
 	}
 
 	clientOperation func(ctx context.Context, client historyservice.HistoryServiceClient) error
 
 	basicRedirector struct {
-		connections            *clientConnections
+		connections            connections
 		historyServiceResolver membership.ServiceResolver
 	}
 )
-
-func (t operationTarget) validate() error {
-	if t.shardID < 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", t.shardID))
-	}
-	if t.shardID == 0 {
-		if len(t.address) == 0 {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid client target"))
-		}
-	} else {
-		if len(t.address) != 0 {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid client target"))
-		}
-	}
-	return nil
-}
 
 func shardLookup(resolver membership.ServiceResolver, shardID int32) (rpcAddress, error) {
 	hostInfo, err := resolver.Lookup(convert.Int32ToString(shardID))
@@ -89,7 +62,7 @@ func shardLookup(resolver membership.ServiceResolver, shardID int32) (rpcAddress
 }
 
 func newBasicRedirector(
-	connections *clientConnections,
+	connections connections,
 	historyServiceResolver membership.ServiceResolver,
 ) *basicRedirector {
 	return &basicRedirector{
@@ -98,15 +71,11 @@ func newBasicRedirector(
 	}
 }
 
-func (r *basicRedirector) clientForTarget(target operationTarget) (historyservice.HistoryServiceClient, error) {
-	if err := target.validate(); err != nil {
+func (r *basicRedirector) clientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+	if err := checkShardID(shardID); err != nil {
 		return nil, err
 	}
-	if target.shardID == 0 {
-		connection := r.connections.getOrCreateClientConn(target.address)
-		return connection.historyClient, nil
-	}
-	address, err := shardLookup(r.historyServiceResolver, target.shardID)
+	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,15 +83,11 @@ func (r *basicRedirector) clientForTarget(target operationTarget) (historyservic
 	return clientConn.historyClient, nil
 }
 
-func (r *basicRedirector) execute(ctx context.Context, target operationTarget, op clientOperation) error {
-	if err := target.validate(); err != nil {
+func (r *basicRedirector) execute(ctx context.Context, shardID int32, op clientOperation) error {
+	if err := checkShardID(shardID); err != nil {
 		return err
 	}
-	if target.shardID == 0 {
-		connection := r.connections.getOrCreateClientConn(target.address)
-		return op(ctx, connection.historyClient)
-	}
-	address, err := shardLookup(r.historyServiceResolver, target.shardID)
+	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
 		return err
 	}
@@ -136,8 +101,8 @@ func (r *basicRedirector) redirectLoop(ctx context.Context, address rpcAddress, 
 		}
 		clientConn := r.connections.getOrCreateClientConn(address)
 		err := op(ctx, clientConn.historyClient)
-		solErr, ok := err.(*serviceerrors.ShardOwnershipLost)
-		if !ok || len(solErr.OwnerHost) == 0 {
+		var solErr *serviceerrors.ShardOwnershipLost
+		if !errors.As(err, &solErr) || len(solErr.OwnerHost) == 0 {
 			return err
 		}
 		// TODO: consider emitting a metric for number of redirects

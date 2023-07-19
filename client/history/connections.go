@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination connections_mock.go
+
 package history
 
 import (
@@ -42,7 +44,7 @@ type (
 
 	rpcAddress string
 
-	clientConnections struct {
+	connectionsImpl struct {
 		mu struct {
 			sync.RWMutex
 			conns map[rpcAddress]clientConnection
@@ -51,13 +53,18 @@ type (
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             common.RPCFactory
 	}
+
+	connections interface {
+		getOrCreateClientConn(addr rpcAddress) clientConnection
+		getAllClientConns() []clientConnection
+	}
 )
 
 func newConnections(
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory common.RPCFactory,
-) *clientConnections {
-	c := &clientConnections{
+) *connectionsImpl {
+	c := &connectionsImpl{
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
 	}
@@ -65,7 +72,7 @@ func newConnections(
 	return c
 }
 
-func (c *clientConnections) getOrCreateClientConn(addr rpcAddress) clientConnection {
+func (c *connectionsImpl) getOrCreateClientConn(addr rpcAddress) clientConnection {
 	c.mu.RLock()
 	cc, ok := c.mu.conns[addr]
 	c.mu.RUnlock()
@@ -90,7 +97,7 @@ func (c *clientConnections) getOrCreateClientConn(addr rpcAddress) clientConnect
 	return cc
 }
 
-func (c *clientConnections) getAllClientConns() []clientConnection {
+func (c *connectionsImpl) getAllClientConns() []clientConnection {
 	hostInfos := c.historyServiceResolver.Members()
 
 	var clientConns []clientConnection

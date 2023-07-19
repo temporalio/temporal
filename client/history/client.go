@@ -29,6 +29,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -53,7 +54,7 @@ const (
 )
 
 type clientImpl struct {
-	connections     *clientConnections
+	connections     connections
 	logger          log.Logger
 	numberOfShards  int32
 	redirector      redirector
@@ -85,14 +86,14 @@ func (c *clientImpl) DescribeHistoryHost(
 	request *historyservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 
-	var target operationTarget
-
+	var shardID int32
 	if request.GetShardId() != 0 {
-		target = c.targetByShardID(request.GetShardId())
+		shardID = request.GetShardId()
 	} else if request.GetWorkflowExecution() != nil {
-		target = c.targetByWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
+		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWorkflowExecution().GetWorkflowId())
 	} else {
-		target = c.targetByAddress(request.GetHostAddress())
+		clientConn := c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress()))
+		return clientConn.historyClient.DescribeHistoryHost(ctx, request, opts...)
 	}
 
 	var response *historyservice.DescribeHistoryHostResponse
@@ -103,7 +104,7 @@ func (c *clientImpl) DescribeHistoryHost(
 		response, err = client.DescribeHistoryHost(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -117,8 +118,7 @@ func (c *clientImpl) GetReplicationMessages(
 	requestsByClient := make(map[historyservice.HistoryServiceClient]*historyservice.GetReplicationMessagesRequest)
 
 	for _, token := range request.Tokens {
-		target := c.targetByShardID(token.GetShardId())
-		client, err := c.redirector.clientForTarget(target)
+		client, err := c.redirector.clientForShardID(token.GetShardId())
 		if err != nil {
 			return nil, err
 		}
@@ -230,8 +230,7 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByShardID(targetClusterShardID.ShardID)
-	client, err := c.redirector.clientForTarget(target)
+	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
 	if err != nil {
 		return nil, err
 	}
@@ -245,22 +244,21 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) targetByWorkflowID(namespaceID, workflowID string) operationTarget {
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
-	return operationTarget{shardID: shardID}
+func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32 {
+	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
 }
 
-func (c *clientImpl) targetByShardID(shardID int32) operationTarget {
-	return operationTarget{shardID: shardID}
+func checkShardID(shardID int32) error {
+	if shardID <= 0 {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
+	}
+	return nil
 }
 
-func (c *clientImpl) targetByAddress(addr string) operationTarget {
-	return operationTarget{address: rpcAddress(addr)}
-}
-
-func (c *clientImpl) executeWithRedirect(ctx context.Context,
-	target operationTarget,
-	op func(ctx context.Context, client historyservice.HistoryServiceClient) error,
+func (c *clientImpl) executeWithRedirect(
+	ctx context.Context,
+	shardID int32,
+	op clientOperation,
 ) error {
-	return c.redirector.execute(ctx, target, op)
+	return c.redirector.execute(ctx, shardID, op)
 }

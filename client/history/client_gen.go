@@ -39,7 +39,7 @@ func (c *clientImpl) CloseShard(
 	request *historyservice.CloseShardRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.CloseShardResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.CloseShardResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -48,7 +48,7 @@ func (c *clientImpl) CloseShard(
 		response, err = client.CloseShard(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -59,7 +59,7 @@ func (c *clientImpl) DeleteWorkflowExecution(
 	request *historyservice.DeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DeleteWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.DeleteWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -68,7 +68,7 @@ func (c *clientImpl) DeleteWorkflowExecution(
 		response, err = client.DeleteWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -79,7 +79,7 @@ func (c *clientImpl) DeleteWorkflowVisibilityRecord(
 	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.DeleteWorkflowVisibilityRecordResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -88,7 +88,7 @@ func (c *clientImpl) DeleteWorkflowVisibilityRecord(
 		response, err = client.DeleteWorkflowVisibilityRecord(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -99,7 +99,7 @@ func (c *clientImpl) DescribeMutableState(
 	request *historyservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DescribeMutableStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.DescribeMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -108,7 +108,7 @@ func (c *clientImpl) DescribeMutableState(
 		response, err = client.DescribeMutableState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -119,7 +119,7 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	request *historyservice.DescribeWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.DescribeWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -128,7 +128,7 @@ func (c *clientImpl) DescribeWorkflowExecution(
 		response, err = client.DescribeWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -139,7 +139,7 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.GenerateLastHistoryReplicationTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -148,7 +148,7 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 		response, err = client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -159,7 +159,7 @@ func (c *clientImpl) GetDLQMessages(
 	request *historyservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetDLQMessagesResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.GetDLQMessagesResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -168,7 +168,7 @@ func (c *clientImpl) GetDLQMessages(
 		response, err = client.GetDLQMessages(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -183,7 +183,7 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	if len(request.GetTaskInfos()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	target := c.targetByWorkflowID(request.GetTaskInfos()[0].NamespaceId, request.GetTaskInfos()[0].WorkflowId)
+	shardID := c.shardIDFromWorkflowID(request.GetTaskInfos()[0].NamespaceId, request.GetTaskInfos()[0].WorkflowId)
 	var response *historyservice.GetDLQReplicationMessagesResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -192,7 +192,7 @@ func (c *clientImpl) GetDLQReplicationMessages(
 		response, err = client.GetDLQReplicationMessages(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -203,7 +203,7 @@ func (c *clientImpl) GetMutableState(
 	request *historyservice.GetMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetMutableStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.GetMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -212,7 +212,7 @@ func (c *clientImpl) GetMutableState(
 		response, err = client.GetMutableState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -223,7 +223,7 @@ func (c *clientImpl) GetShard(
 	request *historyservice.GetShardRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetShardResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.GetShardResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -232,7 +232,7 @@ func (c *clientImpl) GetShard(
 		response, err = client.GetShard(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -243,7 +243,7 @@ func (c *clientImpl) MergeDLQMessages(
 	request *historyservice.MergeDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.MergeDLQMessagesResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -252,7 +252,7 @@ func (c *clientImpl) MergeDLQMessages(
 		response, err = client.MergeDLQMessages(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -263,7 +263,7 @@ func (c *clientImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PollMutableStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.PollMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -272,7 +272,7 @@ func (c *clientImpl) PollMutableState(
 		response, err = client.PollMutableState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -283,7 +283,7 @@ func (c *clientImpl) PollWorkflowExecutionUpdate(
 	request *historyservice.PollWorkflowExecutionUpdateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.PollWorkflowExecutionUpdateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -292,7 +292,7 @@ func (c *clientImpl) PollWorkflowExecutionUpdate(
 		response, err = client.PollWorkflowExecutionUpdate(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -303,7 +303,7 @@ func (c *clientImpl) PurgeDLQMessages(
 	request *historyservice.PurgeDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PurgeDLQMessagesResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.PurgeDLQMessagesResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -312,7 +312,7 @@ func (c *clientImpl) PurgeDLQMessages(
 		response, err = client.PurgeDLQMessages(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -323,7 +323,7 @@ func (c *clientImpl) QueryWorkflow(
 	request *historyservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.QueryWorkflowResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.QueryWorkflowResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -332,7 +332,7 @@ func (c *clientImpl) QueryWorkflow(
 		response, err = client.QueryWorkflow(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -343,7 +343,7 @@ func (c *clientImpl) ReapplyEvents(
 	request *historyservice.ReapplyEventsRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReapplyEventsResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ReapplyEventsResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -352,7 +352,7 @@ func (c *clientImpl) ReapplyEvents(
 		response, err = client.ReapplyEvents(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -363,7 +363,7 @@ func (c *clientImpl) RebuildMutableState(
 	request *historyservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RebuildMutableStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.RebuildMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -372,7 +372,7 @@ func (c *clientImpl) RebuildMutableState(
 		response, err = client.RebuildMutableState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -387,7 +387,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RecordActivityTaskHeartbeatResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -397,7 +397,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 		response, err = client.RecordActivityTaskHeartbeat(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -408,7 +408,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RecordActivityTaskStartedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -417,7 +417,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 		response, err = client.RecordActivityTaskStarted(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -428,7 +428,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordChildExecutionCompletedResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RecordChildExecutionCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -437,7 +437,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 		response, err = client.RecordChildExecutionCompleted(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -448,7 +448,7 @@ func (c *clientImpl) RecordWorkflowTaskStarted(
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RecordWorkflowTaskStartedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -457,7 +457,7 @@ func (c *clientImpl) RecordWorkflowTaskStarted(
 		response, err = client.RecordWorkflowTaskStarted(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -468,7 +468,7 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	request *historyservice.RefreshWorkflowTasksRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RefreshWorkflowTasksResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.RefreshWorkflowTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -477,7 +477,7 @@ func (c *clientImpl) RefreshWorkflowTasks(
 		response, err = client.RefreshWorkflowTasks(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -488,7 +488,7 @@ func (c *clientImpl) RemoveSignalMutableState(
 	request *historyservice.RemoveSignalMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RemoveSignalMutableStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RemoveSignalMutableStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -497,7 +497,7 @@ func (c *clientImpl) RemoveSignalMutableState(
 		response, err = client.RemoveSignalMutableState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -508,7 +508,7 @@ func (c *clientImpl) RemoveTask(
 	request *historyservice.RemoveTaskRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RemoveTaskResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.RemoveTaskResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -517,7 +517,7 @@ func (c *clientImpl) RemoveTask(
 		response, err = client.RemoveTask(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -528,7 +528,7 @@ func (c *clientImpl) ReplicateEventsV2(
 	request *historyservice.ReplicateEventsV2Request,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReplicateEventsV2Response, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ReplicateEventsV2Response
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -537,7 +537,7 @@ func (c *clientImpl) ReplicateEventsV2(
 		response, err = client.ReplicateEventsV2(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -548,7 +548,7 @@ func (c *clientImpl) ReplicateWorkflowState(
 	request *historyservice.ReplicateWorkflowStateRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ReplicateWorkflowStateResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowState().GetExecutionInfo().GetWorkflowId())
 	var response *historyservice.ReplicateWorkflowStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -557,7 +557,7 @@ func (c *clientImpl) ReplicateWorkflowState(
 		response, err = client.ReplicateWorkflowState(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -568,7 +568,7 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	request *historyservice.RequestCancelWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetCancelRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.RequestCancelWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -577,7 +577,7 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 		response, err = client.RequestCancelWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -588,7 +588,7 @@ func (c *clientImpl) ResetStickyTaskQueue(
 	request *historyservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
 	var response *historyservice.ResetStickyTaskQueueResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -597,7 +597,7 @@ func (c *clientImpl) ResetStickyTaskQueue(
 		response, err = client.ResetStickyTaskQueue(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -608,7 +608,7 @@ func (c *clientImpl) ResetWorkflowExecution(
 	request *historyservice.ResetWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetResetRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetResetRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ResetWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -617,7 +617,7 @@ func (c *clientImpl) ResetWorkflowExecution(
 		response, err = client.ResetWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -632,7 +632,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RespondActivityTaskCanceledResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -642,7 +642,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 		response, err = client.RespondActivityTaskCanceled(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -657,7 +657,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RespondActivityTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -667,7 +667,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 		response, err = client.RespondActivityTaskCompleted(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -682,7 +682,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RespondActivityTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -692,7 +692,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 		response, err = client.RespondActivityTaskFailed(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -707,7 +707,7 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RespondWorkflowTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -717,7 +717,7 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 		response, err = client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -732,7 +732,7 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	target := c.targetByWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
 
 	var response *historyservice.RespondWorkflowTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
@@ -742,7 +742,7 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 		response, err = client.RespondWorkflowTaskFailed(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -753,7 +753,7 @@ func (c *clientImpl) ScheduleWorkflowTask(
 	request *historyservice.ScheduleWorkflowTaskRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ScheduleWorkflowTaskResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.ScheduleWorkflowTaskResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -762,7 +762,7 @@ func (c *clientImpl) ScheduleWorkflowTask(
 		response, err = client.ScheduleWorkflowTask(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -773,7 +773,7 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 	request *historyservice.SignalWithStartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetSignalWithStartRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetSignalWithStartRequest().GetWorkflowId())
 	var response *historyservice.SignalWithStartWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -782,7 +782,7 @@ func (c *clientImpl) SignalWithStartWorkflowExecution(
 		response, err = client.SignalWithStartWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -793,7 +793,7 @@ func (c *clientImpl) SignalWorkflowExecution(
 	request *historyservice.SignalWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SignalWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetSignalRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.SignalWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -802,7 +802,7 @@ func (c *clientImpl) SignalWorkflowExecution(
 		response, err = client.SignalWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -813,7 +813,7 @@ func (c *clientImpl) StartWorkflowExecution(
 	request *historyservice.StartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetStartRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetStartRequest().GetWorkflowId())
 	var response *historyservice.StartWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -822,7 +822,7 @@ func (c *clientImpl) StartWorkflowExecution(
 		response, err = client.StartWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -833,7 +833,7 @@ func (c *clientImpl) SyncActivity(
 	request *historyservice.SyncActivityRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SyncActivityResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowId())
 	var response *historyservice.SyncActivityResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -842,7 +842,7 @@ func (c *clientImpl) SyncActivity(
 		response, err = client.SyncActivity(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -853,7 +853,7 @@ func (c *clientImpl) SyncShardStatus(
 	request *historyservice.SyncShardStatusRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.SyncShardStatusResponse, error) {
-	target := c.targetByShardID(request.GetShardId())
+	shardID := request.GetShardId()
 	var response *historyservice.SyncShardStatusResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -862,7 +862,7 @@ func (c *clientImpl) SyncShardStatus(
 		response, err = client.SyncShardStatus(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -873,7 +873,7 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	request *historyservice.TerminateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.TerminateWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -882,7 +882,7 @@ func (c *clientImpl) TerminateWorkflowExecution(
 		response, err = client.TerminateWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -893,7 +893,7 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	request *historyservice.UpdateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.UpdateWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -902,7 +902,7 @@ func (c *clientImpl) UpdateWorkflowExecution(
 		response, err = client.UpdateWorkflowExecution(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -913,7 +913,7 @@ func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetParentExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetParentExecution().GetWorkflowId())
 	var response *historyservice.VerifyChildExecutionCompletionRecordedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -922,7 +922,7 @@ func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 		response, err = client.VerifyChildExecutionCompletionRecorded(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -933,7 +933,7 @@ func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
-	target := c.targetByWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
 	var response *historyservice.VerifyFirstWorkflowTaskScheduledResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -942,7 +942,7 @@ func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
 		response, err = client.VerifyFirstWorkflowTaskScheduled(ctx, request, opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, target, op); err != nil {
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
 		return nil, err
 	}
 	return response, nil
