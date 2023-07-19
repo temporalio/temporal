@@ -33,8 +33,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/metadata"
 
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
@@ -1962,62 +1964,84 @@ func (adh *AdminHandler) getWorkflowCompletionEvent(
 }
 
 func (adh *AdminHandler) StreamWorkflowReplicationMessages(
-	targetCluster adminservice.AdminService_StreamWorkflowReplicationMessagesServer,
+	clientCluster adminservice.AdminService_StreamWorkflowReplicationMessagesServer,
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	ctx := targetCluster.Context()
-	sourceCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	ctxMetadata, ok := metadata.FromIncomingContext(clientCluster.Context())
+	if !ok {
+		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
+	}
+	_, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
 	if err != nil {
 		return err
 	}
 
-	errGroup, ctx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		for ctx.Err() == nil {
-			req, err := targetCluster.Recv()
+	logger := log.With(adh.logger, tag.ShardID(serverClusterShardID.ShardID))
+	logger.Info("AdminStreamReplicationMessages started.")
+	defer logger.Info("AdminStreamReplicationMessages stopped.")
+
+	ctx := clientCluster.Context()
+	serverCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	if err != nil {
+		return err
+	}
+
+	shutdownChan := channel.NewShutdownOnce()
+	go func() {
+		defer shutdownChan.Shutdown()
+
+		for !shutdownChan.IsShutdown() {
+			req, err := clientCluster.Recv()
 			if err != nil {
-				return err
+				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
+				return
 			}
 			switch attr := req.GetAttributes().(type) {
 			case *adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
-				if err = sourceCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
+				if err = serverCluster.Send(&historyservice.StreamWorkflowReplicationMessagesRequest{
 					Attributes: &historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 						SyncReplicationState: attr.SyncReplicationState,
 					},
 				}); err != nil {
-					return err
+					logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(err))
+					return
 				}
 			default:
-				return serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages client -> server encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))
+				))))
+				return
 			}
 		}
-		return ctx.Err()
-	})
-	errGroup.Go(func() error {
-		for ctx.Err() == nil {
-			resp, err := sourceCluster.Recv()
+	}()
+	go func() {
+		defer shutdownChan.Shutdown()
+
+		for !shutdownChan.IsShutdown() {
+			resp, err := serverCluster.Recv()
 			if err != nil {
-				return err
+				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+				return
 			}
 			switch attr := resp.GetAttributes().(type) {
 			case *historyservice.StreamWorkflowReplicationMessagesResponse_Messages:
-				if err = targetCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
+				if err = clientCluster.Send(&adminservice.StreamWorkflowReplicationMessagesResponse{
 					Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
 						Messages: attr.Messages,
 					},
 				}); err != nil {
-					return err
+					logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+					return
 				}
 			default:
-				return serviceerror.NewInternal(fmt.Sprintf(
+				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(serviceerror.NewInternal(fmt.Sprintf(
 					"StreamWorkflowReplicationMessages encountered unknown type: %T %v", attr, attr,
-				))
+				))))
+				return
 			}
 		}
-		return ctx.Err()
-	})
-	return errGroup.Wait()
+	}()
+	<-shutdownChan.Channel()
+	return nil
 }

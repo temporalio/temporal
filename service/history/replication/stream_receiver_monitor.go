@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	streamReceiverMonitorInterval = 5 * time.Second
+	streamReceiverMonitorInterval = 2 * time.Second
 )
 
 type (
