@@ -102,6 +102,12 @@ func NewInt32(key string, value int32) ZapTag {
 	}
 }
 
+func NewFloat64(key string, value float64) ZapTag {
+	return ZapTag{
+		field: zap.Float64(key, value),
+	}
+}
+
 func NewBoolTag(key string, value bool) ZapTag {
 	return ZapTag{
 		field: zap.Bool(key, value),
