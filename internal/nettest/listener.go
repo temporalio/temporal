@@ -41,6 +41,8 @@ type PipeListener struct {
 	done chan struct{}
 }
 
+var _ net.Listener = (*PipeListener)(nil)
+
 func (t *PipeListener) Accept() (net.Conn, error) {
 	return t.Pipe.Accept(t.done)
 }
