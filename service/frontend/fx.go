@@ -290,7 +290,13 @@ func RateLimitInterceptorProvider(
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := func() float64 {
-		return effectiveRPS(frontendServiceResolver, serviceConfig.RPS, serviceConfig.GlobalRPS)
+		return quotas.CalculateEffectiveResourceLimit(
+			frontendServiceResolver,
+			quotas.Limits{
+				InstanceLimit: serviceConfig.RPS(),
+				ClusterLimit:  serviceConfig.GlobalRPS(),
+			},
+		)
 	}
 	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
 

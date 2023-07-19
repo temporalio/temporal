@@ -22,59 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package quotas
 
-import (
-	"sync"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+type (
+	// InstanceCounter returns the total number of instances there are for a given service.
+	InstanceCounter interface {
+		MemberCount() int
+	}
+	// Limits contains the per instance and per cluster limits. It exists to make it harder to mix up the two limits
+	// when calling CalculateEffectiveResourceLimit.
+	Limits struct {
+		InstanceLimit int
+		ClusterLimit  int
+	}
 )
 
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
+// CalculateEffectiveResourceLimit returns the effective resource limit for a host given the per instance and per
+// cluster limits. The "resource" here could be requests per second, total number of active requests, etc. The
+// cluster-wide limit is used if and only if it is configured to a value greater than zero and the number of instances
+// that membership reports is greater than zero. Otherwise, the per-instance limit is used.
+func CalculateEffectiveResourceLimit(instanceCounter InstanceCounter, limits Limits) float64 {
+	if clusterLimit := limits.ClusterLimit; clusterLimit > 0 && instanceCounter != nil {
+		if clusterSize := instanceCounter.MemberCount(); clusterSize > 0 {
+			return float64(clusterLimit) / float64(clusterSize)
+		}
+	}
 
-	pipe := NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
-}
-
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
-}
-
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+	return float64(limits.InstanceLimit)
 }
