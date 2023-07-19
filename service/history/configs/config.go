@@ -74,9 +74,9 @@ type Config struct {
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheInitialSize dynamicconfig.IntPropertyFn
-	EventsCacheMaxSize     dynamicconfig.IntPropertyFn
-	EventsCacheTTL         dynamicconfig.DurationPropertyFn
+	EventsCacheInitialSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
+	EventsCacheTTL              dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
 	RangeSizeBits           uint
@@ -355,9 +355,9 @@ func NewConfig(
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 
-		EventsCacheInitialSize: dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 128*1024), // 128KB
-		EventsCacheMaxSize:     dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512*1024),     // 512KB
-		EventsCacheTTL:         dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsCacheInitialSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheInitialSizeBytes, 128*1024), // 128KB
+		EventsCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),     // 512KB
+		EventsCacheTTL:              dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 
 		RangeSizeBits:                        20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                 dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),

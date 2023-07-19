@@ -24,57 +24,34 @@
 
 package nettest
 
-import (
-	"sync"
-	"testing"
+import "net"
 
-	"github.com/stretchr/testify/assert"
-)
-
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
+// NewListener returns a net.Listener which uses the given Pipe to simulate a network connection.
+func NewListener(pipe *Pipe) *PipeListener {
+	return &PipeListener{
+		Pipe: pipe,
+		done: make(chan struct{}),
+	}
 }
 
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+// PipeListener is a net.Listener which uses a Pipe to simulate a network connection.
+type PipeListener struct {
+	*Pipe
+	// We cancel calls to Accept using the done channel so that tests don't hang if they're broken.
+	done chan struct{}
 }
 
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
+var _ net.Listener = (*PipeListener)(nil)
 
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+func (t *PipeListener) Accept() (net.Conn, error) {
+	return t.Pipe.Accept(t.done)
+}
+
+func (t *PipeListener) Close() error {
+	close(t.done)
+	return nil
+}
+
+func (t *PipeListener) Addr() net.Addr {
+	return &net.TCPAddr{}
 }

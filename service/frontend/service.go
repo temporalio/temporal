@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -401,21 +402,10 @@ func namespaceRPS(
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	return effectiveRPS(frontendResolver, func() int {
-		return perInstanceRPSFn(namespace)
-	}, func() int {
-		return globalRPSFn(namespace)
+	return quotas.CalculateEffectiveResourceLimit(frontendResolver, quotas.Limits{
+		InstanceLimit: perInstanceRPSFn(namespace),
+		ClusterLimit:  globalRPSFn(namespace),
 	})
-}
-
-func effectiveRPS(frontendResolver membership.ServiceResolver, hostRPS func() int, globalRPS func() int) float64 {
-	if gRPS := globalRPS(); gRPS > 0 && frontendResolver != nil {
-		if numHosts := frontendResolver.MemberCount(); numHosts > 0 {
-			return float64(gRPS) / float64(numHosts)
-		}
-	}
-
-	return float64(hostRPS())
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
