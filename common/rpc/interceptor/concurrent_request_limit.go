@@ -51,7 +51,7 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		memberCounter     quotas.MemberCounter
-		limiter           quotas.ClusterAwareNamespaceSpecificQuotaCalculator
+		quotaCalculator   quotas.ClusterAwareNamespaceSpecificQuotaCalculator
 		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
 		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
 		tokens map[string]int
@@ -74,7 +74,7 @@ func NewConcurrentRequestLimitInterceptor(
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
 		memberCounter:     memberCounter,
-		limiter: quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		quotaCalculator: quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 			MemberCounter:    memberCounter,
 			PerInstanceQuota: perInstanceCountLimit,
 			GlobalQuota:      globalCountLimit,
@@ -123,8 +123,8 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) isWithinRequestLimit(nsName namespace.Name, count int32) bool {
-	limit := ni.limiter.GetQuota(nsName.String())
-	return count <= int32(limit)
+	quota := ni.quotaCalculator.GetQuota(nsName.String())
+	return count <= int32(quota)
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) counter(
