@@ -70,13 +70,13 @@ var (
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewInvalidArgument("exceeded workflow execution limit for signal events")
 	// ErrWorkflowClosing is the error indicating requests to workflow got rejected due to workflow is closing
-	ErrWorkflowClosing = serviceerror.NewUnavailable("workflow operation rejected because workflow is closing")
+	ErrWorkflowClosing = serviceerror.NewWorkflowNotReady("workflow operation rejected because workflow is closing")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
-	ErrConsistentQueryBufferExceeded = serviceerror.NewUnavailable("consistent query buffer is full, cannot accept new consistent queries")
+	ErrConsistentQueryBufferExceeded = serviceerror.NewWorkflowNotReady("consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit

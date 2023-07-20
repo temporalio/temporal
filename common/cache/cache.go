@@ -53,7 +53,8 @@ type Cache interface {
 	// Iterator returns the iterator of the cache
 	Iterator() Iterator
 
-	// Size returns the number of entries currently stored in the Cache
+	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
+	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
 }
 

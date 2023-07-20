@@ -27,12 +27,15 @@ package configs
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -82,4 +85,37 @@ func (s *quotasSuite) TestAPIs() {
 		apiToPriority[apiName] = APIToPriority[apiName]
 	}
 	s.Equal(apiToPriority, APIToPriority)
+}
+
+func (s *quotasSuite) TestOperatorPrioritized() {
+	rateFn := func() float64 { return 5 }
+	operatorRPSRatioFn := func() float64 { return 0.2 }
+	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
+
+	operatorRequest := quotas.NewRequest(
+		"StartWorkflowExecution",
+		1,
+		"",
+		headers.CallerTypeOperator,
+		-1,
+		"")
+
+	apiRequest := quotas.NewRequest(
+		"StartWorkflowExecution",
+		1,
+		"",
+		headers.CallerTypeAPI,
+		-1,
+		"")
+
+	requestTime := time.Now()
+	limitCount := 0
+
+	for i := 0; i < 12; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			limitCount++
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
+	}
+	s.Equal(2, limitCount)
 }
