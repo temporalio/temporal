@@ -196,6 +196,26 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 					},
 				}},
 			},
+			shard.ReplicationReaderIDFromClusterShardID(cluster.TestOptionalClusterInitialFailoverVersion, common.MapShardID(
+				cluster.TestAllClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+				cluster.TestAllClusterInfo[cluster.TestOptionalClusterName].ShardCount,
+				s.shardID,
+			)[0]): {
+				Scopes: []*persistencespb.QueueSliceScope{{
+					Range: &persistencespb.QueueSliceRange{
+						InclusiveMin: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(ackedTaskID + 1),
+						),
+						ExclusiveMax: shard.ConvertToPersistenceTaskKey(
+							tasks.NewImmediateKey(math.MaxInt64),
+						),
+					},
+					Predicate: &persistencespb.Predicate{
+						PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+						Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+					},
+				}},
+			},
 		},
 	}, true)
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
