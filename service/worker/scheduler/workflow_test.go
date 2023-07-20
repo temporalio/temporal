@@ -1477,6 +1477,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	scheduleId := "myschedule"
+	startTime := time.Now()
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
@@ -1519,10 +1520,12 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(time.Now().Sub(startTime) < currentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	scheduleId := "myschedule"
+	startTime := time.Now()
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T01:00:00Z", req.Request.WorkflowId)
@@ -1555,10 +1558,12 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(time.Now().Sub(startTime) < currentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
+	startTime := time.Now()
 
 	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
@@ -1577,4 +1582,5 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(time.Now().Sub(startTime) < currentTweakablePolicies.RetentionTime)
 }
