@@ -152,13 +152,13 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 		rl.curRateMultiplier = math.Max(rl.minRateMultiplier, rl.curRateMultiplier-rl.curOptions.RateBackoffStepSize)
 		rl.rateLimiter.SetRate(rl.curRateMultiplier * rl.rateFn())
 		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
-		rl.logger.Info("Health threshold exceeded, reducing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
+		rl.logger.Info("Health thresholds exceeded, reducing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()))
 	} else if rl.curRateMultiplier < rl.maxRateMultiplier {
 		// already doing backoff and under thresholds, increase limit
 		rl.curRateMultiplier = math.Min(rl.maxRateMultiplier, rl.curRateMultiplier+rl.curOptions.RateIncreaseStepSize)
 		rl.rateLimiter.SetRate(rl.curRateMultiplier * rl.rateFn())
 		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
-		rl.logger.Info("System healthy, increasing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
+		rl.logger.Info("System healthy, increasing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()))
 	}
 }
 
@@ -193,9 +193,17 @@ func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
 }
 
 func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {
-	return rl.curOptions.LatencyThreshold > 0 && rl.healthSignals.AverageLatency() > rl.curOptions.LatencyThreshold
+	thresholdExceeded := rl.healthSignals.AverageLatency() > rl.curOptions.LatencyThreshold
+	if thresholdExceeded {
+		rl.logger.Info("Dynamic rate limiter average latency threshold exceeded.", tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()))
+	}
+	return rl.curOptions.LatencyThreshold > 0 && thresholdExceeded
 }
 
 func (rl *HealthRequestRateLimiterImpl) errorThresholdExceeded() bool {
-	return rl.curOptions.ErrorThreshold > 0 && rl.healthSignals.ErrorRatio() > rl.curOptions.ErrorThreshold
+	thresholdExceeded := rl.healthSignals.ErrorRatio() > rl.curOptions.ErrorThreshold
+	if thresholdExceeded {
+		rl.logger.Info("Dynamic rate limiter error ratio threshold exceeded.", tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
+	}
+	return rl.curOptions.ErrorThreshold > 0 && thresholdExceeded
 }
