@@ -256,12 +256,16 @@ const (
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
-	// FrontendMaxConcurrentTaskQueuePollsPerInstance limits concurrent task queue polls per namespace, per-instance.
+	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance.
+	// Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The limit is
+	// summed across all methods. This value is ignored if FrontendGlobalMaxConcurrentLongRunningRequests is greater
+	// than zero. Warning: setting this to zero will cause all long-running requests to fail.
 	// The name `frontend.namespaceCount` is kept for backwards compatibility.
-	FrontendMaxConcurrentTaskQueuePollsPerInstance = "frontend.namespaceCount"
-	// FrontendGlobalMaxConcurrentTaskQueuePolls limits concurrent task queue polls per namespace for the whole
-	// cluster. The name `frontend.globalNamespaceCount` is kept for consistency with the per-instance limit name.
-	FrontendGlobalMaxConcurrentTaskQueuePolls = "frontend.globalNamespaceCount"
+	FrontendMaxConcurrentLongRunningRequestsPerInstance = "frontend.namespaceCount"
+	// FrontendGlobalMaxConcurrentLongRunningRequests limits concurrent long-running requests across all frontend
+	// instances in the cluster, for a given namespace. If this is set to 0 (the default), then it is ignored. The name
+	// `frontend.globalNamespaceCount` is kept for consistency with the per-instance limit name.
+	FrontendGlobalMaxConcurrentLongRunningRequests = "frontend.globalNamespaceCount"
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"

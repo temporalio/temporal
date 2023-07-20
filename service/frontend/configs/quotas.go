@@ -38,6 +38,13 @@ const (
 )
 
 var (
+	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes from their
+	// corresponding quota, which is determined by dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance and
+	// dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests. If the value is not set, then the method is not
+	// considered a long-running request and the number of concurrent requests will not be throttled. The Poll* methods
+	// here are long-running because they block until there is a task available. The GetWorkflowExecutionHistory method
+	// is blocking only if WaitNewEvent is true, otherwise it is not long-running. The QueryWorkflow and
+	// UpdateWorkflowExecution methods are long-running because they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"PollActivityTaskQueue":       1,
 		"PollWorkflowTaskQueue":       1,

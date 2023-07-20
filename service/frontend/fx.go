@@ -373,8 +373,8 @@ func NamespaceCountLimitInterceptorProvider(
 		namespaceRegistry,
 		logger,
 		serviceResolver,
-		serviceConfig.MaxConcurrentTaskQueuePollsPerInstance,
-		serviceConfig.GlobalMaxConcurrentTaskQueuePolls,
+		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+		serviceConfig.GlobalMaxConcurrentLongRunningRequests,
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
