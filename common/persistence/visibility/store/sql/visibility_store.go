@@ -92,6 +92,12 @@ func (s *VisibilityStore) GetIndexName() string {
 	return s.sqlStore.GetDbName()
 }
 
+func (s *VisibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return searchAttributes, nil
+}
+
 func (s *VisibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
@@ -513,6 +519,14 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	searchAttributes, err = searchattribute.Decode(request.SearchAttributes, &saTypeMap, false)
 	if err != nil {
 		return nil, err
+	}
+	// This is to prevent existing tasks to fail indefinitely.
+	// If it's only invalid values error, then silently continue without them.
+	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
+	if err != nil {
+		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+			return nil, err
+		}
 	}
 
 	for name, value := range searchAttributes {
