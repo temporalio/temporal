@@ -27,19 +27,35 @@ package searchattribute
 import (
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 type searchAttributesValidatorSuite struct {
 	suite.Suite
+
+	mockVisibilityManager *manager.MockVisibilityManager
 }
 
 func TestSearchAttributesValidatorSuite(t *testing.T) {
-	s := &searchAttributesValidatorSuite{}
+	ctrl := gomock.NewController(t)
+	s := &searchAttributesValidatorSuite{
+		mockVisibilityManager: manager.NewMockVisibilityManager(ctrl),
+	}
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.mockVisibilityManager.EXPECT().
+		ValidateCustomSearchAttributes(gomock.Any()).
+		DoAndReturn(
+			func(searchAttributes map[string]any) (map[string]any, error) {
+				return searchAttributes, nil
+			},
+		).
+		AnyTimes()
 	suite.Run(t, s)
 }
 
@@ -54,7 +70,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
-		"",
+		s.mockVisibilityManager,
 		true,
 	)
 
@@ -131,7 +147,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
-		"",
+		s.mockVisibilityManager,
 		false,
 	)
 
@@ -194,7 +210,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
-		"",
+		s.mockVisibilityManager,
 		false,
 	)
 
@@ -233,7 +249,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
-		"",
+		s.mockVisibilityManager,
 		false,
 	)
 
