@@ -89,6 +89,12 @@ func (p *visibilityManagerImpl) GetIndexName() string {
 	return p.store.GetIndexName()
 }
 
+func (p *visibilityManagerImpl) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return p.store.ValidateCustomSearchAttributes(searchAttributes)
+}
+
 func (p *visibilityManagerImpl) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,
