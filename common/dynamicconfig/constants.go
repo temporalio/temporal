@@ -258,9 +258,9 @@ const (
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
 	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance.
 	// Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The limit is
-	// summed across all methods. This value is ignored if FrontendGlobalMaxConcurrentLongRunningRequests is greater
-	// than zero. Warning: setting this to zero will cause all long-running requests to fail.
-	// The name `frontend.namespaceCount` is kept for backwards compatibility.
+	// applied individually to each method. This value is ignored if FrontendGlobalMaxConcurrentLongRunningRequests is
+	// greater than zero. Warning: setting this to zero will cause all long-running requests to fail. The name
+	// `frontend.namespaceCount` is kept for backwards compatibility.
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = "frontend.namespaceCount"
 	// FrontendGlobalMaxConcurrentLongRunningRequests limits concurrent long-running requests across all frontend
 	// instances in the cluster, for a given namespace. If this is set to 0 (the default), then it is ignored. The name
