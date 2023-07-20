@@ -67,15 +67,16 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
-	HistoryCacheInitialSize dynamicconfig.IntPropertyFn
-	HistoryCacheMaxSize     dynamicconfig.IntPropertyFn
-	HistoryCacheTTL         dynamicconfig.DurationPropertyFn
+	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
+	HistoryCacheMaxSize                   dynamicconfig.IntPropertyFn
+	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
+	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheInitialSize dynamicconfig.IntPropertyFn
-	EventsCacheMaxSize     dynamicconfig.IntPropertyFn
-	EventsCacheTTL         dynamicconfig.DurationPropertyFn
+	EventsCacheInitialSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
+	EventsCacheTTL              dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
 	RangeSizeBits           uint
@@ -348,13 +349,16 @@ func NewConfig(
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 
-		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
-		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
-		HistoryCacheMaxSize:                  dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
-		HistoryCacheTTL:                      dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
-		EventsCacheInitialSize:               dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 128),
-		EventsCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512),
-		EventsCacheTTL:                       dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		HistoryCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
+		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
+
+		EventsCacheInitialSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheInitialSizeBytes, 128*1024), // 128KB
+		EventsCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),     // 512KB
+		EventsCacheTTL:              dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+
 		RangeSizeBits:                        20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:                 dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		AcquireShardConcurrency:              dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),

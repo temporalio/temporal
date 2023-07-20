@@ -22,59 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package quotastest
 
-import (
-	"sync"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-)
-
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
+// NewFakeInstanceCounter returns a new fake quotas.InstanceCounter that always returns numInstances.
+func NewFakeInstanceCounter(numInstances int) instanceCounter {
+	return instanceCounter{numInstances: numInstances}
 }
 
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+type instanceCounter struct {
+	numInstances int
 }
 
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+func (c instanceCounter) MemberCount() int {
+	return c.numInstances
 }

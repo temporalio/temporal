@@ -31,6 +31,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -110,6 +111,13 @@ func (r VerifyResult) isSkipped() bool {
 
 func (r VerifyResult) isCompleted() bool {
 	return r.isVerified() || r.isSkipped()
+}
+
+func (e verifyReplicationTasksTimeoutErr) Error() string {
+	return fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (retryable). Not found WorkflowExecution: %v,",
+		e.timeout,
+		e.details.LastNotFoundWorkflowExecution,
+	)
 }
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
@@ -645,18 +653,11 @@ func (a *activities) verifyReplicationTasks(
 			return false, progress, nil
 
 		default:
-			return false, progress, err
+			return false, progress, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
 		}
 	}
 
 	return true, progress, nil
-}
-
-func (e verifyReplicationTasksTimeoutErr) Error() string {
-	return fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (retryable). Not found WorkflowExecution: %v,",
-		e.timeout,
-		e.details.LastNotFoundWorkflowExecution,
-	)
 }
 
 const (

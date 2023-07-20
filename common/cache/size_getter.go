@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,59 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination size_getter_mock.go
 
-import (
-	"sync"
-	"testing"
+package cache
 
-	"github.com/stretchr/testify/assert"
+// SizeGetter is an interface that can be implemented by cache entries to provide their size
+type (
+	SizeGetter interface {
+		CacheSize() int
+	}
 )
 
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
-}
-
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
-}
-
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+func getSize(value interface{}) int {
+	if v, ok := value.(SizeGetter); ok {
+		return v.CacheSize()
+	}
+	// if the object does not have a CacheSize() method, assume is count limit cache, which size should be 1
+	return 1
 }
