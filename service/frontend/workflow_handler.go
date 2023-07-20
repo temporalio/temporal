@@ -190,7 +190,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
-			visibilityMrg.GetIndexName(),
+			visibilityMrg,
 			visibility.AllowListForValidation(visibilityMrg.GetStoreNames()),
 		),
 		archivalMetadata:  archivalMetadata,
