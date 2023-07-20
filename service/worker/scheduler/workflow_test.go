@@ -179,15 +179,6 @@ func (s *workflowSuite) expectTerminate(f func(req *schedspb.TerminateWorkflowRe
 		})
 }
 
-func (s *workflowSuite) expectDeleteScheduleWorkflow(f func(scheduleId string) error) *testsuite.MockCallWrapper {
-	return s.env.OnActivity(new(activities).DeleteScheduleWorkflow, mock.Anything, mock.Anything).Once().Return(
-		func(_ context.Context, scheduleId string) error {
-			// cancel workflow to simulate deletion and prevent further calls to delete
-			s.env.CancelWorkflow()
-			return f(scheduleId)
-		})
-}
-
 // High-level mock helpers. This is a small meta-test-framework: it runs a schedule across
 // multiple workflow executions with continue-as-new, breaking at a variety of points. To do
 // this it has to reinitialize the workflow test framework each time, since the framework only
@@ -1484,7 +1475,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 	)
 }
 
-func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoActions() {
+func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -1502,10 +1493,7 @@ func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoActions() {
 		s.Equal("myid-2022-06-01T00:30:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
-	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
-		s.Equal("myschedule", scheduleId)
-		return nil
-	})
+
 	currentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
@@ -1528,19 +1516,17 @@ func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoActions() {
 			ConflictToken: InitialConflictToken,
 		},
 	})
+	// two iterations to start one workflow: first will sleep, second will start and then sleep again
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
-func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoNextTime() {
+func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T01:00:00Z", req.Request.WorkflowId)
 		return nil, nil
-	})
-
-	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
-		s.Equal("myschedule", scheduleId)
-		return nil
 	})
 
 	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
@@ -1566,14 +1552,13 @@ func (s *workflowSuite) TestDeleteScheduleWorkflowWhenNoNextTime() {
 			ConflictToken: InitialConflictToken,
 		},
 	})
+	// two iterations to start one workflow: first will sleep, second will start and then sleep again
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
-func (s *workflowSuite) TestDeleteScheduleWorkflowWhenEmpty() {
+func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
-	s.expectDeleteScheduleWorkflow(func(scheduleId string) error {
-		s.Equal("myschedule", scheduleId)
-		return nil
-	})
 
 	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
@@ -1588,4 +1573,8 @@ func (s *workflowSuite) TestDeleteScheduleWorkflowWhenEmpty() {
 			ConflictToken: InitialConflictToken,
 		},
 	})
+
+	// two iterations to start one workflow: first will sleep, second will start and then sleep again
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }

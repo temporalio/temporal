@@ -221,7 +221,6 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	var previousProcessedTime *time.Time
 	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
@@ -237,7 +236,6 @@ func (s *scheduler) run() error {
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
 			false,
 		)
-		previousProcessedTime = s.State.LastProcessedTime
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		// handle signals after processing time range that just elapsed
 		scheduleChanged := s.processSignals()
@@ -254,25 +252,14 @@ func (s *scheduler) run() error {
 		// if schedule is not paused and out of actions or do not have anything scheduled, delete the schedule workflow after retention period is passed
 		if s.tweakables.RetentionTime > 0 && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
 			// if schedule is empty use the previousProcessedTime as last workflow start time
-			lastWorkflowStarTime := s.now().Sub(*previousProcessedTime)
+			timeSinceLastWorkflowStart := s.now().Sub(t1)
 			if len(s.Info.RecentActions) > 0 {
-				lastWorkflowStarTime = s.now().Sub(*s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime)
+				timeSinceLastWorkflowStart = s.now().Sub(*s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime)
 			}
 
-			if lastWorkflowStarTime >= s.tweakables.RetentionTime {
-				activityOptions := workflow.ActivityOptions{
-					ScheduleToCloseTimeout: 1 * time.Hour,
-					StartToCloseTimeout:    5 * time.Second,
-					RetryPolicy: &temporal.RetryPolicy{
-						InitialInterval: 1 * time.Second,
-						MaximumInterval: 60 * time.Second,
-					},
-				}
-				ctx := workflow.WithActivityOptions(s.ctx, activityOptions)
-				err := workflow.ExecuteActivity(ctx, s.a.DeleteScheduleWorkflow, s.State.ScheduleId).Get(s.ctx, nil)
-				if err != nil {
-					s.logger.Error("Failed to delete schedule workflow", "err", err)
-				}
+			if timeSinceLastWorkflowStart >= s.tweakables.RetentionTime {
+				return nil
+
 			}
 		}
 
