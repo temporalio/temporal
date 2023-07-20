@@ -28,6 +28,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -179,6 +180,7 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 			startWG.Wait()
 
 			for !s.future.Ready() {
+				time.Sleep(time.Millisecond * 10)
 			}
 
 			value, err := s.future.Get(ctx)
