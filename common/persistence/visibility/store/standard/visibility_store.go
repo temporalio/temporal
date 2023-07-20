@@ -79,6 +79,12 @@ func (s *standardStore) GetIndexName() string {
 	return ""
 }
 
+func (s *standardStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return searchAttributes, nil
+}
+
 func (s *standardStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

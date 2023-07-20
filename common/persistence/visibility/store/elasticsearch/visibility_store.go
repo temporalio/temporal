@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -55,6 +56,7 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter                    = "~"
+	scrollKeepAliveInterval      = "1m"
 	pointInTimeKeepAliveInterval = "1m"
 )
 
@@ -72,7 +74,12 @@ type (
 	}
 
 	visibilityPageToken struct {
-		SearchAfter   []interface{}
+		SearchAfter []interface{}
+
+		// For ScanWorkflowExecutions API.
+		// For ES<7.10.0 and "oss" flavor.
+		ScrollID string
+		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
 	}
 
@@ -87,6 +94,10 @@ var _ store.VisibilityStore = (*visibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
+
+	minTime         = time.Unix(0, 0).UTC()
+	maxTime         = time.Unix(0, math.MaxInt64).UTC()
+	maxStringLength = 32766
 
 	// Default sorter uses the sorting order defined in the index template.
 	// It is indirectly built so buildPaginationQuery can have access to
@@ -155,6 +166,44 @@ func (s *visibilityStore) GetName() string {
 
 func (s *visibilityStore) GetIndexName() string {
 	return s.index
+}
+
+func (s *visibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	validatedSearchAttributes := make(map[string]any, len(searchAttributes))
+	var invalidValueErrs []error
+	for saName, saValue := range searchAttributes {
+		var err error
+		switch value := saValue.(type) {
+		case time.Time:
+			err = validateDatetime(value)
+		case []time.Time:
+			for _, item := range value {
+				if err = validateDatetime(item); err != nil {
+					break
+				}
+			}
+		case string:
+			err = validateString(value)
+		case []string:
+			for _, item := range value {
+				if err = validateString(item); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			invalidValueErrs = append(invalidValueErrs, err)
+			continue
+		}
+		validatedSearchAttributes[saName] = saValue
+	}
+	var retError error
+	if len(invalidValueErrs) > 0 {
+		retError = store.NewVisibilityStoreInvalidValuesError(invalidValueErrs)
+	}
+	return validatedSearchAttributes, retError
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
@@ -479,6 +528,55 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
+	// Point in time is only supported in Elasticsearch 7.10+ in default flavor.
+	if s.esClient.IsPointInTimeSupported(ctx) {
+		return s.scanWorkflowExecutionsWithPit(ctx, request)
+	}
+	return s.scanWorkflowExecutionsWithScroll(ctx, request)
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithScroll(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	var (
+		searchResult *elastic.SearchResult
+		scrollErr    error
+	)
+
+	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(request.NextPageToken) == 0 {
+		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
+	} else if p.ScrollID != "" {
+		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, scrollKeepAliveInterval)
+	} else {
+		return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
+	}
+
+	if scrollErr != nil && scrollErr != io.EOF {
+		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
+	}
+
+	// Both io.IOF and empty hits list indicate that this is a last page.
+	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
+		scrollErr == io.EOF {
+		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
+		if err != nil {
+			return nil, convertElasticsearchClientError("Unable to close scroll", err)
+		}
+	}
+
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithPit(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
@@ -491,6 +589,8 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 			return nil, convertElasticsearchClientError("Unable to create point in time", err)
 		}
 		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
+	} else if p.PointInTime == nil {
+		return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
@@ -667,7 +767,14 @@ func (s *visibilityStore) processPageToken(
 	pageToken *visibilityPageToken,
 	namespaceName namespace.Name,
 ) error {
-	if pageToken == nil || len(pageToken.SearchAfter) == 0 {
+	if pageToken == nil {
+		return nil
+	}
+	if pageToken.ScrollID != "" {
+		params.ScrollID = pageToken.ScrollID
+		return nil
+	}
+	if len(pageToken.SearchAfter) == 0 {
 		return nil
 	}
 	if pageToken.PointInTimeID != "" {
@@ -805,9 +912,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 		lastHitSort = hit.Sort
 	}
 
-	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
+	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter:   lastHitSort,
+			ScrollID:      searchResult.ScrollId,
 			PointInTimeID: searchResult.PitId,
 		})
 		if err != nil {
@@ -874,6 +982,14 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 	if err != nil {
 		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
+	}
+	// This is to prevent existing tasks to fail indefinitely.
+	// If it's only invalid values error, then silently continue without them.
+	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
+	if err != nil {
+		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+			return nil, err
+		}
 	}
 	for saName, saValue := range searchAttributes {
 		if saValue == nil {
@@ -1254,4 +1370,26 @@ func parsePageTokenValue(
 			fieldName,
 		))
 	}
+}
+
+func validateDatetime(value time.Time) error {
+	if value.Before(minTime) || value.After(maxTime) {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Date not supported in Elasticsearch: %v", value),
+		)
+	}
+	return nil
+}
+
+func validateString(value string) error {
+	if len(value) > maxStringLength {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"Strings with more than %d bytes are not supported in Elasticsearch (got %s)",
+				maxStringLength,
+				value,
+			),
+		)
+	}
+	return nil
 }

@@ -347,3 +347,18 @@ func (mr *MockVisibilityManagerMockRecorder) UpsertWorkflowExecution(ctx, reques
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWorkflowExecution", reflect.TypeOf((*MockVisibilityManager)(nil).UpsertWorkflowExecution), ctx, request)
 }
+
+// ValidateCustomSearchAttributes mocks base method.
+func (m *MockVisibilityManager) ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateCustomSearchAttributes", searchAttributes)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateCustomSearchAttributes indicates an expected call of ValidateCustomSearchAttributes.
+func (mr *MockVisibilityManagerMockRecorder) ValidateCustomSearchAttributes(searchAttributes interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCustomSearchAttributes", reflect.TypeOf((*MockVisibilityManager)(nil).ValidateCustomSearchAttributes), searchAttributes)
+}

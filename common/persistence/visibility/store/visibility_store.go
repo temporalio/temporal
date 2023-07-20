@@ -45,6 +45,11 @@ type (
 		GetName() string
 		GetIndexName() string
 
+		// Validate search attributes based on the store constraints. It returns a new map containing
+		// only search attributes with valid values. If there are invalid values, an error of type
+		// VisibilityStoreInvalidValuesError wraps all invalid values errors.
+		ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error)
+
 		// Write APIs.
 		RecordWorkflowExecutionStarted(ctx context.Context, request *InternalRecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(ctx context.Context, request *InternalRecordWorkflowExecutionClosedRequest) error
