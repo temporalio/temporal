@@ -1,6 +1,10 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
+    masterClusterName: "active"
+    currentClusterName: "active"
+    initialFailoverVersion: 1
+    replicationAddress: "127.0.0.1:7134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -12,6 +16,10 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
+    masterClusterName: "standby"
+    currentClusterName: "standby"
+    initialFailoverVersion: 2
+    replicationAddress: "127.0.0.1:8134"
   enablearchival: false
   workerconfig:
     enablearchiver: false

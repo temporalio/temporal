@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"gopkg.in/yaml.v3"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -132,21 +131,21 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ReplicationAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ReplicationAddress
-	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               cluster2Address,
-		EnableRemoteClusterConnection: true,
-	})
-	s.Require().NoError(err)
-
-	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               cluster1Address,
-		EnableRemoteClusterConnection: true,
-	})
-	s.Require().NoError(err)
+	//cluster1Address := clusterConfigs[0].ClusterMetadata.ReplicationAddress
+	//cluster2Address := clusterConfigs[1].ClusterMetadata.ReplicationAddress
+	//_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	//	FrontendAddress:               cluster2Address,
+	//	EnableRemoteClusterConnection: true,
+	//})
+	//s.Require().NoError(err)
+	//
+	//_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	//	FrontendAddress:               cluster1Address,
+	//	EnableRemoteClusterConnection: true,
+	//})
+	//s.Require().NoError(err)
 	// Wait for cluster metadata to refresh new added clusters
-	time.Sleep(time.Millisecond * 200)
+	time.Sleep(time.Second * 20)
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"

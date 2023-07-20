@@ -27,6 +27,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -236,11 +237,13 @@ func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistences
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
 		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||
 		(old.IsGlobalNamespaceEnabled && !cur.IsGlobalNamespaceEnabled) {
+		fmt.Println("XXXXXXXXX", old.ClusterId, cur.ClusterId)
 		return true
 	}
 	if old.IsGlobalNamespaceEnabled {
 		if (old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
 			(old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion) {
+			fmt.Println("YYYYYYYYY")
 			return true
 		}
 	}
