@@ -31,6 +31,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -634,7 +635,8 @@ func (a *activities) verifyReplicationTasks(
 		default:
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
 				Counter(metrics.VerifyReplicationTaskFailed.GetMetricName()).Record(1)
-			return false, progress, err
+
+			return false, progress, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
 		}
 	}
 
