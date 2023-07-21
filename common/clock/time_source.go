@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package timex provides extensions to the [time] package.
+// Package clock provides extensions to the [time] package.
 package clock
 
 import (

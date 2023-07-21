@@ -30,16 +30,16 @@ import (
 )
 
 type (
-	// EventTimeSource is a timex.TimeSource. Unlike other fake timeSource implementations, the methods of this
-	// timeSource are synchronous, so when you call Advance or Update, all triggered timers from AfterFunc will fire
-	// before the method returns, in the same goroutine.
+	// EventTimeSource is a fake TimeSource. Unlike other fake clock implementations, the methods are synchronous, so
+	// when you call Advance or Update, all triggered timers from AfterFunc will fire before the method returns, in the
+	// same goroutine.
 	EventTimeSource struct {
 		mu     sync.RWMutex
 		now    time.Time
 		timers []*fakeTimer
 	}
 
-	// fakeTimer is a fake implementation of [timex.Timer].
+	// fakeTimer is a fake implementation of [Timer].
 	fakeTimer struct {
 		// need a link to the parent timeSource for synchronization
 		timeSource *EventTimeSource
