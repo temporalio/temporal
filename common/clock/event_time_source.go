@@ -70,9 +70,10 @@ func (ts *EventTimeSource) Now() time.Time {
 }
 
 // AfterFunc return a timer that will fire after the specified duration. It is important to note that the timeSource is
-// locked while the callback is called. This means that you must be cautious about calling any methods on the timeSource
-// from within the callback. Doing so will probably result in a deadlock. To avoid this, you may want to wrap all such
-// calls in a goroutine. If the duration is non-positive, the callback will fire immediately before AfterFunc returns.
+// locked while the callback is called. This means that you must be cautious about calling any other mutating methods on
+// the timeSource from within the callback. Doing so will probably result in a deadlock. To avoid this, you may want to
+// wrap all such calls in a goroutine. If the duration is non-positive, the callback will fire immediately before
+// AfterFunc returns.
 func (ts *EventTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
