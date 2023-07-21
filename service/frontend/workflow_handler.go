@@ -495,18 +495,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
 			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
-				NamespaceId:     namespaceID.String(),
-				Execution:       request.Execution,
-				MaximumPageSize: request.MaximumPageSize,
-				NextPageToken:   request.NextPageToken,
+				NamespaceId: namespaceID.String(),
+				Request:     request,
 			})
 		if err != nil {
 			return nil, err
 		}
-		return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
-			History:       response.History,
-			NextPageToken: response.NextPageToken,
-		}, nil
+		return response.Response, nil
 	}
 	return wh.getWorkflowExecutionHistoryReverse(ctx, request)
 }

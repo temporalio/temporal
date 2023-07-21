@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/server/api/adminservice/v1"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -57,10 +58,11 @@ func Invoke(
 		return nil, err
 	}
 
-	execution := request.Execution
+	req := request.Request
+	execution := req.Execution
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
-	if request.NextPageToken == nil {
+	if req.NextPageToken == nil {
 		response, err := api.GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
 			NamespaceId: ns.ID().String(),
 			Execution:   execution,
@@ -79,7 +81,7 @@ func Invoke(
 
 		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
 	} else {
-		pageToken, err = api.DeserializeRawHistoryToken(request.NextPageToken)
+		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -106,12 +108,14 @@ func Invoke(
 	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
 		// API is exclusive-exclusive. Return empty response here.
 		return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
-			HistoryBatches: []*commonpb.DataBlob{},
-			NextPageToken:  nil, // no further pagination
-			VersionHistory: targetVersionHistory,
+			Response: &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+				HistoryBatches: []*commonpb.DataBlob{},
+				NextPageToken:  nil, // no further pagination
+				VersionHistory: targetVersionHistory,
+			},
 		}, nil
 	}
-	pageSize := int(request.GetMaximumPageSize())
+	pageSize := int(req.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
 		ns.ID().String(),
 		execution.GetWorkflowId(),
@@ -132,9 +136,11 @@ func Invoke(
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
-				HistoryBatches: []*commonpb.DataBlob{},
-				NextPageToken:  nil, // no further pagination
-				VersionHistory: targetVersionHistory,
+				Response: &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+					HistoryBatches: []*commonpb.DataBlob{},
+					NextPageToken:  nil, // no further pagination
+					VersionHistory: targetVersionHistory,
+				},
 			}, nil
 		}
 		return nil, err
@@ -148,11 +154,12 @@ func Invoke(
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
 	)
 
-	result := &historyservice.GetWorkflowExecutionRawHistoryV2Response{
-		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
-		VersionHistory: targetVersionHistory,
-		HistoryNodeIds: rawHistoryResponse.NodeIDs,
-	}
+	result :=
+		&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
+			VersionHistory: targetVersionHistory,
+			HistoryNodeIds: rawHistoryResponse.NodeIDs,
+		}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
 	} else {
@@ -162,14 +169,17 @@ func Invoke(
 		}
 	}
 
-	return result, nil
+	return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
+		Response: result,
+	}, nil
 }
 
 func validateGetWorkflowExecutionRawHistoryV2Request(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
 
-	execution := request.Execution
+	req := request.Request
+	execution := req.Execution
 	if execution.GetWorkflowId() == "" {
 		return consts.ErrWorkflowIDNotSet
 	}
@@ -180,15 +190,15 @@ func validateGetWorkflowExecutionRawHistoryV2Request(
 		return consts.ErrInvalidRunID
 	}
 
-	pageSize := int(request.GetMaximumPageSize())
+	pageSize := int(req.GetMaximumPageSize())
 	if pageSize <= 0 {
 		return consts.ErrInvalidPageSize
 	}
 
-	if request.GetStartEventId() == common.EmptyEventID &&
-		request.GetStartEventVersion() == common.EmptyVersion &&
-		request.GetEndEventId() == common.EmptyEventID &&
-		request.GetEndEventVersion() == common.EmptyVersion {
+	if req.GetStartEventId() == common.EmptyEventID &&
+		req.GetStartEventVersion() == common.EmptyVersion &&
+		req.GetEndEventId() == common.EmptyEventID &&
+		req.GetEndEventVersion() == common.EmptyVersion {
 		return consts.ErrInvalidEventQueryRange
 	}
 
@@ -199,6 +209,8 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
+
+	req := request.Request
 
 	targetBranch, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
@@ -213,29 +225,29 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if request.GetStartEventId() == common.EmptyVersion || request.GetStartEventVersion() == common.EmptyVersion {
+	if req.GetStartEventId() == common.EmptyVersion || req.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
 		// As the API is exclusive-exclusive, use first event id - 1 here
-		request.StartEventId = common.FirstEventID - 1
-		request.StartEventVersion = firstItem.GetVersion()
+		req.StartEventId = common.FirstEventID - 1
+		req.StartEventVersion = firstItem.GetVersion()
 	}
-	if request.GetEndEventId() == common.EmptyEventID || request.GetEndEventVersion() == common.EmptyVersion {
+	if req.GetEndEventId() == common.EmptyEventID || req.GetEndEventVersion() == common.EmptyVersion {
 		// If end event is not set, get the events until the end event
 		// As the API is exclusive-exclusive, use end event id + 1 here
-		request.EndEventId = lastItem.GetEventId() + 1
-		request.EndEventVersion = lastItem.GetVersion()
+		req.EndEventId = lastItem.GetEventId() + 1
+		req.EndEventVersion = lastItem.GetVersion()
 	}
 
-	if request.GetStartEventId() < 0 {
+	if req.GetStartEventId() < 0 {
 		return nil, consts.ErrInvalidFirstNextEventCombination
 	}
 
 	// get branch based on the end event if end event is defined in the request
-	if request.GetEndEventId() == lastItem.GetEventId()+1 &&
-		request.GetEndEventVersion() == lastItem.GetVersion() {
+	if req.GetEndEventId() == lastItem.GetEventId()+1 &&
+		req.GetEndEventVersion() == lastItem.GetVersion() {
 		// this is a special case, target branch remains the same
 	} else {
-		endItem := versionhistory.NewVersionHistoryItem(request.GetEndEventId(), request.GetEndEventVersion())
+		endItem := versionhistory.NewVersionHistoryItem(req.GetEndEventId(), req.GetEndEventVersion())
 		idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
 		if err != nil {
 			return nil, err
@@ -247,11 +259,11 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		}
 	}
 
-	startItem := versionhistory.NewVersionHistoryItem(request.GetStartEventId(), request.GetStartEventVersion())
+	startItem := versionhistory.NewVersionHistoryItem(req.GetStartEventId(), req.GetStartEventVersion())
 	// If the request start event is defined. The start event may be on a different branch as current branch.
 	// We need to find the LCA of the start event and the current branch.
-	if request.GetStartEventId() == common.FirstEventID-1 &&
-		request.GetStartEventVersion() == firstItem.GetVersion() {
+	if req.GetStartEventId() == common.FirstEventID-1 &&
+		req.GetStartEventVersion() == firstItem.GetVersion() {
 		// this is a special case, start event is on the same branch as target branch
 	} else {
 		if !versionhistory.ContainsVersionHistoryItem(targetBranch, startItem) {
@@ -267,8 +279,8 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 			if err != nil {
 				return nil, err
 			}
-			request.StartEventId = startItem.GetEventId()
-			request.StartEventVersion = startItem.GetVersion()
+			req.StartEventId = startItem.GetEventId()
+			req.StartEventVersion = startItem.GetVersion()
 		}
 	}
 

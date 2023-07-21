@@ -38,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -49,11 +50,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/tests"
 )
 
 type (
-	historyUtilSuite struct {
+	historyAPISuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -65,19 +67,19 @@ type (
 	}
 )
 
-func TestHistoryUtilSuite(t *testing.T) {
-	s := new(historyUtilSuite)
+func TestHistoryAPISuite(t *testing.T) {
+	s := new(historyAPISuite)
 	suite.Run(t, s)
 }
 
-func (s *historyUtilSuite) SetupSuite() {
+func (s *historyAPISuite) SetupSuite() {
 
 }
 
-func (s *historyUtilSuite) TearDownSuite() {
+func (s *historyAPISuite) TearDownSuite() {
 }
 
-func (s *historyUtilSuite) SetupTest() {
+func (s *historyAPISuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -89,10 +91,10 @@ func (s *historyUtilSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 }
 
-func (s *historyUtilSuite) TearDownTest() {
+func (s *historyAPISuite) TearDownTest() {
 	s.controller.Finish()
 }
-func (s *historyUtilSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
+func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 	}
@@ -105,8 +107,9 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() 
 
 	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		ShardId:     shardID,
-		Execution:   &execution,
+		Request: &adminservice.DeleteWorkflowExecutionRequest{
+			Execution: &execution,
+		},
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
@@ -114,7 +117,7 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() 
 	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
-	resp, err := forceDeleteWorkflowExecution(context.Background(), request, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
+	resp, err := forcedeleteworkflowexecution.Invoke(context.Background(), request, shardID, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
 	s.Nil(resp)
 	s.Error(err)
 
@@ -158,11 +161,11 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() 
 	}).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
 
-	_, err = forceDeleteWorkflowExecution(context.Background(), request, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
+	_, err = forcedeleteworkflowexecution.Invoke(context.Background(), request, shardID, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
 	s.NoError(err)
 }
 
-func (s *historyUtilSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
+func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 		RunId:      uuid.New(),
@@ -176,8 +179,9 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() 
 
 	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		ShardId:     shardID,
-		Execution:   &execution,
+		Request: &adminservice.DeleteWorkflowExecutionRequest{
+			Execution: &execution,
+		},
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
@@ -188,11 +192,11 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() 
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, err := forceDeleteWorkflowExecution(context.Background(), request, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
+	_, err := forcedeleteworkflowexecution.Invoke(context.Background(), request, shardID, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
 	s.NoError(err)
 }
 
-func (s *historyUtilSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
+func (s *historyAPISuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "workflowID",
 		RunId:      uuid.New(),
@@ -206,8 +210,9 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacken
 
 	request := &historyservice.ForceDeleteWorkflowExecutionRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		ShardId:     shardID,
-		Execution:   &execution,
+		Request: &adminservice.DeleteWorkflowExecutionRequest{
+			Execution: &execution,
+		},
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
@@ -247,7 +252,7 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacken
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
 	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes()
 
-	_, err := forceDeleteWorkflowExecution(context.Background(), request, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
+	_, err := forcedeleteworkflowexecution.Invoke(context.Background(), request, shardID, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
 	s.NoError(err)
 
 	// test delete close records
@@ -282,6 +287,6 @@ func (s *historyUtilSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacken
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
 
-	_, err = forceDeleteWorkflowExecution(context.Background(), request, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
+	_, err = forcedeleteworkflowexecution.Invoke(context.Background(), request, shardID, s.mockExecutionMgr, s.mockVisibilityMgr, s.logger)
 	s.NoError(err)
 }

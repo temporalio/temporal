@@ -36,15 +36,16 @@ func GeneratePaginationToken(
 	versionHistories *historyspb.VersionHistories,
 ) *tokenspb.RawHistoryContinuation {
 
-	execution := request.Execution
+	req := request.Request
+	execution := req.Execution
 	return &tokenspb.RawHistoryContinuation{
-		NamespaceId:       request.GetNamespaceId(),
+		NamespaceId:       req.GetNamespaceId(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
-		StartEventId:      request.GetStartEventId(),
-		StartEventVersion: request.GetStartEventVersion(),
-		EndEventId:        request.GetEndEventId(),
-		EndEventVersion:   request.GetEndEventVersion(),
+		StartEventId:      req.GetStartEventId(),
+		StartEventVersion: req.GetStartEventVersion(),
+		EndEventId:        req.GetEndEventId(),
+		EndEventVersion:   req.GetEndEventVersion(),
 		VersionHistories:  versionHistories,
 		PersistenceToken:  nil, // this is the initialized value
 	}
@@ -55,14 +56,15 @@ func ValidatePaginationToken(
 	token *tokenspb.RawHistoryContinuation,
 ) error {
 
-	execution := request.Execution
-	if request.GetNamespaceId() != token.GetNamespaceId() ||
+	req := request.Request
+	execution := req.Execution
+	if req.GetNamespaceId() != token.GetNamespaceId() ||
 		execution.GetWorkflowId() != token.GetWorkflowId() ||
 		execution.GetRunId() != token.GetRunId() ||
-		request.GetStartEventId() != token.GetStartEventId() ||
-		request.GetStartEventVersion() != token.GetStartEventVersion() ||
-		request.GetEndEventId() != token.GetEndEventId() ||
-		request.GetEndEventVersion() != token.GetEndEventVersion() {
+		req.GetStartEventId() != token.GetStartEventId() ||
+		req.GetStartEventVersion() != token.GetStartEventVersion() ||
+		req.GetEndEventId() != token.GetEndEventId() ||
+		req.GetEndEventVersion() != token.GetEndEventVersion() {
 		return consts.ErrInvalidPaginationToken
 	}
 	return nil

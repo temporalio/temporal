@@ -898,24 +898,13 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
 		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
-				NamespaceId:       request.NamespaceId,
-				Execution:         request.Execution,
-				StartEventId:      request.StartEventId,
-				StartEventVersion: request.StartEventVersion,
-				EndEventId:        request.EndEventId,
-				EndEventVersion:   request.EndEventVersion,
-				MaximumPageSize:   request.MaximumPageSize,
-				NextPageToken:     request.NextPageToken,
+				NamespaceId: request.NamespaceId,
+				Request:     request,
 			})
 		if err != nil {
 			return nil, err
 		}
-		return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-			NextPageToken:  response.NextPageToken,
-			HistoryBatches: response.HistoryBatches,
-			VersionHistory: response.VersionHistory,
-			HistoryNodeIds: response.HistoryNodeIds,
-		}, nil
+		return response.Response, nil
 	}
 	return adh.getWorkflowExecutionRawHistoryV2(ctx, request)
 }
@@ -1557,21 +1546,16 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
-
 	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
-				Shard:       shardID,
-				Execution:   request.Execution,
+				Request:     request,
 			})
 		if err != nil {
 			return nil, err
 		}
-		return &adminservice.DeleteWorkflowExecutionResponse{
-			Warnings: response.Warnings,
-		}, nil
+		return response.Response, nil
 	}
 	return adh.deleteWorkflowExecution(ctx, request)
 }

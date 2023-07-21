@@ -139,7 +139,7 @@ func (c *clientImpl) ForceDeleteWorkflowExecution(
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.ForceDeleteWorkflowExecutionResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -283,7 +283,7 @@ func (c *clientImpl) GetWorkflowExecutionHistoryReverse(
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.GetWorkflowExecutionHistoryReverseResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -303,7 +303,7 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	opts ...grpc.CallOption,
 ) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
 	var response *historyservice.GetWorkflowExecutionRawHistoryV2Response
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

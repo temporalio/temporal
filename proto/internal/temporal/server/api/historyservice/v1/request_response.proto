@@ -706,15 +706,11 @@ message GetWorkflowExecutionHistoryResponse {
 
 message GetWorkflowExecutionHistoryReverseRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    int32 maximum_page_size = 3;
-    bytes next_page_token = 4;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest request = 2;
 }
 
 message GetWorkflowExecutionHistoryReverseResponse {
-    temporal.api.history.v1.History history = 1;
-    // Will be set if there are more history events than were included in this response
-    bytes next_page_token = 3;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse response = 1;
 }
 
 /**
@@ -722,30 +718,19 @@ message GetWorkflowExecutionHistoryReverseResponse {
   * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
-    reserved 1;
-    string namespace_id = 9;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    int64 start_event_id = 3;
-    int64 start_event_version = 4;
-    int64 end_event_id = 5;
-    int64 end_event_version = 6;
-    int32 maximum_page_size = 7;
-    bytes next_page_token = 8;
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request request = 2;
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
-    bytes next_page_token = 1;
-    repeated temporal.api.common.v1.DataBlob history_batches = 2;
-    temporal.server.api.history.v1.VersionHistory version_history = 3;
-    repeated int64 history_node_ids = 4;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response response = 1;
 }
 
 message ForceDeleteWorkflowExecutionRequest {
     string namespace_id = 1;
-    int32 shard = 2;
-    temporal.api.common.v1.WorkflowExecution execution = 3;
+    temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest request = 2;
 }
 
 message ForceDeleteWorkflowExecutionResponse {
-    repeated string warnings = 1;
+    temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }

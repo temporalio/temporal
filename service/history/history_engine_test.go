@@ -34,6 +34,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -5621,16 +5623,19 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkf
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "",
-				RunId:      uuid.New(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
 			},
-			StartEventId:      1,
-			StartEventVersion: 100,
-			EndEventId:        10,
-			EndEventVersion:   100,
-			MaximumPageSize:   1,
-			NextPageToken:     nil,
 		})
 	s.Error(err)
 }
@@ -5654,16 +5659,19 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidRunID
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflowID",
-				RunId:      "runID",
+			Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      "runID",
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
 			},
-			StartEventId:      1,
-			StartEventVersion: 100,
-			EndEventId:        10,
-			EndEventVersion:   100,
-			MaximumPageSize:   1,
-			NextPageToken:     nil,
 		})
 	s.Error(err)
 }
@@ -5678,16 +5686,19 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCac
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: namespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
 			},
-			StartEventId:      1,
-			StartEventVersion: 100,
-			EndEventId:        10,
-			EndEventVersion:   100,
-			MaximumPageSize:   1,
-			NextPageToken:     nil,
 		})
 	s.Error(err)
 }
@@ -5734,16 +5745,19 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	_, err = engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: tests.NamespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   10,
+				NextPageToken:     nil,
 			},
-			StartEventId:      1,
-			StartEventVersion: 100,
-			EndEventId:        10,
-			EndEventVersion:   100,
-			MaximumPageSize:   10,
-			NextPageToken:     nil,
 		})
 	s.NoError(err)
 }
@@ -5785,18 +5799,21 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID(
 	resp, err := engine.GetWorkflowExecutionRawHistoryV2(ctx,
 		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 			NamespaceId: tests.NamespaceID.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "workflowID",
-				RunId:      uuid.New(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      10,
+				StartEventVersion: 100,
+				EndEventId:        common.EmptyEventID,
+				EndEventVersion:   common.EmptyVersion,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
 			},
-			StartEventId:      10,
-			StartEventVersion: 100,
-			EndEventId:        common.EmptyEventID,
-			EndEventVersion:   common.EmptyVersion,
-			MaximumPageSize:   1,
-			NextPageToken:     nil,
 		})
-	s.Nil(resp.NextPageToken)
+	s.Nil(resp.Response.NextPageToken)
 	s.NoError(err)
 }
 
@@ -5812,24 +5829,27 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "workflowID",
-			RunId:      uuid.New(),
+		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      inputStartEventID,
+			StartEventVersion: inputStartVersion,
+			EndEventId:        inputEndEventID,
+			EndEventVersion:   inputEndVersion,
+			MaximumPageSize:   10,
+			NextPageToken:     nil,
 		},
-		StartEventId:      inputStartEventID,
-		StartEventVersion: inputStartVersion,
-		EndEventId:        inputEndEventID,
-		EndEventVersion:   inputEndVersion,
-		MaximumPageSize:   10,
-		NextPageToken:     nil,
 	}
 
 	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
-	s.Equal(request.GetStartEventId(), inputStartEventID)
-	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(request.GetRequest().GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetRequest().GetEndEventId(), inputEndEventID)
 	s.Equal(targetVersionHistory, versionHistory)
 	s.NoError(err)
 }
@@ -5846,24 +5866,27 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "workflowID",
-			RunId:      uuid.New(),
+		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      common.EmptyEventID,
+			StartEventVersion: common.EmptyVersion,
+			EndEventId:        inputEndEventID,
+			EndEventVersion:   inputEndVersion,
+			MaximumPageSize:   10,
+			NextPageToken:     nil,
 		},
-		StartEventId:      common.EmptyEventID,
-		StartEventVersion: common.EmptyVersion,
-		EndEventId:        inputEndEventID,
-		EndEventVersion:   inputEndVersion,
-		MaximumPageSize:   10,
-		NextPageToken:     nil,
 	}
 
 	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
-	s.Equal(request.GetStartEventId(), inputStartEventID-1)
-	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(request.GetRequest().GetStartEventId(), inputStartEventID-1)
+	s.Equal(request.GetRequest().GetEndEventId(), inputEndEventID)
 	s.Equal(targetVersionHistory, versionHistory)
 	s.NoError(err)
 }
@@ -5880,24 +5903,27 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_Defi
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "workflowID",
-			RunId:      uuid.New(),
+		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      inputStartEventID,
+			StartEventVersion: inputStartVersion,
+			EndEventId:        common.EmptyEventID,
+			EndEventVersion:   common.EmptyVersion,
+			MaximumPageSize:   10,
+			NextPageToken:     nil,
 		},
-		StartEventId:      inputStartEventID,
-		StartEventVersion: inputStartVersion,
-		EndEventId:        common.EmptyEventID,
-		EndEventVersion:   common.EmptyVersion,
-		MaximumPageSize:   10,
-		NextPageToken:     nil,
 	}
 
 	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
-	s.Equal(request.GetStartEventId(), inputStartEventID)
-	s.Equal(request.GetEndEventId(), inputEndEventID+1)
+	s.Equal(request.GetRequest().GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetRequest().GetEndEventId(), inputEndEventID+1)
 	s.Equal(targetVersionHistory, versionHistory)
 	s.NoError(err)
 }
@@ -5919,24 +5945,27 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "workflowID",
-			RunId:      uuid.New(),
+		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "workflowID",
+				RunId:      uuid.New(),
+			},
+			StartEventId:      9,
+			StartEventVersion: 20,
+			EndEventId:        inputEndEventID,
+			EndEventVersion:   inputEndVersion,
+			MaximumPageSize:   10,
+			NextPageToken:     nil,
 		},
-		StartEventId:      9,
-		StartEventVersion: 20,
-		EndEventId:        inputEndEventID,
-		EndEventVersion:   inputEndVersion,
-		MaximumPageSize:   10,
-		NextPageToken:     nil,
 	}
 
 	targetVersionHistory, err := getworkflowexecutionrawhistoryv2.SetRequestDefaultValueAndGetTargetVersionHistory(
 		request,
 		versionHistories,
 	)
-	s.Equal(request.GetStartEventId(), inputStartEventID)
-	s.Equal(request.GetEndEventId(), inputEndEventID)
+	s.Equal(request.GetRequest().GetStartEventId(), inputStartEventID)
+	s.Equal(request.GetRequest().GetEndEventId(), inputEndEventID)
 	s.Equal(targetVersionHistory, versionHistory1)
 	s.NoError(err)
 }

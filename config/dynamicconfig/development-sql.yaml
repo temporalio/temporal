@@ -43,3 +43,5 @@ frontend.enableUpdateWorkflowExecution:
   - value: true
 frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
+frontend.accessHistoryFraction:
+  - value: 1.0

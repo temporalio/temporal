@@ -30,6 +30,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -84,13 +85,14 @@ func Invoke(
 			nil
 	}
 
-	execution := request.Execution
+	req := request.Request
+	execution := req.Execution
 	var continuationToken *tokenspb.HistoryContinuation
 
 	var runID string
 	var lastFirstTxnID int64
 
-	if request.NextPageToken == nil {
+	if req.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
 		continuationToken.BranchToken, runID, lastFirstTxnID, err =
 			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
@@ -104,7 +106,7 @@ func Invoke(
 		continuationToken.NextEventId = common.EmptyEventID
 		continuationToken.PersistenceToken = nil
 	} else {
-		continuationToken, err = api.DeserializeHistoryToken(request.NextPageToken)
+		continuationToken, err = api.DeserializeHistoryToken(req.NextPageToken)
 		if err != nil {
 			return nil, consts.ErrInvalidNextPageToken
 		}
@@ -142,7 +144,7 @@ func Invoke(
 		*execution,
 		continuationToken.NextEventId,
 		lastFirstTxnID,
-		request.GetMaximumPageSize(),
+		req.GetMaximumPageSize(),
 		continuationToken.PersistenceToken,
 		continuationToken.BranchToken,
 		persistenceVisibilityMgr,
@@ -162,7 +164,9 @@ func Invoke(
 	}
 
 	return &historyservice.GetWorkflowExecutionHistoryReverseResponse{
-		History:       history,
-		NextPageToken: nextToken,
+		Response: &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+			History:       history,
+			NextPageToken: nextToken,
+		},
 	}, nil
 }

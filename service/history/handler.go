@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -2040,7 +2041,7 @@ func (h *Handler) GetWorkflowExecutionHistoryReverse(
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
 		namespace.ID(request.GetNamespaceId()),
-		request.GetExecution().GetWorkflowId(),
+		request.GetRequest().GetExecution().GetWorkflowId(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2067,7 +2068,7 @@ func (h *Handler) GetWorkflowExecutionRawHistoryV2(
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
 		namespace.ID(request.GetNamespaceId()),
-		request.GetExecution().GetWorkflowId(),
+		request.GetRequest().GetExecution().GetWorkflowId(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2085,9 +2086,20 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 ) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retErr error) {
-	return forceDeleteWorkflowExecution(
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID.String(),
+		request.Request.Execution.WorkflowId,
+		h.config.NumberOfShards,
+	)
+	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
+		shardID,
 		h.persistenceExecutionManager,
 		h.persistenceVisibilityManager,
 		h.logger,
