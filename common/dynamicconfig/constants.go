@@ -248,10 +248,6 @@ const (
 	// APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility).
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendNamespaceReplicationInducingAPIsRPS = "frontend.rps.namespaceReplicationInducingAPIs"
-	// FrontendGlobalNamespaceReplicationInducingAPIsRPS limits the per second request rate for namespace replication
-	// inducing APIs (e.g. RegisterNamespace, UpdateNamespace, UpdateWorkerBuildIdCompatibility) for the whole cluster.
-	// This config is EXPERIMENTAL and may be changed or removed in a later release.
-	FrontendGlobalNamespaceReplicationInducingAPIsRPS = "frontend.globalRPS.namespaceReplicationInducingAPIs"
 	// FrontendMaxNamespaceRPSPerInstance is workflow namespace rate limit per second
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit

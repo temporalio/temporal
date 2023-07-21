@@ -211,7 +211,6 @@ func NewConfig(
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
 		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
-		GlobalNamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendGlobalNamespaceReplicationInducingAPIsRPS, 0),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
