@@ -318,9 +318,7 @@ func (db *taskQueueDB) DbStoresUserData() bool {
 
 // GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
 // will cause cache inconsistency.
-func (db *taskQueueDB) GetUserData(
-	context.Context,
-) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+func (db *taskQueueDB) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.getUserDataLocked()
