@@ -297,7 +297,7 @@ func RateLimitInterceptorProvider(
 	namespaceReplicationInducingRateFn := quotas.ClusterAwareQuotaCalculator{
 		MemberCounter:    frontendServiceResolver,
 		PerInstanceQuota: serviceConfig.NamespaceReplicationInducingAPIsRPS,
-		GlobalQuota:      serviceConfig.GlobalNamespaceReplicationInducingAPIsRPS,
+		GlobalQuota:      serviceConfig.GlobalNamespaceNamespaceReplicationInducingAPIsRPS,
 	}.GetQuota
 
 	return interceptor.NewRateLimitInterceptor(

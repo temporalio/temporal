@@ -73,7 +73,6 @@ type Config struct {
 	GlobalRPS                                                    dynamicconfig.IntPropertyFn
 	OperatorRPSRatio                                             dynamicconfig.FloatPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
-	GlobalNamespaceReplicationInducingAPIsRPS                    dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                  dynamicconfig.IntPropertyFnWithNamespaceFilter

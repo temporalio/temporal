@@ -194,7 +194,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				NamespaceReplicationInducingAPIsRPS: func() int {
 					return tc.perInstanceRPSLimit
 				},
-				GlobalNamespaceReplicationInducingAPIsRPS: func() int {
+				GlobalNamespaceNamespaceReplicationInducingAPIsRPS: func() int {
 					return tc.globalRPSLimit
 				},
 				OperatorRPSRatio: func() float64 {
