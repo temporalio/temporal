@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -60,7 +61,12 @@ type (
 	}
 )
 
+const (
+	xdcMinCacheSize = 64 * 1024 // 64KB
+)
+
 var _ XDCCache = (*XDCCacheImpl)(nil)
+var _ cache.SizeGetter = XDCCacheValue{}
 
 func NewXDCCacheKey(
 	workflowKey definition.WorkflowKey,
@@ -88,11 +94,22 @@ func NewXDCCacheValue(
 	}
 }
 
-func NewEventsBlobCache() *XDCCacheImpl {
+func (v XDCCacheValue) CacheSize() int {
+	size := 0
+	for _, item := range v.VersionHistoryItems {
+		size += item.Size()
+	}
+	return v.BaseWorkflowInfo.Size() + size + v.EventBlob.Size()
+}
+
+func NewEventsBlobCache(
+	maxBytes int,
+	ttl time.Duration,
+) *XDCCacheImpl {
 	return &XDCCacheImpl{
-		cache: cache.New(2048, &cache.Options{
-			InitialCapacity: 512,
-			TTL:             20 * time.Second,
+		cache: cache.New(util.Max(xdcMinCacheSize, maxBytes), &cache.Options{
+			InitialCapacity: util.Max(xdcMinCacheSize, maxBytes/4),
+			TTL:             ttl,
 			Pin:             false,
 		}),
 	}
