@@ -117,7 +117,7 @@ update-goimports:
 
 update-linters:
 	@printf $(COLOR) "Install/update linters..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
