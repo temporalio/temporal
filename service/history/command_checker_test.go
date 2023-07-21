@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -83,8 +84,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		mockNamespaceCache *namespace.MockRegistry
+		controller            *gomock.Controller
+		mockNamespaceCache    *namespace.MockRegistry
+		mockVisibilityManager *manager.MockVisibilityManager
 
 		validator *commandAttrValidator
 
@@ -111,6 +113,18 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
+
+	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
+	s.mockVisibilityManager.EXPECT().
+		ValidateCustomSearchAttributes(gomock.Any()).
+		DoAndReturn(
+			func(searchAttributes map[string]any) (map[string]any, error) {
+				return searchAttributes, nil
+			},
+		).
+		AnyTimes()
+
 	config := &configs.Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
@@ -130,7 +144,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
-			"index-name",
+			s.mockVisibilityManager,
 			false,
 		))
 }

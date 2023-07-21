@@ -101,6 +101,17 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
+	mockVisibilityManager := mockShard.Resource.VisibilityManager
+	mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
+	mockVisibilityManager.EXPECT().
+		ValidateCustomSearchAttributes(gomock.Any()).
+		DoAndReturn(
+			func(searchAttributes map[string]any) (map[string]any, error) {
+				return searchAttributes, nil
+			},
+		).
+		AnyTimes()
+
 	s.mockEventsCache = mockShard.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
@@ -124,7 +135,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
-			"",
+			mockShard.Resource.VisibilityManager,
 			false,
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, workflowCache),
