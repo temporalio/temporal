@@ -108,7 +108,7 @@ func NewEventsBlobCache(
 ) *XDCCacheImpl {
 	return &XDCCacheImpl{
 		cache: cache.New(util.Max(xdcMinCacheSize, maxBytes), &cache.Options{
-			InitialCapacity: util.Max(xdcMinCacheSize, maxBytes/4),
+			InitialCapacity: xdcMinCacheSize,
 			TTL:             ttl,
 			Pin:             false,
 		}),
