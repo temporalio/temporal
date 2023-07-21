@@ -249,18 +249,9 @@ func (s *scheduler) run() error {
 		}
 		s.updateMemoAndSearchAttributes()
 
-		// if schedule is not paused and out of actions or do not have anything scheduled, delete the schedule workflow after retention period is passed
-		if s.tweakables.RetentionTime > 0 && (!s.Schedule.State.Paused && (nextWakeup.IsZero() || !s.canTakeScheduledAction(false, false))) {
-			// if schedule is empty use the previousProcessedTime as last workflow start time
-			timeSinceLastWorkflowStart := s.now().Sub(t1)
-			if len(s.Info.RecentActions) > 0 {
-				timeSinceLastWorkflowStart = s.now().Sub(*s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime)
-			}
-
-			if timeSinceLastWorkflowStart >= s.tweakables.RetentionTime {
-				return nil
-
-			}
+		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
+		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {
+			return nil
 		}
 
 		// sleep returns on any of:
@@ -496,13 +487,9 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 		nextWakeup = time.Time{}
 	}
 
-	// if run out of actions or no more jobs to run and the schedule workflow is not paused, start a timer to delete the schedule workflow
-	if s.tweakables.RetentionTime > 0 && !s.Schedule.State.Paused && nextWakeup.IsZero() {
-		if len(s.Info.RecentActions) > 0 {
-			nextWakeup = s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime.Add(s.tweakables.RetentionTime)
-		} else {
-			nextWakeup = s.now().Add(s.tweakables.RetentionTime)
-		}
+	// if retention is not zero, it means there is no more job to schedule, so sleep for retention time and then exit if no signal is received
+	if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() {
+		nextWakeup = exp
 	}
 
 	if !nextWakeup.IsZero() {
@@ -1075,6 +1062,31 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	// Note: the local activity has completed (or failed) here but we'll still wait until we
 	// observe the workflow close (with a watcher) to start the next one.
 	// If this failed, that's okay, we'll try it again the next time we try to take an action.
+}
+
+func (s *scheduler) getRetentionExpiration(nextWakeup time.Time) time.Time {
+	// if RetentionTime is not set or the schedule is paused or nextWakeup time is not zero
+	// or there is more action to take, there is no need for retention
+	if s.tweakables.RetentionTime == 0 || s.Schedule.State.Paused || (!nextWakeup.IsZero() && s.canTakeScheduledAction(false, false)) {
+		return time.Time{}
+	}
+
+	lastActionTime := timestamp.TimePtr(time.Time{})
+	if len(s.Info.RecentActions) > 0 {
+		lastActionTime = s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime
+	}
+
+	// retention base is max(CreateTime, UpdateTime, and last action time)
+	retentionBase := lastActionTime
+
+	if s.Info.CreateTime != nil && s.Info.CreateTime.After(*retentionBase) {
+		retentionBase = s.Info.CreateTime
+	}
+	if s.Info.UpdateTime != nil && s.Info.UpdateTime.After(*retentionBase) {
+		retentionBase = s.Info.UpdateTime
+	}
+
+	return retentionBase.Add(s.tweakables.RetentionTime)
 }
 
 func (s *scheduler) newUUIDString() string {
