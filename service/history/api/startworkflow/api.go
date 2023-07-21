@@ -33,10 +33,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 
 	"go.temporal.io/server/common/tasktoken"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -543,6 +543,7 @@ func (s *Starter) generateResponse(
 		runID,
 		workflowTaskInfo.ScheduledEventID,
 		workflowTaskInfo.StartedEventID,
+		workflowTaskInfo.StartedTime,
 		workflowTaskInfo.Attempt,
 		clock,
 		workflowTaskInfo.Version,

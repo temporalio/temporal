@@ -25,6 +25,8 @@
 package tasktoken
 
 import (
+	"time"
+
 	v11 "go.temporal.io/server/api/clock/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 )
@@ -35,6 +37,7 @@ func NewWorkflowTaskToken(
 	runID string,
 	scheduledEventID int64,
 	startedEventId int64,
+	startedTime *time.Time,
 	attempt int32,
 	clock *v11.VectorClock,
 	version int64,
@@ -45,6 +48,7 @@ func NewWorkflowTaskToken(
 		RunId:            runID,
 		ScheduledEventId: scheduledEventID,
 		StartedEventId:   startedEventId,
+		StartedTime:      startedTime,
 		Attempt:          attempt,
 		Clock:            clock,
 		Version:          version,

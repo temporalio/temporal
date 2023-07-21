@@ -325,8 +325,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			if workflowTask == nil ||
 				workflowTask.StartedEventID == common.EmptyEventID ||
 				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
+				(token.StartedTime != nil && workflowTask.StartedTime != nil && !token.StartedTime.Equal(*workflowTask.StartedTime)) ||
 				workflowTask.Attempt != token.Attempt ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
+				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
+				workflowContext.GetReleaseFn()(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
@@ -393,6 +396,22 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+	weContext := workflowContext.GetContext()
+	ms := workflowContext.GetMutableState()
+
+	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+	if !ms.IsWorkflowExecutionRunning() ||
+		currentWorkflowTask == nil ||
+		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
+		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
+		(token.StartedTime != nil && currentWorkflowTask.StartedTime != nil && !token.StartedTime.Equal(*currentWorkflowTask.StartedTime)) ||
+		currentWorkflowTask.Attempt != token.Attempt ||
+		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
+		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
+		workflowContext.GetReleaseFn()(nil)
+		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
 	var effects effect.Buffer
@@ -409,19 +428,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 		effects.Apply(ctx)
 	}()
-
-	weContext := workflowContext.GetContext()
-	ms := workflowContext.GetMutableState()
-
-	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
-	if !ms.IsWorkflowExecutionRunning() ||
-		currentWorkflowTask == nil ||
-		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
-		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
-		currentWorkflowTask.Attempt != token.Attempt ||
-		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
-		return nil, serviceerror.NewNotFound("Workflow task not found.")
-	}
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
 	if ms.GetWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
