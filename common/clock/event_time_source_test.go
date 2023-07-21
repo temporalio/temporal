@@ -158,6 +158,23 @@ func TestEventTimeSource_AfterFunc_Stop(t *testing.T) {
 	assert.False(t, timer.Stop(), "`Stop` return false if the timer was already stopped")
 }
 
+func TestEventTimeSource_AfterFunc_NegativeDelay(t *testing.T) {
+	t.Parallel()
+
+	// Create a new fake time source and one event to fire.
+	source := clock.NewEventTimeSource()
+	ev1 := event{t: t}
+
+	// Create a timer which fires after -1ns. This should fire immediately.
+	timer := source.AfterFunc(-1, ev1.Fire)
+
+	// Verify that the timer has fired.
+	ev1.AssertFiredOnce("A timer with a negative delay should fire immediately")
+
+	// Verify that the timer is stopped.
+	assert.False(t, timer.Stop(), "`Stop` should return false if the timer was already stopped")
+}
+
 func TestEventTimeSource_Update(t *testing.T) {
 	t.Parallel()
 
