@@ -183,6 +183,28 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	assert.Equal(t, closeTime, status.LastCloseTime)
 }
 
+func TestForceReplicationWorkflow_InvalidInput(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+
+	for _, invalidInput := range []ForceReplicationParams{
+		{},
+		{
+			Namespace:          uuid.New(),
+			EnableVerification: true,
+		},
+	} {
+		env := testSuite.NewTestWorkflowEnvironment()
+		env.ExecuteWorkflow(ForceReplicationWorkflow, invalidInput)
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err)
+		require.ErrorContains(t, err, "InvalidArgument")
+		env.AssertExpectations(t)
+
+	}
+}
+
 func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()

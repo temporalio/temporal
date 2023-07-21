@@ -61,9 +61,8 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
-		TargetClusterEndpoint   string `validate:"required"`
-		VerifyIntervalInSeconds int    `validate:"gte=0"`
-		RetentionBiasInSeconds  int    `validate:"gte=0"`
+		TargetClusterEndpoint   string
+		VerifyIntervalInSeconds int `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
 		LastCloseTime                      time.Time
@@ -108,7 +107,6 @@ type (
 		NamespaceID           string
 		TargetClusterEndpoint string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		RetentionBiasDuration time.Duration `validate:"gte=0"`
 		Executions            []commonpb.WorkflowExecution
 	}
 
@@ -303,10 +301,6 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		params.VerifyIntervalInSeconds = defaultVerifyIntervalInSeconds
 	}
 
-	if params.RetentionBiasInSeconds <= 0 {
-		params.RetentionBiasInSeconds = defaultRetentionBiasInSeconds
-	}
-
 	return nil
 }
 
@@ -406,7 +400,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				NamespaceID:           namespaceID,
 				Executions:            workflowExecutions,
 				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
-				RetentionBiasDuration: time.Duration(params.RetentionBiasInSeconds) * time.Second,
 			})
 
 			pendingVerifyTasks++
