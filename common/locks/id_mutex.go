@@ -108,6 +108,7 @@ func (idMutex *idMutexImpl) UnlockID(identifier interface{}) {
 	shard := idMutex.shards[idMutex.getShardIndex(identifier)]
 
 	shard.Lock()
+	defer shard.Unlock()
 	mutexInfo, ok := shard.mutexInfos[identifier]
 	if !ok {
 		panic("cannot find workflow lock")
@@ -118,7 +119,6 @@ func (idMutex *idMutexImpl) UnlockID(identifier interface{}) {
 	} else {
 		mutexInfo.waitCount--
 	}
-	shard.Unlock()
 }
 
 func (idMutex *idMutexImpl) getShardIndex(key interface{}) uint32 {

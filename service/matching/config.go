@@ -27,6 +27,7 @@ package matching
 import (
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -47,6 +48,7 @@ type (
 		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		TestDisableSyncMatch                  dynamicconfig.BoolPropertyFn
 		RPS                                   dynamicconfig.IntPropertyFn
+		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 
 		// taskQueueManager configuration
@@ -124,7 +126,7 @@ type (
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
 
 		// If set to false, matching does not load user data from DB for root partitions or fetch it via RPC from the
-		// root. When disbled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
+		// root. When disabled, features that rely on user data (e.g. worker versioning) will essentially be disabled.
 		// See the documentation for constants.MatchingLoadUserData for the implications on versioning.
 		LoadUserData func() bool
 
@@ -163,6 +165,7 @@ func NewConfig(
 		TestDisableSyncMatch:                  dc.GetBoolProperty(dynamicconfig.TestMatchingDisableSyncMatch, false),
 		LoadUserData:                          dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLoadUserData, true),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
+		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		RangeSize:                             100000,
 		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
 		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, defaultUpdateAckInterval),

@@ -45,6 +45,7 @@ type (
 	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
+	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
 
 	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
 
@@ -59,6 +60,7 @@ type (
 		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         EnablePriorityRateLimiting
+		OperatorRPSRatio                   OperatorRPSRatio
 		ClusterName                        ClusterName
 		ServiceName                        primitives.ServiceName
 		MetricsHandler                     metrics.Handler
@@ -92,6 +94,7 @@ func FactoryProvider(
 				params.PersistenceMaxQPS,
 				params.PersistencePerShardNamespaceMaxQPS,
 				RequestPriorityFn,
+				params.OperatorRPSRatio,
 				params.HealthSignals,
 				params.DynamicRateLimitingParams,
 				params.Logger,

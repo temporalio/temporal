@@ -86,6 +86,12 @@ func (s *visibilityStore) GetIndexName() string {
 	return ""
 }
 
+func (s *visibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return searchAttributes, nil
+}
+
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,

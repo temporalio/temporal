@@ -290,7 +290,13 @@ func RateLimitInterceptorProvider(
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
 	rateFn := func() float64 {
-		return effectiveRPS(frontendServiceResolver, serviceConfig.RPS, serviceConfig.GlobalRPS)
+		return quotas.CalculateEffectiveResourceLimit(
+			frontendServiceResolver,
+			quotas.Limits{
+				InstanceLimit: serviceConfig.RPS(),
+				ClusterLimit:  serviceConfig.GlobalRPS(),
+			},
+		)
 	}
 	namespaceReplicationInducingRateFn := func() float64 { return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS()) }
 
@@ -300,6 +306,7 @@ func RateLimitInterceptorProvider(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
 	)
@@ -359,6 +366,7 @@ func NamespaceRateLimitInterceptorProvider(
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				serviceConfig.OperatorRPSRatio,
 			)
 		},
 	)
@@ -408,6 +416,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -431,6 +440,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,

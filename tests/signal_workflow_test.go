@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
@@ -853,7 +854,7 @@ func (s *integrationSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 				RequestId:  uuid.New(),
 			})
 			s.Error(err)
-			s.IsType(&serviceerror.Unavailable{}, err)
+			s.Error(consts.ErrWorkflowClosing, err)
 		}
 
 		attemptCount++

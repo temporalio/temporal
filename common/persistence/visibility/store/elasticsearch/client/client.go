@@ -52,6 +52,11 @@ type (
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
 
+		OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error)
+		Scroll(ctx context.Context, id string, keepAliveInterval string) (*elastic.SearchResult, error)
+		CloseScroll(ctx context.Context, id string) error
+
+		IsPointInTimeSupported(ctx context.Context) bool
 		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
 		ClosePointInTime(ctx context.Context, id string) (bool, error)
 	}
@@ -79,6 +84,7 @@ type (
 		Sorter   []elastic.Sorter
 
 		SearchAfter []interface{}
+		ScrollID    string
 		PointInTime *elastic.PointInTime
 	}
 )

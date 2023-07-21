@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -71,6 +72,7 @@ type Config struct {
 	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                                          dynamicconfig.IntPropertyFn
 	GlobalRPS                                                    dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                                             dynamicconfig.FloatPropertyFn
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -206,6 +208,7 @@ func NewConfig(
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
+		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
@@ -399,35 +402,10 @@ func namespaceRPS(
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	return effectiveRPS(frontendResolver, func() int {
-		return perInstanceRPSFn(namespace)
-	}, func() int {
-		return globalRPSFn(namespace)
+	return quotas.CalculateEffectiveResourceLimit(frontendResolver, quotas.Limits{
+		InstanceLimit: perInstanceRPSFn(namespace),
+		ClusterLimit:  globalRPSFn(namespace),
 	})
-}
-
-func effectiveRPS(frontendResolver membership.ServiceResolver, hostRPS func() int, globalRPS func() int) float64 {
-	if gRPS := globalRPS(); gRPS > 0 && frontendResolver != nil {
-		hosts := float64(numFrontendHosts(frontendResolver))
-		return float64(gRPS) / hosts
-	}
-
-	return float64(hostRPS())
-}
-
-func numFrontendHosts(
-	frontendResolver membership.ServiceResolver,
-) int {
-	defaultHosts := 1
-	if frontendResolver == nil {
-		return defaultHosts
-	}
-
-	ringSize := frontendResolver.MemberCount()
-	if ringSize < defaultHosts {
-		return defaultHosts
-	}
-	return ringSize
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

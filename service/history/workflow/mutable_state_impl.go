@@ -1902,7 +1902,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
+		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
 			return err
 		}
 	}
@@ -2107,8 +2107,10 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	if len(toAdd) == 0 {
 		return nil
 	}
-	if err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
+	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
 		return err
+	} else if !changed {
+		return nil
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
@@ -2184,16 +2186,16 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) error {
+func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
-		return err
+		return false, err
 	}
 	modifiedBuildIds, added := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildIds)
 	if !added {
-		return nil
+		return false, nil
 	}
-	return ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
+	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
 }
 
 // TODO: we will release the restriction when reset API allow those pending
