@@ -306,7 +306,8 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionHistories,
+		BaseExecutionInfo: baseWorkflowInfo,
+		VersionHistories:  versionHistories,
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
@@ -410,7 +411,8 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		RetryLastWorkerIdentity: activityLastWorkerIdentity,
 	}, true).AnyTimes()
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionHistories,
+		BaseExecutionInfo: baseWorkflowInfo,
+		VersionHistories:  versionHistories,
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
@@ -565,7 +567,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WorkflowMissin
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
-	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, s.executionManager, s.logger)
+	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -626,7 +628,8 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionHistories,
+		BaseExecutionInfo: baseWorkflowInfo,
+		VersionHistories:  versionHistories,
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -671,7 +674,8 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 	).Return(s.newWorkflowContext, s.releaseFn, nil)
 	s.newWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.newMutableState, nil)
 	s.newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: newVersionHistories,
+		BaseExecutionInfo: baseWorkflowInfo,
+		VersionHistories:  newVersionHistories,
 	}).AnyTimes()
 	s.newMutableState.EXPECT().GetBaseWorkflowInfo().Return(nil).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -686,7 +690,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		NextPageToken:     nil,
 	}, nil)
 
-	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, s.executionManager, s.logger)
+	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
@@ -762,7 +766,8 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionHistories,
+		BaseExecutionInfo: baseWorkflowInfo,
+		VersionHistories:  versionHistories,
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 	s.executionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
@@ -777,7 +782,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		NextPageToken:     nil,
 	}, nil)
 
-	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, s.executionManager, s.logger)
+	result, err := convertHistoryReplicationTask(ctx, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,

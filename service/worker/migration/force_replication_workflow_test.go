@@ -344,7 +344,8 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 	})
 
 	var errMsg = "mock verify replication tasks error"
-	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(1)
+	// GenerateReplicationTasks and VerifyReplicationTasks runs in paralle. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(
 		temporal.NewNonRetryableApplicationError(errMsg, "", nil),
 	).Times(1)
