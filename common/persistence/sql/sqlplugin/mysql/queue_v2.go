@@ -130,7 +130,6 @@ func (mdb *db) GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter s
 		// The layer of code above us expects ErrNoRows when the queue is empty. MAX() yields
 		// null when the queue is empty, so we need to turn that into the correct error.
 		return 0, sql.ErrNoRows
-	} else {
-		return *lastMessageID, err
 	}
+	return *lastMessageID, err
 }

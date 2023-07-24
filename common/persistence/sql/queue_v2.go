@@ -83,6 +83,9 @@ func (q *sqlQueueV2) CreateQueue(
 	case sql.ErrNoRows:
 		version := 0
 		blob, err := convertQueueV2MetadataToBlob(&QueueV2MetadataPayload{AckLevel: 0})
+		if err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("initializeQueueMetadata operation failed. Error %v", err))
+		}
 		result, err := q.Db.InsertIntoQueueV2Metadata(ctx, &sqlplugin.QueueV2MetadataRow{
 			QueueType:       request.QueueType,
 			QueueName:       request.QueueName,
@@ -95,10 +98,10 @@ func (q *sqlQueueV2) CreateQueue(
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			return nil, fmt.Errorf("rowsAffected returned error when initializing queue metadata  %v: %v", request.QueueType, err)
+			return nil, fmt.Errorf("rowsAffected returned error when initializing queue metadata  %v: %w", request.QueueType, err)
 		}
 		if rowsAffected != 1 {
-			return nil, fmt.Errorf("rowsAffected returned %v queue metadata instead of one", rowsAffected)
+			return nil, serviceerror.NewInternal(fmt.Sprintf("rowsAffected returned %v queue metadata instead of one", rowsAffected))
 		}
 		return response, nil
 	default:
@@ -130,7 +133,7 @@ func (q *sqlQueueV2) EnqueueMessage(
 			})
 			return err
 		default:
-			return fmt.Errorf("failed to get last enqueued message id: %v", err)
+			return fmt.Errorf("failed to get last enqueued message id: %w", err)
 		}
 	})
 	if err != nil {
@@ -170,7 +173,7 @@ func (q *sqlQueueV2) ListQueues(
 		case sql.ErrNoRows:
 			return nil
 		default:
-			return fmt.Errorf("failed to fetch list of queues: %v", err)
+			return fmt.Errorf("failed to fetch list of queues: %w", err)
 		}
 	})
 	if err != nil {
@@ -272,13 +275,13 @@ func (q *sqlQueueV2) getCurrentAckLevelAndVersion(
 		case nil:
 			ackLevel, err = getAckLevelFromQueueV2Metadata(metaDataRow.Payload, metaDataRow.PayloadEncoding)
 			if err != nil {
-				return fmt.Errorf("failed to get queue with type and name: %v, %v. got error: %v", queueType, queueName, err)
+				return fmt.Errorf("failed to get queue with type and name: %v, %v. got error: %w", queueType, queueName, err)
 			}
 			return nil
 		case sql.ErrNoRows:
 			return serviceerror.NewUnavailable(fmt.Sprintf("queue of Type %v and with Name %v could not be found", queueType, queueName))
 		default:
-			return fmt.Errorf("failed to get queue with type and name: %v, %v", queueType, queueName)
+			return serviceerror.NewInternal(fmt.Sprintf("failed to get queue with type and name: %v, %v", queueType, queueName))
 		}
 	})
 	if err != nil {
@@ -294,7 +297,7 @@ func (q *sqlQueueV2) updateAckLevel(ctx context.Context, request persistence.Int
 	}
 	blob, err := convertQueueV2MetadataToBlob(&queueMetadata)
 	if err != nil {
-		return fmt.Errorf("failed to update ack level: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+		return fmt.Errorf("failed to update ack level: %w, Queue Type: %v, Queue Name: %v", err, request.QueueType, request.QueueName)
 	}
 
 	for {
@@ -311,7 +314,7 @@ func (q *sqlQueueV2) updateAckLevel(ctx context.Context, request persistence.Int
 			case nil:
 				rowsAffected, err := result.RowsAffected()
 				if err != nil {
-					return fmt.Errorf("rowsAffected returned error for queue metadata %v: %v", request.QueueType, err)
+					return fmt.Errorf("rowsAffected returned error for queue metadata %v: %w", request.QueueType, err)
 				}
 				if rowsAffected != 1 {
 					return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encountered concurrent write."}
@@ -332,7 +335,7 @@ func (q *sqlQueueV2) updateAckLevel(ctx context.Context, request persistence.Int
 		var ackLevel int64
 		ackLevel, version, err = q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
 		if err != nil {
-			return fmt.Errorf("failed to get ack level from queue metadata: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+			return fmt.Errorf("failed to get ack level from queue metadata: %w, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
 		}
 		if ackLevel >= request.InclusiveMaxMessageMetadata.ID {
 			break
@@ -359,7 +362,7 @@ func convertQueueV2MetadataToBlob(payload *QueueV2MetadataPayload) (*commonpb.Da
 
 func getAckLevelFromQueueV2Metadata(payload []byte, encoding string) (int64, error) {
 	if encoding != enumspb.ENCODING_TYPE_JSON.String() {
-		return 0, fmt.Errorf("unsupported encoding type: %v", encoding)
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported encoding type: %v", encoding))
 	}
 	var queueMetadata QueueV2MetadataPayload
 	if err := json.Unmarshal(payload, &queueMetadata); err != nil {

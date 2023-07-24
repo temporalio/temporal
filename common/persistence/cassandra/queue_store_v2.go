@@ -80,7 +80,7 @@ func (q *QueueStoreV2) CreateQueue(
 	version := 0
 	blob, err := convertQueueV2MetadataToBlob(&QueueV2MetadataPayload{AckLevel: 0})
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, request.QueueType)
+		return nil, fmt.Errorf("failed to insert initial queue metadata record: %w, Type: %v", err, request.QueueType)
 	}
 	query := q.session.Query(templateInsertQueueMetadataQueryV2,
 		request.QueueType,
@@ -91,7 +91,7 @@ func (q *QueueStoreV2) CreateQueue(
 	).WithContext(ctx)
 	_, err = query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, request.QueueType)
+		return nil, fmt.Errorf("failed to insert initial queue metadata record: %w, Type: %v", err, request.QueueType)
 	}
 	// it's ok if the query is not applied, which means that the record exists already.
 	return &persistence.InternalCreateQueueResponse{}, nil
@@ -238,23 +238,23 @@ func (q *QueueStoreV2) getLastMessageID(
 	return result["message_id"].(int64), nil
 }
 
-func (q *QueueStoreV2) getCurrentAckLevelAndVersion(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, int64, error) {
+func (q *QueueStoreV2) getCurrentAckLevelAndVersion(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (ackLevel int64, version int64, err error) {
 	query := q.session.Query(templateGetCurrentAckLevelAndVersionQueryV2, queueType, queueName).WithContext(ctx)
 	result := make(map[string]interface{})
-	err := query.MapScan(result)
+	err = query.MapScan(result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return 0, 0, nil
 		}
 		return 0, 0, gocql.ConvertError("getLastMessageID", err)
 	}
-	version := result["version"].(int64)
+	version = result["version"].(int64)
 	payload := result["metadata_payload"].([]byte)
 	enconding := result["metadata_encoding"].(string)
 
-	ackLevel, err := getAckLevelFromQueueV2Metadata(payload, enconding)
+	ackLevel, err = getAckLevelFromQueueV2Metadata(payload, enconding)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get ack level from queue metadata: %v, Type: %v, Name: %v", err, queueType, queueName)
+		return 0, 0, fmt.Errorf("failed to get ack level from queue metadata: %w, Type: %v, Name: %v", err, queueType, queueName)
 	}
 	return ackLevel, version, nil
 }
@@ -265,7 +265,7 @@ func (q *QueueStoreV2) updateAckLevel(ctx context.Context, request persistence.I
 	}
 	blob, err := convertQueueV2MetadataToBlob(&queueMetadata)
 	if err != nil {
-		return fmt.Errorf("failed to update ack level: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+		return fmt.Errorf("failed to update ack level: %w, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
 	}
 
 	for {
@@ -292,7 +292,7 @@ func (q *QueueStoreV2) updateAckLevel(ctx context.Context, request persistence.I
 
 		ackLevel, err := getAckLevelFromQueueV2Metadata(payload, enconding)
 		if err != nil {
-			return fmt.Errorf("failed to get ack level from queue metadata: %v, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
+			return fmt.Errorf("failed to get ack level from queue metadata: %w, Type: %v, Name: %v", err, request.QueueType, request.QueueName)
 		}
 		if ackLevel >= request.InclusiveMaxMessageMetadata.ID {
 			break
@@ -319,7 +319,7 @@ func convertQueueV2MetadataToBlob(payload *QueueV2MetadataPayload) (*commonpb.Da
 
 func getAckLevelFromQueueV2Metadata(payload []byte, encoding string) (int64, error) {
 	if encoding != enumspb.ENCODING_TYPE_JSON.String() {
-		return 0, fmt.Errorf("unsupported encoding type: %v", encoding)
+		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf("unsupported encoding type: %v", encoding))
 	}
 	var queueMetadata QueueV2MetadataPayload
 	if err := json.Unmarshal(payload, &queueMetadata); err != nil {
