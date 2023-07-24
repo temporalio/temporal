@@ -47,6 +47,7 @@ type (
 		MetadataStore  *FaultInjectionMetadataStore
 		ExecutionStore *FaultInjectionExecutionStore
 		Queue          *FaultInjectionQueue
+		QueueV2        *FaultInjectionQueueV2
 		ClusterMDStore *FaultInjectionClusterMetadataStore
 	}
 
@@ -78,6 +79,11 @@ type (
 
 	FaultInjectionQueue struct {
 		baseQueue      persistence.Queue
+		ErrorGenerator ErrorGenerator
+	}
+
+	FaultInjectionQueueV2 struct {
+		baseQueue      persistence.QueueV2
 		ErrorGenerator ErrorGenerator
 	}
 )
@@ -246,6 +252,27 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 		}
 	}
 	return d.Queue, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) NewQueueV2(queueType persistence.QueueV2Type) (persistence.QueueV2, error) {
+	if d.Queue == nil {
+		baseQueue, err := d.baseFactory.NewQueueV2(queueType)
+		if err != nil {
+			return baseQueue, err
+		}
+		if storeConfig, ok := d.config.Targets.DataStores[config.QueueName]; ok {
+			d.QueueV2 = &FaultInjectionQueueV2{
+				baseQueue:      baseQueue,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.QueueV2, err = NewFaultInjectionQueueV2(d.ErrorGenerator.Rate(), baseQueue)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return d.QueueV2, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
@@ -421,6 +448,62 @@ func (q *FaultInjectionQueue) GetDLQAckLevels(
 
 func (q *FaultInjectionQueue) UpdateRate(rate float64) {
 	q.ErrorGenerator.UpdateRate(rate)
+}
+
+func NewFaultInjectionQueueV2(rate float64, baseQueue persistence.QueueV2) (*FaultInjectionQueueV2, error) {
+	errorGenerator := newErrorGenerator(rate,
+		append(defaultErrors,
+			FaultWeight{
+				errFactory: func(msg string) error {
+					return &persistence.ShardOwnershipLostError{
+						ShardID: -1,
+						Msg:     fmt.Sprintf("FaultInjectionQueue injected, %s", msg),
+					}
+				},
+				weight: 1,
+			},
+		),
+	)
+
+	return &FaultInjectionQueueV2{
+		baseQueue:      baseQueue,
+		ErrorGenerator: errorGenerator,
+	}, nil
+}
+
+func (q *FaultInjectionQueueV2) Close() {
+	q.baseQueue.Close()
+}
+
+func (q *FaultInjectionQueueV2) EnqueueMessage(ctx context.Context, request persistence.InternalEnqueueMessageRequest) (*persistence.InternalEnqueueMessageResponse, error) {
+	if err := q.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return q.baseQueue.EnqueueMessage(ctx, request)
+}
+func (q *FaultInjectionQueueV2) ReadMessages(ctx context.Context, request persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
+	if err := q.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return q.baseQueue.ReadMessages(ctx, request)
+}
+func (q *FaultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request persistence.InternalRangeDeleteMessagesRequest) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	if err := q.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return q.baseQueue.RangeDeleteMessages(ctx, request)
+}
+func (q *FaultInjectionQueueV2) CreateQueue(ctx context.Context, request persistence.InternalCreateQueueRequest) (*persistence.InternalCreateQueueResponse, error) {
+	if err := q.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return q.baseQueue.CreateQueue(ctx, request)
+}
+func (q *FaultInjectionQueueV2) ListQueues(ctx context.Context, request persistence.InternalListQueuesRequest) (*persistence.InternalListQueuesResponse, error) {
+	if err := q.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return q.baseQueue.ListQueues(ctx, request)
 }
 
 func NewFaultInjectionExecutionStore(

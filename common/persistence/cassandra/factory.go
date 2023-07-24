@@ -113,6 +113,11 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return NewQueueStore(queueType, f.session, f.logger)
 }
 
+// NewQueueV2 returns a new queueV2 backed by cassandra
+func (f *Factory) NewQueueV2(queueType p.QueueV2Type) (p.QueueV2, error) {
+	return NewQueueStoreV2(queueType, f.session, f.logger)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.Lock()

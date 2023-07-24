@@ -49,6 +49,8 @@ type (
 		// NewExecutionStore returns a new execution store
 		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
+		// NewQueueV2 returns a new queue v2 store
+		NewQueueV2(queueType p.QueueV2Type) (p.QueueV2, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
 	}

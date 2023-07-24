@@ -130,6 +130,16 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(conn, f.logger, queueType)
 }
 
+// NewQueueV2 returns a new queue v2 backed by sql
+func (f *Factory) NewQueueV2(queueType p.QueueV2Type) (p.QueueV2, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	return newQueueV2(conn, f.logger, queueType)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.mainDBConn.ForceClose()
