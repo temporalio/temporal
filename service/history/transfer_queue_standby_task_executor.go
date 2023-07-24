@@ -509,7 +509,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 	if !nsRecord.IsOnCluster(t.clusterName) {
 		// discard standby tasks
-		return consts.ErrTaskDiscarded
+		return nil
 	}
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, taskInfo)

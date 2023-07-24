@@ -441,7 +441,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	}
 	if !nsRecord.IsOnCluster(t.clusterName) {
 		// discard standby tasks
-		return consts.ErrTaskDiscarded
+		return nil
 	}
 
 	executionContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, timerTask)
