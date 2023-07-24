@@ -561,6 +561,7 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 		if updateReplicationConfig.GetActiveClusterName() != "" {
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
+			replicationConfig.State = enumspb.REPLICATION_STATE_NORMAL
 		}
 	}
 
@@ -585,7 +586,7 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 		}
 	}
 
-	if configurationChanged && activeClusterChanged && isGlobalNamespace {
+	if configurationChanged && activeClusterChanged {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
@@ -607,6 +608,7 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 				failoverHistory,
 				updateRequest.ReplicationConfig,
 				getResponse.Namespace,
+				getResponse.Namespace.FailoverVersion,
 				failoverVersion,
 			)
 		}
@@ -743,6 +745,7 @@ func (d *namespaceHandlerImpl) createResponse(
 	replicationConfigResult := &replicationpb.NamespaceReplicationConfig{
 		ActiveClusterName: replicationConfig.ActiveClusterName,
 		Clusters:          clusters,
+		State:             replicationConfig.State,
 	}
 
 	var failoverHistory []*replicationpb.FailoverStatus
@@ -876,8 +879,12 @@ func (d *namespaceHandlerImpl) maybeUpdateFailoverHistory(
 	failoverHistory []*persistencespb.FailoverStatus,
 	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
 	namespaceDetail *persistencespb.NamespaceDetail,
+	oldFailoverVersion int64,
 	newFailoverVersion int64,
 ) []*persistencespb.FailoverStatus {
+	if failoverHistory == nil {
+		failoverHistory = []*persistencespb.FailoverStatus{}
+	}
 	d.logger.Debug(
 		"maybeUpdateFailoverHistory",
 		tag.NewAnyTag("failoverHistory", failoverHistory),
@@ -893,7 +900,7 @@ func (d *namespaceHandlerImpl) maybeUpdateFailoverHistory(
 	if l := len(namespaceDetail.ReplicationConfig.FailoverHistory); l > 0 {
 		lastFailoverVersion = namespaceDetail.ReplicationConfig.FailoverHistory[l-1].FailoverVersion
 	}
-	if lastFailoverVersion != newFailoverVersion {
+	if lastFailoverVersion != newFailoverVersion && oldFailoverVersion != newFailoverVersion {
 		now := d.timeSource.Now()
 		failoverHistory = append(
 			failoverHistory, &persistencespb.FailoverStatus{
