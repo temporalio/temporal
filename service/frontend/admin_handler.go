@@ -63,8 +63,6 @@ import (
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -144,13 +142,11 @@ type (
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		HostInfoProvider                    membership.HostInfoProvider
-		ArchiverProvider                    provider.ArchiverProvider
 		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
 		ClusterMetadata                     cluster.Metadata
-		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource

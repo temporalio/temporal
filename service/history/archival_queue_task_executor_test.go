@@ -433,7 +433,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 						assert.Zero(t, task.TaskID)
 						assert.Equal(t, p.LastWriteVersionBeforeArchival, task.Version)
 						assert.Equal(t, branchToken, task.BranchToken)
-						assert.True(t, task.WorkflowDataAlreadyArchived)
 						assert.Equal(t, p.ExpectedDeleteTime, task.VisibilityTimestamp)
 						popTasks := map[tasks.Category][]tasks.Task{
 							tasks.CategoryTimer: {

@@ -42,7 +42,6 @@ var (
 		dynamicconfig.FrontendRPS:                                    3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:   50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance: 50,
-		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:         5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts:  1,
 		dynamicconfig.AdvancedVisibilityWritingMode:                  visibility.SecondaryVisibilityWritingModeOff,
 		dynamicconfig.WorkflowTaskHeartbeatTimeout:                   5 * time.Second,

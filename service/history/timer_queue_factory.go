@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -56,7 +55,6 @@ type (
 		QueueFactoryBaseParams
 
 		ClientBean        client.Bean
-		ArchivalClient    archiver.Client
 		MatchingRawClient resource.MatchingRawClient
 		VisibilityManager manager.VisibilityManager
 	}
@@ -114,7 +112,6 @@ func (f *timerQueueFactory) CreateQueue(
 		shard,
 		workflowCache,
 		f.Config,
-		f.ArchivalClient,
 		shard.GetTimeSource(),
 		f.VisibilityManager,
 	)
