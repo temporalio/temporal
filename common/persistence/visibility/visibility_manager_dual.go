@@ -81,6 +81,22 @@ func (v *visibilityManagerDual) GetIndexName() string {
 	return v.visibilityManager.GetIndexName()
 }
 
+func (v *visibilityManagerDual) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	ms, err := v.managerSelector.writeManagers()
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range ms {
+		searchAttributes, err = m.ValidateCustomSearchAttributes(searchAttributes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return searchAttributes, nil
+}
+
 func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,

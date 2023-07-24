@@ -55,6 +55,7 @@ type (
 		fx.In
 
 		DataStoreFactory                   DataStoreFactory
+		EventBlobCache                     persistence.XDCCache
 		Cfg                                *config.Persistence
 		PersistenceMaxQPS                  PersistenceMaxQps
 		PersistenceNamespaceMaxQPS         PersistenceNamespaceMaxQps
@@ -77,10 +78,20 @@ var Module = fx.Options(
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(DataStoreFactoryProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
+	fx.Provide(EventBlobCacheProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
 	return ClusterName(config.CurrentClusterName)
+}
+
+func EventBlobCacheProvider(
+	dc *dynamicconfig.Collection,
+) persistence.XDCCache {
+	return persistence.NewEventsBlobCache(
+		dc.GetIntProperty(dynamicconfig.XDCCacheMaxSizeBytes, 8*1024*1024)(),
+		20*time.Second,
+	)
 }
 
 func FactoryProvider(
@@ -109,6 +120,7 @@ func FactoryProvider(
 		params.Cfg,
 		requestRatelimiter,
 		serialization.NewSerializer(),
+		params.EventBlobCache,
 		string(params.ClusterName),
 		params.MetricsHandler,
 		params.Logger,

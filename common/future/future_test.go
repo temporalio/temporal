@@ -26,6 +26,7 @@ package future
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -179,6 +180,7 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 			startWG.Wait()
 
 			for !s.future.Ready() {
+				runtime.Gosched()
 			}
 
 			value, err := s.future.Get(ctx)
