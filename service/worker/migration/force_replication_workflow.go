@@ -133,7 +133,7 @@ const (
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
 
-	defaultListWorkflowsPageSize                   = 100
+	defaultListWorkflowsPageSize                   = 1000
 	defaultPageCountPerExecution                   = 200
 	maxPageCountPerExecution                       = 1000
 	defaultPageSizeForTaskQueueUserDataReplication = 20
