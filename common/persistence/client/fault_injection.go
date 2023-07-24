@@ -506,6 +506,10 @@ func (q *FaultInjectionQueueV2) ListQueues(ctx context.Context, request persiste
 	return q.baseQueue.ListQueues(ctx, request)
 }
 
+func (q *FaultInjectionQueueV2) UpdateRate(rate float64) {
+	q.ErrorGenerator.UpdateRate(rate)
+}
+
 func NewFaultInjectionExecutionStore(
 	rate float64,
 	executionStore persistence.ExecutionStore,
