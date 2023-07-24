@@ -644,7 +644,6 @@ func (a *activities) verifyReplicationTasks(
 }
 
 const (
-	defaultNoProgressRetryableTimeout    = 5 * time.Minute
 	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
 )
 
