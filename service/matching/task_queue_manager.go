@@ -419,12 +419,6 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.liveness.markAlive()
 	}
 
-	if c.taskQueueID.VersionSet() == dlqVersionSet {
-		// If this is the versioned task dlq, skip straight to spooling the task since we can't
-		// have any pollers.
-		return false, c.SpoolTask(params)
-	}
-
 	// TODO: make this work for versioned queues too
 	if c.QueueID().IsRoot() && c.QueueID().VersionSet() == "" && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
@@ -438,7 +432,9 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, err
 	}
 
-	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+	// If this is the versioned task dlq, skip sync match since we know we have no pollers.
+	isDlq := c.taskQueueID.VersionSet() == dlqVersionSet
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) && !isDlq {
 		syncMatch, err := c.trySyncMatch(ctx, params)
 		if syncMatch {
 			return syncMatch, err

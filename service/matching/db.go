@@ -384,7 +384,12 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 func (db *taskQueueDB) setUserDataState(userDataState userDataState) {
 	db.Lock()
 	defer db.Unlock()
-	db.userDataState = userDataState
+
+	if userDataState != db.userDataState {
+		db.userDataState = userDataState
+		close(db.userDataChanged)
+		db.userDataChanged = make(chan struct{})
+	}
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed

@@ -685,11 +685,10 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
 	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
-	if err == nil && taskQueue.VersionSet() == dlqVersionSet {
-		err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-	}
 	if err != nil {
 		return nil, err
+	} else if taskQueue.VersionSet() == dlqVersionSet {
+		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 	}
 
 	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
