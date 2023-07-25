@@ -27,9 +27,6 @@ package history
 import (
 	"net"
 
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -77,7 +74,7 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
-	fx.Provide(GrpcServerOptionsProvider),
+	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -177,37 +174,6 @@ func ConfigProvider(
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
-}
-
-func GrpcServerOptionsProvider(
-	logger log.Logger,
-	rpcFactory common.RPCFactory,
-	retryableInterceptor *interceptor.RetryableInterceptor,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	tracingInterceptor telemetry.ServerTraceInterceptor,
-) []grpc.ServerOption {
-
-	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-
-	return append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			grpc.UnaryServerInterceptor(tracingInterceptor),
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			telemetryInterceptor.UnaryIntercept,
-			rateLimitInterceptor.Intercept,
-			retryableInterceptor.Intercept,
-		),
-		grpc.ChainStreamInterceptor(
-			telemetryInterceptor.StreamIntercept,
-		),
-	)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
