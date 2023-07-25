@@ -126,6 +126,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 
 	client := history.NewClient(
+		cf.dynConfig,
 		resolver,
 		cf.logger,
 		cf.numberOfHistoryShards,
