@@ -90,7 +90,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 			EndEventId:        endEventId,
 			StartEventVersion: startEventVerion,
 			EndEventVersion:   endEventVersion,
-			MaximumPageSize:   10000,
+			MaximumPageSize:   100,
 			NextPageToken:     token,
 		})
 		if err != nil {
