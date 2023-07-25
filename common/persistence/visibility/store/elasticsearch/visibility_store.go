@@ -95,6 +95,10 @@ var _ store.VisibilityStore = (*visibilityStore)(nil)
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
 
+	minTime         = time.Unix(0, 0).UTC()
+	maxTime         = time.Unix(0, math.MaxInt64).UTC()
+	maxStringLength = 32766
+
 	// Default sorter uses the sorting order defined in the index template.
 	// It is indirectly built so buildPaginationQuery can have access to
 	// the fields names to build the page query from the token.
@@ -162,6 +166,44 @@ func (s *visibilityStore) GetName() string {
 
 func (s *visibilityStore) GetIndexName() string {
 	return s.index
+}
+
+func (s *visibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	validatedSearchAttributes := make(map[string]any, len(searchAttributes))
+	var invalidValueErrs []error
+	for saName, saValue := range searchAttributes {
+		var err error
+		switch value := saValue.(type) {
+		case time.Time:
+			err = validateDatetime(value)
+		case []time.Time:
+			for _, item := range value {
+				if err = validateDatetime(item); err != nil {
+					break
+				}
+			}
+		case string:
+			err = validateString(value)
+		case []string:
+			for _, item := range value {
+				if err = validateString(item); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			invalidValueErrs = append(invalidValueErrs, err)
+			continue
+		}
+		validatedSearchAttributes[saName] = saValue
+	}
+	var retError error
+	if len(invalidValueErrs) > 0 {
+		retError = store.NewVisibilityStoreInvalidValuesError(invalidValueErrs)
+	}
+	return validatedSearchAttributes, retError
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
@@ -941,6 +983,14 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
+	// This is to prevent existing tasks to fail indefinitely.
+	// If it's only invalid values error, then silently continue without them.
+	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
+	if err != nil {
+		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+			return nil, err
+		}
+	}
 	for saName, saValue := range searchAttributes {
 		if saValue == nil {
 			// If search attribute value is `nil`, it means that it shouldn't be added to the document.
@@ -1320,4 +1370,26 @@ func parsePageTokenValue(
 			fieldName,
 		))
 	}
+}
+
+func validateDatetime(value time.Time) error {
+	if value.Before(minTime) || value.After(maxTime) {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Date not supported in Elasticsearch: %v", value),
+		)
+	}
+	return nil
+}
+
+func validateString(value string) error {
+	if len(value) > maxStringLength {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"Strings with more than %d bytes are not supported in Elasticsearch (got %s)",
+				maxStringLength,
+				value,
+			),
+		)
+	}
+	return nil
 }

@@ -177,6 +177,12 @@ func (v *visibilityStore) GetIndexName() string {
 	return ""
 }
 
+func (v *visibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return searchAttributes, nil
+}
+
 // Close releases the resources held by this object
 func (v *visibilityStore) Close() {
 	v.session.Close()

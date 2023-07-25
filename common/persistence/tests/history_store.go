@@ -84,6 +84,7 @@ func NewHistoryEventsSuite(
 		store: p.NewExecutionManager(
 			store,
 			eventSerializer,
+			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),

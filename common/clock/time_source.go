@@ -22,58 +22,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Package clock provides extensions to the [time] package.
 package clock
 
 import (
-	"sync/atomic"
 	"time"
-
-	// clockwork is not currently used but it is useful to have the option to use this in testing code
-	// this comment is needed to stop lint from complaining about this _ import
-	_ "github.com/jonboulle/clockwork"
 )
 
 type (
-	// TimeSource is an interface for any
-	// entity that provides the current
-	// time. Its primarily used to mock
-	// out timesources in unit test
+	// TimeSource is an interface to make it easier to test code that uses time.
 	TimeSource interface {
 		Now() time.Time
+		AfterFunc(d time.Duration, f func()) Timer
 	}
-	// RealTimeSource serves real wall-clock time
+	// Timer is a timer returned by TimeSource.AfterFunc. Unlike the timers returned by [time.NewTimer] or time.Ticker,
+	// this timer does not have a channel. That is because the callback already reacts to the timer firing.
+	Timer interface {
+		// Reset changes the expiration time of the timer. It returns true if the timer had been active, false if the
+		// timer had expired or been stopped.
+		Reset(d time.Duration) bool
+		// Stop prevents the Timer from firing. It returns true if the call stops the timer, false if the timer has
+		// already expired or been stopped.
+		Stop() bool
+	}
+	// RealTimeSource is a timeSource that uses the real wall timeSource time. The zero value is valid.
 	RealTimeSource struct{}
-
-	// EventTimeSource serves fake controlled time
-	EventTimeSource struct {
-		now int64
-	}
 )
 
-// NewRealTimeSource returns a time source that servers
-// real wall clock time
-func NewRealTimeSource() *RealTimeSource {
-	return &RealTimeSource{}
+// NewRealTimeSource returns a timeSource that uses the real wall timeSource time.
+func NewRealTimeSource() RealTimeSource {
+	return RealTimeSource{}
 }
 
-// Now return the real current time
-func (ts *RealTimeSource) Now() time.Time {
+// Now returns the current time, with the location set to UTC.
+func (ts RealTimeSource) Now() time.Time {
 	return time.Now().UTC()
 }
 
-// NewEventTimeSource returns a time source that servers
-// fake controlled time
-func NewEventTimeSource() *EventTimeSource {
-	return &EventTimeSource{}
-}
-
-// Now return the fake current time
-func (ts *EventTimeSource) Now() time.Time {
-	return time.Unix(0, atomic.LoadInt64(&ts.now)).UTC()
-}
-
-// Update update the fake current time
-func (ts *EventTimeSource) Update(now time.Time) *EventTimeSource {
-	atomic.StoreInt64(&ts.now, now.UnixNano())
-	return ts
+// AfterFunc is a pass-through to time.AfterFunc.
+func (ts RealTimeSource) AfterFunc(d time.Duration, f func()) Timer {
+	return time.AfterFunc(d, f)
 }

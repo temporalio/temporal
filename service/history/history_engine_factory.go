@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
@@ -60,6 +61,7 @@ type (
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
 		PersistenceVisibilityMgr        manager.VisibilityManager
+		EventBlobCache                  persistence.XDCCache
 	}
 
 	historyEngineFactory struct {
@@ -89,5 +91,6 @@ func (f *historyEngineFactory) CreateEngine(
 		workflowConsistencyChecker,
 		f.TracerProvider,
 		f.PersistenceVisibilityMgr,
+		f.EventBlobCache,
 	)
 }

@@ -88,7 +88,7 @@ linters-settings:
           - 15
       - name: function-result-limit
         arguments:
-          - 3
+          - 4
       - name: unhandled-error
         arguments:
           - "fmt.*"
