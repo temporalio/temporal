@@ -503,6 +503,8 @@ const (
 	AcquireShardConcurrency = "history.acquireShardConcurrency"
 	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
 	// shard ownership information, instead of checking membership for each request.
+	// Only inspected when an instance first creates a history client, so changes
+	// to this require a restart to take effect.
 	HistoryClientOwnershipCachingEnabled = "history.clientOwnershipCachingEnabled"
 	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay = "history.standbyClusterDelay"

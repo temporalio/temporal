@@ -135,6 +135,7 @@ func (r *cachingRedirector) getOrCreateEntry(shardID int32) (cacheEntry, error) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Recheck under write lock.
 	entry, ok = r.mu.cache[shardID]
 	if ok {
 		return entry, nil
@@ -157,7 +158,8 @@ func (r *cachingRedirector) cacheAddLocked(shardID int32, addr rpcAddress) cache
 	// instance, would be delayed waiting for the next connection attempt, which
 	// could be many seconds.
 	// If we're adding a new cache entry for a shard, we take that as a hint that
-	// the next request should attempt to connect immediately if required.
+	// the next request should attempt to connect immediately if required. If the
+	// GRPC connection is not in connect backoff, this call has no effect.
 	connection := r.connections.getOrCreateClientConn(addr)
 	r.connections.resetConnectBackoff(connection)
 
