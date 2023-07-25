@@ -57,6 +57,7 @@ type (
 	connectionPool interface {
 		getOrCreateClientConn(addr rpcAddress) clientConnection
 		getAllClientConns() []clientConnection
+		resetConnectBackoff(clientConnection)
 	}
 )
 
@@ -107,4 +108,8 @@ func (c *connectionPoolImpl) getAllClientConns() []clientConnection {
 	}
 
 	return clientConns
+}
+
+func (c *connectionPoolImpl) resetConnectBackoff(cc clientConnection) {
+	cc.grpcConn.ResetConnectBackoff()
 }
