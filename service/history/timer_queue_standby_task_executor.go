@@ -440,7 +440,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return err
 	}
 	if !nsRecord.IsOnCluster(t.clusterName) {
-		// discard standby tasks
+		// namespace is not replicated to local cluster, ignore corresponding tasks
 		return nil
 	}
 
