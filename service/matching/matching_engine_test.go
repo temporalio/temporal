@@ -2422,7 +2422,6 @@ func (s *matchingEngineSuite) TestPersistUnknownBuildId_Match() {
 	}()
 
 	go func() {
-		time.Sleep(10 * time.Millisecond)
 		tlID := newTestTaskQueueID(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		task, err := s.matchingEngine.getTask(ctx, tlID, normalStickyInfo, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
