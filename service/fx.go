@@ -25,18 +25,9 @@
 package service
 
 import (
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/telemetry"
+	"go.uber.org/fx"
 )
 
 type (
@@ -88,35 +79,4 @@ func PersistenceMaxQpsFn(
 		// }
 		return maxQps()
 	}
-}
-
-func GrpcServerOptionsProvider(
-	logger log.Logger,
-	rpcFactory common.RPCFactory,
-	retryableInterceptor *interceptor.RetryableInterceptor,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	tracingInterceptor telemetry.ServerTraceInterceptor,
-) []grpc.ServerOption {
-
-	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-
-	return append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			grpc.UnaryServerInterceptor(tracingInterceptor),
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			telemetryInterceptor.UnaryIntercept,
-			rateLimitInterceptor.Intercept,
-			retryableInterceptor.Intercept,
-		),
-		grpc.ChainStreamInterceptor(
-			telemetryInterceptor.StreamIntercept,
-		),
-	)
 }
