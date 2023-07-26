@@ -1507,6 +1507,8 @@ var (
 	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
+	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
+	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")

@@ -78,9 +78,12 @@ type Config struct {
 	EventsCacheTTL         dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
-	RangeSizeBits           uint
-	AcquireShardInterval    dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency dynamicconfig.IntPropertyFn
+	RangeSizeBits                uint
+	AcquireShardInterval         dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
+	ShardLingerEnabled           dynamicconfig.BoolPropertyFn
+	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -360,9 +363,12 @@ func NewConfig(
 		EventsCacheMaxSize:     dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512),
 		EventsCacheTTL:         dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 
-		RangeSizeBits:           20, // 20 bits for sequencer, 2^20 sequence number for any range
-		AcquireShardInterval:    dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
-		AcquireShardConcurrency: dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		RangeSizeBits:                20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:         dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
+		AcquireShardConcurrency:      dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		ShardLingerEnabled:           dc.GetBoolProperty(dynamicconfig.ShardLingerEnabled, false),
+		ShardLingerOwnershipCheckQPS: dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
+		ShardLingerTimeLimit:         dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 3*time.Second),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 
