@@ -59,6 +59,11 @@ type (
 		sync.RWMutex
 		historyShards map[int32]ControllableContext
 
+		lingerState struct {
+			sync.Mutex
+			shards map[ControllableContext]struct{}
+		}
+
 		config               *configs.Config
 		contextFactory       ContextFactory
 		contextTaggedLogger  log.Logger
@@ -91,7 +96,7 @@ func ControllerProvider(
 		taggedMetricsHandler,
 	)
 
-	return &ControllerImpl{
+	c := &ControllerImpl{
 		config:               config,
 		contextFactory:       contextFactory,
 		contextTaggedLogger:  contextTaggedLogger,
@@ -100,6 +105,8 @@ func ControllerProvider(
 		ownership:            ownership,
 		taggedMetricsHandler: taggedMetricsHandler,
 	}
+	c.lingerState.shards = make(map[ControllableContext]struct{})
+	return c
 }
 
 func (c *ControllerImpl) Start() {
@@ -294,9 +301,10 @@ func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableC
 
 // shardLingerThenClose delays closing the shard for a small amount of time,
 // while watching for the shard to become invalid due to receiving a shard
-// ownership lost error. It calls AssertOwnership to probe for lost ownership,
-// but any concurrent request may also see the error, which will mark the shard
-// as invalid.
+// ownership lost error.
+// The potential benefit over closing the shard immediately is that this
+// history instance can continue to process requests for the shard until the
+// new owner actually acquires the shard.
 func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32) {
 	c.RLock()
 	shard, ok := c.historyShards[shardID]
@@ -305,6 +313,38 @@ func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32
 		return
 	}
 
+	// This uses a separate goroutine because acquireShards has a concurrency limit,
+	// and we don't want to block acquiring new shards while waiting for
+	// shard ownership lost on this one. Otherwise, another history instance
+	// could be lingering on a shard that this instance should own, but this
+	// instance's acquireShards concurrency slots are filled with lingering shards.
+	if !c.beginLinger(shard) {
+		return
+	}
+
+	go func() {
+		defer c.endLinger(shard)
+		c.doLinger(ctx, shard)
+	}()
+}
+
+func (c *ControllerImpl) beginLinger(shard ControllableContext) bool {
+	c.lingerState.Lock()
+	defer c.lingerState.Unlock()
+	if _, ok := c.lingerState.shards[shard]; ok {
+		return false
+	}
+	c.lingerState.shards[shard] = struct{}{}
+	return true
+}
+
+func (c *ControllerImpl) endLinger(shard ControllableContext) {
+	c.lingerState.Lock()
+	defer c.lingerState.Unlock()
+	delete(c.lingerState.shards, shard)
+}
+
+func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext) {
 	startTime := time.Now()
 	timeout := util.Min(c.config.ShardLingerTimeLimit(), shardIOTimeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -323,7 +363,7 @@ func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32
 
 		if err := limiter.Wait(ctx); err != nil {
 			c.contextTaggedLogger.Info("shardLinger: wait timed out",
-				tag.ShardID(shardID),
+				tag.ShardID(shard.GetShardID()),
 				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
 			)
 			c.taggedMetricsHandler.Counter(metrics.ShardLingerTimeouts.GetMetricName()).Record(1)

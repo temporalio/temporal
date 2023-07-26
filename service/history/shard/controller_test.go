@@ -745,12 +745,8 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 		return true
 	}
 	timeLimit := 1 * time.Second
-	checkQPS := 5
 	s.config.ShardLingerTimeLimit = func() time.Duration {
 		return timeLimit
-	}
-	s.config.ShardLingerOwnershipCheckQPS = func() int {
-		return checkQPS
 	}
 
 	historyEngines := make(map[int32]*MockEngine)
@@ -764,17 +760,26 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	s.shardController.acquireShards(context.Background())
 
 	s.Len(s.shardController.ShardIDs(), 1)
+	shard, err := s.shardController.getOrCreateShardContext(shardID)
+	s.NoError(err)
 
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).
 		Return(membership.NewHostInfoFromAddress("newhost"), nil)
 
 	mockEngine.EXPECT().Stop().Return()
 
-	start := time.Now()
 	s.shardController.acquireShards(context.Background())
-	expectedMinimumWait := timeLimit - (time.Second / time.Duration(checkQPS))
-	s.Greater(time.Now().Sub(start), expectedMinimumWait)
+	// Wait for total of timeout plus 100ms of test fudge factor.
+
+	// Should still have a valid shard before the timeout.
+	time.Sleep(timeLimit / 2)
+	s.True(shard.IsValid())
+	s.Len(s.shardController.ShardIDs(), 1)
+
+	// By now the timeout should have occurred.
+	time.Sleep(timeLimit/2 + 100*time.Millisecond)
 	s.Len(s.shardController.ShardIDs(), 0)
+	s.False(shard.IsValid())
 
 	s.Equal(float64(1), s.readMetricsCounter(
 		metrics.ShardLingerTimeouts.GetMetricName(),
@@ -856,13 +861,13 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 		return nil
 	}).Times(1)
 
-	start := time.Now()
 	s.shardController.acquireShards(context.Background())
-	s.Len(s.shardController.ShardIDs(), 0)
 
+	// Wait for one check plus 100ms of test fudge factor.
 	expectedWait := time.Second / time.Duration(checkQPS)
-	expected := start.Add(expectedWait)
-	s.WithinDuration(time.Now(), expected, 100*time.Millisecond)
+	time.Sleep(expectedWait + 100*time.Millisecond)
+
+	s.Len(s.shardController.ShardIDs(), 0)
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
