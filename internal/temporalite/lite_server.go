@@ -102,6 +102,8 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *portPr
 	if cfg.Ephemeral {
 		sqliteConfig.ConnectAttributes["mode"] = "memory"
 		sqliteConfig.ConnectAttributes["cache"] = "shared"
+		// TODO(jlegrone): investigate whether a randomized db name is necessary when running in shared cache mode:
+		//                 https://www.sqlite.org/sharedcache.html
 		sqliteConfig.DatabaseName = fmt.Sprintf("%d", rand.Intn(9999999))
 	} else {
 		sqliteConfig.ConnectAttributes["mode"] = "rwc"
