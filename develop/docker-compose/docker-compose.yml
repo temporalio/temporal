@@ -16,6 +16,9 @@ services:
       - ./mysql-init:/docker-entrypoint-initdb.d
     networks:
       - temporal-dev-network
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
   cassandra:
     image: cassandra:3.11
     container_name: temporal-dev-cassandra

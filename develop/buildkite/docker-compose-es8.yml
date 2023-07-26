@@ -7,6 +7,9 @@ services:
       services-network:
         aliases:
           - cassandra
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
 
   mysql:
     image: mysql:5.7
@@ -18,6 +21,9 @@ services:
       services-network:
         aliases:
           - mysql
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
 
   postgresql:
     image: postgres:9.6
@@ -30,6 +36,9 @@ services:
       services-network:
         aliases:
           - postgresql
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
 
   elasticsearch:
     image: elasticsearch:8.0.0
@@ -45,6 +54,9 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
 
   integration-test-cassandra:
     build:
