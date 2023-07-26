@@ -60,6 +60,14 @@ type (
 	QueueV2MetadataPayload struct {
 		AckLevel int64
 	}
+
+	// both MessageID and Pagetoken are required to reconstrcut the query
+	// This is encoded to []byte and sent over the wire to the client
+	// Initially both are set to nil
+	InternalReadMessagePageToken struct {
+		MessageID int64
+		PageToken []byte
+	}
 )
 
 func NewQueueStoreV2(
@@ -113,26 +121,27 @@ func (q *QueueStoreV2) EnqueueMessage(ctx context.Context, request persistence.I
 
 func (q *QueueStoreV2) ReadMessages(ctx context.Context, request persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
-	var minMessageID int64
-	var pageToken *[]byte
-	if request.NextPageToken.PageToken != nil {
-		minMessageID = request.NextPageToken.MessageID
-		pageToken = &request.NextPageToken.PageToken
+	var pageToken InternalReadMessagePageToken
+	if request.NextPageToken != nil {
+		err := gobDeserialize(request.NextPageToken, &pageToken)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		ackLevel, _, err := q.getCurrentAckLevelAndVersion(ctx, request.QueueType, request.QueueName)
 		if err != nil {
 			return nil, err
 		}
-		minMessageID = ackLevel
+		pageToken.MessageID = ackLevel
 	}
 
 	query := q.session.Query(templateGetMessagesQueryV2,
 		request.QueueType,
 		request.QueueName,
 		EmptyPartition,
-		minMessageID,
+		pageToken.MessageID,
 	).WithContext(ctx)
-	iter := query.PageSize(request.PageSize).PageState(*pageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(pageToken.PageToken).Iter()
 
 	var result []persistence.Message
 	message := make(map[string]interface{})
@@ -151,11 +160,13 @@ func (q *QueueStoreV2) ReadMessages(ctx context.Context, request persistence.Int
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
 	}
 
+	pageToken.PageToken = nextPageToken
+	pageTokenByte, err := gobSerialize(pageToken)
+	if err != nil {
+		return nil, err
+	}
 	return &persistence.InternalReadMessagesResponse{Messages: result,
-		NextPageToken: persistence.InternalReadMessagePageToken{
-			MessageID: minMessageID,
-			PageToken: nextPageToken,
-		},
+		NextPageToken: pageTokenByte,
 	}, nil
 }
 

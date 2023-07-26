@@ -213,10 +213,10 @@ func (q *sqlQueueV2) ReadMessages(
 	request persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
 	var minMessageID int64
-	if len(request.NextPageToken.PageToken) != 0 {
-		lastReadMessageID, err := deserializePageToken(request.NextPageToken.PageToken)
+	if len(request.NextPageToken) != 0 {
+		lastReadMessageID, err := deserializePageToken(request.NextPageToken)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken.PageToken))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken))
 		}
 		minMessageID = lastReadMessageID
 	} else {
@@ -254,7 +254,7 @@ func (q *sqlQueueV2) ReadMessages(
 	}
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
-		NextPageToken: persistence.InternalReadMessagePageToken{MessageID: lastReadMessageID, PageToken: newPagingToken},
+		NextPageToken: newPagingToken,
 	}
 	return response, nil
 }

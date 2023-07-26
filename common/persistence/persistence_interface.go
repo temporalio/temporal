@@ -754,22 +754,16 @@ type (
 		Metadata MessageMetadata
 	}
 
-	InternalReadMessagePageToken struct {
-		// for initial request set this to 0
-		MessageID int64
-		PageToken []byte
-	}
-
 	InternalReadMessagesRequest struct {
 		QueueType     QueueV2Type
 		QueueName     string
 		PageSize      int
-		NextPageToken InternalReadMessagePageToken
+		NextPageToken []byte
 	}
 
 	InternalReadMessagesResponse struct {
 		Messages      []Message
-		NextPageToken InternalReadMessagePageToken
+		NextPageToken []byte
 	}
 
 	// delete all messages with ID <= given messageID
