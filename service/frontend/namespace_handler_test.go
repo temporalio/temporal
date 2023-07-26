@@ -288,6 +288,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster1,
 			Clusters:          []string{cluster1},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
 		},
 		ConfigVersion:               0,
 		FailoverNotificationVersion: 0,
@@ -309,6 +310,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster2,
 			Clusters:          []string{cluster1, cluster2},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
 		},
 		ConfigVersion:               0,
 		FailoverNotificationVersion: 0,
@@ -775,6 +777,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 				FailoverHistory:   failoverHistory,
 			},
 		},
+		IsGlobalNamespace: true,
 	}, nil)
 	sizeLimitedFailoverHistory := slices.Clone(failoverHistory)
 	sizeLimitedFailoverHistory = append(sizeLimitedFailoverHistory, &persistencespb.FailoverStatus{
@@ -1286,6 +1289,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 				Clusters:          []string{cluster.TestCurrentClusterName},
 			},
 		},
+		IsGlobalNamespace: true,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -1303,12 +1307,13 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_AllAttrSet() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
+				FailoverHistory:   []*persistencespb.FailoverStatus{},
 			},
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
 	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
@@ -1496,6 +1501,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 				Clusters:          []string{cluster.TestCurrentClusterName},
 			},
 		},
+		IsGlobalNamespace: true,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -1513,12 +1519,13 @@ func (s *namespaceHandlerCommonSuite) TestUpdateGlobalNamespace_NotMaster() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters:          []string{cluster.TestCurrentClusterName},
+				FailoverHistory:   []*persistencespb.FailoverStatus{},
 			},
 			ConfigVersion:               1,
 			FailoverNotificationVersion: 0,
 			FailoverVersion:             0,
 		},
-		IsGlobalNamespace:   false,
+		IsGlobalNamespace:   true,
 		NotificationVersion: version,
 	})
 	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
@@ -1577,6 +1584,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 				Clusters:          []string{clusterName1, clusterName2},
 			},
 		},
+		IsGlobalNamespace: true,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{

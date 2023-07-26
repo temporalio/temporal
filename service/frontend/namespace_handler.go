@@ -747,6 +747,9 @@ func (d *namespaceHandlerImpl) createResponse(
 		Clusters:          clusters,
 		State:             replicationConfig.State,
 	}
+	if replicationConfigResult.State == enumspb.REPLICATION_STATE_UNSPECIFIED {
+		replicationConfigResult.State = enumspb.REPLICATION_STATE_NORMAL
+	}
 
 	var failoverHistory []*replicationpb.FailoverStatus
 	for _, entry := range replicationConfig.GetFailoverHistory() {
