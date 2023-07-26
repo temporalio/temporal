@@ -372,7 +372,7 @@ func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *po
 	svc := config.Service{
 		RPC: config.RPC{
 			GRPCPort:        cfg.FrontendPort + frontendPortOffset,
-			MembershipPort:  cfg.FrontendPort + 100 + frontendPortOffset,
+			MembershipPort:  provider.MustGetFreePort(),
 			BindOnLocalHost: true,
 			BindOnIP:        "",
 		},
@@ -382,7 +382,6 @@ func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *po
 	if frontendPortOffset != 0 {
 		svc.RPC.GRPCPort = provider.MustGetFreePort()
 	}
-	svc.RPC.MembershipPort = provider.MustGetFreePort()
 
 	// Optionally bind frontend to IPv4 address
 	if frontendPortOffset == 0 && cfg.FrontendIP != "" {
