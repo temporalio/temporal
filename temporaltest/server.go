@@ -146,7 +146,7 @@ func (ts *TestServer) Stop() {
 // the server and release resources.
 func NewServer(opts ...TestServerOption) *TestServer {
 	rand.Seed(time.Now().UnixNano())
-	testNamespace := fmt.Sprintf("temporaltest-%d", rand.Intn(999999))
+	testNamespace := fmt.Sprintf("temporaltest-%d", rand.Intn(1e6))
 
 	ts := TestServer{
 		defaultTestNamespace: testNamespace,
@@ -158,9 +158,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 	}
 
 	if ts.t != nil {
-		ts.t.Cleanup(func() {
-			ts.Stop()
-		})
+		ts.t.Cleanup(ts.Stop)
 	}
 
 	s, err := temporalite.NewLiteServer(&temporalite.LiteServerConfig{
@@ -178,11 +176,10 @@ func NewServer(opts ...TestServerOption) *TestServer {
 	}
 	ts.server = s
 
-	go func() {
-		if err := s.Start(); err != nil {
-			ts.fatal(fmt.Errorf("error starting server: %w", err))
-		}
-	}()
+	// Start does not block as long as InterruptOn is unset.
+	if err := s.Start(); err != nil {
+		ts.fatal(err)
+	}
 
 	return &ts
 }
