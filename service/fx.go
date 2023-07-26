@@ -127,9 +127,7 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		params.TelemetryInterceptor.UnaryIntercept,
 	}
 
-	if len(params.AdditionalInterceptors) > 0 {
-		interceptors = append(interceptors, params.AdditionalInterceptors...)
-	}
+	interceptors = append(interceptors, params.AdditionalInterceptors...)
 
 	return append(
 		interceptors,
