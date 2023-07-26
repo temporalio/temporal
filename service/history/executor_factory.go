@@ -22,9 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executor_factory_mock.go
+
 package history
 
 import (
+	"context"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -51,6 +57,13 @@ type (
 			logger log.Logger,
 		) queues.Executor
 
+		CreateTimerExecutor(
+			shardCtx shard.Context,
+			workflowCache wcache.Cache,
+			logger log.Logger,
+			clusterName string,
+		) queues.Executor
+
 		CreateTimerActiveExecutor(
 			shardCtx shard.Context,
 			workflowCache wcache.Cache,
@@ -63,6 +76,13 @@ type (
 			workflowCache wcache.Cache,
 			workflowDeleteManager deletemanager.DeleteManager,
 			nDCHistoryResender xdc.NDCHistoryResender,
+			logger log.Logger,
+			clusterName string,
+		) queues.Executor
+
+		CreateTransferExecutor(
+			shardCtx shard.Context,
+			workflowCache wcache.Cache,
 			logger log.Logger,
 			clusterName string,
 		) queues.Executor
@@ -83,7 +103,6 @@ type (
 
 		CreateExecutorWrapper(
 			currentClusterName string,
-			registry namespace.Registry,
 			activeExecutor queues.Executor,
 			standbyExecutor queues.Executor,
 			logger log.Logger,
@@ -102,15 +121,17 @@ type (
 		Config         *configs.Config
 		MetricsHandler metrics.Handler
 
-		// Archiver is the archival client used to archive history events and visibility records.
-		Archiver archival.Archiver
-		// RelocatableAttributesFetcher is the client used to fetch the memo and search attributes of a workflow.
-		RelocatableAttributesFetcher workflow.RelocatableAttributesFetcher
-
+		NamespaceRegistry namespace.Registry
+		ClientBean        client.Bean
 		MatchingClient    resource.MatchingClient
 		ArchivalClient    archiver.Client
 		SdkClientFactory  sdk.ClientFactory
 		VisibilityManager manager.VisibilityManager
+
+		// Archiver is the archival client used to archive history events and visibility records.
+		Archiver archival.Archiver
+		// RelocatableAttributesFetcher is the client used to fetch the memo and search attributes of a workflow.
+		RelocatableAttributesFetcher workflow.RelocatableAttributesFetcher
 	}
 
 	ExecutorFactoryBase struct {
@@ -137,6 +158,31 @@ func (f *ExecutorFactoryBase) CreateArchivalExecutor(
 		workflowCache,
 		f.RelocatableAttributesFetcher,
 		f.MetricsHandler,
+		logger,
+	)
+}
+
+func (f *ExecutorFactoryBase) CreateTimerExecutor(
+	shardCtx shard.Context,
+	workflowCache wcache.Cache,
+	logger log.Logger,
+	clusterName string,
+) queues.Executor {
+	deleteManager := f.GetNewWorkflowDeleteManager(shardCtx, workflowCache)
+	return f.CreateExecutorWrapper(
+		clusterName,
+		f.CreateTimerActiveExecutor(
+			shardCtx,
+			workflowCache,
+			deleteManager,
+			logger),
+		f.CreateTimerStandbyExecutor(
+			shardCtx,
+			workflowCache,
+			deleteManager,
+			f.GetNewStandbyNDCHistoryResender(shardCtx, logger),
+			logger,
+			clusterName),
 		logger,
 	)
 }
@@ -176,6 +222,28 @@ func (f *ExecutorFactoryBase) CreateTimerStandbyExecutor(
 		f.MetricsHandler,
 		clusterName,
 		f.Config,
+	)
+}
+
+func (f *ExecutorFactoryBase) CreateTransferExecutor(
+	shardCtx shard.Context,
+	workflowCache wcache.Cache,
+	logger log.Logger,
+	clusterName string,
+) queues.Executor {
+	return f.CreateExecutorWrapper(
+		clusterName,
+		f.CreateTransferActiveExecutor(
+			shardCtx,
+			workflowCache,
+			logger),
+		f.CreateTransferStandbyExecutor(
+			shardCtx,
+			workflowCache,
+			f.GetNewStandbyNDCHistoryResender(shardCtx, logger),
+			logger,
+			clusterName),
+		logger,
 	)
 }
 
@@ -219,14 +287,13 @@ func (f *ExecutorFactoryBase) CreateTransferStandbyExecutor(
 
 func (f *ExecutorFactoryBase) CreateExecutorWrapper(
 	currentClusterName string,
-	registry namespace.Registry,
 	activeExecutor queues.Executor,
 	standbyExecutor queues.Executor,
 	logger log.Logger,
 ) queues.Executor {
 	return queues.NewExecutorWrapper(
 		currentClusterName,
-		registry,
+		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
@@ -246,5 +313,39 @@ func (f *ExecutorFactoryBase) CreateVisibilityExecutor(
 		f.MetricsHandler,
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
+	)
+}
+
+func (f *ExecutorFactoryBase) GetNewWorkflowDeleteManager(
+	shardCtx shard.Context,
+	workflowCache wcache.Cache,
+) deletemanager.DeleteManager {
+	return deletemanager.NewDeleteManager(
+		shardCtx,
+		workflowCache,
+		f.Config,
+		f.ArchivalClient,
+		shardCtx.GetTimeSource(),
+		f.VisibilityManager,
+	)
+}
+
+func (f *ExecutorFactoryBase) GetNewStandbyNDCHistoryResender(
+	shardCtx shard.Context,
+	logger log.Logger,
+) xdc.NDCHistoryResender {
+	return xdc.NewNDCHistoryResender(
+		f.NamespaceRegistry,
+		f.ClientBean,
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			engine, err := shardCtx.GetEngine(ctx)
+			if err != nil {
+				return err
+			}
+			return engine.ReplicateEventsV2(ctx, request)
+		},
+		shardCtx.GetPayloadSerializer(),
+		f.Config.StandbyTaskReReplicationContextTimeout,
+		logger,
 	)
 }

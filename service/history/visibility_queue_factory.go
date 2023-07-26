@@ -25,12 +25,9 @@
 package history
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -42,25 +39,17 @@ const (
 )
 
 type (
-	visibilityQueueFactoryParams struct {
-		fx.In
-
-		QueueFactoryBaseParams
-
-		VisibilityMgr manager.VisibilityManager
-	}
-
 	visibilityQueueFactory struct {
-		visibilityQueueFactoryParams
+		QueueFactoryBaseParams
 		QueueFactoryBase
 	}
 )
 
 func NewVisibilityQueueFactory(
-	params visibilityQueueFactoryParams,
+	params QueueFactoryBaseParams,
 ) QueueFactory {
 	return &visibilityQueueFactory{
-		visibilityQueueFactoryParams: params,
+		QueueFactoryBaseParams: params,
 		QueueFactoryBase: QueueFactoryBase{
 			HostScheduler: queues.NewNamespacePriorityScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
@@ -98,21 +87,13 @@ func (f *visibilityQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
+	executor := f.ExecutorFactory.CreateVisibilityExecutor(shard, workflowCache, logger)
+
 	rescheduler := queues.NewRescheduler(
 		f.HostScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
-	)
-
-	executor := newVisibilityQueueTaskExecutor(
-		shard,
-		workflowCache,
-		f.VisibilityMgr,
-		logger,
-		f.MetricsHandler,
-		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
-		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 	)
 
 	return queues.NewImmediateQueue(

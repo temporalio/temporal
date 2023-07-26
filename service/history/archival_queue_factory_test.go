@@ -53,6 +53,9 @@ func TestArchivalQueueFactory(t *testing.T) {
 		return metricsHandler
 	}).Times(2)
 
+	executorFactory := NewMockExecutorFactory(ctrl)
+	executorFactory.EXPECT().CreateArchivalExecutor(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	mockShard := shard.NewTestContext(
 		ctrl,
 		&persistencespb.ShardInfo{
@@ -70,13 +73,12 @@ func TestArchivalQueueFactory(t *testing.T) {
 		tests.NewDynamicConfig(),
 	)
 
-	queueFactory := NewArchivalQueueFactory(ArchivalQueueFactoryParams{
-		QueueFactoryBaseParams: QueueFactoryBaseParams{
-			Config:         tests.NewDynamicConfig(),
-			TimeSource:     clock.NewEventTimeSource(),
-			MetricsHandler: metricsHandler,
-			Logger:         log.NewNoopLogger(),
-		},
+	queueFactory := NewArchivalQueueFactory(QueueFactoryBaseParams{
+		ExecutorFactory: executorFactory,
+		Config:          tests.NewDynamicConfig(),
+		TimeSource:      clock.NewEventTimeSource(),
+		MetricsHandler:  metricsHandler,
+		Logger:          log.NewNoopLogger(),
 	})
 	queue := queueFactory.CreateQueue(mockShard, nil)
 

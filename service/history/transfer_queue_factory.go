@@ -25,24 +25,13 @@
 package history
 
 import (
-	"context"
-
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -50,30 +39,17 @@ const (
 )
 
 type (
-	transferQueueFactoryParams struct {
-		fx.In
-
-		QueueFactoryBaseParams
-
-		ClientBean        client.Bean
-		ArchivalClient    archiver.Client
-		SdkClientFactory  sdk.ClientFactory
-		MatchingClient    resource.MatchingClient
-		HistoryClient     historyservice.HistoryServiceClient
-		VisibilityManager manager.VisibilityManager
-	}
-
 	transferQueueFactory struct {
-		transferQueueFactoryParams
+		QueueFactoryBaseParams
 		QueueFactoryBase
 	}
 )
 
 func NewTransferQueueFactory(
-	params transferQueueFactoryParams,
+	params QueueFactoryBaseParams,
 ) QueueFactory {
 	return &transferQueueFactory{
-		transferQueueFactoryParams: params,
+		QueueFactoryBaseParams: params,
 		QueueFactoryBase: QueueFactoryBase{
 			HostScheduler: queues.NewNamespacePriorityScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
@@ -110,58 +86,20 @@ func (f *transferQueueFactory) CreateQueue(
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
+	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
+
+	executor := f.ExecutorFactory.CreateTransferExecutor(
+		shard,
+		workflowCache,
+		logger,
+		currentClusterName,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		f.HostScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
-	)
-
-	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
-	activeExecutor := newTransferQueueActiveTaskExecutor(
-		shard,
-		workflowCache,
-		f.ArchivalClient,
-		f.SdkClientFactory,
-		logger,
-		f.MetricsHandler,
-		f.Config,
-		f.MatchingClient,
-		f.VisibilityManager,
-	)
-
-	standbyExecutor := newTransferQueueStandbyTaskExecutor(
-		shard,
-		workflowCache,
-		f.ArchivalClient,
-		xdc.NewNDCHistoryResender(
-			f.NamespaceRegistry,
-			f.ClientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine(ctx)
-				if err != nil {
-					return err
-				}
-				return engine.ReplicateEventsV2(ctx, request)
-			},
-			shard.GetPayloadSerializer(),
-			f.Config.StandbyTaskReReplicationContextTimeout,
-			logger,
-		),
-		logger,
-		f.MetricsHandler,
-		currentClusterName,
-		f.MatchingClient,
-		f.VisibilityManager,
-	)
-
-	executor := queues.NewExecutorWrapper(
-		currentClusterName,
-		f.NamespaceRegistry,
-		activeExecutor,
-		standbyExecutor,
-		logger,
 	)
 
 	return queues.NewImmediateQueue(

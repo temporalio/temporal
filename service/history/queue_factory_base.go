@@ -64,6 +64,7 @@ type (
 	QueueFactoryBaseParams struct {
 		fx.In
 
+		ExecutorFactory      ExecutorFactory
 		NamespaceRegistry    namespace.Registry
 		ClusterMetadata      cluster.Metadata
 		Config               *configs.Config
@@ -88,6 +89,7 @@ type (
 )
 
 var QueueModule = fx.Options(
+	fx.Provide(ExecutorFactoryProvider),
 	fx.Provide(QueueSchedulerRateLimiterProvider),
 	fx.Provide(
 		fx.Annotated{
@@ -133,7 +135,7 @@ type additionalQueueFactories struct {
 // is why we must return a list here.
 func getOptionalQueueFactories(
 	archivalMetadata archiver.ArchivalMetadata,
-	params ArchivalQueueFactoryParams,
+	params QueueFactoryBaseParams,
 ) additionalQueueFactories {
 
 	c := tasks.CategoryArchival
@@ -150,6 +152,12 @@ func getOptionalQueueFactories(
 			NewArchivalQueueFactory(params),
 		},
 	}
+}
+
+func ExecutorFactoryProvider(
+	params ExecutorFactoryBaseParams,
+) ExecutorFactory {
+	return NewExecutorFactoryBase(params)
 }
 
 func QueueSchedulerRateLimiterProvider(

@@ -25,24 +25,13 @@
 package history
 
 import (
-	"context"
-
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/xdc"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -50,28 +39,17 @@ const (
 )
 
 type (
-	timerQueueFactoryParams struct {
-		fx.In
-
-		QueueFactoryBaseParams
-
-		ClientBean        client.Bean
-		ArchivalClient    archiver.Client
-		MatchingClient    resource.MatchingClient
-		VisibilityManager manager.VisibilityManager
-	}
-
 	timerQueueFactory struct {
-		timerQueueFactoryParams
+		QueueFactoryBaseParams
 		QueueFactoryBase
 	}
 )
 
 func NewTimerQueueFactory(
-	params timerQueueFactoryParams,
+	params QueueFactoryBaseParams,
 ) QueueFactory {
 	return &timerQueueFactory{
-		timerQueueFactoryParams: params,
+		QueueFactoryBaseParams: params,
 		QueueFactoryBase: QueueFactoryBase{
 			HostScheduler: queues.NewNamespacePriorityScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
@@ -108,15 +86,13 @@ func (f *timerQueueFactory) CreateQueue(
 ) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope))
-
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
-	workflowDeleteManager := deletemanager.NewDeleteManager(
+
+	executor := f.ExecutorFactory.CreateTimerExecutor(
 		shard,
 		workflowCache,
-		f.Config,
-		f.ArchivalClient,
-		shard.GetTimeSource(),
-		f.VisibilityManager,
+		logger,
+		currentClusterName,
 	)
 
 	rescheduler := queues.NewRescheduler(
@@ -124,53 +100,6 @@ func (f *timerQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
-	)
-
-	activeExecutor := newTimerQueueActiveTaskExecutor(
-		shard,
-		workflowCache,
-		workflowDeleteManager,
-		logger,
-		f.MetricsHandler,
-		f.Config,
-		f.MatchingClient,
-	)
-
-	standbyExecutor := newTimerQueueStandbyTaskExecutor(
-		shard,
-		workflowCache,
-		workflowDeleteManager,
-		xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
-			f.ClientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine(ctx)
-				if err != nil {
-					return err
-				}
-				return engine.ReplicateEventsV2(ctx, request)
-			},
-			shard.GetPayloadSerializer(),
-			f.Config.StandbyTaskReReplicationContextTimeout,
-			logger,
-		),
-		f.MatchingClient,
-		logger,
-		f.MetricsHandler,
-		// note: the cluster name is for calculating time for standby tasks,
-		// here we are basically using current cluster time
-		// this field will be deprecated soon, currently exists so that
-		// we have the option of revert to old behavior
-		currentClusterName,
-		f.Config,
-	)
-
-	executor := queues.NewExecutorWrapper(
-		currentClusterName,
-		f.NamespaceRegistry,
-		activeExecutor,
-		standbyExecutor,
-		logger,
 	)
 
 	return queues.NewScheduledQueue(

@@ -25,19 +25,15 @@
 package history
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -58,40 +54,27 @@ var (
 )
 
 type (
-	// ArchivalQueueFactoryParams contains the necessary params to create a new archival queue factory.
-	ArchivalQueueFactoryParams struct {
-		// fx.In allows fx to construct this object without an explicitly defined constructor.
-		fx.In
-
-		// QueueFactoryBaseParams contains common params for all queue factories.
-		QueueFactoryBaseParams
-		// Archiver is the archival client used to archive history events and visibility records.
-		Archiver archival.Archiver
-		// RelocatableAttributesFetcher is the client used to fetch the memo and search attributes of a workflow.
-		RelocatableAttributesFetcher workflow.RelocatableAttributesFetcher
-	}
-
 	// archivalQueueFactory implements QueueFactory for the archival queue.
 	archivalQueueFactory struct {
 		QueueFactoryBase
-		ArchivalQueueFactoryParams
+		QueueFactoryBaseParams
 	}
 )
 
 // NewArchivalQueueFactory creates a new QueueFactory to construct archival queues.
 func NewArchivalQueueFactory(
-	params ArchivalQueueFactoryParams,
+	params QueueFactoryBaseParams,
 ) QueueFactory {
 	hostScheduler := newScheduler(params)
 	queueFactoryBase := newQueueFactoryBase(params, hostScheduler)
 	return &archivalQueueFactory{
-		ArchivalQueueFactoryParams: params,
-		QueueFactoryBase:           queueFactoryBase,
+		QueueFactoryBaseParams: params,
+		QueueFactoryBase:       queueFactoryBase,
 	}
 }
 
 // newScheduler creates a new task scheduler for tasks on the archival queue.
-func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
+func newScheduler(params QueueFactoryBaseParams) queues.Scheduler {
 	return queues.NewPriorityScheduler(
 		queues.PrioritySchedulerOptions{
 			WorkerCount:                 params.Config.ArchivalProcessorSchedulerWorkerCount,
@@ -109,7 +92,7 @@ func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 
 // newQueueFactoryBase creates a new QueueFactoryBase for the archival queue, which contains common configurations
 // like the task scheduler, task priority assigner, and rate limiters.
-func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues.Scheduler) QueueFactoryBase {
+func newQueueFactoryBase(params QueueFactoryBaseParams, hostScheduler queues.Scheduler) QueueFactoryBase {
 	return QueueFactoryBase{
 		HostScheduler:        hostScheduler,
 		HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -129,25 +112,13 @@ func (f *archivalQueueFactory) CreateQueue(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	executor := f.newArchivalTaskExecutor(shard, workflowCache)
-	return f.newScheduledQueue(shard, executor)
-}
-
-// newArchivalTaskExecutor creates a new archival task executor for the given shard.
-func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, workflowCache wcache.Cache) queues.Executor {
-	return NewArchivalQueueTaskExecutor(
-		f.Archiver,
-		shard,
-		workflowCache,
-		f.RelocatableAttributesFetcher,
-		f.MetricsHandler,
-		log.With(shard.GetLogger(), tag.ComponentArchivalQueue),
-	)
+	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
+	executor := f.ExecutorFactory.CreateArchivalExecutor(shard, workflowCache, logger)
+	return f.newScheduledQueue(shard, executor, logger)
 }
 
 // newScheduledQueue creates a new scheduled queue for the given shard with archival-specific configurations.
-func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor queues.Executor) queues.Queue {
-	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
+func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor queues.Executor, logger log.Logger) queues.Queue {
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
 	rescheduler := queues.NewRescheduler(
