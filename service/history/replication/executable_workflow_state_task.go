@@ -149,6 +149,13 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
+		e.Logger.Error("workflow state replication task encountered error",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
 		return err
 	}
 }
