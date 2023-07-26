@@ -46,7 +46,7 @@ func (p *portProvider) GetFreePort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 	if err != nil {
 		if addr, err = net.ResolveTCPAddr("tcp6", "[::1]:0"); err != nil {
-			panic(fmt.Sprintf("temporalite: failed to get free port: %v", err))
+			return 0, fmt.Errorf("failed to get free port: %w", err)
 		}
 	}
 
