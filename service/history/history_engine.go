@@ -150,6 +150,7 @@ func NewEngineWithShardContext(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	eventBlobCache persistence.XDCCache,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -200,6 +201,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
 			workflowCache,
+			eventBlobCache,
 			executionManager,
 			logger,
 		)
@@ -233,7 +235,7 @@ func NewEngineWithShardContext(
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
-		persistenceVisibilityMgr.GetIndexName(),
+		persistenceVisibilityMgr,
 		visibility.AllowListForValidation(persistenceVisibilityMgr.GetStoreNames()),
 	)
 

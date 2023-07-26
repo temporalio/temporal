@@ -122,7 +122,7 @@ func (s *ackManagerSuite) SetupTest() {
 	workflowCache := wcache.NewCache(s.mockShard)
 
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
 	).(*ackMgrImpl)
 }
 

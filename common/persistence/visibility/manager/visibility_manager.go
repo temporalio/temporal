@@ -47,6 +47,7 @@ type (
 		GetStoreNames() []string
 		HasStoreName(stName string) bool
 		GetIndexName() string
+		ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error)
 
 		// Write APIs.
 		RecordWorkflowExecutionStarted(ctx context.Context, request *RecordWorkflowExecutionStartedRequest) error

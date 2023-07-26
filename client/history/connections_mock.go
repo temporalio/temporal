@@ -84,3 +84,15 @@ func (mr *MockconnectionPoolMockRecorder) getOrCreateClientConn(addr interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getOrCreateClientConn", reflect.TypeOf((*MockconnectionPool)(nil).getOrCreateClientConn), addr)
 }
+
+// resetConnectBackoff mocks base method.
+func (m *MockconnectionPool) resetConnectBackoff(arg0 clientConnection) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "resetConnectBackoff", arg0)
+}
+
+// resetConnectBackoff indicates an expected call of resetConnectBackoff.
+func (mr *MockconnectionPoolMockRecorder) resetConnectBackoff(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "resetConnectBackoff", reflect.TypeOf((*MockconnectionPool)(nil).resetConnectBackoff), arg0)
+}

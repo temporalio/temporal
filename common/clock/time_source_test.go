@@ -22,36 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package store
+package clock_test
 
 import (
-	"strings"
+	"testing"
 
-	"go.temporal.io/api/serviceerror"
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 )
 
-type (
-	VisibilityStoreInvalidValuesError struct {
-		errs []error
-	}
-)
+func TestNewRealClock_Now(t *testing.T) {
+	t.Parallel()
 
-var (
-	// OperationNotSupportedErr is returned when visibility operation in not supported.
-	OperationNotSupportedErr = serviceerror.NewInvalidArgument("Operation not supported. Please use on Elasticsearch")
-)
-
-func (e *VisibilityStoreInvalidValuesError) Error() string {
-	var sb strings.Builder
-	sb.WriteString("Visibility store invalid values errors: ")
-	for _, err := range e.errs {
-		sb.WriteString("[")
-		sb.WriteString(err.Error())
-		sb.WriteString("]")
-	}
-	return sb.String()
+	source := clock.NewRealTimeSource()
+	location := source.Now().Location()
+	assert.Equal(t, "UTC", location.String())
 }
 
-func NewVisibilityStoreInvalidValuesError(errs []error) error {
-	return &VisibilityStoreInvalidValuesError{errs: errs}
+func TestNewRealClock_AfterFunc(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewRealTimeSource()
+	ch := make(chan struct{})
+	timer := source.AfterFunc(0, func() {
+		close(ch)
+	})
+
+	<-ch
+	assert.False(t, timer.Stop())
 }

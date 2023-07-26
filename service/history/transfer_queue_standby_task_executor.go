@@ -508,8 +508,8 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	if !nsRecord.IsOnCluster(t.clusterName) {
-		// discard standby tasks
-		return consts.ErrTaskDiscarded
+		// namespace is not replicated to local cluster, ignore corresponding tasks
+		return nil
 	}
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, taskInfo)
