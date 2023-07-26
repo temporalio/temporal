@@ -41,7 +41,7 @@ import (
 type nsCountLimitTestCase struct {
 	// name of the test case
 	name string
-	// request to be intercepted by the NamespaceCountLimitInterceptor
+	// request to be intercepted by the ConcurrentRequestLimitInterceptor
 	request any
 	// numBlockedRequests is the number of pending requests that will be blocked before the final request is sent.
 	numBlockedRequests int
@@ -56,11 +56,10 @@ type nsCountLimitTestCase struct {
 	expectRateLimit bool
 }
 
-// TestNamespaceCountLimitInterceptor_Intercept verifies that the NamespaceCountLimitInterceptor responds with a rate
+// TestNamespaceCountLimitInterceptor_Intercept verifies that the ConcurrentRequestLimitInterceptor responds with a rate
 // limit error when requests would exceed the concurrent poller limit for a namespace.
 func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 	t.Parallel()
-
 	for _, tc := range []nsCountLimitTestCase{
 		{
 			name:               "no limit hit",
@@ -163,7 +162,7 @@ func (tc *nsCountLimitTestCase) createRequestHandler() *testRequestHandler {
 // spawnBlockedRequests sends a bunch of requests to the interceptor which will block until signaled.
 func (tc *nsCountLimitTestCase) spawnBlockedRequests(
 	handler *testRequestHandler,
-	interceptor *NamespaceCountLimitInterceptor,
+	interceptor *ConcurrentRequestLimitInterceptor,
 ) {
 	for i := 0; i < tc.numBlockedRequests; i++ {
 		go func() {
@@ -179,13 +178,13 @@ func (tc *nsCountLimitTestCase) spawnBlockedRequests(
 	}
 }
 
-func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *NamespaceCountLimitInterceptor {
+func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *ConcurrentRequestLimitInterceptor {
 	registry := namespace.NewMockRegistry(ctrl)
 	registry.EXPECT().GetNamespace(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 
 	logger := log.NewNoopLogger()
 	perInstanceCountLimit := dynamicconfig.GetIntPropertyFilteredByNamespace(tc.perInstanceLimit)
-	interceptor := NewNamespaceCountLimitInterceptor(
+	interceptor := NewConcurrentRequestLimitInterceptor(
 		registry,
 		logger,
 		perInstanceCountLimit,
