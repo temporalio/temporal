@@ -379,7 +379,7 @@ func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 		results := make(map[time.Time]getNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < maxNextTimeResultCacheSize; {
-			next := s.cspec.getNextTime(t)
+			next := s.cspec.getNextTime(s.jitterSeed(), t)
 			results[t] = next
 			t = next.Next
 		}
@@ -419,7 +419,7 @@ func (s *scheduler) processTimeRange(
 			// Run this logic in a SideEffect so that we can fix bugs there without breaking
 			// existing schedule workflows.
 			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-				return s.cspec.getNextTime(t1)
+				return s.cspec.getNextTime(s.jitterSeed(), t1)
 			}).Get(&next))
 		} else {
 			next = s.getNextTime(t1)
@@ -641,7 +641,7 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 	for len(out) < n {
 		// don't need to call getNextTime in SideEffect because this is only used in a query
 		// handler and for the UpsertMemo value
-		t1 = s.cspec.getNextTime(t1).Next
+		t1 = s.cspec.getNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() {
 			break
 		}
@@ -674,7 +674,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	t1 := timestamp.TimeValue(req.StartTime)
 	for i := 0; i < maxListMatchingTimesCount; i++ {
 		// don't need to call getNextTime in SideEffect because this is just a query
-		t1 = s.cspec.getNextTime(t1).Next
+		t1 = s.cspec.getNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}
@@ -969,6 +969,10 @@ func (s *scheduler) startWorkflow(
 
 func (s *scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.State.Namespace, s.State.ScheduleId)
+}
+
+func (s *scheduler) jitterSeed() string {
+	return fmt.Sprintf("%s-%s", s.State.NamespaceId, s.State.ScheduleId)
 }
 
 func (s *scheduler) addSearchAttributes(
