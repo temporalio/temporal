@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+
 	"go.temporal.io/server/temporal"
 )
 
@@ -38,19 +39,23 @@ type TestServerOption interface {
 	apply(*TestServer)
 }
 
+type applyFunc func(*TestServer)
+
+func (f applyFunc) apply(s *TestServer) { f(s) }
+
 // WithT directs all worker and client logs to the test logger.
 //
 // If this option is specified, then server will automatically be stopped when the
 // test completes.
 func WithT(t *testing.T) TestServerOption {
-	return newApplyFuncContainer(func(server *TestServer) {
+	return applyFunc(func(server *TestServer) {
 		server.t = t
 	})
 }
 
 // WithBaseClientOptions configures options for the default clients and workers connected to the test server.
 func WithBaseClientOptions(o client.Options) TestServerOption {
-	return newApplyFuncContainer(func(server *TestServer) {
+	return applyFunc(func(server *TestServer) {
 		server.defaultClientOptions = o
 	})
 }
@@ -61,28 +66,14 @@ func WithBaseClientOptions(o client.Options) TestServerOption {
 // fail fast when workflow code panics or detects non-determinism.
 func WithBaseWorkerOptions(o worker.Options) TestServerOption {
 	o.WorkflowPanicPolicy = worker.FailWorkflow
-	return newApplyFuncContainer(func(server *TestServer) {
+	return applyFunc(func(server *TestServer) {
 		server.defaultWorkerOptions = o
 	})
 }
 
 // WithBaseServerOptions enables configuring additional server options not directly exposed via temporaltest.
 func WithBaseServerOptions(options ...temporal.ServerOption) TestServerOption {
-	return newApplyFuncContainer(func(server *TestServer) {
+	return applyFunc(func(server *TestServer) {
 		server.serverOptions = append(server.serverOptions, options...)
 	})
-}
-
-type applyFuncContainer struct {
-	applyInternal func(*TestServer)
-}
-
-func (fso *applyFuncContainer) apply(ts *TestServer) {
-	fso.applyInternal(ts)
-}
-
-func newApplyFuncContainer(apply func(*TestServer)) *applyFuncContainer {
-	return &applyFuncContainer{
-		applyInternal: apply,
-	}
 }
