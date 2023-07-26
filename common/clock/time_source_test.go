@@ -22,52 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package clock_test
 
 import (
-	"sync/atomic"
-	"time"
+	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
 )
 
-type (
-	liveness struct {
-		timeSource clock.TimeSource
-		ttl        func() time.Duration
-		onIdle     func()
-		timer      atomic.Value
-	}
+func TestNewRealClock_Now(t *testing.T) {
+	t.Parallel()
 
-	timerWrapper struct {
-		clock.Timer
-	}
-)
-
-func newLiveness(
-	timeSource clock.TimeSource,
-	ttl func() time.Duration,
-	onIdle func(),
-) *liveness {
-	return &liveness{
-		timeSource: timeSource,
-		ttl:        ttl,
-		onIdle:     onIdle,
-	}
+	source := clock.NewRealTimeSource()
+	location := source.Now().Location()
+	assert.Equal(t, "UTC", location.String())
 }
 
-func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.timeSource.AfterFunc(l.ttl(), l.onIdle)})
-}
+func TestNewRealClock_AfterFunc(t *testing.T) {
+	t.Parallel()
 
-func (l *liveness) Stop() {
-	if t, ok := l.timer.Swap(timerWrapper{}).(timerWrapper); ok && t.Timer != nil {
-		t.Stop()
-	}
-}
+	source := clock.NewRealTimeSource()
+	ch := make(chan struct{})
+	timer := source.AfterFunc(0, func() {
+		close(ch)
+	})
 
-func (l *liveness) markAlive() {
-	if t, ok := l.timer.Load().(timerWrapper); ok && t.Timer != nil {
-		t.Reset(l.ttl())
-	}
+	<-ch
+	assert.False(t, timer.Stop())
 }
