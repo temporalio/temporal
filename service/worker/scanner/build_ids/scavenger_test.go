@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -84,8 +85,10 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
 
 	a := &Activities{
-		logger:            log.NewCLILogger(),
-		visibilityManager: visiblityManager,
+		logger:                               log.NewCLILogger(),
+		visibilityManager:                    visiblityManager,
+		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
 	}
 
 	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
@@ -107,6 +110,8 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	})
 
 	c0 := hlc.Zero(0)
+	c1 := hlc.Clock{WallClock: time.Now().UnixMilli(), Version: 0, ClusterId: 0}
+
 	userData := &persistencespb.TaskQueueUserData{
 		Clock: &c0,
 		VersioningData: &persistencespb.VersioningData{
@@ -115,49 +120,55 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 					SetIds: []string{"v1"},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "v1.0",
-							State:                persistencespb.STATE_DELETED,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v1.0",
+							State:                  persistencespb.STATE_DELETED,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 						{
-							Id:                   "v1.1",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v1.1",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 						{
-							Id:                   "v1.2",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v1.2",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					BecameDefaultTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v2"},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "v2.0",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v2.0",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					BecameDefaultTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v3"},
 					BuildIds: []*persistencespb.BuildId{
 						{
-							Id:                   "v3.0",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v3.0",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 						{
-							Id:                   "v3.1",
-							State:                persistencespb.STATE_ACTIVE,
-							StateUpdateTimestamp: &c0,
+							Id:                     "v3.1",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					BecameDefaultTimestamp: &c0,
 				},
 				{
 					SetIds: []string{"v4"},
@@ -166,12 +177,25 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 							Id:                   "v4.0",
 							State:                persistencespb.STATE_ACTIVE,
 							StateUpdateTimestamp: &c0,
+							// This one may have been used recently, it should not be deleted
+							BecameDefaultTimestamp: &c1,
 						},
 					},
-					DefaultUpdateTimestamp: &c0,
+					BecameDefaultTimestamp: &c0,
+				},
+				{
+					SetIds: []string{"v5"},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:                     "v5.0",
+							State:                  persistencespb.STATE_ACTIVE,
+							StateUpdateTimestamp:   &c0,
+							BecameDefaultTimestamp: &c0,
+						},
+					},
+					BecameDefaultTimestamp: &c0,
 				},
 			},
-			DefaultUpdateTimestamp: &c0,
 		},
 	}
 
@@ -209,16 +233,15 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 
 	a := &Activities{
-		logger:            log.NewCLILogger(),
-		visibilityManager: visiblityManager,
-		metadataManager:   metadataManager,
-		taskManager:       taskManager,
-		namespaceRegistry: namespaceRegistry,
-		matchingClient:    matchingClient,
-		removableBuildIdMinAge: func() time.Duration {
-			return time.Hour
-		},
-		currentClusterName: "test-cluster",
+		logger:                               log.NewCLILogger(),
+		visibilityManager:                    visiblityManager,
+		metadataManager:                      metadataManager,
+		taskManager:                          taskManager,
+		namespaceRegistry:                    namespaceRegistry,
+		matchingClient:                       matchingClient,
+		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
+		currentClusterName:                   "test-cluster",
 	}
 
 	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
@@ -279,7 +302,6 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 					NextPageToken: []byte{},
 				}, nil
 			} else {
-				// nolint:goerr113
 				return nil, errors.New("invalid NextPageToken")
 			}
 		},
@@ -331,17 +353,18 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 											SetIds: []string{"v1"},
 											BuildIds: []*persistencespb.BuildId{
 												{
-													Id:                   "v1.0",
-													State:                persistencespb.STATE_ACTIVE,
-													StateUpdateTimestamp: &c0,
+													Id:                     "v1.0",
+													State:                  persistencespb.STATE_ACTIVE,
+													StateUpdateTimestamp:   &c0,
+													BecameDefaultTimestamp: &c0,
 												},
 												{
-													Id:                   "v1.1",
-													State:                persistencespb.STATE_ACTIVE,
-													StateUpdateTimestamp: &c0,
+													Id:                     "v1.1",
+													State:                  persistencespb.STATE_ACTIVE,
+													StateUpdateTimestamp:   &c0,
+													BecameDefaultTimestamp: &c0,
 												},
 											},
-											DefaultUpdateTimestamp: &c0,
 										},
 									},
 								},

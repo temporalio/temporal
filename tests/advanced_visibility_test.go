@@ -98,6 +98,8 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.ReachabilityTaskQueueScanLimit:             2,
 		dynamicconfig.ReachabilityQueryBuildIdLimit:              1,
 		dynamicconfig.BuildIdScavengerEnabled:                    true,
+		// Allow the scavenger to remove any build id regardless of when it was last default for a set.
+		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
 
 	switch TestFlags.PersistenceDriver {
@@ -2402,6 +2404,14 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	})
 	s.Require().NoError(err)
 
+	dc := s.testCluster.host.dcClient
+	// Verify new workflows are considered reachable by v01 which is no longer queue default within the configured
+	// duration
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+
+	defer dc.RemoveOverride(dynamicconfig.ReachabilityQuerySetDurationSinceDefault)
+	dc.OverrideValue(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 	// Verify new workflows aren't reachable
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2534,6 +2544,15 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 		},
 	})
 	s.Require().NoError(err)
+
+	dc := s.testCluster.host.dcClient
+	// Verify new workflows are considered reachable by the unversioned worker immediately after making the queue versioned
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
+	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
+
+	defer dc.RemoveOverride(dynamicconfig.ReachabilityQuerySetDurationSinceDefault)
+	dc.OverrideValue(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 }

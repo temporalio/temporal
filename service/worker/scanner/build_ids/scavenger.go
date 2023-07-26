@@ -26,7 +26,6 @@ package build_ids
 
 import (
 	"context"
-	"math"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,6 +36,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -66,20 +66,25 @@ var (
 
 type (
 	BuildIdScavangerInput struct {
-		VisibilityRPS         float64
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
 	}
 
 	Activities struct {
-		logger                 log.Logger
-		taskManager            persistence.TaskManager
-		metadataManager        persistence.MetadataManager
-		visibilityManager      manager.VisibilityManager
-		namespaceRegistry      namespace.Registry
-		matchingClient         matchingservice.MatchingServiceClient
-		currentClusterName     string
-		removableBuildIdMinAge dynamicconfig.DurationPropertyFn
+		logger             log.Logger
+		taskManager        persistence.TaskManager
+		metadataManager    persistence.MetadataManager
+		visibilityManager  manager.VisibilityManager
+		namespaceRegistry  namespace.Registry
+		matchingClient     matchingservice.MatchingServiceClient
+		currentClusterName string
+		// Minimum duration since a build id was last default in its containing set for it to be considered for removal.
+		// If a build id was still default recently, there may be:
+		// 1. workers with that identifier processing tasks
+		// 2. workflows with that identifier that have yet to be indexed in visibility
+		// The scavenger should allow enough time to pass before cleaning these build ids.
+		removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
+		buildIdScavengerVisibilityRPS        dynamicconfig.FloatPropertyFn
 	}
 
 	heartbeatDetails struct {
@@ -98,15 +103,19 @@ func NewActivities(
 	namespaceRegistry namespace.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	currentClusterName string,
+	removableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn,
+	buildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn,
 ) *Activities {
 	return &Activities{
-		logger:             logger,
-		taskManager:        taskManager,
-		metadataManager:    metadataManager,
-		visibilityManager:  visibilityManager,
-		namespaceRegistry:  namespaceRegistry,
-		matchingClient:     matchingClient,
-		currentClusterName: currentClusterName,
+		logger:                               logger,
+		taskManager:                          taskManager,
+		metadataManager:                      metadataManager,
+		visibilityManager:                    visibilityManager,
+		namespaceRegistry:                    namespaceRegistry,
+		matchingClient:                       matchingClient,
+		currentClusterName:                   currentClusterName,
+		removableBuildIdDurationSinceDefault: removableBuildIdDurationSinceDefault,
+		buildIdScavengerVisibilityRPS:        buildIdScavengerVisibilityRPS,
 	}
 }
 
@@ -128,9 +137,6 @@ func (a *Activities) setDefaults(input *BuildIdScavangerInput) {
 	if input.TaskQueueListPageSize == 0 {
 		input.TaskQueueListPageSize = 100
 	}
-	if input.VisibilityRPS == 0 {
-		input.VisibilityRPS = 1
-	}
 }
 
 func (a *Activities) recordHeartbeat(ctx context.Context, heartbeat heartbeatDetails) {
@@ -147,7 +153,7 @@ func (a *Activities) ScavengeBuildIds(ctx context.Context, input BuildIdScavange
 			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
 		}
 	}
-	rateLimiter := quotas.NewRateLimiter(input.VisibilityRPS, int(math.Ceil(input.VisibilityRPS)))
+	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(a.buildIdScavengerVisibilityRPS))
 	for {
 		nsResponse, err := a.metadataManager.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
 			PageSize:       input.NamespaceListPageSize,
@@ -200,6 +206,9 @@ func (a *Activities) processNamespaceEntry(
 			return err
 		}
 		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
 			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
 				// Intentionally don't fail the activity on single entry.
@@ -207,7 +216,6 @@ func (a *Activities) processNamespaceEntry(
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),
 					tag.Error(err))
-				continue
 			}
 			heartbeat.TaskQueueIdx++
 			a.recordHeartbeat(ctx, *heartbeat)
@@ -270,6 +278,10 @@ func (a *Activities) findBuildIdsToRemove(
 			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
 			// Don't remove if build id is the queue default of there's another active build id in this set.
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
+				continue
+			}
+			timeSinceWasDefault := time.Since(hybrid_logical_clock.UTC(*buildId.BecameDefaultTimestamp))
+			if timeSinceWasDefault < a.removableBuildIdDurationSinceDefault() {
 				continue
 			}
 

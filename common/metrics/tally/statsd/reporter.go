@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/cactus/go-statsd-client/v5/statsd"
 	"github.com/uber-go/tally/v4"
 	tallystatsdreporter "github.com/uber-go/tally/v4/statsd"
 )

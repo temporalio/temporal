@@ -49,8 +49,6 @@ var (
 
 type (
 	Reader interface {
-		common.Daemon
-
 		Scopes() []Scope
 
 		WalkSlices(SliceIterator)
@@ -63,6 +61,8 @@ type (
 
 		Notify()
 		Pause(time.Duration)
+		Start()
+		Stop()
 	}
 
 	ReaderOptions struct {

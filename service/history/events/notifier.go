@@ -48,10 +48,11 @@ const (
 
 type (
 	Notifier interface {
-		common.Daemon
 		NotifyNewHistoryEvent(event *Notification)
 		WatchHistoryEvent(identifier definition.WorkflowKey) (string, chan *Notification, error)
 		UnwatchHistoryEvent(identifier definition.WorkflowKey, subscriberID string) error
+		Start()
+		Stop()
 	}
 
 	Notification struct {

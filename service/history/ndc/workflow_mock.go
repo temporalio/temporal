@@ -146,6 +146,21 @@ func (mr *MockWorkflowMockRecorder) HappensAfter(that interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HappensAfter", reflect.TypeOf((*MockWorkflow)(nil).HappensAfter), that)
 }
 
+// LastWriteByLocalCluster mocks base method.
+func (m *MockWorkflow) LastWriteByLocalCluster() (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LastWriteByLocalCluster")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LastWriteByLocalCluster indicates an expected call of LastWriteByLocalCluster.
+func (mr *MockWorkflowMockRecorder) LastWriteByLocalCluster() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastWriteByLocalCluster", reflect.TypeOf((*MockWorkflow)(nil).LastWriteByLocalCluster))
+}
+
 // Revive mocks base method.
 func (m *MockWorkflow) Revive() error {
 	m.ctrl.T.Helper()

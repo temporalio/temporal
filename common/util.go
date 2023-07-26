@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -43,7 +42,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -166,11 +164,23 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 		close(doneC)
 	}()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-doneC:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C:
 		return false
+	}
+}
+
+// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
+func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
 	}
 }
 
@@ -783,44 +793,6 @@ func OverrideWorkflowTaskTimeout(
 	}
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
-}
-
-// StampIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
-// otherwise returns nil.
-func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerVersionStamp {
-	if stamp.GetUseVersioning() {
-		return stamp
-	}
-	return nil
-}
-
-func MakeVersionDirectiveForWorkflowTask(
-	stamp *commonpb.WorkerVersionStamp,
-	lastWorkflowTaskStartedEventID int64,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
-	} else if lastWorkflowTaskStartedEventID == EmptyEventID {
-		// first workflow task
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	}
-	// else: unversioned queue
-	return &directive
-}
-
-func MakeVersionDirectiveForActivityTask(
-	stamp *commonpb.WorkerVersionStamp,
-	useCompatibleVersion bool,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if !useCompatibleVersion {
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
-	}
-	// else: unversioned queue
-	return &directive
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

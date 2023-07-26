@@ -190,11 +190,13 @@ func (s *SequentialScheduler[T]) workerMonitor() {
 	defer s.shutdownWG.Done()
 
 	for {
+		timer := time.NewTimer(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 		select {
 		case <-s.shutdownChan:
+			timer.Stop()
 			s.stopWorkers(len(s.workerShutdownCh))
 			return
-		case <-time.After(backoff.Jitter(defaultMonitorTickerDuration, defaultMonitorTickerJitter)):
+		case <-timer.C:
 			targetWorkerNum := s.options.WorkerCount()
 			currentWorkerNum := len(s.workerShutdownCh)
 

@@ -27,11 +27,19 @@ package configs
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
 	"golang.org/x/exp/slices"
+)
+
+var (
+	testRateBurstFn        = quotas.NewDefaultIncomingRateBurst(func() float64 { return 5 })
+	testOperatorRPSRatioFn = func() float64 { return 0.2 }
 )
 
 type (
@@ -186,8 +194,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	apis := map[string]struct{}{
-		"UpdateWorkerBuildIdCompatibility": {},
+		"RegisterNamespace":                {},
 		"UpdateNamespace":                  {},
+		"UpdateWorkerBuildIdCompatibility": {},
 	}
 
 	var service workflowservice.WorkflowServiceServer
@@ -208,7 +217,6 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"GetSystemInfo":       {},
 		"GetSearchAttributes": {},
 
-		"RegisterNamespace":  {},
 		"DescribeNamespace":  {},
 		"ListNamespaces":     {},
 		"DeprecateNamespace": {},
@@ -261,4 +269,53 @@ func (s *quotasSuite) TestAllAPIs() {
 		actualAPIs[api] = struct{}{}
 	}
 	s.Equal(expectedAPIs, actualAPIs)
+}
+
+func (s *quotasSuite) TestOperatorPriority_Execution() {
+	limiter := NewExecutionPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
+	s.testOperatorPrioritized(limiter, "DescribeWorkflowExecution")
+}
+
+func (s *quotasSuite) TestOperatorPriority_Visibility() {
+	limiter := NewVisibilityPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
+	s.testOperatorPrioritized(limiter, "ListOpenWorkflowExecutions")
+}
+
+func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
+	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
+	s.testOperatorPrioritized(limiter, "RegisterNamespace")
+}
+
+func (s *quotasSuite) TestOperatorPriority_Other() {
+	limiter := NewOtherAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
+	s.testOperatorPrioritized(limiter, "DescribeNamespace")
+}
+
+func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
+	operatorRequest := quotas.NewRequest(
+		api,
+		1,
+		"test-namespace",
+		headers.CallerTypeOperator,
+		-1,
+		"")
+
+	apiRequest := quotas.NewRequest(
+		api,
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"")
+
+	requestTime := time.Now()
+	limitCount := 0
+
+	for i := 0; i < 12; i++ {
+		if !limiter.Allow(requestTime, apiRequest) {
+			limitCount++
+			s.True(limiter.Allow(requestTime, operatorRequest))
+		}
+	}
+	s.Equal(2, limitCount)
 }

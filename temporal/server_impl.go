@@ -33,9 +33,12 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
@@ -53,6 +56,7 @@ type (
 		persistenceConfig          config.Persistence
 		clusterMetadata            *cluster.Config
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
+		metricsHandler             metrics.Handler
 	}
 )
 
@@ -66,6 +70,7 @@ func NewServerFxImpl(
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
+	metricsHandler metrics.Handler,
 ) *ServerImpl {
 	s := &ServerImpl{
 		so:                         opts,
@@ -75,6 +80,7 @@ func NewServerFxImpl(
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,
 		persistenceFactoryProvider: persistenceFactoryProvider,
+		metricsHandler:             metricsHandler,
 	}
 	for _, svcMeta := range servicesGroup.Services {
 		if svcMeta != nil {
@@ -96,6 +102,7 @@ func (s *ServerImpl) Start(ctx context.Context) error {
 		s.persistenceFactoryProvider,
 		s.logger,
 		s.so.customDataStoreFactory,
+		s.metricsHandler,
 	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -165,15 +172,17 @@ func initSystemNamespaces(
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	metricsHandler metrics.Handler,
 ) error {
 	clusterName := persistenceClient.ClusterName(currentClusterName)
+	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
 		cfg,
 		customDataStoreFactory,
 		logger,
-		nil,
+		metricsHandler,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -182,7 +191,7 @@ func initSystemNamespaces(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
-		MetricsHandler:             nil,
+		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
 	})
 	defer factory.Close()
@@ -192,6 +201,7 @@ func initSystemNamespaces(
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	if err = metadataManager.InitializeSystemNamespaces(ctx, currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}

@@ -31,7 +31,6 @@ package ndc
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -60,15 +59,15 @@ func (m *MocktransactionMgrForNewWorkflow) EXPECT() *MocktransactionMgrForNewWor
 }
 
 // dispatchForNewWorkflow mocks base method.
-func (m *MocktransactionMgrForNewWorkflow) dispatchForNewWorkflow(ctx context.Context, now time.Time, targetWorkflow Workflow) error {
+func (m *MocktransactionMgrForNewWorkflow) dispatchForNewWorkflow(ctx context.Context, targetWorkflow Workflow) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dispatchForNewWorkflow", ctx, now, targetWorkflow)
+	ret := m.ctrl.Call(m, "dispatchForNewWorkflow", ctx, targetWorkflow)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // dispatchForNewWorkflow indicates an expected call of dispatchForNewWorkflow.
-func (mr *MocktransactionMgrForNewWorkflowMockRecorder) dispatchForNewWorkflow(ctx, now, targetWorkflow interface{}) *gomock.Call {
+func (mr *MocktransactionMgrForNewWorkflowMockRecorder) dispatchForNewWorkflow(ctx, targetWorkflow interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForNewWorkflow", reflect.TypeOf((*MocktransactionMgrForNewWorkflow)(nil).dispatchForNewWorkflow), ctx, now, targetWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForNewWorkflow", reflect.TypeOf((*MocktransactionMgrForNewWorkflow)(nil).dispatchForNewWorkflow), ctx, targetWorkflow)
 }

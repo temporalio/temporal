@@ -97,6 +97,7 @@ type (
 		paginationFnProvider  PaginationFnProvider
 		executableInitializer ExecutableInitializer
 
+		lastRangeID                    int64
 		exclusiveDeletionHighWatermark tasks.Key
 		nonReadableScope               Scope
 		readerRateLimiter              quotas.RequestRateLimiter
@@ -258,6 +259,7 @@ func newQueueBase(
 		paginationFnProvider:  paginationFnProvider,
 		executableInitializer: executableInitializer,
 
+		lastRangeID:                    -1, // start from an invalid rangeID
 		exclusiveDeletionHighWatermark: exclusiveDeletionHighWatermark,
 		nonReadableScope: NewScope(
 			NewRange(exclusiveReaderHighWatermark, tasks.MaximumKey),
@@ -389,7 +391,10 @@ func (p *queueBase) checkpoint() {
 	// Emit metric before the deletion watermark comparsion so we have the emit even if there's no task
 	// for the queue
 	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
-	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 {
+	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
+		p.updateShardRangeID() {
+		// when shard rangeID is updated, perform range completion again in case the underlying persistence implementation
+		// serves traffic based on the persisted shardInfo
 		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
 			p.resetCheckpointTimer(err)
@@ -447,6 +452,15 @@ func (p *queueBase) updateReaderProgress(
 			InclusiveMinPendingTaskKey: progress,
 		})
 	}
+}
+
+func (p *queueBase) updateShardRangeID() bool {
+	newRangeID := p.shard.GetRangeID()
+	if p.lastRangeID < newRangeID {
+		p.lastRangeID = newRangeID
+		return true
+	}
+	return false
 }
 
 func (p *queueBase) rangeCompleteTasks(

@@ -82,6 +82,12 @@ func (m *visibilityManagerMetrics) GetIndexName() string {
 	return m.delegate.GetIndexName()
 }
 
+func (m *visibilityManagerMetrics) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return m.delegate.ValidateCustomSearchAttributes(searchAttributes)
+}
+
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *manager.RecordWorkflowExecutionStartedRequest,

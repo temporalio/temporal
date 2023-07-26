@@ -97,7 +97,7 @@ func (c *metricClient) StreamWorkflowReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ adminservice.AdminService_StreamWorkflowReplicationMessagesClient, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminStreamWorkflowReplicationMessagesScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminClientStreamWorkflowReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()

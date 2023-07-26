@@ -89,6 +89,12 @@ type (
 		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
 		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
+
+		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its
+		// containing set for it to be considered for removal.
+		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
+		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
+		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 	}
 
 	// scannerContext is the context object that gets
@@ -204,6 +210,8 @@ func (s *Scanner) Start() error {
 			s.context.namespaceRegistry,
 			s.context.matchingClient,
 			s.context.currentClusterName,
+			s.context.cfg.RemovableBuildIdDurationSinceDefault,
+			s.context.cfg.BuildIdScavengerVisibilityRPS,
 		)
 
 		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)

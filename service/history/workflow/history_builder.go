@@ -154,6 +154,13 @@ func NewImmutableHistoryBuilder(
 	}
 }
 
+func (b *HistoryBuilder) IsDirty() bool {
+	return len(b.memEventsBatches) > 0 ||
+		len(b.memLatestBatch) > 0 ||
+		len(b.memBufferBatch) > 0 ||
+		len(b.scheduledIDToStartedID) > 0
+}
+
 // NOTE:
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset
@@ -458,7 +465,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 	retryState enumspb.RetryState,
 	command *commandpb.FailWorkflowExecutionCommandAttributes,
 	newExecutionRunID string,
-) *historypb.HistoryEvent {
+) (*historypb.HistoryEvent, int64) {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
 		WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -469,8 +476,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 		},
 	}
 
-	event, _ = b.appendEvents(event)
-	return event
+	return b.appendEvents(event)
 }
 
 func (b *HistoryBuilder) AddTimeoutWorkflowEvent(

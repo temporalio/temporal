@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// nolint:revive
 package tests
 
 import (
@@ -397,6 +398,83 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.Equal("done!", out)
 }
 
+func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned() {
+	// force one partition so that we can unload the task queue
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+	v0 := s.prefixed("v0")
+
+	// Register a versioned "v0" worker to execute a single workflow task to constrain a workflow on the task queue to a
+	// compatible set.
+	ch := make(chan struct{}, 1)
+	wf1 := func(ctx workflow.Context) (string, error) {
+		close(ch)
+		workflow.GetSignalChannel(ctx, "unblock").Receive(ctx, nil)
+		return "done!", nil
+	}
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v0,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflow(wf1)
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.addNewDefaultBuildId(ctx, tq, v0)
+	s.waitForPropagation(ctx, tq, v0)
+
+	// Start the first workflow while the task queue is still considered versioned.
+	// We want to verify that if a spooled task with a "compatible" versioning directive doesn't block a spooled task
+	// with a "default" directive.
+	// This should never happen in practice since we dispatch "default" tasks to the unversioned task queue but the test
+	// verifies this at a functional level.
+	run1, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf1)
+	s.NoError(err)
+
+	// Wait for first WFT and stop the worker
+	<-ch
+	w1.Stop()
+
+	// Generate a second workflow task with a "compatible" directive, it should be spooled in the versioned task queue.
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run1.GetID(), run1.GetRunID(), "unblock", nil))
+
+	wf2 := func(ctx workflow.Context) (string, error) {
+		return "done!", nil
+	}
+	run2, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf2)
+	s.NoError(err)
+
+	// Wait a bit and allow tasks to be spooled.
+	time.Sleep(time.Second * 3)
+
+	// Disable user data and unload the task queue.
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	s.unloadTaskQueue(ctx, tq)
+
+	// Start an unversioned worker and verify that the second workflow completes.
+	w2 := worker.New(s.sdkClient, tq, worker.Options{
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflow(wf2)
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	var out string
+	s.NoError(run2.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
 func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 	s.testWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
 }
@@ -558,7 +636,6 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act1state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)
@@ -571,7 +648,6 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 		if act2state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				// nolint:goerr113
 				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second)
@@ -1395,7 +1471,7 @@ func (s *versioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
-func (s *versioningIntegSuite) TestDisableLoadUserData() {
+func (s *versioningIntegSuite) TestDisableUserData() {
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1409,6 +1485,9 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	dc := s.testCluster.host.dcClient
 	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	// unload so that we reload and pick up LoadUserData dynamic config
+	s.unloadTaskQueue(ctx, tq)
 
 	// Verify update fails
 	_, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -1424,24 +1503,56 @@ func (s *versioningIntegSuite) TestDisableLoadUserData() {
 	s.unloadTaskQueue(ctx, tq)
 
 	// Verify read returns empty
-	res, err := s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+	_, err = s.engine.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
 	})
-	s.Require().NoError(err)
-	s.Require().Equal(0, len(res.GetMajorVersionSets()))
+	s.Require().ErrorAs(err, &failedPreconditionError)
 }
 
-func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData() {
+func (s *versioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
+	tq := s.T().Name()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dc := s.testCluster.host.dcClient
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+
+	wf := func(ctx workflow.Context) (string, error) {
+		return "ok", nil
+	}
+	wrk := worker.New(s.sdkClient, tq, worker.Options{})
+	wrk.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk.Start())
+	defer wrk.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: 5 * time.Second,
+	}, "wf")
+	s.NoError(err)
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("ok", out)
+}
+
+func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
+	// force one partition so that we can unload the task queue
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
-	dc := s.testCluster.host.dcClient
-	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 
 	s.unloadTaskQueue(ctx, tq)
 
@@ -1451,7 +1562,7 @@ func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData
 		return nil
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -1461,31 +1572,55 @@ func (s *versioningIntegSuite) TestWorkflowGetsStuckWhenDisablingLoadingUserData
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue:                tq,
-		WorkflowExecutionTimeout: 5 * time.Second,
+		WorkflowExecutionTimeout: 10 * time.Second,
 	}, "wf")
 	s.Require().NoError(err)
-	err = run.Get(ctx, nil)
-	var timeoutError *temporal.TimeoutError
-	s.Require().ErrorAs(err, &timeoutError)
+
+	// should not run on versioned worker
+	time.Sleep(2 * time.Second)
 	s.Require().Equal(int32(0), runs.Load())
+
+	wrk.Stop()
+
+	// start unversioned worker and let task run there
+	wrk2 := worker.New(s.sdkClient, tq, worker.Options{
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	wrk2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(wrk2.Start())
+	defer wrk2.Stop()
+
+	// now workflow can complete
+	err = run.Get(ctx, nil)
+	s.NoError(err)
+	s.Require().Equal(int32(1), runs.Load())
 }
 
-func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUserData() {
+func (s *versioningIntegSuite) TestDisableUserData_QueryFails() {
+	// force one partition so that we can unload the task queue
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	s.addNewDefaultBuildId(ctx, tq, v1)
 
 	var runs atomic.Int32
 	wf := func(ctx workflow.Context) error {
-		return workflow.SetQueryHandler(ctx, "query", func() (string, error) {
+		workflow.SetQueryHandler(ctx, "query", func() (string, error) {
 			runs.Add(1)
 			return "response", nil
 		})
+		return nil
 	}
 	wrk := worker.New(s.sdkClient, tq, worker.Options{
-		BuildID:                          "v1",
+		BuildID:                          v1,
 		UseBuildIDForVersioning:          true,
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
@@ -1499,16 +1634,18 @@ func (s *versioningIntegSuite) TestWorkflowQueryTimesOutWhenDisablingLoadingUser
 	}, "wf")
 	s.Require().NoError(err)
 
-	dc := s.testCluster.host.dcClient
-	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	// wait for it to complete
+	s.NoError(run.Get(ctx, nil))
+
 	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
 
 	s.unloadTaskQueue(ctx, tq)
 
 	_, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
-	var deadlineExceededError *serviceerror.DeadlineExceeded
-	s.Require().ErrorAs(err, &deadlineExceededError)
-	s.Require().Equal(int32(0), runs.Load())
+	var failedPrecond *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecond, err)
+	s.Equal(int32(0), runs.Load())
 }
 
 func (s *versioningIntegSuite) TestDescribeTaskQueue() {

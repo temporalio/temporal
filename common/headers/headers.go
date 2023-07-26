@@ -38,7 +38,7 @@ const (
 	SupportedFeaturesHeaderDelim      = ","
 
 	callerNameHeaderName = "caller-name"
-	callerTypeHeaderName = "caller-type"
+	CallerTypeHeaderName = "caller-type"
 	callOriginHeaderName = "call-initiation"
 )
 
@@ -50,7 +50,7 @@ var (
 		SupportedServerVersionsHeaderName,
 		SupportedFeaturesHeaderName,
 		callerNameHeaderName,
-		callerTypeHeaderName,
+		CallerTypeHeaderName,
 		callOriginHeaderName,
 	}
 )

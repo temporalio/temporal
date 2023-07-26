@@ -35,7 +35,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
@@ -45,8 +44,6 @@ import (
 type (
 	// Engine represents an interface for managing workflow execution history.
 	Engine interface {
-		common.Daemon
-
 		StartWorkflowExecution(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest) (*historyservice.StartWorkflowExecutionResponse, error)
 		GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (*historyservice.GetMutableStateResponse, error)
 		PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error)
@@ -95,6 +92,8 @@ type (
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
 
 		ReplicationStream
+		Start()
+		Stop()
 	}
 
 	ReplicationStream interface {

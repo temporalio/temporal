@@ -20,10 +20,17 @@ jobs:
         id: get_branch
         run: |
           echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+      
+      - name: Generate a token
+        id: generate_token
+        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
+        with:
+          app_id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private_key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
 
       - name: Dispatch docker builds Github Action
         env:
-          PAT: ${{ secrets.COMMANDER_DATA_TOKEN }}
+          PAT: ${{ steps.generate_token.outputs.token }}
           PARENT_REPO: temporalio/docker-builds
           PARENT_BRANCH: ${{ toJSON('main') }}
           WORKFLOW_ID: update-submodules.yml

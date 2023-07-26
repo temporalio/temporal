@@ -108,6 +108,11 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if nsError != nil {
 		return nsError
 	} else if !apply {
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
 		return nil
 	}
 	ctx, cancel := newTaskContext(namespaceName)
@@ -148,6 +153,13 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
+		e.Logger.Error("history replication task encountered error",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
 		return err
 	}
 }

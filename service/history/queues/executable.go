@@ -178,25 +178,20 @@ func (e *executableImpl) Execute() (retErr error) {
 		return nil
 	}
 
-	ns, _ := e.namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	ns, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
 	var callerInfo headers.CallerInfo
 	switch e.priority {
 	case ctasks.PriorityHigh:
-		callerInfo = headers.NewBackgroundCallerInfo(ns.Name().String())
+		callerInfo = headers.NewBackgroundCallerInfo(ns.String())
 	default:
 		// priority low or unknown
-		callerInfo = headers.NewPreemptableCallerInfo(ns.Name().String())
+		callerInfo = headers.NewPreemptableCallerInfo(ns.String())
 	}
 	ctx := headers.SetCallerInfo(
 		metrics.AddMetricsContext(context.Background()),
 		callerInfo,
 	)
 	e.Unlock()
-
-	if !ns.IsOnCluster(e.clusterMetadata.GetCurrentClusterName()) {
-		// Discard task if the namespace is not on the current cluster.
-		return consts.ErrTaskDiscarded
-	}
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {

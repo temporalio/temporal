@@ -26,6 +26,8 @@ package cache
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/clock"
 )
 
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
@@ -51,7 +53,8 @@ type Cache interface {
 	// Iterator returns the iterator of the cache
 	Iterator() Iterator
 
-	// Size returns the number of entries currently stored in the Cache
+	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
+	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
 }
 
@@ -66,6 +69,9 @@ type Options struct {
 
 	// Pin prevents in-use objects from getting evicted.
 	Pin bool
+
+	// TimeSource is an optional clock to use for time-skipping and testing. If this is nil, a real clock will be used.
+	TimeSource clock.TimeSource
 }
 
 // SimpleOptions provides options that can be used to configure SimpleCache
