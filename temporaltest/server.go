@@ -68,15 +68,7 @@ func (ts *TestServer) fatal(err error) {
 
 // NewWorker registers and starts a Temporal worker on the specified task queue.
 func (ts *TestServer) NewWorker(taskQueue string, registerFunc func(registry worker.Registry)) worker.Worker {
-	w := worker.New(ts.GetDefaultClient(), taskQueue, ts.defaultWorkerOptions)
-	registerFunc(w)
-	ts.workers = append(ts.workers, w)
-
-	if err := w.Start(); err != nil {
-		ts.fatal(err)
-	}
-
-	return w
+	return ts.NewWorkerWithOptions(taskQueue, registerFunc, ts.defaultWorkerOptions)
 }
 
 // NewWorkerWithOptions returns a Temporal worker on the specified task queue.
