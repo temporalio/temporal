@@ -28,14 +28,15 @@ package temporaltest_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/grpc/codes"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
@@ -224,9 +226,11 @@ func TestBaseServerOptions(t *testing.T) {
 		t.Fatal("err must be non-nil")
 	}
 
-	if !strings.Contains(err.Error(), authorization.RequestUnauthorized) {
-		t.Errorf("expected error %q, got %q", authorization.RequestUnauthorized, err)
+	permissionDeniedErr := &serviceerror.PermissionDenied{}
+	if !errors.As(err, &permissionDeniedErr) {
+		t.Errorf("expected error %T, got %T", permissionDeniedErr, err)
 	}
+	assert.Equal(t, codes.PermissionDenied.String(), permissionDeniedErr.Status().Code().String())
 }
 
 func TestClientWithCustomInterceptor(t *testing.T) {
