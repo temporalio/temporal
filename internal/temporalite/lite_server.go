@@ -342,7 +342,7 @@ func (s *LiteServer) NewClient(ctx context.Context, namespace string) (client.Cl
 //
 // To set the client's namespace, use the corresponding field in client.Options.
 //
-// Note that the HostPort and ConnectionOptions fields of client.Options will always be overridden.
+// Note that options.HostPort will always be overridden.
 func (s *LiteServer) NewClientWithOptions(ctx context.Context, options client.Options) (client.Client, error) {
 	options.HostPort = s.frontendHostPort
 	return client.NewClient(options)
