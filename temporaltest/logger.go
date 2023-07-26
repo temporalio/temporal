@@ -28,8 +28,15 @@ package temporaltest
 
 import (
 	"testing"
+
+	"go.temporal.io/sdk/log"
 )
 
+var _ log.Logger = &testLogger{}
+
+// testLogger implements a Go SDK logger by writing to the test output.
+//
+// Text will be printed only if the test fails or the -test.v flag is set.
 type testLogger struct {
 	t *testing.T
 }
