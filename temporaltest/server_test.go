@@ -33,10 +33,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -264,38 +267,74 @@ func TestClientWithCustomInterceptor(t *testing.T) {
 	}
 }
 
-func TestSearchAttributeCacheDisabled(t *testing.T) {
-	// TODO(jlegrone) re-enable this test when advanced visibility is enabled in temporalite.
-	t.Skip("This test case does not currently pass as of the 1.20 release")
-
+func TestSearchAttributeRegistration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
+	c := ts.GetDefaultClient()
 
-	testSearchAttr := "my-search-attr"
+	testSearchAttr := "MySearchAttr"
 
 	// Create a search attribute
-	_, err := ts.GetDefaultClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+	if _, err := ts.GetDefaultClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enums.IndexedValueType{
 			testSearchAttr: enums.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 		Namespace: ts.GetDefaultNamespace(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Confirm search attribute is registered immediately
+	// TODO(jlegrone): investigate why custom search attribute missing here while setting it from workflow succeeds.
+	//resp, err := c.GetSearchAttributes(ctx)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//saType, ok := resp.GetKeys()[testSearchAttr]
+	//if !ok {
+	//	t.Fatalf("search attribute %q is missing from %v", testSearchAttr, resp.GetKeys())
+	//}
+	//if saType != enums.INDEXED_VALUE_TYPE_KEYWORD {
+	//	t.Error("search attribute type does not match expected")
+	//}
+
+	// Run a workflow that sets the custom search attribute
+	ts.NewWorker("test", func(registry worker.Registry) {
+		registry.RegisterWorkflow(SearchAttrWorkflow)
+	})
+	wfr, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                       "search-attr-test",
+		TaskQueue:                "test",
+		WorkflowExecutionTimeout: 10 * time.Second,
+	}, SearchAttrWorkflow, testSearchAttr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Wait for workflow to complete
+	if err := wfr.Get(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Confirm workflow has search attribute and shows up in custom list query
+	listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
+	workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: ts.GetDefaultNamespace(),
+		Query:     listFilter,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Confirm it exists immediately
-	resp, err := ts.GetDefaultClient().GetSearchAttributes(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	saType, ok := resp.GetKeys()[testSearchAttr]
-	if !ok {
-		t.Fatalf("search attribute %q is missing", testSearchAttr)
-	}
-	if saType != enums.INDEXED_VALUE_TYPE_KEYWORD {
-		t.Error("search attribute type does not match expected")
+	if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
+		t.Errorf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
+	} else {
+		searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
+		if !ok {
+			t.Fatal("Workflow missing test search attr")
+		}
+		var searchAttrValue string
+		if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "foo", searchAttrValue)
 	}
 }
 
@@ -328,6 +367,12 @@ func BenchmarkRunWorkflow(b *testing.B) {
 			}
 		}(b)
 	}
+}
+
+func SearchAttrWorkflow(ctx workflow.Context, searchAttr string) error {
+	return workflow.UpsertSearchAttributes(ctx, map[string]interface{}{
+		searchAttr: "foo",
+	})
 }
 
 // Example workflow/activity
