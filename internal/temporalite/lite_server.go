@@ -302,9 +302,8 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		serverOpts = append(serverOpts, temporal.WithDynamicConfigClient(liteConfig.DynamicConfig))
 	}
 
-	if len(opts) > 0 {
-		serverOpts = append(serverOpts, opts...)
-	}
+	// Apply options from arguments
+	serverOpts = append(serverOpts, opts...)
 
 	srv, err := temporal.NewServer(serverOpts...)
 	if err != nil {
