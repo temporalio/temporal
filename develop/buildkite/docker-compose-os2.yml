@@ -9,7 +9,6 @@ services:
           - cassandra
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   opensearch:
     image: opensearchproject/opensearch:2.6.0
@@ -22,7 +21,6 @@ services:
       - plugins.security.disabled=true
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   integration-test-cassandra:
     build:

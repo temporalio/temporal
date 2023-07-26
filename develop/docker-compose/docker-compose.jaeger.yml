@@ -13,4 +13,3 @@ services:
       - temporal-dev-network
     security_opt:
       - no-new-privileges:true
-    read_only: true

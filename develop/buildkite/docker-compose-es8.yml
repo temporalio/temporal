@@ -9,7 +9,6 @@ services:
           - cassandra
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   mysql:
     image: mysql:5.7
@@ -23,7 +22,6 @@ services:
           - mysql
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   postgresql:
     image: postgres:9.6
@@ -38,7 +36,6 @@ services:
           - postgresql
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   elasticsearch:
     image: elasticsearch:8.0.0
@@ -56,7 +53,6 @@ services:
       - ES_JAVA_OPTS=-Xms100m -Xmx100m
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   integration-test-cassandra:
     build:

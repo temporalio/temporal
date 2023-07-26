@@ -9,7 +9,6 @@ services:
           - cassandra
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -23,7 +22,6 @@ services:
           - mysql
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   postgresql:
     image: postgres:13.5
@@ -38,7 +36,6 @@ services:
           - postgresql
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   elasticsearch:
     image: elasticsearch:7.10.1
@@ -50,7 +47,6 @@ services:
       - discovery.type=single-node
     security_opt:
       - no-new-privileges:true
-    read_only: true
 
   build:
     build:
