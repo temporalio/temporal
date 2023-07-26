@@ -119,6 +119,7 @@ func TestNewServer(t *testing.T) {
 
 func TestNewWorkerWithOptions(t *testing.T) {
 	ts := temporaltest.NewServer(temporaltest.WithT(t))
+	c := ts.GetDefaultClient()
 
 	ts.NewWorkerWithOptions(
 		"hello_world",
@@ -128,13 +129,16 @@ func TestNewWorkerWithOptions(t *testing.T) {
 		worker.Options{
 			MaxConcurrentActivityExecutionSize:      1,
 			MaxConcurrentLocalActivityExecutionSize: 1,
+			// We will later verify this option was set by checking the identity of the task queue poller.
+			Identity: "test-worker-with-options",
 		},
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	wfr, err := ts.GetDefaultClient().ExecuteWorkflow(
+	// Verify that workflows still run to completion
+	wfr, err := c.ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{TaskQueue: "hello_world"},
 		Greet,
@@ -148,11 +152,17 @@ func TestNewWorkerWithOptions(t *testing.T) {
 	if err := wfr.Get(ctx, &result); err != nil {
 		t.Fatal(err)
 	}
-
 	if result != "Hello world" {
 		t.Fatalf("unexpected result: %q", result)
 	}
 
+	// Verify that the Identity worker option was set.
+	resp, err := c.DescribeTaskQueue(ctx, "hello_world", enums.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		t.Fatal(err)
+	}
+	poller := resp.GetPollers()[0]
+	assert.Equal(t, "test-worker-with-options", poller.GetIdentity())
 }
 
 func TestDefaultWorkerOptions(t *testing.T) {
