@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -362,10 +363,7 @@ var supportedPragmas = map[string]struct{}{
 }
 
 func getAllowedPragmas() []string {
-	var allowedPragmaList []string
-	for k := range supportedPragmas {
-		allowedPragmaList = append(allowedPragmaList, k)
-	}
+	allowedPragmaList := maps.Keys(supportedPragmas)
 	sort.Strings(allowedPragmaList)
 	return allowedPragmaList
 }
