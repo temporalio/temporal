@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -86,7 +87,9 @@ func (s *taskValidatorSuite) SetupTest() {
 		},
 	}
 
-	s.taskValidator = newTaskValidator(s.historyClient)
+	s.taskValidator = newTaskValidator(func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.Background(), 4*time.Second)
+	}, s.historyClient)
 }
 
 func (s *taskValidatorSuite) TeardownTest() {

@@ -65,7 +65,7 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	return &taskReader{
 		status:        common.DaemonStatusInitialized,
 		tlMgr:         tlMgr,
-		taskValidator: newTaskValidator(tlMgr.engine.historyClient),
+		taskValidator: newTaskValidator(tlMgr.newIOContext, tlMgr.engine.historyClient),
 		notifyC:       make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
@@ -127,7 +127,7 @@ dispatchLoop:
 			for ctx.Err() == nil {
 				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType) {
 					task.finish(nil)
-					tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.
 					continue dispatchLoop
 				}
@@ -150,12 +150,11 @@ dispatchLoop:
 				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
 			return ctx.Err()
-
 		case <-ctx.Done():
-			break dispatchLoop
+			return ctx.Err()
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
@@ -284,7 +283,7 @@ func (tr *taskReader) addTasksToBuffer(
 ) error {
 	for _, t := range tasks {
 		if IsTaskExpired(t) {
-			tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())

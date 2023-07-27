@@ -1445,7 +1445,7 @@ var (
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
 	SyncThrottlePerTaskQueueCounter           = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter         = NewCounterDef("buffer_throttle_count")
-	InvalidTasksPerTaskQueueCounter           = NewCounterDef("tasks_invalid")
+	ExpiredTasksPerTaskQueueCounter           = NewCounterDef("tasks_expired")
 	ForwardedPerTaskQueueCounter              = NewCounterDef("forwarded_per_tl")
 	ForwardTaskErrorsPerTaskQueue             = NewCounterDef("forward_task_errors")
 	LocalToLocalMatchPerTaskQueueCounter      = NewCounterDef("local_to_local_matches")

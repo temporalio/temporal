@@ -56,17 +56,20 @@ type (
 	}
 
 	taskValidatorImpl struct {
-		historyClient historyservice.HistoryServiceClient
+		newIOContextFn func() (context.Context, context.CancelFunc)
+		historyClient  historyservice.HistoryServiceClient
 
 		lastValidatedTaskInfo taskValidationInfo
 	}
 )
 
 func newTaskValidator(
+	newIOContextFn func() (context.Context, context.CancelFunc),
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
-		historyClient: historyClient,
+		newIOContextFn: newIOContextFn,
+		historyClient:  historyClient,
 	}
 }
 
@@ -132,7 +135,7 @@ func (v *taskValidatorImpl) isTaskValid(
 	task *persistencespb.AllocatedTaskInfo,
 	taskType enumspb.TaskQueueType,
 ) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := v.newIOContextFn()
 	defer cancel()
 
 	namespaceID := task.Data.NamespaceId
