@@ -42,6 +42,7 @@ type (
 const (
 	FieldNameFilter FieldNameUsage = iota
 	FieldNameSorter
+	FieldNameGroupBy
 )
 
 func (n *NopFieldNameInterceptor) Name(name string, _ FieldNameUsage) (string, error) {

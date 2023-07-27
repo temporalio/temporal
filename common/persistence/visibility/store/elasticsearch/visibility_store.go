@@ -38,8 +38,10 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -618,6 +620,10 @@ func (s *visibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
+	if len(queryParams.GroupBy) > 0 {
+		return s.countGroupByWorkflowExecutions(ctx, queryParams)
+	}
+
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
 		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
@@ -625,6 +631,49 @@ func (s *visibilityStore) CountWorkflowExecutions(
 
 	response := &manager.CountWorkflowExecutionsResponse{Count: count}
 	return response, nil
+}
+
+func (s *visibilityStore) countGroupByWorkflowExecutions(
+	ctx context.Context,
+	queryParams *query.QueryParams,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	groupByFields := queryParams.GroupBy
+
+	// Elasticsearch aggregation is nested. so need to loop backwards to build it.
+	// Example: when grouping by (field1, field2), the object looks like
+	// {
+	//   "aggs": {
+	//     "field1": {
+	//       "terms": {
+	//         "field": "field1"
+	//       },
+	//       "aggs": {
+	//         "field2": {
+	//           "terms": {
+	//             "field": "field2"
+	//           }
+	//         }
+	//       }
+	//     }
+	//   }
+	// }
+	termsAgg := elastic.NewTermsAggregation().Field(groupByFields[len(groupByFields)-1])
+	for i := len(groupByFields) - 2; i >= 0; i-- {
+		termsAgg = elastic.NewTermsAggregation().
+			Field(groupByFields[i]).
+			SubAggregation(groupByFields[i+1], termsAgg)
+	}
+	esResponse, err := s.esClient.CountGroupBy(
+		ctx,
+		s.index,
+		queryParams.Query,
+		groupByFields[0],
+		termsAgg,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s.parseCountGroupByResponse(esResponse, groupByFields)
 }
 
 func (s *visibilityStore) GetWorkflowExecution(
@@ -728,6 +777,10 @@ func (s *visibilityStore) buildSearchParametersV2(
 		Index:    s.index,
 		PageSize: request.PageSize,
 		Query:    queryParams.Query,
+	}
+
+	if len(queryParams.GroupBy) > 0 {
+		return nil, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
 	}
 
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
@@ -1121,6 +1174,93 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	}
 
 	return record, nil
+}
+
+// Elasticsearch aggregation groups are returned as nested object.
+// This function flattens the response into rows.
+//
+//nolint:revive // cognitive complexity 27 (> max enabled 25)
+func (s *visibilityStore) parseCountGroupByResponse(
+	searchResult *elastic.SearchResult,
+	groupByFields []string,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	response := &manager.CountWorkflowExecutionsResponse{}
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("Unable to read search attribute types: %v", err),
+		)
+	}
+	groupByTypes := make([]enumspb.IndexedValueType, len(groupByFields))
+	for i, saName := range groupByFields {
+		tp, err := typeMap.GetType(saName)
+		if err != nil {
+			return nil, err
+		}
+		groupByTypes[i] = tp
+	}
+
+	parseJsonNumber := func(val any) (int64, error) {
+		numberVal, isNumber := val.(json.Number)
+		if !isNumber {
+			return 0, fmt.Errorf("%w: expected json.Number, got %T", errUnexpectedJSONFieldType, val)
+		}
+		return numberVal.Int64()
+	}
+
+	var parseInternal func(map[string]any, []*commonpb.Payload) error
+	parseInternal = func(aggs map[string]any, bucketValues []*commonpb.Payload) error {
+		if len(bucketValues) == len(groupByFields) {
+			cnt, err := parseJsonNumber(aggs["doc_count"])
+			if err != nil {
+				return fmt.Errorf("Unable to parse 'doc_count' field: %w", err)
+			}
+			groupValues := make([]*commonpb.Payload, len(groupByFields))
+			for i := range bucketValues {
+				groupValues[i] = bucketValues[i]
+			}
+			response.Groups = append(
+				response.Groups,
+				&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					GroupValues: groupValues,
+					Count:       cnt,
+				},
+			)
+			response.Count += cnt
+			return nil
+		}
+
+		index := len(bucketValues)
+		fieldName := groupByFields[index]
+		buckets := aggs[fieldName].(map[string]any)["buckets"].([]any)
+		for i := range buckets {
+			bucket := buckets[i].(map[string]any)
+			value, err := finishParseJSONValue(bucket["key"], groupByTypes[index])
+			if err != nil {
+				return fmt.Errorf("Failed to parse value %v: %w", bucket["key"], err)
+			}
+			payload, err := searchattribute.EncodeValue(value, groupByTypes[index])
+			if err != nil {
+				return fmt.Errorf("Failed to encode value %v: %w", value, err)
+			}
+			err = parseInternal(bucket, append(bucketValues, payload))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	var bucketsJson map[string]any
+	dec := json.NewDecoder(bytes.NewReader(searchResult.Aggregations[groupByFields[0]]))
+	dec.UseNumber()
+	if err := dec.Decode(&bucketsJson); err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to unmarshal json response: %v", err))
+	}
+	if err := parseInternal(map[string]any{groupByFields[0]: bucketsJson}, nil); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 // finishParseJSONValue finishes JSON parsing after json.Decode.
