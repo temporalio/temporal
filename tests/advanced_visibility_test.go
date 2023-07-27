@@ -1166,10 +1166,6 @@ func (s *advancedVisibilitySuite) TestCountWorkflow() {
 }
 
 func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
-	if !s.isElasticsearchEnabled {
-		s.T().Skip("This test is only for Elasticsearch")
-	}
-
 	id := "es-integration-count-groupby-workflow-test"
 	wt := "es-integration-count-groupby-workflow-test-type"
 	tl := "es-integration-count-groupby-workflow-test-taskqueue"
