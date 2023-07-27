@@ -37,8 +37,9 @@ import (
 )
 
 const (
-	EmptyQueueMessageID = int64(-1)
-	MaxQueueMessageID   = math.MaxInt64
+	EmptyQueueMessageID   = int64(-1)
+	EmptyQueueV2MessageID = int64(0)
+	MaxQueueMessageID     = math.MaxInt64
 )
 
 type (

@@ -129,7 +129,7 @@ func (q *sqlQueueV2) EnqueueMessage(
 			return err
 		case sql.ErrNoRows:
 			_, err = tx.InsertIntoQueueV2Messages(ctx, []sqlplugin.QueueV2MessageRow{
-				newQueueV2Row(request.QueueType, request.QueueName, persistence.EmptyQueueMessageID+1, request.Blob),
+				newQueueV2Row(request.QueueType, request.QueueName, persistence.EmptyQueueV2MessageID+1, request.Blob),
 			})
 			return err
 		default:

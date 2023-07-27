@@ -40,7 +40,7 @@ const (
 	templateEnqueueMessageQueryV2   = `INSERT INTO queue_v2 (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateGetLastMessageIDQueryV2 = `SELECT message_id FROM queue WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1`
 	templateDeleteMessagesQueryV2   = `DELETE FROM queue WHERE queue_type = ? and queue_name = ? and message_id > ? and message_id <= ?`
-	templateGetMessagesQueryV2      = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and queue_name = ? and partition = ? and message_id > ? LIMIT ?`
+	templateGetMessagesQueryV2      = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and queue_name = ? and partition = ? and message_id > ?`
 
 	templateInsertQueueMetadataQueryV2          = `INSERT INTO queue_metadata_v2 (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateGetQueuesListQueryV2                = `SELECT queue_name FROM queue_metadata_v2 WHERE queue_type=?`
@@ -105,6 +105,8 @@ func (q *QueueStoreV2) CreateQueue(
 	return &persistence.InternalCreateQueueResponse{}, nil
 }
 
+// TODO: For cassandra, we need to make sure this concurrency for this method is 1 on a host and
+// tryEnqueue should do back off while holding the concurrency token when it encounters conditional failure.
 func (q *QueueStoreV2) EnqueueMessage(ctx context.Context, request persistence.InternalEnqueueMessageRequest) (*persistence.InternalEnqueueMessageResponse, error) {
 	lastMessageID, err := q.getLastMessageID(ctx, request, EmptyPartition)
 	if err != nil {
@@ -222,11 +224,11 @@ func (q *QueueStoreV2) tryEnqueue(
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
+		return persistence.EmptyQueueV2MessageID, gocql.ConvertError("tryEnqueue", err)
 	}
 
 	if !applied {
-		return persistence.EmptyQueueMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
+		return persistence.EmptyQueueV2MessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
 	}
 
 	return messageID, nil
@@ -242,9 +244,9 @@ func (q *QueueStoreV2) getLastMessageID(
 	err := query.MapScan(result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
-			return persistence.EmptyQueueMessageID, nil
+			return persistence.EmptyQueueV2MessageID, nil
 		}
-		return persistence.EmptyQueueMessageID, gocql.ConvertError("getLastMessageID", err)
+		return persistence.EmptyQueueV2MessageID, gocql.ConvertError("getLastMessageID", err)
 	}
 	return result["message_id"].(int64), nil
 }

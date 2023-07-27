@@ -451,20 +451,7 @@ func (q *FaultInjectionQueue) UpdateRate(rate float64) {
 }
 
 func NewFaultInjectionQueueV2(rate float64, baseQueue persistence.QueueV2) (*FaultInjectionQueueV2, error) {
-	errorGenerator := newErrorGenerator(rate,
-		append(defaultErrors,
-			FaultWeight{
-				errFactory: func(msg string) error {
-					return &persistence.ShardOwnershipLostError{
-						ShardID: -1,
-						Msg:     fmt.Sprintf("FaultInjectionQueue injected, %s", msg),
-					}
-				},
-				weight: 1,
-			},
-		),
-	)
-
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
 	return &FaultInjectionQueueV2{
 		baseQueue:      baseQueue,
 		ErrorGenerator: errorGenerator,
@@ -481,24 +468,28 @@ func (q *FaultInjectionQueueV2) EnqueueMessage(ctx context.Context, request pers
 	}
 	return q.baseQueue.EnqueueMessage(ctx, request)
 }
+
 func (q *FaultInjectionQueueV2) ReadMessages(ctx context.Context, request persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
 	return q.baseQueue.ReadMessages(ctx, request)
 }
+
 func (q *FaultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request persistence.InternalRangeDeleteMessagesRequest) (*persistence.InternalRangeDeleteMessagesResponse, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
 	return q.baseQueue.RangeDeleteMessages(ctx, request)
 }
+
 func (q *FaultInjectionQueueV2) CreateQueue(ctx context.Context, request persistence.InternalCreateQueueRequest) (*persistence.InternalCreateQueueResponse, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
 	return q.baseQueue.CreateQueue(ctx, request)
 }
+
 func (q *FaultInjectionQueueV2) ListQueues(ctx context.Context, request persistence.InternalListQueuesRequest) (*persistence.InternalListQueuesResponse, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err

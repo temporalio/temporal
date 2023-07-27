@@ -103,7 +103,7 @@ func (q *QueueStore) EnqueueMessageToDLQ(
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(ctx, q.getDLQTypeFromQueueType())
 	if err != nil {
-		return persistence.EmptyQueueMessageID, err
+		return persistence.EmptyQueueV2MessageID, err
 	}
 
 	// Use negative queue type as the dlq type
@@ -120,11 +120,11 @@ func (q *QueueStore) tryEnqueue(
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
+		return persistence.EmptyQueueV2MessageID, gocql.ConvertError("tryEnqueue", err)
 	}
 
 	if !applied {
-		return persistence.EmptyQueueMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
+		return persistence.EmptyQueueV2MessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
 	}
 
 	return messageID, nil
@@ -140,9 +140,9 @@ func (q *QueueStore) getLastMessageID(
 	err := query.MapScan(result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
-			return persistence.EmptyQueueMessageID, nil
+			return persistence.EmptyQueueV2MessageID, nil
 		}
-		return persistence.EmptyQueueMessageID, gocql.ConvertError("getLastMessageID", err)
+		return persistence.EmptyQueueV2MessageID, gocql.ConvertError("getLastMessageID", err)
 	}
 	return result["message_id"].(int64), nil
 }
