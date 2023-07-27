@@ -12,7 +12,7 @@ PRIMARY KEY ((queue_type, queue_name))
 CREATE TABLE queue_v2 (
   queue_type        int,
   queue_name        varchar,
-  queue_partition   int, // not used but in case we need in the future
+  queue_partition   int, -- not used but in case we need in the future
   message_id        bigint,
   message_payload   blob,
   message_encoding  text,
