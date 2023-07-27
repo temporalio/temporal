@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -469,6 +470,10 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
+	if len(selectFilter.GroupBy) > 0 {
+		return s.countGroupByWorkflowExecutions(ctx, selectFilter, saTypeMap)
+	}
+
 	count, err := s.sqlStore.Db.CountFromVisibility(ctx, *selectFilter)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
@@ -476,6 +481,49 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	}
 
 	return &manager.CountWorkflowExecutionsResponse{Count: count}, nil
+}
+
+func (s *VisibilityStore) countGroupByWorkflowExecutions(
+	ctx context.Context,
+	selectFilter *sqlplugin.VisibilitySelectFilter,
+	saTypeMap searchattribute.NameTypeMap,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	var err error
+	groupByTypes := make([]enumspb.IndexedValueType, len(selectFilter.GroupBy))
+	for i, fieldName := range selectFilter.GroupBy {
+		groupByTypes[i], err = saTypeMap.GetType(fieldName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rows, err := s.sqlStore.Db.CountGroupByFromVisibility(ctx, *selectFilter)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("CountWorkflowExecutions operation failed. Query failed: %v", err))
+	}
+	resp := &manager.CountWorkflowExecutionsResponse{
+		Count:  0,
+		Groups: make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(rows)),
+	}
+	for _, row := range rows {
+		groupValues := make([]*common.Payload, len(row.GroupValues))
+		for i, val := range row.GroupValues {
+			groupValues[i], err = searchattribute.EncodeValue(val, groupByTypes[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		resp.Groups = append(
+			resp.Groups,
+			&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				GroupValues: groupValues,
+				Count:       row.Count,
+			},
+		)
+		resp.Count += row.Count
+	}
+	return resp, nil
 }
 
 func (s *VisibilityStore) GetWorkflowExecution(

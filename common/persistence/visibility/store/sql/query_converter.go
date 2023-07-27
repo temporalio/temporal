@@ -53,7 +53,7 @@ type (
 			token *pageToken,
 		) (string, []any)
 
-		buildCountStmt(namespaceID namespace.ID, queryString string) (string, []any)
+		buildCountStmt(namespaceID namespace.ID, queryString string, groupBy []string) (string, []any)
 
 		getDatetimeFormat() string
 
@@ -69,6 +69,12 @@ type (
 		queryString   string
 
 		seenNamespaceDivision bool
+	}
+
+	queryParams struct {
+		queryString string
+		// List of search attributes to group by (field name, not db name).
+		groupBy []string
 	}
 )
 
@@ -143,13 +149,16 @@ func (c *QueryConverter) BuildSelectStmt(
 	if err != nil {
 		return nil, err
 	}
-	queryString, err := c.convertWhereString(c.queryString)
+	qp, err := c.convertWhereString(c.queryString)
 	if err != nil {
 		return nil, err
 	}
+	if len(qp.groupBy) > 0 {
+		return nil, query.NewConverterError("%s: 'group by' clause", query.NotSupportedErrMessage)
+	}
 	queryString, queryArgs := c.buildSelectStmt(
 		c.namespaceID,
-		queryString,
+		qp.queryString,
 		pageSize,
 		token,
 	)
@@ -157,47 +166,55 @@ func (c *QueryConverter) BuildSelectStmt(
 }
 
 func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, error) {
-	queryString, err := c.convertWhereString(c.queryString)
+	qp, err := c.convertWhereString(c.queryString)
 	if err != nil {
 		return nil, err
 	}
-	queryString, queryArgs := c.buildCountStmt(
-		c.namespaceID,
-		queryString,
-	)
-	return &sqlplugin.VisibilitySelectFilter{Query: queryString, QueryArgs: queryArgs}, nil
+	groupByDbNames := make([]string, len(qp.groupBy))
+	for i, fieldName := range qp.groupBy {
+		groupByDbNames[i] = searchattribute.GetSqlDbColName(fieldName)
+	}
+	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames)
+	return &sqlplugin.VisibilitySelectFilter{
+		Query:     queryString,
+		QueryArgs: queryArgs,
+		GroupBy:   qp.groupBy,
+	}, nil
 }
 
-func (c *QueryConverter) convertWhereString(queryString string) (string, error) {
+func (c *QueryConverter) convertWhereString(queryString string) (*queryParams, error) {
 	where := strings.TrimSpace(queryString)
-	if where != "" && !strings.HasPrefix(strings.ToLower(where), "order by") {
+	if where != "" &&
+		!strings.HasPrefix(strings.ToLower(where), "order by") &&
+		!strings.HasPrefix(strings.ToLower(where), "group by") {
 		where = "where " + where
 	}
 	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
 	sql := "select * from table1 " + where
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	selectStmt, _ := stmt.(*sqlparser.Select)
 	err = c.convertSelectStmt(selectStmt)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	result := ""
+	res := &queryParams{}
 	if selectStmt.Where != nil {
-		result = sqlparser.String(selectStmt.Where.Expr)
+		res.queryString = sqlparser.String(selectStmt.Where.Expr)
 	}
-	return result, nil
+	for _, groupByExpr := range selectStmt.GroupBy {
+		// The parser already ensures the type is saColName.
+		colName := groupByExpr.(*saColName)
+		res.groupBy = append(res.groupBy, colName.fieldName)
+	}
+	return res, nil
 }
 
 func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
-	if sel.GroupBy != nil {
-		return query.NewConverterError("%s: 'group by' clause", query.NotSupportedErrMessage)
-	}
-
 	if sel.OrderBy != nil {
 		return query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage)
 	}
@@ -248,6 +265,26 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 				Left:  sel.Where.Expr,
 				Right: namespaceDivisionExpr,
 			}
+		}
+	}
+
+	if len(sel.GroupBy) > 1 {
+		return query.NewConverterError(
+			"%s: 'group by' clause supports only a single field",
+			query.NotSupportedErrMessage,
+		)
+	}
+	for k := range sel.GroupBy {
+		colName, err := c.convertColName(&sel.GroupBy[k])
+		if err != nil {
+			return err
+		}
+		if colName.fieldName != searchattribute.ExecutionStatus {
+			return query.NewConverterError(
+				"%s: 'group by' clause is only supported for %s search attribute",
+				query.NotSupportedErrMessage,
+				searchattribute.ExecutionStatus,
+			)
 		}
 	}
 
