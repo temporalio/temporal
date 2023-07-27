@@ -125,7 +125,7 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for ctx.Err() == nil {
-				if valid := tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType); !valid {
+				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType) {
 					task.finish(nil)
 					tr.taggedMetricsHandler().Counter(metrics.InvalidTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.
