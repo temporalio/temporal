@@ -60,6 +60,8 @@ const (
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
 	BatchAndCacheTimeQueries
+	// use cache v2, and include ids in jitter
+	NewCacheAndJitter
 )
 
 const (
@@ -87,7 +89,7 @@ const (
 
 	rateLimitedErrorType = "RateLimited"
 
-	maxNextTimeResultCacheSize = 10
+	nextTimeCacheV1Size = 10
 )
 
 type (
@@ -118,7 +120,8 @@ type (
 
 		// This cache is used to store time results after batching getNextTime queries
 		// in a single SideEffect
-		nextTimeResultCache map[time.Time]getNextTimeResult
+		nextTimeCacheV1 map[time.Time]getNextTimeResult
+		nextTimeCacheV2 nextTimeCacheV2
 	}
 
 	tweakablePolicies struct {
@@ -135,11 +138,18 @@ type (
 		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
-		MaxBufferSize  int
-		AllowZeroSleep bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
-		ReuseTimer     bool                     // Whether to reuse timer. Used for workflow compatibility.
-		Version        SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
+		MaxBufferSize       int
+		AllowZeroSleep      bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer          bool                     // Whether to reuse timer. Used for workflow compatibility.
+		NextTimeCacheV2Size int                      // Size of next time cache (v2)
+		Version             SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
+	}
+
+	nextTimeCacheV2 struct {
+		Start     time.Time           // start time that the results were calculated from
+		Results   []getNextTimeResult // results of getNextTime in sequence
+		Completed bool                // whether the end of results represents the end of the schedule
 	}
 )
 
@@ -174,7 +184,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		Version:                           BatchAndCacheTimeQueries,
+		NextTimeCacheV2Size:               10,
+		Version:                           NewCacheAndJitter,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -299,8 +310,9 @@ func (s *scheduler) ensureFields() {
 }
 
 func (s *scheduler) compileSpec() {
-	// if spec changes invalidate current nextTimeResult cache
-	s.nextTimeResultCache = nil
+	// if spec changes invalidate current cache
+	s.nextTimeCacheV1 = nil
+	s.nextTimeCacheV2.clear()
 
 	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
@@ -365,27 +377,76 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 	}
 }
 
-func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
-
+func (s *scheduler) getNextTimeV1(after time.Time) getNextTimeResult {
 	// we populate the map sequentially, if after is not in the map, it means we either exhausted
 	// all items, or we jumped through time (forward or backward), in either case, refresh the cache
-	next, ok := s.nextTimeResultCache[after]
+	next, ok := s.nextTimeCacheV1[after]
 	if ok {
 		return next
 	}
-	s.nextTimeResultCache = nil
+	s.nextTimeCacheV1 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 		results := make(map[time.Time]getNextTimeResult)
-		for t := after; !t.IsZero() && len(results) < maxNextTimeResultCacheSize; {
+		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
 			next := s.cspec.getNextTime(s.jitterSeed(), t)
 			results[t] = next
 			t = next.Next
 		}
 		return results
-	}).Get(&s.nextTimeResultCache))
-	return s.nextTimeResultCache[after]
+	}).Get(&s.nextTimeCacheV1))
+	return s.nextTimeCacheV1[after]
+}
+
+func (s *scheduler) getNextTimeV2(after time.Time) getNextTimeResult {
+	// Asking for a time before the cache, need to refill
+	if after.Before(s.nextTimeCacheV2.Start) {
+		s.fillNextTimeCacheV2(after)
+	}
+	// Results covers a contiguous time range so we can search in it
+	for _, result := range s.nextTimeCacheV2.Results {
+		if result.Next.After(after) {
+			return result
+		}
+	}
+	// Ran off end: if completed, then we're done
+	if s.nextTimeCacheV2.Completed {
+		return getNextTimeResult{}
+	}
+	// Otherwise refill and take first result, or none
+	s.fillNextTimeCacheV2(after)
+	if len(s.nextTimeCacheV2.Results) > 0 {
+		return s.nextTimeCacheV2.Results[0]
+	}
+	return getNextTimeResult{}
+}
+
+func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
+	// Clear value so we can Get into it
+	s.nextTimeCacheV2.clear()
+	// Run this logic in a SideEffect so that we can fix bugs there without breaking
+	// existing schedule workflows.
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		cache := nextTimeCacheV2{Start: start}
+		for t := start; len(cache.Results) < s.tweakables.NextTimeCacheV2Size; {
+			next := s.cspec.getNextTime(s.jitterSeed(), t)
+			if next.Next.IsZero() {
+				cache.Completed = true
+				break
+			}
+			cache.Results = append(cache.Results, next)
+			t = next.Next
+		}
+		return cache
+	}).Get(&s.nextTimeCacheV2))
+}
+
+func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
+	if s.hasMinVersion(NewCacheAndJitter) {
+		return s.getNextTimeV2(after)
+	}
+	return s.getNextTimeV1(after)
 }
 
 func (s *scheduler) processTimeRange(
@@ -630,8 +691,22 @@ func (s *scheduler) processSignals() bool {
 	return scheduleChanged
 }
 
-func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
-	// Note that `s` may be a fake scheduler used to compute list info at creation time.
+func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*time.Time {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time
+	// or in a query. In that case inWorkflowContext will be false, and this function and
+	// anything it calls should not use s.ctx.
+
+	// Pure version not using workflow context
+	next := func(t1 time.Time) time.Time {
+		return s.cspec.getNextTime(s.jitterSeed(), t1).Next
+	}
+
+	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
+		// We can use the cache here
+		next = func(t1 time.Time) time.Time {
+			return s.getNextTime(t1).Next
+		}
+	}
 
 	if s.cspec == nil {
 		return nil
@@ -639,9 +714,7 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 	out := make([]*time.Time, 0, n)
 	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 	for len(out) < n {
-		// don't need to call getNextTime in SideEffect because this is only used in a query
-		// handler and for the UpsertMemo value
-		t1 = s.cspec.getNextTime(s.jitterSeed(), t1).Next
+		t1 = next(t1)
 		if t1.IsZero() {
 			break
 		}
@@ -653,7 +726,7 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
 	// this is a query handler, don't modify s.Info directly
 	infoCopy := *s.Info
-	infoCopy.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
+	infoCopy.FutureActionTimes = s.getFutureActionTimes(false, s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
@@ -687,9 +760,10 @@ func (s *scheduler) incSeqNo() {
 	s.State.ConflictToken++
 }
 
-func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
-	// Note that `s` may be a fake scheduler used to compute list info at creation time, before
-	// the first workflow task. This function and anything it calls should not use s.ctx.
+func (s *scheduler) getListInfo(inWorkflowContext bool) *schedpb.ScheduleListInfo {
+	// Note that `s` may be a fake scheduler used to compute list info at creation time.
+	// In that case inWorkflowContext will be false, and this function and anything it calls
+	// should not use s.ctx.
 
 	// make shallow copy
 	spec := *s.Schedule.Spec
@@ -702,12 +776,12 @@ func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
-		FutureActionTimes: s.getFutureActionTimes(s.tweakables.FutureActionCountForList),
+		FutureActionTimes: s.getFutureActionTimes(inWorkflowContext, s.tweakables.FutureActionCountForList),
 	}
 }
 
 func (s *scheduler) updateMemoAndSearchAttributes() {
-	newInfo := s.getListInfo()
+	newInfo := s.getListInfo(true)
 
 	workflowInfo := workflow.GetInfo(s.ctx)
 	currentInfoPayload := workflowInfo.Memo.GetFields()[MemoFieldInfo]
@@ -972,7 +1046,10 @@ func (s *scheduler) identity() string {
 }
 
 func (s *scheduler) jitterSeed() string {
-	return fmt.Sprintf("%s-%s", s.State.NamespaceId, s.State.ScheduleId)
+	if s.hasMinVersion(NewCacheAndJitter) {
+		return fmt.Sprintf("%s-%s", s.State.NamespaceId, s.State.ScheduleId)
+	}
+	return ""
 }
 
 func (s *scheduler) addSearchAttributes(
@@ -1112,6 +1189,10 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
 }
 
+func (c *nextTimeCacheV2) clear() {
+	*c = nextTimeCacheV2{}
+}
+
 func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
@@ -1127,5 +1208,5 @@ func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *
 	fakeScheduler.ensureFields()
 	fakeScheduler.compileSpec()
 	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
-	return fakeScheduler.getListInfo()
+	return fakeScheduler.getListInfo(false)
 }

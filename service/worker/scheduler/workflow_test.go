@@ -1429,7 +1429,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 	// [maxNextTimeResultCacheSize, 2*maxNextTimeResultCacheSize) range
 	for i := range delayedCallbacks {
 
-		maxRuns := rand.Intn(maxNextTimeResultCacheSize) + maxNextTimeResultCacheSize
+		maxRuns := rand.Intn(nextTimeResultCacheSizeV1) + nextTimeResultCacheSizeV1
 		expected += maxRuns
 		// a point in time to send the callback request
 		callbackTime := time.Date(2022, 6, 1, i+15, 2, 0, 0, time.UTC)
