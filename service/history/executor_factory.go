@@ -57,13 +57,6 @@ type (
 			logger log.Logger,
 		) queues.Executor
 
-		CreateTimerExecutor(
-			shardCtx shard.Context,
-			workflowCache wcache.Cache,
-			logger log.Logger,
-			clusterName string,
-		) queues.Executor
-
 		CreateTimerActiveExecutor(
 			shardCtx shard.Context,
 			workflowCache wcache.Cache,
@@ -76,13 +69,6 @@ type (
 			workflowCache wcache.Cache,
 			workflowDeleteManager deletemanager.DeleteManager,
 			nDCHistoryResender xdc.NDCHistoryResender,
-			logger log.Logger,
-			clusterName string,
-		) queues.Executor
-
-		CreateTransferExecutor(
-			shardCtx shard.Context,
-			workflowCache wcache.Cache,
 			logger log.Logger,
 			clusterName string,
 		) queues.Executor
@@ -113,6 +99,11 @@ type (
 			workflowCache wcache.Cache,
 			logger log.Logger,
 		) queues.Executor
+
+		GetNewDefaultStandbyNDCHistoryResender(
+			shardCtx shard.Context,
+			logger log.Logger,
+		) xdc.NDCHistoryResender
 	}
 
 	ExecutorFactoryBaseParams struct {
@@ -162,31 +153,6 @@ func (f *ExecutorFactoryBase) CreateArchivalExecutor(
 	)
 }
 
-func (f *ExecutorFactoryBase) CreateTimerExecutor(
-	shardCtx shard.Context,
-	workflowCache wcache.Cache,
-	logger log.Logger,
-	clusterName string,
-) queues.Executor {
-	deleteManager := f.GetNewWorkflowDeleteManager(shardCtx, workflowCache)
-	return f.CreateExecutorWrapper(
-		clusterName,
-		f.CreateTimerActiveExecutor(
-			shardCtx,
-			workflowCache,
-			deleteManager,
-			logger),
-		f.CreateTimerStandbyExecutor(
-			shardCtx,
-			workflowCache,
-			deleteManager,
-			f.GetNewStandbyNDCHistoryResender(shardCtx, logger),
-			logger,
-			clusterName),
-		logger,
-	)
-}
-
 func (f *ExecutorFactoryBase) CreateTimerActiveExecutor(
 	shardCtx shard.Context,
 	workflowCache wcache.Cache,
@@ -222,28 +188,6 @@ func (f *ExecutorFactoryBase) CreateTimerStandbyExecutor(
 		f.MetricsHandler,
 		clusterName,
 		f.Config,
-	)
-}
-
-func (f *ExecutorFactoryBase) CreateTransferExecutor(
-	shardCtx shard.Context,
-	workflowCache wcache.Cache,
-	logger log.Logger,
-	clusterName string,
-) queues.Executor {
-	return f.CreateExecutorWrapper(
-		clusterName,
-		f.CreateTransferActiveExecutor(
-			shardCtx,
-			workflowCache,
-			logger),
-		f.CreateTransferStandbyExecutor(
-			shardCtx,
-			workflowCache,
-			f.GetNewStandbyNDCHistoryResender(shardCtx, logger),
-			logger,
-			clusterName),
-		logger,
 	)
 }
 
@@ -330,7 +274,7 @@ func (f *ExecutorFactoryBase) GetNewWorkflowDeleteManager(
 	)
 }
 
-func (f *ExecutorFactoryBase) GetNewStandbyNDCHistoryResender(
+func (f *ExecutorFactoryBase) GetNewDefaultStandbyNDCHistoryResender(
 	shardCtx shard.Context,
 	logger log.Logger,
 ) xdc.NDCHistoryResender {

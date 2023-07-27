@@ -28,10 +28,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/archiver"
+	"go.uber.org/fx"
 )
 
 const (
@@ -39,17 +43,25 @@ const (
 )
 
 type (
-	timerQueueFactory struct {
+	timerQueueFactoryParams struct {
+		fx.In
+
 		QueueFactoryBaseParams
+		ArchivalClient    archiver.Client
+		VisibilityManager manager.VisibilityManager
+	}
+
+	timerQueueFactory struct {
+		timerQueueFactoryParams
 		QueueFactoryBase
 	}
 )
 
 func NewTimerQueueFactory(
-	params QueueFactoryBaseParams,
+	params timerQueueFactoryParams,
 ) QueueFactory {
 	return &timerQueueFactory{
-		QueueFactoryBaseParams: params,
+		timerQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
 			HostScheduler: queues.NewNamespacePriorityScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
@@ -88,11 +100,23 @@ func (f *timerQueueFactory) CreateQueue(
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope))
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	executor := f.ExecutorFactory.CreateTimerExecutor(
-		shard,
-		workflowCache,
-		logger,
+	deleteManager := f.getNewDeleteManager(shard, workflowCache)
+
+	executor := f.ExecutorFactory.CreateExecutorWrapper(
 		currentClusterName,
+		f.ExecutorFactory.CreateTimerActiveExecutor(
+			shard,
+			workflowCache,
+			deleteManager,
+			logger),
+		f.ExecutorFactory.CreateTimerStandbyExecutor(
+			shard,
+			workflowCache,
+			deleteManager,
+			f.ExecutorFactory.GetNewDefaultStandbyNDCHistoryResender(shard, logger),
+			logger,
+			currentClusterName),
+		logger,
 	)
 
 	rescheduler := queues.NewRescheduler(
@@ -130,5 +154,16 @@ func (f *timerQueueFactory) CreateQueue(
 		f.HostReaderRateLimiter,
 		logger,
 		metricsHandler,
+	)
+}
+
+func (f *timerQueueFactory) getNewDeleteManager(shardCtx shard.Context, workflowCache wcache.Cache) deletemanager.DeleteManager {
+	return deletemanager.NewDeleteManager(
+		shardCtx,
+		workflowCache,
+		f.Config,
+		f.ArchivalClient,
+		shardCtx.GetTimeSource(),
+		f.VisibilityManager,
 	)
 }

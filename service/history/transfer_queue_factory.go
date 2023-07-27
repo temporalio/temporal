@@ -88,11 +88,19 @@ func (f *transferQueueFactory) CreateQueue(
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	executor := f.ExecutorFactory.CreateTransferExecutor(
-		shard,
-		workflowCache,
-		logger,
+	executor := f.ExecutorFactory.CreateExecutorWrapper(
 		currentClusterName,
+		f.ExecutorFactory.CreateTransferActiveExecutor(
+			shard,
+			workflowCache,
+			logger),
+		f.ExecutorFactory.CreateTransferStandbyExecutor(
+			shard,
+			workflowCache,
+			f.ExecutorFactory.GetNewDefaultStandbyNDCHistoryResender(shard, logger),
+			logger,
+			currentClusterName),
+		logger,
 	)
 
 	rescheduler := queues.NewRescheduler(
