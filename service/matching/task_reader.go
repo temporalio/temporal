@@ -141,10 +141,8 @@ dispatchLoop:
 
 				// if task is still valid (truly valid or unable to verify if task is valid)
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if errors.Is(err, errUserDataDisabled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-					// We're trying to dispatch a versioned task but user data isn't loaded.
-					// Don't log here since it would be too spammy.
-				} else {
+				if !errors.Is(err, errUserDataDisabled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
 				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
