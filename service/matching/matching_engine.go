@@ -273,7 +273,7 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 		e.taskQueuesLock.Lock()
 		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
 			var err error
-			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
+			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
