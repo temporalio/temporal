@@ -115,10 +115,7 @@ func (v *taskValidatorImpl) preValidate(
 	}
 
 	// this task has been validated before
-	if time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold {
-		return true
-	}
-	return false
+	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
 }
 
 // postValidate update tracked task info
