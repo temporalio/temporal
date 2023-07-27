@@ -105,20 +105,6 @@ func (mr *MockExecutorFactoryMockRecorder) CreateTimerActiveExecutor(shardCtx, w
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTimerActiveExecutor", reflect.TypeOf((*MockExecutorFactory)(nil).CreateTimerActiveExecutor), shardCtx, workflowCache, workflowDeleteManager, logger)
 }
 
-// CreateTimerExecutor mocks base method.
-func (m *MockExecutorFactory) CreateTimerExecutor(shardCtx shard.Context, workflowCache cache.Cache, logger log.Logger, clusterName string) queues.Executor {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTimerExecutor", shardCtx, workflowCache, logger, clusterName)
-	ret0, _ := ret[0].(queues.Executor)
-	return ret0
-}
-
-// CreateTimerExecutor indicates an expected call of CreateTimerExecutor.
-func (mr *MockExecutorFactoryMockRecorder) CreateTimerExecutor(shardCtx, workflowCache, logger, clusterName interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTimerExecutor", reflect.TypeOf((*MockExecutorFactory)(nil).CreateTimerExecutor), shardCtx, workflowCache, logger, clusterName)
-}
-
 // CreateTimerStandbyExecutor mocks base method.
 func (m *MockExecutorFactory) CreateTimerStandbyExecutor(shardCtx shard.Context, workflowCache cache.Cache, workflowDeleteManager deletemanager.DeleteManager, nDCHistoryResender xdc.NDCHistoryResender, logger log.Logger, clusterName string) queues.Executor {
 	m.ctrl.T.Helper()
@@ -147,20 +133,6 @@ func (mr *MockExecutorFactoryMockRecorder) CreateTransferActiveExecutor(shardCtx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransferActiveExecutor", reflect.TypeOf((*MockExecutorFactory)(nil).CreateTransferActiveExecutor), shardCtx, workflowCache, logger)
 }
 
-// CreateTransferExecutor mocks base method.
-func (m *MockExecutorFactory) CreateTransferExecutor(shardCtx shard.Context, workflowCache cache.Cache, logger log.Logger, clusterName string) queues.Executor {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTransferExecutor", shardCtx, workflowCache, logger, clusterName)
-	ret0, _ := ret[0].(queues.Executor)
-	return ret0
-}
-
-// CreateTransferExecutor indicates an expected call of CreateTransferExecutor.
-func (mr *MockExecutorFactoryMockRecorder) CreateTransferExecutor(shardCtx, workflowCache, logger, clusterName interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransferExecutor", reflect.TypeOf((*MockExecutorFactory)(nil).CreateTransferExecutor), shardCtx, workflowCache, logger, clusterName)
-}
-
 // CreateTransferStandbyExecutor mocks base method.
 func (m *MockExecutorFactory) CreateTransferStandbyExecutor(shardCtx shard.Context, workflowCache cache.Cache, nDCHistoryResender xdc.NDCHistoryResender, logger log.Logger, clusterName string) queues.Executor {
 	m.ctrl.T.Helper()
@@ -187,4 +159,18 @@ func (m *MockExecutorFactory) CreateVisibilityExecutor(shardCtx shard.Context, w
 func (mr *MockExecutorFactoryMockRecorder) CreateVisibilityExecutor(shardCtx, workflowCache, logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVisibilityExecutor", reflect.TypeOf((*MockExecutorFactory)(nil).CreateVisibilityExecutor), shardCtx, workflowCache, logger)
+}
+
+// GetNewDefaultStandbyNDCHistoryResender mocks base method.
+func (m *MockExecutorFactory) GetNewDefaultStandbyNDCHistoryResender(shardCtx shard.Context, logger log.Logger) xdc.NDCHistoryResender {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNewDefaultStandbyNDCHistoryResender", shardCtx, logger)
+	ret0, _ := ret[0].(xdc.NDCHistoryResender)
+	return ret0
+}
+
+// GetNewDefaultStandbyNDCHistoryResender indicates an expected call of GetNewDefaultStandbyNDCHistoryResender.
+func (mr *MockExecutorFactoryMockRecorder) GetNewDefaultStandbyNDCHistoryResender(shardCtx, logger interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNewDefaultStandbyNDCHistoryResender", reflect.TypeOf((*MockExecutorFactory)(nil).GetNewDefaultStandbyNDCHistoryResender), shardCtx, logger)
 }
