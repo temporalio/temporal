@@ -165,7 +165,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,

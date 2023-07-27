@@ -156,7 +156,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.VisibilityManager,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
