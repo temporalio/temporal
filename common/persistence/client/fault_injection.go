@@ -255,7 +255,7 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 }
 
 func (d *FaultInjectionDataStoreFactory) NewQueueV2(queueType persistence.QueueV2Type) (persistence.QueueV2, error) {
-	if d.Queue == nil {
+	if d.QueueV2 == nil {
 		baseQueue, err := d.baseFactory.NewQueueV2(queueType)
 		if err != nil {
 			return baseQueue, err
