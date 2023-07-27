@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/internal/goro"
-	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 const (
@@ -49,11 +48,12 @@ const (
 
 type (
 	taskReader struct {
-		status     int32
-		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
-		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
-		tlMgr      *taskQueueManagerImpl
-		gorogrp    goro.Group
+		status        int32
+		taskBuffer    chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC       chan struct{}                          // Used as signal to notify pump of new tasks
+		tlMgr         *taskQueueManagerImpl
+		taskValidator taskValidator
+		gorogrp       goro.Group
 
 		backoffTimerLock sync.Mutex
 		backoffTimer     *time.Timer
@@ -63,9 +63,10 @@ type (
 
 func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	return &taskReader{
-		status:  common.DaemonStatusInitialized,
-		tlMgr:   tlMgr,
-		notifyC: make(chan struct{}, 1),
+		status:        common.DaemonStatusInitialized,
+		tlMgr:         tlMgr,
+		taskValidator: newTaskValidator(tlMgr.newIOContext, tlMgr.engine.historyClient),
+		notifyC:       make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
@@ -124,37 +125,34 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for ctx.Err() == nil {
-				// We checked if the task was expired before putting it in the buffer, but it
-				// might have expired while it sat in the buffer, so we should check again.
-				if taskqueue.IsTaskExpired(taskInfo) {
+				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType) {
 					task.finish(nil)
 					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.
-					break
+					continue dispatchLoop
 				}
-				err := tr.tlMgr.engine.DispatchSpooledTask(ctx, task, tr.tlMgr.taskQueueID, tr.tlMgr.stickyInfo)
+
+				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
+				err := tr.tlMgr.engine.DispatchSpooledTask(taskCtx, task, tr.tlMgr.taskQueueID, tr.tlMgr.stickyInfo)
+				cancel()
 				if err == nil {
-					break
+					continue dispatchLoop
 				}
-				if err == context.Canceled {
-					break dispatchLoop
-				}
-				// this should never happen unless there is a bug - don't drop the task
+
+				// if task is still valid (truly valid or unable to verify if task is valid)
 				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if errors.Is(err, errUserDataDisabled) {
-					// We're trying to dispatch a versioned task but user data isn't loaded.
-					// Don't log here since it would be too spammy.
-				} else {
-					tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
+				if !errors.Is(err, errUserDataDisabled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+					// Don't log here if encounters missing user data error when dispatch a versioned task.
+					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
 				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
-
+			return ctx.Err()
 		case <-ctx.Done():
-			break dispatchLoop
+			return ctx.Err()
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
@@ -282,7 +280,7 @@ func (tr *taskReader) addTasksToBuffer(
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) error {
 	for _, t := range tasks {
-		if taskqueue.IsTaskExpired(t) {
+		if IsTaskExpired(t) {
 			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
@@ -317,6 +315,10 @@ func (tr *taskReader) persistAckLevel(ctx context.Context) error {
 
 func (tr *taskReader) logger() log.Logger {
 	return tr.tlMgr.logger
+}
+
+func (tr *taskReader) throttledLogger() log.ThrottledLogger {
+	return tr.tlMgr.throttledLogger
 }
 
 func (tr *taskReader) taggedMetricsHandler() metrics.Handler {

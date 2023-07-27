@@ -238,6 +238,46 @@ func (c *clientImpl) GetShard(
 	return response, nil
 }
 
+func (c *clientImpl) IsActivityTaskValid(
+	ctx context.Context,
+	request *historyservice.IsActivityTaskValidRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.IsActivityTaskValidResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	var response *historyservice.IsActivityTaskValidResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.IsActivityTaskValid(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) IsWorkflowTaskValid(
+	ctx context.Context,
+	request *historyservice.IsWorkflowTaskValidRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	var response *historyservice.IsWorkflowTaskValidResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.IsWorkflowTaskValid(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

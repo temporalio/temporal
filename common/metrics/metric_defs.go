@@ -349,6 +349,10 @@ const (
 	HistoryClientGetDLQReplicationMessagesScope = "HistoryClientGetDLQReplicationMessages"
 	// HistoryClientGetShardScope tracks RPC calls to history service
 	HistoryClientGetShardScope = "HistoryClientGetShard"
+	// HistoryClientIsActivityTaskValidScope tracks RPC calls to history service
+	HistoryClientIsActivityTaskValidScope = "HistoryClientIsActivityTaskValid"
+	// HistoryClientIsWorkflowTaskValidScope tracks RPC calls to history service
+	HistoryClientIsWorkflowTaskValidScope = "HistoryClientIsWorkflowTaskValid"
 	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
 	HistoryClientRebuildMutableStateScope = "HistoryClientRebuildMutableState"
 	// HistoryClientRemoveTaskScope tracks RPC calls to history service
