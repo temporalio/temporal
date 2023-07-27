@@ -22,57 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas_test
+package clock_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/quotas/quotastest"
+	"go.temporal.io/server/common/clock"
 )
 
-func TestEffectiveResourceLimit(t *testing.T) {
+func TestNewRealClock_Now(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 5.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
+	source := clock.NewRealTimeSource()
+	location := source.Now().Location()
+	assert.Equal(t, "UTC", location.String())
 }
 
-func TestEffectiveResourceLimit_NoPerClusterLimit(t *testing.T) {
+func TestNewRealClock_AfterFunc(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  0,
-		},
-	))
-}
+	source := clock.NewRealTimeSource()
+	ch := make(chan struct{})
+	timer := source.AfterFunc(0, func() {
+		close(ch)
+	})
 
-func TestEffectiveResourceLimit_NoHosts(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(0),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
-}
-
-func TestEffectiveResourceLimit_NilInstanceCounter(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(nil, quotas.Limits{
-		InstanceLimit: 10,
-		ClusterLimit:  20,
-	}))
+	<-ch
+	assert.False(t, timer.Stop())
 }

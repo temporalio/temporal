@@ -152,6 +152,7 @@ func NewEngineWithShardContext(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	eventBlobCache persistence.XDCCache,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -202,6 +203,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
 			workflowCache,
+			eventBlobCache,
 			executionManager,
 			logger,
 		)

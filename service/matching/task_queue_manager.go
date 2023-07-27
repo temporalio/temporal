@@ -32,7 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,6 +42,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -133,7 +134,7 @@ type (
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		// GetUserData returns the versioned user data for this task queue
-		GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
+		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
@@ -146,6 +147,8 @@ type (
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
 		LongPollExpirationInterval() time.Duration
+		RedirectToVersionedQueueForAdd(context.Context, *taskqueuespb.TaskVersionDirective) (*taskQueueID, chan struct{}, error)
+		RedirectToVersionedQueueForPoll(*commonpb.WorkerVersionCapabilities) (*taskQueueID, error)
 	}
 
 	// Single task queue in memory state
@@ -263,7 +266,7 @@ func newTaskQueueManager(
 	}
 
 	tlMgr.liveness = newLiveness(
-		clockwork.NewRealClock(),
+		clock.NewRealTimeSource(),
 		taskQueueConfig.MaxTaskQueueIdleTime,
 		tlMgr.unloadFromEngine,
 	)
@@ -533,8 +536,8 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 
 // GetUserData returns the user data for the task queue if any.
 // Note: can return nil value with no error.
-func (c *taskQueueManagerImpl) GetUserData(ctx context.Context) (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
-	return c.db.GetUserData(ctx)
+func (c *taskQueueManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+	return c.db.GetUserData()
 }
 
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
@@ -759,6 +762,73 @@ func (c *taskQueueManagerImpl) LongPollExpirationInterval() time.Duration {
 	return c.config.LongPollExpirationInterval()
 }
 
+func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(caps *commonpb.WorkerVersionCapabilities) (*taskQueueID, error) {
+	if !caps.GetUseVersioning() {
+		// Either this task queue is versioned, or there are still some workflows running on
+		// the "unversioned" set.
+		return c.taskQueueID, nil
+	}
+	// We don't need the userDataChanged channel here because polls have a timeout and the
+	// client will retry, so if we're blocked on the wrong matcher it'll just take one poll
+	// timeout to fix itself.
+	userData, _, err := c.GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	data := userData.GetData().GetVersioningData()
+
+	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
+		err := checkVersionForStickyPoll(data, caps)
+		return c.taskQueueID, err
+	}
+
+	versionSet, err := lookupVersionSetForPoll(data, caps)
+	if err != nil {
+		return nil, err
+	}
+	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), nil
+}
+
+func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Context, directive *taskqueuespb.TaskVersionDirective) (*taskQueueID, chan struct{}, error) {
+	var buildId string
+	switch dir := directive.GetValue().(type) {
+	case *taskqueuespb.TaskVersionDirective_UseDefault:
+		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
+	case *taskqueuespb.TaskVersionDirective_BuildId:
+		buildId = dir.BuildId
+	default:
+		// Unversioned task, leave on unversioned queue.
+		return c.taskQueueID, nil, nil
+	}
+
+	// Have to look up versioning data.
+	userData, userDataChanged, err := c.GetUserData()
+	if err != nil {
+		if errors.Is(err, errUserDataDisabled) && buildId == "" {
+			// When user data disabled, send "default" tasks to unversioned queue.
+			return c.taskQueueID, userDataChanged, nil
+		}
+		return nil, nil, err
+	}
+	data := userData.GetData().GetVersioningData()
+
+	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
+		err := checkVersionForStickyAdd(data, buildId)
+		return c.taskQueueID, userDataChanged, err
+	}
+
+	versionSet, err := lookupVersionSetForAdd(data, buildId)
+	if err == errEmptyVersioningData { // nolint:goerr113
+		// default was requested for an unversioned queue
+		return c.taskQueueID, userDataChanged, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), userDataChanged, nil
+}
+
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
@@ -849,7 +919,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			return errUserDataDisabled
 		}
 
-		knownUserData, _, err := c.GetUserData(ctx)
+		knownUserData, _, err := c.GetUserData()
 		if err != nil {
 			// Start with a non-long poll after re-enabling after disable, so that we don't have to wait the
 			// full long poll interval before calling SetUserDataStatus to enable again.

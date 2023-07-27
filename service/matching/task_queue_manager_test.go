@@ -146,7 +146,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testi
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataEnabled, nil)
+	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(3 * taskReaderOfferThrottleWait)
@@ -181,7 +181,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataEnabled, nil)
+	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(taskReaderOfferThrottleWait)
@@ -653,7 +653,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -687,7 +687,7 @@ func TestUserData_DontLoadWhenDisabled(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 	tq.Stop()
@@ -729,14 +729,14 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 
 	loadUserData <- false
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.Equal(t, err, errUserDataDisabled)
 	require.Nil(t, userData)
 
@@ -761,7 +761,7 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 	loadUserData <- true
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 
@@ -789,13 +789,13 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 
 	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Nil(t, userData)
 
 	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Nil(t, userData)
 
@@ -839,7 +839,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -910,7 +910,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 	tq.Stop()
@@ -921,7 +921,6 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
-	ctx := context.Background()
 	// note: using activity here
 	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	require.NoError(t, err)
@@ -1009,7 +1008,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	loadUserData <- true
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 
@@ -1017,7 +1016,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// should have fetched twice but now user data is disabled
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 
@@ -1026,7 +1025,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// should be available again with data3
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data3, userData)
 
@@ -1101,7 +1100,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 
 	// now it should be ready
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1169,7 +1168,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	// at this point it should have tried once and gotten unimplemented. it should be ready already.
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.Nil(t, userData)
 	require.NoError(t, err)
 
@@ -1177,7 +1176,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	ch <- struct{}{}
 	time.Sleep(100 * time.Millisecond) // time to return
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1218,7 +1217,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1259,7 +1258,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1320,7 +1319,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()

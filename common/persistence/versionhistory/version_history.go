@@ -57,7 +57,7 @@ func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory
 // CopyVersionHistoryUntilLCAVersionHistoryItem returns copy of VersionHistory up until LCA item.
 func CopyVersionHistoryUntilLCAVersionHistoryItem(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) (*historyspb.VersionHistory, error) {
 	versionHistory := &historyspb.VersionHistory{}
-	notFoundErr := serviceerror.NewInvalidArgument("version history does not contains the LCA item.")
+	notFoundErr := serviceerror.NewInternal("version history does not contains the LCA item.")
 	for _, item := range v.Items {
 		if item.Version < lcaItem.Version {
 			if err := AddOrUpdateVersionHistoryItem(versionHistory, item); err != nil {
@@ -93,11 +93,11 @@ func AddOrUpdateVersionHistoryItem(v *historyspb.VersionHistory, item *historysp
 
 	lastItem := v.Items[len(v.Items)-1]
 	if item.Version < lastItem.Version {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot update version history with a lower version %v. Last version: %v", item.Version, lastItem.Version))
+		return serviceerror.NewInternal(fmt.Sprintf("cannot update version history with a lower version %v. Last version: %v", item.Version, lastItem.Version))
 	}
 
 	if item.GetEventId() <= lastItem.GetEventId() {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot add version history with a lower event id %v. Last event id: %v", item.GetEventId(), lastItem.GetEventId()))
+		return serviceerror.NewInternal(fmt.Sprintf("cannot add version history with a lower event id %v. Last event id: %v", item.GetEventId(), lastItem.GetEventId()))
 	}
 
 	if item.Version > lastItem.Version {
@@ -149,7 +149,7 @@ func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.
 		}
 	}
 
-	return nil, serviceerror.NewInvalidArgument("version history is malformed. No joint point found.")
+	return nil, serviceerror.NewInternal("version history is malformed. No joint point found.")
 }
 
 // IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.
@@ -167,7 +167,7 @@ func IsLCAVersionHistoryItemAppendable(v *historyspb.VersionHistory, lcaItem *hi
 // GetFirstVersionHistoryItem return the first VersionHistoryItem.
 func GetFirstVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
 	if len(v.Items) == 0 {
-		return nil, serviceerror.NewInvalidArgument("version history is empty.")
+		return nil, serviceerror.NewInternal("version history is empty.")
 	}
 	return CopyVersionHistoryItem(v.Items[0]), nil
 }
@@ -175,7 +175,7 @@ func GetFirstVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.Versi
 // GetLastVersionHistoryItem return the last VersionHistoryItem.
 func GetLastVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
 	if len(v.Items) == 0 {
-		return nil, serviceerror.NewInvalidArgument("version history is empty.")
+		return nil, serviceerror.NewInternal("version history is empty.")
 	}
 	return CopyVersionHistoryItem(v.Items[len(v.Items)-1]), nil
 }
@@ -187,7 +187,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 		return 0, err
 	}
 	if eventID < common.FirstEventID || eventID > lastItem.GetEventId() {
-		return 0, serviceerror.NewInvalidArgument("input event ID is not in range.")
+		return 0, serviceerror.NewInternal("input event ID is not in range.")
 	}
 
 	// items are sorted by eventID & version
@@ -198,7 +198,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 			return currentItem.GetVersion(), nil
 		}
 	}
-	return 0, serviceerror.NewInvalidArgument("input event ID is not in range.")
+	return 0, serviceerror.NewInternal("input event ID is not in range.")
 }
 
 // IsEmptyVersionHistory indicate whether version history is empty

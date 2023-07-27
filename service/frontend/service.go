@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -394,18 +393,6 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("frontend stopped")
-}
-
-func namespaceRPS(
-	perInstanceRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	globalRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	frontendResolver membership.ServiceResolver,
-	namespace string,
-) float64 {
-	return quotas.CalculateEffectiveResourceLimit(frontendResolver, quotas.Limits{
-		InstanceLimit: perInstanceRPSFn(namespace),
-		ClusterLimit:  globalRPSFn(namespace),
-	})
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
