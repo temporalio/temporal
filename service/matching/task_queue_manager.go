@@ -164,6 +164,7 @@ type (
 		matcher              *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		metricsHandler       metrics.Handler
 		namespace            namespace.Name
@@ -226,6 +227,10 @@ func newTaskQueueManager(
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
+	throttledLogger := log.With(e.throttledLogger,
+		tag.WorkflowTaskQueueName(taskQueue.FullName()),
+		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowNamespace(nsName.String()))
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
@@ -241,6 +246,7 @@ func newTaskQueueManager(
 		taskQueueID:          taskQueue,
 		stickyInfo:           stickyInfo,
 		logger:               logger,
+		throttledLogger:      throttledLogger,
 		db:                   db,
 		taskAckManager:       newAckManager(e.logger),
 		taskGC:               newTaskGC(db, taskQueueConfig),

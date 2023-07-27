@@ -155,6 +155,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
+		throttledLogger:   log.ThrottledLogger(logger),
 		metricsHandler:    metrics.NoopMetricsHandler,
 		matchingClient:    mockMatchingClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),

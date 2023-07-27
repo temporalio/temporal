@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 
@@ -116,6 +117,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
@@ -165,6 +167,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
@@ -180,6 +183,7 @@ func NewEngine(
 		matchingClient:            matchingClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
