@@ -135,6 +135,9 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 		f.MatchingClient,
 	)
+	if f.ActiveExecutorWrapper != nil {
+		activeExecutor = f.ActiveExecutorWrapper.Wrap(activeExecutor)
+	}
 
 	standbyExecutor := newTimerQueueStandbyTaskExecutor(
 		shard,
@@ -164,6 +167,9 @@ func (f *timerQueueFactory) CreateQueue(
 		currentClusterName,
 		f.Config,
 	)
+	if f.StandbyExecutorWrapper != nil {
+		standbyExecutor = f.StandbyExecutorWrapper.Wrap(standbyExecutor)
+	}
 
 	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,

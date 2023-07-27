@@ -130,6 +130,9 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingClient,
 		f.VisibilityManager,
 	)
+	if f.ActiveExecutorWrapper != nil {
+		activeExecutor = f.ActiveExecutorWrapper.Wrap(activeExecutor)
+	}
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
 		shard,
@@ -155,6 +158,9 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingClient,
 		f.VisibilityManager,
 	)
+	if f.StandbyExecutorWrapper != nil {
+		standbyExecutor = f.StandbyExecutorWrapper.Wrap(standbyExecutor)
+	}
 
 	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,

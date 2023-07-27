@@ -114,6 +114,9 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 	)
+	if f.ActiveExecutorWrapper != nil {
+		executor = f.ActiveExecutorWrapper.Wrap(executor)
+	}
 
 	return queues.NewImmediateQueue(
 		shard,
