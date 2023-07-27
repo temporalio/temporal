@@ -352,7 +352,7 @@ const (
 	// HistoryClientIsActivityTaskValidScope tracks RPC calls to history service
 	HistoryClientIsActivityTaskValidScope = "HistoryClientIsActivityTaskValid"
 	// HistoryClientIsWorkflowTaskValidScope tracks RPC calls to history service
-	HistoryClientIsWorkflowTaskValidScope = "HistoryClientIsWorkflowTaskValidS"
+	HistoryClientIsWorkflowTaskValidScope = "HistoryClientIsWorkflowTaskValid"
 	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
 	HistoryClientRebuildMutableStateScope = "HistoryClientRebuildMutableState"
 	// HistoryClientRemoveTaskScope tracks RPC calls to history service
