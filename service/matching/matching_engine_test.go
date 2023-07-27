@@ -44,6 +44,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -364,8 +365,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 	// fail due to no sticky worker
-	s.Error(err)
-	s.ErrorContains(err, "sticky worker unavailable")
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 	// poll the sticky queue, should get no result
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -644,6 +644,40 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	case true:
 		s.EqualValues(0, s.taskManager.getTaskCount(newTestTaskQueueID(namespaceID, tl, taskType)))
 	}
+}
+
+func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            uuid.New(),
+		Execution:              &commonpb.WorkflowExecution{RunId: uuid.New(), WorkflowId: "wf1"},
+		ScheduledEventId:       0,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+	// check loaded queues
+	s.matchingEngine.taskQueuesLock.RLock()
+	defer s.matchingEngine.taskQueuesLock.RUnlock()
+	s.Equal(0, len(s.matchingEngine.taskQueues))
+}
+
+func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
+	query := matchingservice.QueryWorkflowRequest{
+		NamespaceId: uuid.New(),
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Namespace: "ns",
+			Execution: &commonpb.WorkflowExecution{RunId: uuid.New(), WorkflowId: "wf1"},
+			Query:     &querypb.WorkflowQuery{QueryType: "q"},
+		},
+	}
+	_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+	// check loaded queues
+	s.matchingEngine.taskQueuesLock.RLock()
+	defer s.matchingEngine.taskQueuesLock.RUnlock()
+	s.Equal(0, len(s.matchingEngine.taskQueues))
 }
 
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {

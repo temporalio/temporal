@@ -320,10 +320,15 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
+	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return false, err
+	} else if sticky && (baseTqm == nil || !baseTqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
+
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
@@ -337,13 +342,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return false, err
-	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
-		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -379,7 +380,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
-	runID := addRequest.Execution.GetRunId()
 	taskQueueName := addRequest.TaskQueue.GetName()
 	stickyInfo := stickyInfoFromTaskQueue(addRequest.TaskQueue)
 
@@ -405,7 +405,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
 	if err != nil {
 		return false, err
 	}
@@ -418,7 +418,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
+		RunId:            addRequest.Execution.GetRunId(),
 		WorkflowId:       addRequest.Execution.GetWorkflowId(),
 		ScheduledEventId: addRequest.GetScheduledEventId(),
 		Clock:            addRequest.GetClock(),
@@ -427,7 +427,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
-	return tlMgr.AddTask(ctx, addTaskParams{
+	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -688,10 +688,15 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
+	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
+	} else if sticky && (baseTqm == nil || !baseTqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
+
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
 	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
@@ -703,13 +708,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
-	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
-		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	taskID := uuid.New()
