@@ -260,20 +260,6 @@ func (f *ExecutorFactoryBase) CreateVisibilityExecutor(
 	)
 }
 
-func (f *ExecutorFactoryBase) GetNewWorkflowDeleteManager(
-	shardCtx shard.Context,
-	workflowCache wcache.Cache,
-) deletemanager.DeleteManager {
-	return deletemanager.NewDeleteManager(
-		shardCtx,
-		workflowCache,
-		f.Config,
-		f.ArchivalClient,
-		shardCtx.GetTimeSource(),
-		f.VisibilityManager,
-	)
-}
-
 func (f *ExecutorFactoryBase) GetNewDefaultStandbyNDCHistoryResender(
 	shardCtx shard.Context,
 	logger log.Logger,
