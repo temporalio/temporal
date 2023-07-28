@@ -86,14 +86,26 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		return "", query.NewConverterError("invalid search attribute: %s", name)
 	}
 
-	if usage == query.FieldNameSorter {
-		if fieldType == enumspb.INDEXED_VALUE_TYPE_TEXT {
-			return "", query.NewConverterError("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_TEXT.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String())
+	switch usage {
+	case query.FieldNameFilter:
+		if fieldName == searchattribute.TemporalNamespaceDivision {
+			ni.seenNamespaceDivision = true
 		}
-	}
-
-	if fieldName == searchattribute.TemporalNamespaceDivision && usage == query.FieldNameFilter {
-		ni.seenNamespaceDivision = true
+	case query.FieldNameSorter:
+		if fieldType == enumspb.INDEXED_VALUE_TYPE_TEXT {
+			return "", query.NewConverterError(
+				"unable to sort by field of %s type, use field of type %s",
+				enumspb.INDEXED_VALUE_TYPE_TEXT.String(),
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD.String(),
+			)
+		}
+	case query.FieldNameGroupBy:
+		if fieldName != searchattribute.ExecutionStatus {
+			return "", query.NewConverterError(
+				"'group by' clause is only supported for %s search attribute",
+				searchattribute.ExecutionStatus,
+			)
+		}
 	}
 
 	return fieldName, nil

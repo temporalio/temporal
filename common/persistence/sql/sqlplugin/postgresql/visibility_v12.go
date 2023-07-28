@@ -163,6 +163,19 @@ func (pdb *dbV12) CountFromVisibility(
 	return count, nil
 }
 
+func (pdb *dbV12) CountGroupByFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityCountRow, error) {
+	filter.Query = pdb.db.db.Rebind(filter.Query)
+	rows, err := pdb.db.db.QueryContext(ctx, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return sqlplugin.ParseCountGroupByRows(rows, filter.GroupBy)
+}
+
 func (pdb *dbV12) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
 	if row == nil {
 		return nil

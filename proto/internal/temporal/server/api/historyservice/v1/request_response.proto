@@ -221,6 +221,18 @@ message RespondWorkflowTaskFailedRequest {
 message RespondWorkflowTaskFailedResponse {
 }
 
+message IsWorkflowTaskValidRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.clock.v1.VectorClock clock = 3;
+    int64 scheduled_event_id = 4;
+}
+
+message IsWorkflowTaskValidResponse {
+    // whether matching service can call history service to start the workflow task
+    bool is_valid = 1;
+}
+
 message RecordActivityTaskHeartbeatRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequest heartbeat_request = 2;
@@ -252,6 +264,18 @@ message RespondActivityTaskCanceledRequest {
 }
 
 message RespondActivityTaskCanceledResponse {
+}
+
+message IsActivityTaskValidRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.clock.v1.VectorClock clock = 3;
+    int64 scheduled_event_id = 4;
+}
+
+message IsActivityTaskValidResponse {
+    // whether matching service can call history service to start the activity task
+    bool is_valid = 1;
 }
 
 message SignalWorkflowExecutionRequest {
