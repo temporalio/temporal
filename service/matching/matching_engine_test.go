@@ -2322,7 +2322,7 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 	s.Require().NoError(err)
 }
 
-func (s *matchingEngineSuite) TestPersistUnknownBuildId_Poll() {
+func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	namespaceId := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -2345,7 +2345,7 @@ func (s *matchingEngineSuite) TestPersistUnknownBuildId_Poll() {
 	s.Equal(int64(1), unknownCtr.Value())
 }
 
-func (s *matchingEngineSuite) TestPersistUnknownBuildId_Add() {
+func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 	namespaceId := namespace.ID(uuid.New())
 	tl := "makeToast"
 
@@ -2382,7 +2382,7 @@ func (s *matchingEngineSuite) TestPersistUnknownBuildId_Add() {
 	s.Equal(int64(1), unknownCtr.Value())
 }
 
-func (s *matchingEngineSuite) TestPersistUnknownBuildId_Match() {
+func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	namespaceId := namespace.ID(uuid.New())
 	tl := "makeToast"
 
