@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -740,13 +741,8 @@ func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {
 func (s *controllerSuite) TestShardLingerTimeout() {
 	shardID := int32(1)
 	s.config.NumberOfShards = 1
-	s.config.ShardLingerEnabled = func() bool {
-		return true
-	}
 	timeLimit := 1 * time.Second
-	s.config.ShardLingerTimeLimit = func() time.Duration {
-		return timeLimit
-	}
+	s.config.ShardLingerTimeLimit = dynamicconfig.GetDurationPropertyFn(timeLimit)
 
 	historyEngines := make(map[int32]*MockEngine)
 	mockEngine := NewMockEngine(s.controller)
@@ -788,17 +784,11 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 func (s *controllerSuite) TestShardLingerSuccess() {
 	shardID := int32(1)
 	s.config.NumberOfShards = 1
-	s.config.ShardLingerEnabled = func() bool {
-		return true
-	}
 	timeLimit := 1 * time.Second
+	s.config.ShardLingerTimeLimit = dynamicconfig.GetDurationPropertyFn(timeLimit)
+
 	checkQPS := 5
-	s.config.ShardLingerTimeLimit = func() time.Duration {
-		return timeLimit
-	}
-	s.config.ShardLingerOwnershipCheckQPS = func() int {
-		return checkQPS
-	}
+	s.config.ShardLingerOwnershipCheckQPS = dynamicconfig.GetIntPropertyFn(checkQPS)
 
 	historyEngines := make(map[int32]*MockEngine)
 	mockEngine := NewMockEngine(s.controller)

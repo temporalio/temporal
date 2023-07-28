@@ -496,15 +496,14 @@ const (
 	AcquireShardInterval = "history.acquireShardInterval"
 	// AcquireShardConcurrency is number of goroutines that can be used to acquire shards in the shard controller.
 	AcquireShardConcurrency = "history.acquireShardConcurrency"
-	// ShardLingerEnabled configures if the shard controller will temporarily
-	// delay closing shards after a membership update, awaiting a shard
-	// ownership lost error from persistence. Not recommended with persistence
-	// layers that are missing AssertShardOwnership support.
-	ShardLingerEnabled = "history.shardLingerEnabled"
 	// ShardLingerOwnershipCheckQPS is the frequency to perform shard ownership
 	// checks while a shard is lingering.
 	ShardLingerOwnershipCheckQPS = "history.shardLingerOwnershipCheckQPS"
-	// ShardLingerTimeLimit is the upper bound on how long a shard can linger.
+	// ShardLingerTimeLimit configures if and for how long the shard controller
+	// will temporarily delay closing shards after a membership update, awaiting a
+	// shard ownership lost error from persistence. Not recommended with
+	// persistence layers that are missing AssertShardOwnership support.
+	// If set to zero, shards will not delay closing.
 	ShardLingerTimeLimit = "history.shardLingerTimeLimit"
 	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
 	// shard ownership information, instead of checking membership for each request.
