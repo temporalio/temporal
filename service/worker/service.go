@@ -522,6 +522,7 @@ func (s *Service) startReplicator() {
 		s.namespaceReplicationQueue,
 		namespaceReplicationTaskExecutor,
 		s.matchingClient,
+		s.namespaceRegistry,
 	)
 	msgReplicator.Start()
 }

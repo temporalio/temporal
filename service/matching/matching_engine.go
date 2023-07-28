@@ -40,13 +40,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -96,6 +96,7 @@ type (
 		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 		kind        enumspb.TaskQueueKind
+		versioned   bool
 	}
 
 	pollMetadata struct {
@@ -116,6 +117,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
@@ -124,6 +126,7 @@ type (
 		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager
+		taskQueueCountLock   sync.Mutex
 		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
@@ -165,6 +168,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
@@ -180,6 +184,7 @@ func NewEngine(
 		matchingClient:            matchingClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
@@ -272,25 +277,22 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 
 		// If it gets here, write lock and check again in case a task queue is created between the two locks
 		e.taskQueuesLock.Lock()
-		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
+		tqm, ok = e.taskQueues[*taskQueue]
+		if !ok {
 			var err error
 			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
 			}
-			tqm.Start()
 			e.taskQueues[*taskQueue] = tqm
-			countKey := taskQueueCounterKey{
-				namespaceID: taskQueue.namespaceID,
-				taskType:    taskQueue.taskType,
-				kind:        stickyInfo.kind,
-			}
-			e.taskQueueCount[countKey]++
-			taskQueueCount := e.taskQueueCount[countKey]
-			e.updateTaskQueueGauge(countKey, taskQueueCount)
 		}
 		e.taskQueuesLock.Unlock()
+
+		if !ok {
+			tqm.Start()
+			e.updateTaskQueueGauge(tqm, 1)
+		}
 	}
 
 	if err := tqm.WaitUntilInitialized(ctx); err != nil {
@@ -321,10 +323,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
@@ -361,10 +367,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
-	if err != nil {
-		return false, err
-	}
 	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
@@ -389,10 +391,14 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return false, err
+	}
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, addRequest.VersionDirective, stickyInfo)
+	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
@@ -424,11 +430,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
-	if err != nil {
-		return false, err
-	}
-
 	return tlMgr.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
@@ -452,8 +453,11 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		taskQueue, userDataChanged, err := e.redirectToVersionedQueueForAdd(
-			ctx, unversionedOrigTaskQueue, directive, stickyInfo)
+		baseTqm, err := e.getTaskQueueManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
+		if err != nil {
+			return err
+		}
+		taskQueue, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
 		if err != nil {
 			return err
 		}
@@ -687,9 +691,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	if err != nil {
+		return nil, err
+	}
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
-	taskQueue, _, err := e.redirectToVersionedQueueForAdd(ctx, origTaskQueue, queryRequest.VersionDirective, stickyInfo)
+	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
@@ -900,6 +908,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				// We don't need to keep the tombstones around if we're not replicating them.
 				versioningData = ClearTombstones(versioningData)
 			}
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId:
+			versioningData = PersistUnknownBuildId(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetPersistUnknownBuildId(),
+			)
 		default:
 			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}
@@ -947,7 +961,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdCompatibility(
 		}
 		return nil, err
 	}
-	userData, _, err := tqMgr.GetUserData(ctx)
+	userData, _, err := tqMgr.GetUserData()
 	if err != nil {
 		return nil, err
 	}
@@ -982,7 +996,7 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 
 	for {
 		resp := &matchingservice.GetTaskQueueUserDataResponse{}
-		userData, userDataChanged, err := tqMgr.GetUserData(ctx)
+		userData, userDataChanged, err := tqMgr.GetUserData()
 		if err != nil {
 			return nil, err
 		}
@@ -1201,13 +1215,7 @@ func (e *matchingEngineImpl) getTask(
 		return nil, err
 	}
 
-	taskQueue, err := e.redirectToVersionedQueueForPoll(
-		ctx,
-		baseTqm,
-		origTaskQueue,
-		pollMetadata.workerVersionCapabilities,
-		stickyInfo,
-	)
+	taskQueue, err := baseTqm.RedirectToVersionedQueueForPoll(pollMetadata.workerVersionCapabilities)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
@@ -1250,16 +1258,26 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 		return
 	}
 	delete(e.taskQueues, *queueID)
-	countKey := taskQueueCounterKey{namespaceID: queueID.namespaceID, taskType: queueID.taskType, kind: foundTQM.TaskQueueKind()}
-	e.taskQueueCount[countKey]--
-	taskQueueCount := e.taskQueueCount[countKey]
 	e.taskQueuesLock.Unlock()
-
-	e.updateTaskQueueGauge(countKey, taskQueueCount)
+	// This may call unloadTaskQueue again but that's okay, the next call will not find it.
 	foundTQM.Stop()
+	e.updateTaskQueueGauge(foundTQM, -1)
 }
 
-func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
+func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta int) {
+	id := tqm.QueueID()
+	countKey := taskQueueCounterKey{
+		namespaceID: id.namespaceID,
+		taskType:    id.taskType,
+		kind:        tqm.TaskQueueKind(),
+		versioned:   id.VersionSet() != "",
+	}
+
+	e.taskQueueCountLock.Lock()
+	e.taskQueueCount[countKey] += delta
+	newCount := e.taskQueueCount[countKey]
+	e.taskQueueCountLock.Unlock()
+
 	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
 	ns := namespace.Name("unknown")
 	if err == nil {
@@ -1267,10 +1285,11 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 	}
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
-		float64(taskQueueCount),
+		float64(newCount),
 		metrics.NamespaceTag(ns.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.kind.String()),
+		metrics.VersionedTag(countKey.versioned),
 	)
 }
 
@@ -1431,92 +1450,6 @@ func (e *matchingEngineImpl) emitForwardedSourceStats(
 	default:
 		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
-}
-
-func (e *matchingEngineImpl) redirectToVersionedQueueForPoll(
-	ctx context.Context,
-	baseTqm taskQueueManager,
-	taskQueue *taskQueueID,
-	workerVersionCapabilities *commonpb.WorkerVersionCapabilities,
-	stickyInfo stickyInfo,
-) (*taskQueueID, error) {
-	if !workerVersionCapabilities.GetUseVersioning() {
-		// Either this task queue is versioned, or there are still some workflows running on
-		// the "unversioned" set.
-		return taskQueue, nil
-	}
-
-	// We don't need the userDataChanged channel here because polls have a timeout and the
-	// client will retry, so if we're blocked on the wrong matcher it'll just take one poll
-	// timeout to fix itself.
-	userData, _, err := baseTqm.GetUserData(ctx)
-	if err != nil {
-		return nil, err
-	}
-	data := userData.GetData().GetVersioningData()
-
-	if stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// In the sticky case we don't redirect, but we may kick off this worker if there's a
-		// newer one.
-		err := checkVersionForStickyPoll(data, workerVersionCapabilities)
-		return taskQueue, err
-	}
-
-	versionSet, err := lookupVersionSetForPoll(data, workerVersionCapabilities)
-	if err != nil {
-		return nil, err
-	}
-	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), nil
-}
-
-func (e *matchingEngineImpl) redirectToVersionedQueueForAdd(
-	ctx context.Context,
-	taskQueue *taskQueueID,
-	directive *taskqueuespb.TaskVersionDirective,
-	stickyInfo stickyInfo,
-) (*taskQueueID, chan struct{}, error) {
-	var buildId string
-	switch dir := directive.GetValue().(type) {
-	case *taskqueuespb.TaskVersionDirective_UseDefault:
-		// leave buildId = "", lookupVersionSetForAdd understands that to mean "default"
-	case *taskqueuespb.TaskVersionDirective_BuildId:
-		buildId = dir.BuildId
-	default:
-		// Unversioned task, leave on unversioned queue.
-		return taskQueue, nil, nil
-	}
-
-	baseTqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Have to look up versioning data.
-	userData, userDataChanged, err := baseTqm.GetUserData(ctx)
-	if err != nil {
-		if errors.Is(err, errUserDataDisabled) && buildId == "" {
-			// When user data disabled, send "default" tasks to unversioned queue.
-			return taskQueue, userDataChanged, nil
-		}
-		return nil, nil, err
-	}
-	data := userData.GetData().GetVersioningData()
-
-	if stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// In the sticky case we don't redirect, but we may kick off this worker if there's a
-		// newer one.
-		err := checkVersionForStickyAdd(data, buildId)
-		return taskQueue, userDataChanged, err
-	}
-
-	versionSet, err := lookupVersionSetForAdd(data, buildId)
-	if err == errEmptyVersioningData { // nolint:goerr113
-		// default was requested for an unversioned queue
-		return taskQueue, userDataChanged, nil
-	} else if err != nil {
-		return nil, nil, err
-	}
-	return newTaskQueueIDWithVersionSet(taskQueue, versionSet), userDataChanged, nil
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {

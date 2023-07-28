@@ -84,6 +84,7 @@ func NewExecutionMutableStateSuite(
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
 			serializer,
+			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),

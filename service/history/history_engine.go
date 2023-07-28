@@ -57,6 +57,8 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
+	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -150,6 +152,7 @@ func NewEngineWithShardContext(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	eventBlobCache persistence.XDCCache,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -200,6 +203,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
 			workflowCache,
+			eventBlobCache,
 			executionManager,
 			logger,
 		)
@@ -580,6 +584,22 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	req *historyservice.RecordChildExecutionCompletedRequest,
 ) (*historyservice.RecordChildExecutionCompletedResponse, error) {
 	return recordchildworkflowcompleted.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
+}
+
+// IsActivityTaskValid - whether activity task is still valid
+func (e *historyEngineImpl) IsActivityTaskValid(
+	ctx context.Context,
+	req *historyservice.IsActivityTaskValidRequest,
+) (*historyservice.IsActivityTaskValidResponse, error) {
+	return isactivitytaskvalid.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
+}
+
+// IsWorkflowTaskValid - whether workflow task is still valid
+func (e *historyEngineImpl) IsWorkflowTaskValid(
+	ctx context.Context,
+	req *historyservice.IsWorkflowTaskValidRequest,
+) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	return isworkflowtaskvalid.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
