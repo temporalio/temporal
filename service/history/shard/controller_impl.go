@@ -231,7 +231,7 @@ func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 // getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
-func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (Context, error) {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableContext, error) {
 	if err := c.validateShardId(shardID); err != nil {
 		return nil, err
 	}

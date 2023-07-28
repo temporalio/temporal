@@ -594,20 +594,6 @@ func (mr *MockContextMockRecorder) GetWorkflowExecution(ctx, request interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).GetWorkflowExecution), ctx, request)
 }
 
-// IsValid mocks base method.
-func (m *MockContext) IsValid() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsValid")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsValid indicates an expected call of IsValid.
-func (mr *MockContextMockRecorder) IsValid() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsValid", reflect.TypeOf((*MockContext)(nil).IsValid))
-}
-
 // NewVectorClock mocks base method.
 func (m *MockContext) NewVectorClock() (*v11.VectorClock, error) {
 	m.ctrl.T.Helper()
