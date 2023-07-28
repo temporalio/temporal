@@ -57,7 +57,6 @@ type (
 	Context interface {
 		GetShardID() int32
 		GetRangeID() int64
-		IsValid() bool
 		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
@@ -126,8 +125,9 @@ type (
 	// the Controller.
 	ControllableContext interface {
 		Context
-
 		common.Pingable
+
+		IsValid() bool
 		FinishStop()
 	}
 )
