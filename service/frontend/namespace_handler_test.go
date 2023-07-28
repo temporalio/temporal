@@ -499,6 +499,53 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	}
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_FailoverLocalNamespace() {
+	namespace := "local-ns-to-be-failover-ed"
+	clusterName1 := "cluster1"
+	clusterName2 := "cluster2"
+	version := int64(1)
+	nid := uuid.New()
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   nid,
+				Name: namespace,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: clusterName1,
+				Clusters:          []string{clusterName1},
+			},
+		},
+		IsGlobalNamespace: false,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName1: {
+			Enabled:                true,
+			InitialFailoverVersion: 1,
+		},
+		clusterName2: {
+			Enabled:                true,
+			InitialFailoverVersion: 2,
+		},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
+
+	updateRequest := &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterName2,
+		},
+	}
+	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
+	s.Error(err)
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace() {
 	namespace := "local-ns-to-be-promoted"
 	clusterName := "cluster1"
@@ -519,6 +566,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 				Clusters:          []string{clusterName},
 			},
 		},
+		IsGlobalNamespace: false,
 	}, nil)
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
