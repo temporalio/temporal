@@ -79,7 +79,7 @@ func (s *ownershipSuite) newController(contextFactory ContextFactory) *Controlle
 		s.resource.GetMetricsHandler(),
 		s.resource.GetHostInfoProvider(),
 		contextFactory,
-	).(*ControllerImpl)
+	)
 }
 
 func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
