@@ -71,19 +71,23 @@ func TestLRU(t *testing.T) {
 
 	cache.Put("A", "Foo2")
 	assert.Equal(t, "Foo2", cache.Get("A"))
+	assert.Equal(t, 4, cache.Size())
 
 	cache.Put("E", "Epsi")
 	assert.Equal(t, "Epsi", cache.Get("E"))
 	assert.Equal(t, "Foo2", cache.Get("A"))
 	assert.Nil(t, cache.Get("B")) // Oldest, should be evicted
+	assert.Equal(t, 4, cache.Size())
 
 	// Access C, D is now LRU
 	cache.Get("C")
 	cache.Put("F", "Felp")
 	assert.Nil(t, cache.Get("D"))
+	assert.Equal(t, 4, cache.Size())
 
 	cache.Delete("A")
 	assert.Nil(t, cache.Get("A"))
+	assert.Equal(t, 3, cache.Size())
 }
 
 func TestGenerics(t *testing.T) {
@@ -107,6 +111,11 @@ func TestGenerics(t *testing.T) {
 		dummyString: "some other random key",
 		dummyInt:    56,
 	}))
+	assert.Equal(t, 1, cache.Size())
+
+	cache.Put(key, "some other random value")
+	assert.Equal(t, "some other random value", cache.Get(key))
+	assert.Equal(t, 1, cache.Size())
 }
 
 func TestLRUWithTTL(t *testing.T) {
@@ -205,13 +214,16 @@ func TestTTLWithPin(t *testing.T) {
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("A"))
+	assert.Equal(t, 1, cache.Size())
 	timeSource.Advance(time.Millisecond * 100)
 	assert.Equal(t, t, cache.Get("A"))
+	assert.Equal(t, 1, cache.Size())
 	// release 3 time since put if not exist also increase the counter
 	cache.Release("A")
 	cache.Release("A")
 	cache.Release("A")
 	assert.Nil(t, cache.Get("A"))
+	assert.Equal(t, 0, cache.Size())
 }
 
 func TestMaxSizeWithPin_MidItem(t *testing.T) {
@@ -226,31 +238,38 @@ func TestMaxSizeWithPin_MidItem(t *testing.T) {
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
+	assert.Equal(t, 1, cache.Size())
 
 	_, err = cache.PutIfNotExist("B", t)
 	assert.NoError(t, err)
+	assert.Equal(t, 2, cache.Size())
 
 	_, err = cache.PutIfNotExist("C", t)
 	assert.Error(t, err)
+	assert.Equal(t, 2, cache.Size())
 
 	assert.Equal(t, t, cache.Get("A"))
 	cache.Release("A") // get will also increase the ref count
 	assert.Equal(t, t, cache.Get("B"))
 	cache.Release("B") // get will also increase the ref count
+	assert.Equal(t, 2, cache.Size())
 
 	cache.Release("B") // B's ref count is 0
 	_, err = cache.PutIfNotExist("C", t)
 	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("C"))
 	cache.Release("C") // get will also increase the ref count
+	assert.Equal(t, 2, cache.Size())
 
 	cache.Release("A") // A's ref count is 0
 	cache.Release("C") // C's ref count is 0
+	assert.Equal(t, 2, cache.Size())
 
 	timeSource.Advance(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
 	assert.Nil(t, cache.Get("B"))
 	assert.Nil(t, cache.Get("C"))
+	assert.Equal(t, 0, cache.Size())
 }
 
 func TestMaxSizeWithPin_LastItem(t *testing.T) {
@@ -265,31 +284,38 @@ func TestMaxSizeWithPin_LastItem(t *testing.T) {
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
+	assert.Equal(t, 1, cache.Size())
 
 	_, err = cache.PutIfNotExist("B", t)
 	assert.NoError(t, err)
+	assert.Equal(t, 2, cache.Size())
 
 	_, err = cache.PutIfNotExist("C", t)
 	assert.Error(t, err)
+	assert.Equal(t, 2, cache.Size())
 
 	assert.Equal(t, t, cache.Get("A"))
 	cache.Release("A") // get will also increase the ref count
 	assert.Equal(t, t, cache.Get("B"))
 	cache.Release("B") // get will also increase the ref count
+	assert.Equal(t, 2, cache.Size())
 
 	cache.Release("A") // A's ref count is 0
 	_, err = cache.PutIfNotExist("C", t)
 	assert.NoError(t, err)
 	assert.Equal(t, t, cache.Get("C"))
 	cache.Release("C") // get will also increase the ref count
+	assert.Equal(t, 2, cache.Size())
 
 	cache.Release("B") // B's ref count is 0
 	cache.Release("C") // C's ref count is 0
+	assert.Equal(t, 2, cache.Size())
 
 	timeSource.Advance(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
 	assert.Nil(t, cache.Get("B"))
 	assert.Nil(t, cache.Get("C"))
+	assert.Equal(t, 0, cache.Size())
 }
 
 func TestIterator(t *testing.T) {
@@ -354,10 +380,12 @@ func TestCache_ItemSizeTooLarge(t *testing.T) {
 
 	res := cache.Put(uuid.New(), &testEntryWithCacheSize{maxTotalBytes})
 	assert.Equal(t, res, nil)
+	assert.Equal(t, 10, cache.Size())
 
 	res, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{maxTotalBytes + 1})
 	assert.Equal(t, err, ErrCacheItemTooLarge)
 	assert.Equal(t, res, nil)
+	assert.Equal(t, 10, cache.Size())
 
 }
 
@@ -391,4 +419,162 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	}
 
 	endWG.Wait()
+}
+
+func TestCache_ItemHasCacheSizeDefined_PutWithNewKeys(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	// Put with new key and value size greater than cache size, should not be added to cache
+	cache.Put(uuid.New(), &testEntryWithCacheSize{15})
+	assert.Equal(t, 0, cache.Size())
+
+	// Put with new key and value size less than cache size, should be added to cache
+	cache.Put(uuid.New(), &testEntryWithCacheSize{5})
+	assert.Equal(t, 5, cache.Size())
+
+	// Put with new key and value size less than cache size, should evict 0 ref items and added to cache
+	cache.Put(uuid.New(), &testEntryWithCacheSize{10})
+	assert.Equal(t, 10, cache.Size())
+
+	// Put with new key and value size less than cache size, should evict 0 ref items until enough spaces and added to cache
+	cache.Put(uuid.New(), &testEntryWithCacheSize{3})
+	assert.Equal(t, 3, cache.Size())
+	cache.Put(uuid.New(), &testEntryWithCacheSize{7})
+	assert.Equal(t, 10, cache.Size())
+}
+
+func TestCache_ItemHasCacheSizeDefined_PutWithSameKey(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	key := uuid.New()
+
+	// Put with same key and value size greater than cache size, should not be added to cache
+	cache.Put(key, &testEntryWithCacheSize{15})
+	assert.Equal(t, 0, cache.Size())
+
+	// Put with same key and value size less than cache size, should be added to cache
+	cache.Put(key, &testEntryWithCacheSize{5})
+	assert.Equal(t, 5, cache.Size())
+
+	// Put with same key and value size less than cache size, should be evicted until enough space and added to cache
+	cache.Put(key, &testEntryWithCacheSize{10})
+	assert.Equal(t, 10, cache.Size())
+
+	// Put with same key and value size less than cache size, should be evicted until enough space and added to cache
+	cache.Put(key, &testEntryWithCacheSize{3})
+	assert.Equal(t, 3, cache.Size())
+	cache.Put(key, &testEntryWithCacheSize{7})
+	assert.Equal(t, 7, cache.Size())
+}
+
+func TestCache_ItemHasCacheSizeDefined_PutIfNotExistWithNewKeys(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	// PutIfNotExist with new keys with size greater than cache size, should return error and not add to cache
+	val, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{15})
+	assert.Equal(t, ErrCacheItemTooLarge, err)
+	assert.Nil(t, val)
+	assert.Equal(t, 0, cache.Size())
+
+	// PutIfNotExist with new keys with size less than cache size, should add to cache
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{5})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{5}, val)
+	assert.Equal(t, 5, cache.Size())
+
+	// PutIfNotExist with new keys with size less than cache size, should evict item and add to cache
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{10})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{10}, val)
+	assert.Equal(t, 10, cache.Size())
+
+	// PutIfNotExist with new keys with size less than cache size, should evict item and add to cache
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{5})
+	assert.NoError(t, err)
+	assert.Equal(t, 5, cache.Size())
+}
+
+func TestCache_ItemHasCacheSizeDefined_PutIfNotExistWithSameKey(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+	key := uuid.New().String()
+
+	// PutIfNotExist with new keys with size greater than cache size, should return error and not add to cache
+	val, err := cache.PutIfNotExist(key, &testEntryWithCacheSize{15})
+	assert.Equal(t, ErrCacheItemTooLarge, err)
+	assert.Nil(t, val)
+	assert.Equal(t, 0, cache.Size())
+
+	// PutIfNotExist with new keys with size less than cache size, should add to cache
+	val, err = cache.PutIfNotExist(key, &testEntryWithCacheSize{5})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{5}, val)
+	assert.Equal(t, 5, cache.Size())
+
+	// PutIfNotExist with same keys with size less than cache size, should not be added to cache
+	val, err = cache.PutIfNotExist(key, &testEntryWithCacheSize{10})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{5}, val)
+	assert.Equal(t, 5, cache.Size())
+}
+
+func TestCache_PutIfNotExistWithNewKeys_Pin(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := New(maxTotalBytes, &Options{Pin: true})
+
+	val, err := cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{15})
+	assert.Equal(t, ErrCacheItemTooLarge, err)
+	assert.Nil(t, val)
+	assert.Equal(t, 0, cache.Size())
+
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{3})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{3}, val)
+	assert.Equal(t, 3, cache.Size())
+
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{7})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{7}, val)
+	assert.Equal(t, 10, cache.Size())
+
+	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{8})
+	assert.Equal(t, ErrCacheFull, err)
+	assert.Nil(t, val)
+	assert.Equal(t, 10, cache.Size())
+}
+
+func TestCache_PutIfNotExistWithSameKeys_Pin(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := New(maxTotalBytes, &Options{Pin: true})
+
+	key := uuid.New()
+	val, err := cache.PutIfNotExist(key, &testEntryWithCacheSize{15})
+	assert.Equal(t, ErrCacheItemTooLarge, err)
+	assert.Nil(t, val)
+	assert.Equal(t, 0, cache.Size())
+
+	val, err = cache.PutIfNotExist(key, &testEntryWithCacheSize{3})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{3}, val)
+	assert.Equal(t, 3, cache.Size())
+
+	val, err = cache.PutIfNotExist(key, &testEntryWithCacheSize{7})
+	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{3}, val)
+	assert.Equal(t, 3, cache.Size())
 }

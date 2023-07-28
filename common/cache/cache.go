@@ -64,9 +64,6 @@ type Options struct {
 	// are older than the TTL will not be returned.
 	TTL time.Duration
 
-	// InitialCapacity controls the initial capacity of the cache
-	InitialCapacity int
-
 	// Pin prevents in-use objects from getting evicted.
 	Pin bool
 
@@ -76,9 +73,6 @@ type Options struct {
 
 // SimpleOptions provides options that can be used to configure SimpleCache
 type SimpleOptions struct {
-	// InitialCapacity controls the initial capacity of the cache
-	InitialCapacity int
-
 	// RemovedFunc is an optional function called when an element
 	// is scheduled for deletion
 	RemovedFunc RemovedFunc

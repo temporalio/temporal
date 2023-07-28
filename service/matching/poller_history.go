@@ -54,9 +54,8 @@ type pollerHistory struct {
 
 func newPollerHistory() *pollerHistory {
 	opts := &cache.Options{
-		InitialCapacity: pollerHistoryInitSize,
-		TTL:             pollerHistoryTTL,
-		Pin:             false,
+		TTL: pollerHistoryTTL,
+		Pin: false,
 	}
 
 	return &pollerHistory{

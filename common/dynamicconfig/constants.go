@@ -493,10 +493,8 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
-	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
-	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsCacheMaxValueSizeBytes is max size of events cache in bytes
+	EventsCacheMaxValueSizeBytes = "history.eventsCacheMaxValueSizeBytes"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
 	// AcquireShardInterval is interval that timer used to acquire shard
