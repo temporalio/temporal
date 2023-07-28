@@ -29,7 +29,6 @@ import (
 	"net"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -350,7 +349,7 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	logger.Info("Starting to serve on frontend listener")
+	s.logger.Info("Starting to serve on frontend listener")
 
 	// Start the gRPC and HTTP server (if any) in the background
 	serveErrCh := make(chan error, 2)
@@ -364,7 +363,7 @@ func (s *Service) Start() {
 	// Wait until one errors or they are both successfully complete
 	for i := 0; i < serverCount; i++ {
 		if err := <-serveErrCh; err != nil {
-			logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
+			s.logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 		}
 	}
 
