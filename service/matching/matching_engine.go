@@ -909,6 +909,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				// We don't need to keep the tombstones around if we're not replicating them.
 				versioningData = ClearTombstones(versioningData)
 			}
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId:
+			versioningData = PersistUnknownBuildId(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetPersistUnknownBuildId(),
+			)
 		default:
 			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}

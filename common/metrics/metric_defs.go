@@ -1461,6 +1461,8 @@ var (
 	TaskWriteLatencyPerTaskQueue              = NewTimerDef("task_write_latency")
 	TaskLagPerTaskQueueGauge                  = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
