@@ -230,6 +230,36 @@ func (c *retryableClient) GetShard(
 	return resp, err
 }
 
+func (c *retryableClient) IsActivityTaskValid(
+	ctx context.Context,
+	request *historyservice.IsActivityTaskValidRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.IsActivityTaskValidResponse, error) {
+	var resp *historyservice.IsActivityTaskValidResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.IsActivityTaskValid(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) IsWorkflowTaskValid(
+	ctx context.Context,
+	request *historyservice.IsWorkflowTaskValidRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	var resp *historyservice.IsWorkflowTaskValidResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.IsWorkflowTaskValid(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

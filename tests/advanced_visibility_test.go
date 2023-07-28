@@ -1165,6 +1165,87 @@ func (s *advancedVisibilitySuite) TestCountWorkflow() {
 	s.Equal(int64(0), resp.GetCount())
 }
 
+func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
+	id := "es-integration-count-groupby-workflow-test"
+	wt := "es-integration-count-groupby-workflow-test-type"
+	tl := "es-integration-count-groupby-workflow-test-taskqueue"
+
+	numWorkflows := 10
+	numClosedWorkflows := 4
+	for i := 0; i < numWorkflows; i++ {
+		wfid := id + strconv.Itoa(i)
+		request := s.createStartWorkflowExecutionRequest(wfid, wt, tl)
+		we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+		if i < numClosedWorkflows {
+			_, err := s.engine.TerminateWorkflowExecution(
+				NewContext(),
+				&workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: wfid,
+						RunId:      we.RunId,
+					},
+				},
+			)
+			s.NoError(err)
+		}
+	}
+
+	query := `GROUP BY ExecutionStatus`
+	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		Query:     query,
+	}
+	var resp *workflowservice.CountWorkflowExecutionsResponse
+	var err error
+	for i := 0; i < numOfRetry; i++ {
+		resp, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
+		s.NoError(err)
+		if resp.GetCount() == int64(numWorkflows) {
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.Equal(int64(numWorkflows), resp.GetCount())
+	s.Equal(2, len(resp.Groups))
+
+	runningStatusPayload, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	terminatedStatusPayload, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	s.Equal(
+		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			GroupValues: []*commonpb.Payload{runningStatusPayload},
+			Count:       int64(numWorkflows - numClosedWorkflows),
+		},
+		resp.Groups[0],
+	)
+	s.Equal(
+		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			GroupValues: []*commonpb.Payload{terminatedStatusPayload},
+			Count:       int64(numClosedWorkflows),
+		},
+		resp.Groups[1],
+	)
+
+	query = `GROUP BY WorkflowType`
+	countRequest.Query = query
+	_, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
+	s.Error(err)
+	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+
+	query = `GROUP BY ExecutionStatus, WorkflowType`
+	countRequest.Query = query
+	_, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
+	s.Error(err)
+	s.Contains(err.Error(), "'group by' clause supports only a single field")
+}
+
 func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}

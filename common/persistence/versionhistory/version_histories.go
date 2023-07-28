@@ -58,7 +58,7 @@ func CopyVersionHistories(h *historyspb.VersionHistories) *historyspb.VersionHis
 // GetVersionHistory gets the VersionHistory according to index provided.
 func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb.VersionHistory, error) {
 	if index < 0 || index >= int32(len(h.Histories)) {
-		return nil, serviceerror.NewInvalidArgument("version histories index is out of range.")
+		return nil, serviceerror.NewInternal("version histories index is out of range.")
 	}
 
 	return h.Histories[index], nil
@@ -67,7 +67,7 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 // AddVersionHistory adds a VersionHistory and return the whether current branch is changed.
 func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
 	if v == nil {
-		return false, 0, serviceerror.NewInvalidArgument("version histories is null.")
+		return false, 0, serviceerror.NewInternal("version histories is null.")
 	}
 
 	// assuming existing version histories inside are valid
@@ -86,7 +86,7 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	}
 
 	if incomingFirstItem.Version != currentFirstItem.Version {
-		return false, 0, serviceerror.NewInvalidArgument("version history first item does not match.")
+		return false, 0, serviceerror.NewInternal("version history first item does not match.")
 	}
 
 	// TODO maybe we need more strict validation
@@ -147,7 +147,7 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 			return int32(versionHistoryIndex), nil
 		}
 	}
-	return 0, serviceerror.NewInvalidArgument("version histories does not contains given item.")
+	return 0, serviceerror.NewInternal("version histories does not contains given item.")
 }
 
 // IsVersionHistoriesRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
@@ -178,7 +178,7 @@ func IsVersionHistoriesRebuilt(h *historyspb.VersionHistories) (bool, error) {
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.
 func SetCurrentVersionHistoryIndex(h *historyspb.VersionHistories, currentVersionHistoryIndex int32) error {
 	if currentVersionHistoryIndex < 0 || currentVersionHistoryIndex >= int32(len(h.Histories)) {
-		return serviceerror.NewInvalidArgument("invalid current version history index.")
+		return serviceerror.NewInternal("invalid current version history index.")
 	}
 
 	h.CurrentVersionHistoryIndex = currentVersionHistoryIndex

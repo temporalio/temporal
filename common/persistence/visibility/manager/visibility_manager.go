@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -145,7 +146,8 @@ type (
 
 	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
 	CountWorkflowExecutionsResponse struct {
-		Count int64
+		Count  int64 // sum of counts in Groups
+		Groups []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup
 	}
 
 	// ListWorkflowExecutionsByTypeRequest is used to list executions of

@@ -77,7 +77,9 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistencespb.AllocatedTaskInfo{}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(&persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{},
+	}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.Equal(tqname.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)

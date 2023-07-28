@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 
@@ -95,6 +96,7 @@ type (
 		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 		kind        enumspb.TaskQueueKind
+		versioned   bool
 	}
 
 	pollMetadata struct {
@@ -115,6 +117,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
@@ -123,6 +126,7 @@ type (
 		metricsHandler       metrics.Handler
 		taskQueuesLock       sync.RWMutex // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager
+		taskQueueCountLock   sync.Mutex
 		taskQueueCount       map[taskQueueCounterKey]int // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
@@ -164,6 +168,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
@@ -179,6 +184,7 @@ func NewEngine(
 		matchingClient:            matchingClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
 		keyResolver:               resolver,
 		clusterMeta:               clusterMeta,
@@ -271,25 +277,22 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 
 		// If it gets here, write lock and check again in case a task queue is created between the two locks
 		e.taskQueuesLock.Lock()
-		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
+		tqm, ok = e.taskQueues[*taskQueue]
+		if !ok {
 			var err error
 			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
 			}
-			tqm.Start()
 			e.taskQueues[*taskQueue] = tqm
-			countKey := taskQueueCounterKey{
-				namespaceID: taskQueue.namespaceID,
-				taskType:    taskQueue.taskType,
-				kind:        stickyInfo.kind,
-			}
-			e.taskQueueCount[countKey]++
-			taskQueueCount := e.taskQueueCount[countKey]
-			e.updateTaskQueueGauge(countKey, taskQueueCount)
 		}
 		e.taskQueuesLock.Unlock()
+
+		if !ok {
+			tqm.Start()
+			e.updateTaskQueueGauge(tqm, 1)
+		}
 	}
 
 	if err := tqm.WaitUntilInitialized(ctx); err != nil {
@@ -905,6 +908,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				// We don't need to keep the tombstones around if we're not replicating them.
 				versioningData = ClearTombstones(versioningData)
 			}
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId:
+			versioningData = PersistUnknownBuildId(
+				updatedClock,
+				data.GetVersioningData(),
+				req.GetPersistUnknownBuildId(),
+			)
 		default:
 			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}
@@ -1249,16 +1258,26 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 		return
 	}
 	delete(e.taskQueues, *queueID)
-	countKey := taskQueueCounterKey{namespaceID: queueID.namespaceID, taskType: queueID.taskType, kind: foundTQM.TaskQueueKind()}
-	e.taskQueueCount[countKey]--
-	taskQueueCount := e.taskQueueCount[countKey]
 	e.taskQueuesLock.Unlock()
-
-	e.updateTaskQueueGauge(countKey, taskQueueCount)
+	// This may call unloadTaskQueue again but that's okay, the next call will not find it.
 	foundTQM.Stop()
+	e.updateTaskQueueGauge(foundTQM, -1)
 }
 
-func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
+func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta int) {
+	id := tqm.QueueID()
+	countKey := taskQueueCounterKey{
+		namespaceID: id.namespaceID,
+		taskType:    id.taskType,
+		kind:        tqm.TaskQueueKind(),
+		versioned:   id.VersionSet() != "",
+	}
+
+	e.taskQueueCountLock.Lock()
+	e.taskQueueCount[countKey] += delta
+	newCount := e.taskQueueCount[countKey]
+	e.taskQueueCountLock.Unlock()
+
 	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
 	ns := namespace.Name("unknown")
 	if err == nil {
@@ -1266,10 +1285,11 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 	}
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
-		float64(taskQueueCount),
+		float64(newCount),
 		metrics.NamespaceTag(ns.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.kind.String()),
+		metrics.VersionedTag(countKey.versioned),
 	)
 }
 
