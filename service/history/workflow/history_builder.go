@@ -154,6 +154,13 @@ func NewImmutableHistoryBuilder(
 	}
 }
 
+func (b *HistoryBuilder) IsDirty() bool {
+	return len(b.memEventsBatches) > 0 ||
+		len(b.memLatestBatch) > 0 ||
+		len(b.memBufferBatch) > 0 ||
+		len(b.scheduledIDToStartedID) > 0
+}
+
 // NOTE:
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset

@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -44,8 +45,11 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -87,6 +91,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		s.SearchAttributesMapperProvider,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetFloatPropertyFn(0.2),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
@@ -772,6 +777,100 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 		}
 		s.Empty(executions, "Unexpected executions returned from list method")
 	}
+}
+
+func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
+	switch s.VisibilityMgr.GetStoreNames()[0] {
+	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+		s.T().Skip("Not supported by standard visibility")
+	}
+
+	testNamespaceUUID := namespace.ID(uuid.New())
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
+
+	for i := 0; i < 5; i++ {
+		s.createOpenWorkflowRecord(
+			testNamespaceUUID,
+			"visibility-workflow-test",
+			"visibility-workflow",
+			startTime,
+			"test-queue",
+		)
+	}
+
+	resp, err := s.VisibilityMgr.CountWorkflowExecutions(
+		s.ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "",
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(5), resp.Count)
+	s.Nil(resp.Groups)
+}
+
+func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
+	switch s.VisibilityMgr.GetStoreNames()[0] {
+	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+		s.T().Skip("Not supported by standard visibility")
+	}
+
+	testNamespaceUUID := namespace.ID(uuid.New())
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
+
+	var startRequests []*manager.RecordWorkflowExecutionStartedRequest
+	for i := 0; i < 5; i++ {
+		startRequests = append(
+			startRequests,
+			s.createOpenWorkflowRecord(
+				testNamespaceUUID,
+				"visibility-workflow-test",
+				"visibility-workflow",
+				startTime,
+				"test-queue",
+			),
+		)
+	}
+
+	runningStatusPayload, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	resp, err := s.VisibilityMgr.CountWorkflowExecutions(
+		s.ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "GROUP BY ExecutionStatus",
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(5), resp.Count)
+	s.Equal(
+		[]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{runningStatusPayload},
+				Count:       int64(5),
+			},
+		},
+		resp.Groups,
+	)
+
+	for i := 0; i < 2; i++ {
+		s.createClosedWorkflowRecord(startRequests[i], closeTime)
+	}
+
+	resp, err = s.VisibilityMgr.CountWorkflowExecutions(
+		s.ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "GROUP BY ExecutionStatus",
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(5), resp.Count)
 }
 
 func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID, pageSize int) []*workflowpb.WorkflowExecutionInfo {

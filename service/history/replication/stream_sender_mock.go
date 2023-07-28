@@ -32,47 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/server/api/replication/v1"
-	tasks "go.temporal.io/server/service/history/tasks"
 )
-
-// MockSourceTaskConvertor is a mock of SourceTaskConvertor interface.
-type MockSourceTaskConvertor struct {
-	ctrl     *gomock.Controller
-	recorder *MockSourceTaskConvertorMockRecorder
-}
-
-// MockSourceTaskConvertorMockRecorder is the mock recorder for MockSourceTaskConvertor.
-type MockSourceTaskConvertorMockRecorder struct {
-	mock *MockSourceTaskConvertor
-}
-
-// NewMockSourceTaskConvertor creates a new mock instance.
-func NewMockSourceTaskConvertor(ctrl *gomock.Controller) *MockSourceTaskConvertor {
-	mock := &MockSourceTaskConvertor{ctrl: ctrl}
-	mock.recorder = &MockSourceTaskConvertorMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockSourceTaskConvertor) EXPECT() *MockSourceTaskConvertorMockRecorder {
-	return m.recorder
-}
-
-// Convert mocks base method.
-func (m *MockSourceTaskConvertor) Convert(task tasks.Task) (*v1.ReplicationTask, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Convert", task)
-	ret0, _ := ret[0].(*v1.ReplicationTask)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Convert indicates an expected call of Convert.
-func (mr *MockSourceTaskConvertorMockRecorder) Convert(task interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Convert", reflect.TypeOf((*MockSourceTaskConvertor)(nil).Convert), task)
-}
 
 // MockStreamSender is a mock of StreamSender interface.
 type MockStreamSender struct {
@@ -123,18 +83,6 @@ func (m *MockStreamSender) Key() ClusterShardKeyPair {
 func (mr *MockStreamSenderMockRecorder) Key() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Key", reflect.TypeOf((*MockStreamSender)(nil).Key))
-}
-
-// Start mocks base method.
-func (m *MockStreamSender) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockStreamSenderMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockStreamSender)(nil).Start))
 }
 
 // Stop mocks base method.

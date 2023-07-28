@@ -85,6 +85,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	}).Times(totalPageCount)
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
+	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
@@ -96,6 +97,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
+		EnableVerification:      true,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -150,6 +152,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	}).Times(maxPageCountPerExecution)
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(maxPageCountPerExecution)
+	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(maxPageCountPerExecution)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
@@ -161,6 +164,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		OverallRps:              10,
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   maxPageCountPerExecution,
+		EnableVerification:      true,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -210,7 +214,7 @@ func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 	env.AssertExpectations(t)
 }
 
-func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
+func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -255,6 +259,114 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskError(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mock generate replication tasks error")
+	env.AssertExpectations(t)
+}
+
+func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	totalPageCount := 4
+	currentPageCount := 0
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		currentPageCount++
+		if currentPageCount < totalPageCount {
+			return &listWorkflowsResponse{
+				Executions:    []commonpb.WorkflowExecution{},
+				NextPageToken: []byte("fake-page-token"),
+			}, nil
+		}
+		// your mock function implementation
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+		}, nil
+	})
+
+	var errMsg = "mock generate replication tasks error"
+	// Only expect GenerateReplicationTasks to execute once and workflow will then fail because of
+	// non-retryable error.
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError(errMsg, "", nil),
+	).Times(1)
+
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 1,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+		EnableVerification:      true,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), errMsg)
+	env.AssertExpectations(t)
+}
+
+func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	namespaceID := uuid.New()
+
+	var a *activities
+	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
+
+	totalPageCount := 4
+	currentPageCount := 0
+	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(func(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+		assert.Equal(t, "test-ns", request.Namespace)
+		currentPageCount++
+		if currentPageCount < totalPageCount {
+			return &listWorkflowsResponse{
+				Executions:    []commonpb.WorkflowExecution{},
+				NextPageToken: []byte("fake-page-token"),
+			}, nil
+		}
+		// your mock function implementation
+		return &listWorkflowsResponse{
+			Executions:    []commonpb.WorkflowExecution{},
+			NextPageToken: nil, // last page
+		}, nil
+	})
+
+	var errMsg = "mock verify replication tasks error"
+	// GenerateReplicationTasks and VerifyReplicationTasks runs in paralle. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
+	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(
+		temporal.NewNonRetryableApplicationError(errMsg, "", nil),
+	).Times(1)
+
+	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
+
+	env.ExecuteWorkflow(ForceReplicationWorkflow, ForceReplicationParams{
+		Namespace:               "test-ns",
+		Query:                   "",
+		ConcurrentActivityCount: 1,
+		OverallRps:              10,
+		ListWorkflowsPageSize:   1,
+		PageCountPerExecution:   4,
+		EnableVerification:      true,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), errMsg)
 	env.AssertExpectations(t)
 }
 
@@ -359,10 +471,10 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 	_, err := env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.Error(t, err)
-	assert.Equal(t, len(iceptor.recordedHeartbeats), 2)
-	assert.Equal(t, []byte(nil), iceptor.recordedHeartbeats[1].NextPageToken)
-	assert.Equal(t, 1, iceptor.recordedHeartbeats[1].IndexInPage)
-	env.SetHeartbeatDetails(iceptor.recordedHeartbeats[1])
+	assert.Equal(t, len(iceptor.seedRecordedHeartbeats), 2)
+	assert.Equal(t, []byte(nil), iceptor.seedRecordedHeartbeats[1].NextPageToken)
+	assert.Equal(t, 1, iceptor.seedRecordedHeartbeats[1].IndexInPage)
+	env.SetHeartbeatDetails(iceptor.seedRecordedHeartbeats[1])
 	_, err = env.ExecuteActivity(a.SeedReplicationQueueWithUserDataEntries, params)
 	assert.NoError(t, err)
 }
@@ -372,8 +484,10 @@ type heartbeatRecordingInterceptor struct {
 	interceptor.WorkerInterceptorBase
 	interceptor.ActivityInboundInterceptorBase
 	interceptor.ActivityOutboundInterceptorBase
-	recordedHeartbeats []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
-	T                  *testing.T
+	seedRecordedHeartbeats                []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
+	replicationRecordedHeartbeats         []replicationTasksHeartbeatDetails
+	generateReplicationRecordedHeartbeats []int
+	T                                     *testing.T
 }
 
 func (i *heartbeatRecordingInterceptor) InterceptActivity(ctx context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
@@ -387,8 +501,15 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 }
 
 func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
-	d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails)
-	assert.True(i.T, ok, "invalid heartbeat details")
-	i.recordedHeartbeats = append(i.recordedHeartbeats, d)
+	if d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails); ok {
+		i.seedRecordedHeartbeats = append(i.seedRecordedHeartbeats, d)
+	} else if d, ok := details[0].(replicationTasksHeartbeatDetails); ok {
+		i.replicationRecordedHeartbeats = append(i.replicationRecordedHeartbeats, d)
+	} else if d, ok := details[0].(int); ok {
+		i.generateReplicationRecordedHeartbeats = append(i.generateReplicationRecordedHeartbeats, d)
+	} else {
+		assert.Fail(i.T, "invalid heartbeat details")
+	}
+
 	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
 }

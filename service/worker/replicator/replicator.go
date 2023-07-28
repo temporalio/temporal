@@ -57,6 +57,7 @@ type (
 		namespaceProcessorsLock sync.Mutex
 		namespaceProcessors     map[string]*namespaceReplicationMessageProcessor
 		matchingClient          matchingservice.MatchingServiceClient
+		namespaceRegistry       namespace.Registry
 	}
 
 	// Config contains all the replication config for worker
@@ -75,8 +76,8 @@ func NewReplicator(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
 	matchingClient matchingservice.MatchingServiceClient,
+	namespaceRegistry namespace.Registry,
 ) *Replicator {
-
 	return &Replicator{
 		status:                           common.DaemonStatusInitialized,
 		hostInfo:                         hostInfo,
@@ -89,6 +90,7 @@ func NewReplicator(
 		metricsHandler:                   metricsHandler,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
 		matchingClient:                   matchingClient,
+		namespaceRegistry:                namespaceRegistry,
 	}
 }
 
@@ -161,6 +163,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						r.serviceResolver,
 						r.namespaceReplicationQueue,
 						r.matchingClient,
+						r.namespaceRegistry,
 					)
 					processor.Start()
 					r.namespaceProcessors[clusterName] = processor

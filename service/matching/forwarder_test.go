@@ -77,7 +77,9 @@ func (t *ForwarderTestSuite) TearDownTest() {
 }
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
-	task := newInternalTask(&persistencespb.AllocatedTaskInfo{}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
+	task := newInternalTask(&persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{},
+	}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.Equal(tqname.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -100,7 +102,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.TaskQueue.GetName())
-	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.TaskQueue.GetKind())
+	t.Equal(t.fwdr.taskQueueKind, request.TaskQueue.GetKind())
 	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
@@ -175,7 +177,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	gotResp, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.NoError(err)
 	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.TaskQueue.GetName())
-	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.TaskQueue.GetKind())
+	t.Equal(t.fwdr.taskQueueKind, request.TaskQueue.GetKind())
 	t.Equal(task.query.request.QueryRequest, request.QueryRequest)
 	t.Equal(resp, gotResp)
 }
@@ -191,7 +193,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 		t.NoError(err)
 	}
 	_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
-	t.NoError(err) // no rateliming should be enforced for query task
+	t.NoError(err) // no rate limiting should be enforced for query task
 }
 
 func (t *ForwarderTestSuite) TestForwardPollError() {
@@ -228,7 +230,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Equal(t.taskQueue.namespaceID, namespace.ID(request.GetNamespaceId()))
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
-	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
+	t.Equal(t.fwdr.taskQueueKind, request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollWorkflowTaskQueueResponse())
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
@@ -256,7 +258,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(t.taskQueue.namespaceID, namespace.ID(request.GetNamespaceId()))
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(mustParent(t.taskQueue.Name, 20).FullName(), request.GetPollRequest().GetTaskQueue().GetName())
-	t.Equal(enumspb.TaskQueueKind(t.fwdr.taskQueueKind), request.GetPollRequest().GetTaskQueue().GetKind())
+	t.Equal(t.fwdr.taskQueueKind, request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollActivityTaskQueueResponse())
 	t.Nil(task.pollWorkflowTaskQueueResponse())
 }
@@ -284,24 +286,26 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 			for i := 0; i < concurrency; i++ {
 				wg.Add(1)
 				go func() {
+					timer := time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-t.fwdr.AddReqTokenC():
+						timer.Stop()
 						if !tc.mustLeakToken {
 							token.release()
 						}
 						atomic.AddInt32(&adds, 1)
-					case <-time.After(time.Millisecond * 200):
-						break
+					case <-timer.C:
 					}
 
+					timer = time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-t.fwdr.PollReqTokenC():
+						timer.Stop()
 						if !tc.mustLeakToken {
 							token.release()
 						}
 						atomic.AddInt32(&polls, 1)
-					case <-time.After(time.Millisecond * 200):
-						break
+					case <-timer.C:
 					}
 					wg.Done()
 				}()

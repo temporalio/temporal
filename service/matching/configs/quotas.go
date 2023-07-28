@@ -25,44 +25,68 @@
 package configs
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
+	OperatorPriority = 0
 )
 
 var (
 	APIToPriority = map[string]int{
-		"AddActivityTask":                        0,
-		"AddWorkflowTask":                        0,
-		"CancelOutstandingPoll":                  0,
-		"DescribeTaskQueue":                      0,
-		"ListTaskQueuePartitions":                0,
-		"PollActivityTaskQueue":                  0,
-		"PollWorkflowTaskQueue":                  0,
-		"QueryWorkflow":                          0,
-		"RespondQueryTaskCompleted":              0,
-		"GetWorkerBuildIdCompatibility":          0,
-		"UpdateWorkerBuildIdCompatibility":       0,
-		"GetTaskQueueUserData":                   0,
-		"ApplyTaskQueueUserDataReplicationEvent": 0,
-		"GetBuildIdTaskQueueMapping":             0,
-		"ForceUnloadTaskQueue":                   0,
-		"UpdateTaskQueueUserData":                0,
-		"ReplicateTaskQueueUserData":             0,
+		"AddActivityTask":                        1,
+		"AddWorkflowTask":                        1,
+		"CancelOutstandingPoll":                  1,
+		"DescribeTaskQueue":                      1,
+		"ListTaskQueuePartitions":                1,
+		"PollActivityTaskQueue":                  1,
+		"PollWorkflowTaskQueue":                  1,
+		"QueryWorkflow":                          1,
+		"RespondQueryTaskCompleted":              1,
+		"GetWorkerBuildIdCompatibility":          1,
+		"UpdateWorkerBuildIdCompatibility":       1,
+		"GetTaskQueueUserData":                   1,
+		"ApplyTaskQueueUserDataReplicationEvent": 1,
+		"GetBuildIdTaskQueueMapping":             1,
+		"ForceUnloadTaskQueue":                   1,
+		"UpdateTaskQueueUserData":                1,
+		"ReplicateTaskQueueUserData":             1,
 	}
 
-	APIPrioritiesOrdered = []int{0}
+	APIPrioritiesOrdered = []int{0, 1}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		if priority == OperatorPriority {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		}
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if req.CallerType == headers.CallerTypeOperator {
+			return OperatorPriority
+		}
 		if priority, ok := APIToPriority[req.API]; ok {
 			return priority
 		}
 		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func operatorRateFn(
+	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		return operatorRPSRatio() * rateFn()
+	}
 }

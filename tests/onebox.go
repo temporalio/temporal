@@ -380,14 +380,12 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		}
 	}
 
-	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	var rpcFactory common.RPCFactory
 	feApp := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 			&config.Config{
@@ -486,13 +484,11 @@ func (c *temporalImpl) startHistory(
 			}
 		}
 
-		stoppedCh := make(chan struct{})
 		var historyService *history.Service
 		var clientBean client.Bean
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
-				stoppedCh,
 				persistenceConfig,
 				serviceName,
 			),
@@ -585,13 +581,11 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		}
 	}
 
-	stoppedCh := make(chan struct{})
 	var matchingService *matching.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 		),
@@ -680,13 +674,11 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 
-	stoppedCh := make(chan struct{})
 	var workerService *worker.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 		),

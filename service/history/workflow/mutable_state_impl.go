@@ -1664,7 +1664,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if command.UseCompatibleVersion {
-		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1902,7 +1902,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
+		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
 			return err
 		}
 	}
@@ -2107,8 +2107,10 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	if len(toAdd) == 0 {
 		return nil
 	}
-	if err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
+	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
 		return err
+	} else if !changed {
+		return nil
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
@@ -2121,17 +2123,16 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	saPayload, found := searchAttributes[searchattribute.BuildIds]
 	if !found {
 		return []string{}, nil
-	} else {
-		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		if err != nil {
-			return nil, err
-		}
-		searchAttributeValues, ok := decoded.([]string)
-		if !ok {
-			return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
-		}
-		return searchAttributeValues, nil
 	}
+	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	if err != nil {
+		return nil, err
+	}
+	searchAttributeValues, ok := decoded.([]string)
+	if !ok {
+		return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+	}
+	return searchAttributeValues, nil
 }
 
 // Takes a list of loaded build IDs from a search attribute and adds new build IDs to it. Returns a potentially modified
@@ -2185,16 +2186,16 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) error {
+func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
-		return err
+		return false, err
 	}
 	modifiedBuildIds, added := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildIds)
 	if !added {
-		return nil
+		return false, nil
 	}
-	return ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
+	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -4378,6 +4379,17 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
+	if ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 {
+		ms.logger.Error("MutableState encountered dirty transaction",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.Value(ms.hBuilder),
+		)
+		ms.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
+		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
+	}
+
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
 		return false, err

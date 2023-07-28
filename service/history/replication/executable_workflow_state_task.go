@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
@@ -103,6 +104,11 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	if err != nil {
 		return err
 	} else if !apply {
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
 		return nil
 	}
 	ctx, cancel := newTaskContext(namespaceName)
@@ -123,11 +129,33 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
-	// no resend is required
-	switch err.(type) {
+	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil
+	case *serviceerrors.RetryReplication:
+		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName)
+		defer cancel()
+
+		if resendErr := e.Resend(
+			ctx,
+			e.sourceClusterName,
+			retryErr,
+		); resendErr != nil {
+			return err
+		}
+		return e.Execute()
 	default:
+		e.Logger.Error("workflow state replication task encountered error",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
 		return err
 	}
 }

@@ -29,33 +29,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 )
 
 func TestLiveness(t *testing.T) {
 	t.Parallel()
 	var idleCalled atomic.Int32
 	ttl := func() time.Duration { return 2500 * time.Millisecond }
-	clock := clockwork.NewFakeClock()
-	liveness := newLiveness(clock, ttl, func() { idleCalled.Store(1) })
+	timeSource := clock.NewEventTimeSource()
+	liveness := newLiveness(timeSource, ttl, func() { idleCalled.Store(1) })
 	liveness.Start()
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond) // need actual time to pass since onIdle still runs async
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(0), idleCalled.Load())
 	liveness.markAlive()
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(0), idleCalled.Load())
 	liveness.markAlive()
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(0), idleCalled.Load())
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(0), idleCalled.Load())
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(1), idleCalled.Load())
 	liveness.Stop()
 }
@@ -64,14 +59,12 @@ func TestLivenessStop(t *testing.T) {
 	t.Parallel()
 	var idleCalled atomic.Int32
 	ttl := func() time.Duration { return 1000 * time.Millisecond }
-	clock := clockwork.NewFakeClock()
-	liveness := newLiveness(clock, ttl, func() { idleCalled.Store(1) })
+	timeSource := clock.NewEventTimeSource()
+	liveness := newLiveness(timeSource, ttl, func() { idleCalled.Store(1) })
 	liveness.Start()
-	clock.Advance(500 * time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(500 * time.Millisecond)
 	liveness.Stop()
-	clock.Advance(1 * time.Second)
-	time.Sleep(50 * time.Millisecond)
+	timeSource.Advance(1 * time.Second)
 	assert.Equal(t, int32(0), idleCalled.Load())
 	liveness.markAlive() // should not panic
 }

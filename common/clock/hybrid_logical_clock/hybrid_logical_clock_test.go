@@ -87,6 +87,18 @@ func Test_Max_ReturnsMaximum(t *testing.T) {
 	assert.Equal(t, max, t1)
 }
 
+func Test_Min_ReturnsMinimum(t *testing.T) {
+	t.Parallel()
+	t0 := Zero(1)
+	t1 := Zero(2)
+
+	min := Min(t0, t1)
+	assert.Equal(t, min, t0)
+	// Just in case it doesn't work in reverse order...
+	min = Min(t1, t0)
+	assert.Equal(t, min, t0)
+}
+
 func Test_UTC_ReturnsTimeInUTC(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, time.Unix(0, 0).UTC(), UTC(Zero(0)))

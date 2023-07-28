@@ -80,6 +80,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		s.visibilityStore,
 		dynamicconfig.GetIntPropertyFn(1),
 		dynamicconfig.GetIntPropertyFn(1),
+		dynamicconfig.GetFloatPropertyFn(0.2),
 		s.metricsHandler,
 		metrics.StandardVisibilityTypeTag(),
 		log.NewNoopLogger())

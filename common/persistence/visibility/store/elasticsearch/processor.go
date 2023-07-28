@@ -54,10 +54,10 @@ import (
 type (
 	// Processor is interface for Elasticsearch bulk processor
 	Processor interface {
-		common.Daemon
-
 		// Add request to bulk processor.
 		Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool]
+		Start()
+		Stop()
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor

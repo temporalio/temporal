@@ -90,6 +90,7 @@ func NewHandler(
 			matchingRawClient, // Use non retry client inside matching
 			config,
 			logger,
+			throttledLogger,
 			metricsHandler,
 			namespaceRegistry,
 			matchingServiceResolver,

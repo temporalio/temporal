@@ -25,8 +25,6 @@
 package matching
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -107,12 +105,12 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{},
 	)
 }
 
-// This function is the same between services but uses different config sources.
+// PersistenceRateLimitingParamsProvider is the same between services but uses different config sources.
 // if-case comes from resourceImpl.New.
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
@@ -123,6 +121,7 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
@@ -131,8 +130,8 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
-// This type is used to ensure the replicator only gets set if global namespaces are enabled on this cluster.
-// See NamespaceReplicationQueueProvider below.
+// TaskQueueReplicatorNamespaceReplicationQueue is used to ensure the replicator only gets set if global namespaces are
+// enabled on this cluster. See NamespaceReplicationQueueProvider below.
 type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 func NamespaceReplicationQueueProvider(
@@ -165,6 +164,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
 		serviceConfig.VisibilityDisableOrderByClause,
@@ -204,27 +204,6 @@ func HandlerProvider(
 	)
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
-	)
-
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

@@ -25,75 +25,101 @@
 package configs
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	// OperatorPriority is used to give precedence to calls coming from web UI or tctl
+	OperatorPriority = 0
 )
 
 var (
 	APIToPriority = map[string]int{
-		"CloseShard":                             0,
-		"GetShard":                               0,
-		"DeleteWorkflowExecution":                0,
-		"DescribeHistoryHost":                    0,
-		"DescribeMutableState":                   0,
-		"DescribeWorkflowExecution":              0,
-		"GetDLQMessages":                         0,
-		"GetDLQReplicationMessages":              0,
-		"GetMutableState":                        0,
-		"GetReplicationMessages":                 0,
-		"MergeDLQMessages":                       0,
-		"PollMutableState":                       0,
-		"PurgeDLQMessages":                       0,
-		"QueryWorkflow":                          0,
-		"ReapplyEvents":                          0,
-		"RebuildMutableState":                    0,
-		"RecordActivityTaskHeartbeat":            0,
-		"RecordActivityTaskStarted":              0,
-		"RecordChildExecutionCompleted":          0,
-		"VerifyChildExecutionCompletionRecorded": 0,
-		"RecordWorkflowTaskStarted":              0,
-		"RefreshWorkflowTasks":                   0,
-		"RemoveSignalMutableState":               0,
-		"RemoveTask":                             0,
-		"ReplicateEventsV2":                      0,
-		"ReplicateWorkflowState":                 0,
-		"RequestCancelWorkflowExecution":         0,
-		"ResetStickyTaskQueue":                   0,
-		"ResetWorkflowExecution":                 0,
-		"RespondActivityTaskCanceled":            0,
-		"RespondActivityTaskCompleted":           0,
-		"RespondActivityTaskFailed":              0,
-		"RespondWorkflowTaskCompleted":           0,
-		"RespondWorkflowTaskFailed":              0,
-		"ScheduleWorkflowTask":                   0,
-		"VerifyFirstWorkflowTaskScheduled":       0,
-		"SignalWithStartWorkflowExecution":       0,
-		"SignalWorkflowExecution":                0,
-		"StartWorkflowExecution":                 0,
-		"SyncActivity":                           0,
-		"SyncShardStatus":                        0,
-		"TerminateWorkflowExecution":             0,
-		"GenerateLastHistoryReplicationTasks":    0,
-		"GetReplicationStatus":                   0,
-		"DeleteWorkflowVisibilityRecord":         0,
-		"UpdateWorkflowExecution":                0,
-		"PollWorkflowExecutionUpdate":            0,
-		"StreamWorkflowReplicationMessages":      0,
+		"CloseShard":                             1,
+		"GetShard":                               1,
+		"DeleteWorkflowExecution":                1,
+		"DescribeHistoryHost":                    1,
+		"DescribeMutableState":                   1,
+		"DescribeWorkflowExecution":              1,
+		"GetDLQMessages":                         1,
+		"GetDLQReplicationMessages":              1,
+		"GetMutableState":                        1,
+		"GetReplicationMessages":                 1,
+		"IsActivityTaskValid":                    1,
+		"IsWorkflowTaskValid":                    1,
+		"MergeDLQMessages":                       1,
+		"PollMutableState":                       1,
+		"PurgeDLQMessages":                       1,
+		"QueryWorkflow":                          1,
+		"ReapplyEvents":                          1,
+		"RebuildMutableState":                    1,
+		"RecordActivityTaskHeartbeat":            1,
+		"RecordActivityTaskStarted":              1,
+		"RecordChildExecutionCompleted":          1,
+		"VerifyChildExecutionCompletionRecorded": 1,
+		"RecordWorkflowTaskStarted":              1,
+		"RefreshWorkflowTasks":                   1,
+		"RemoveSignalMutableState":               1,
+		"RemoveTask":                             1,
+		"ReplicateEventsV2":                      1,
+		"ReplicateWorkflowState":                 1,
+		"RequestCancelWorkflowExecution":         1,
+		"ResetStickyTaskQueue":                   1,
+		"ResetWorkflowExecution":                 1,
+		"RespondActivityTaskCanceled":            1,
+		"RespondActivityTaskCompleted":           1,
+		"RespondActivityTaskFailed":              1,
+		"RespondWorkflowTaskCompleted":           1,
+		"RespondWorkflowTaskFailed":              1,
+		"ScheduleWorkflowTask":                   1,
+		"VerifyFirstWorkflowTaskScheduled":       1,
+		"SignalWithStartWorkflowExecution":       1,
+		"SignalWorkflowExecution":                1,
+		"StartWorkflowExecution":                 1,
+		"SyncActivity":                           1,
+		"SyncShardStatus":                        1,
+		"TerminateWorkflowExecution":             1,
+		"GenerateLastHistoryReplicationTasks":    1,
+		"GetReplicationStatus":                   1,
+		"DeleteWorkflowVisibilityRecord":         1,
+		"UpdateWorkflowExecution":                1,
+		"PollWorkflowExecutionUpdate":            1,
+		"StreamWorkflowReplicationMessages":      1,
 	}
 
-	APIPrioritiesOrdered = []int{0}
+	APIPrioritiesOrdered = []int{OperatorPriority, 1}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		if priority == OperatorPriority {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(operatorRateFn(rateFn, operatorRPSRatio)))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+		}
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if req.CallerType == headers.CallerTypeOperator {
+			return OperatorPriority
+		}
 		if priority, ok := APIToPriority[req.API]; ok {
 			return priority
 		}
 		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+func operatorRateFn(
+	rateFn quotas.RateFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		return operatorRPSRatio() * rateFn()
+	}
 }
