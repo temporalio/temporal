@@ -644,7 +644,6 @@ func (a *activities) verifyReplicationTasks(
 }
 
 const (
-	defaultNoProgressRetryableTimeout    = 5 * time.Minute
 	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
 )
 
@@ -681,6 +680,10 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	//  - more than NonRetryableTimeout, it means potentially we encountered #4. The activity returns
 	//    non-retryable error and force-replication workflow will restarted.
 	for {
+
+		// Since replication has a lag, sleep first.
+		time.Sleep(request.VerifyInterval)
+
 		verified, progress, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient)
 		if err != nil {
 			return err
@@ -697,23 +700,13 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		}
 
 		diff := time.Now().Sub(details.CheckPoint)
-		if diff > defaultNoProgressRetryableTimeout {
-			if diff > defaultNoProgressNotRetryableTimeout {
-				// Potentially encountered a missing execution, return non-retryable error
-				return temporal.NewNonRetryableApplicationError(
-					fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
-						diff.Minutes(),
-						details.LastNotFoundWorkflowExecution, details.CheckPoint),
-					"", nil)
-			}
-
-			// return error to trigger activity retry
-			return verifyReplicationTasksTimeoutErr{
-				timeout: diff,
-				details: details,
-			}
+		if diff > defaultNoProgressNotRetryableTimeout {
+			// Potentially encountered a missing execution, return non-retryable error
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
+					diff.Minutes(),
+					details.LastNotFoundWorkflowExecution, details.CheckPoint),
+				"", nil)
 		}
-
-		time.Sleep(request.VerifyInterval)
 	}
 }

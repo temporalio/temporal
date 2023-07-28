@@ -92,7 +92,7 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 // GetPostgreSQL12TestClusterOption return test options
 func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginName,
+		SQLDBPluginName: postgresql.PluginNameV12,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),
