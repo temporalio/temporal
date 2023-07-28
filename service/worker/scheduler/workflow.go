@@ -1073,7 +1073,7 @@ func (s *scheduler) getRetentionExpiration(nextWakeup time.Time) time.Time {
 
 	lastActionTime := timestamp.TimePtr(time.Time{})
 	if len(s.Info.RecentActions) > 0 {
-		lastActionTime = s.Info.RecentActions[len(s.Info.RecentActions)-1].ScheduleTime
+		lastActionTime = s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime
 	}
 
 	// retention base is max(CreateTime, UpdateTime, and last action time)
