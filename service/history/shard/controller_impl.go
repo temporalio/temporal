@@ -49,6 +49,10 @@ import (
 	"go.temporal.io/server/service/history/configs"
 )
 
+const (
+	shardLingerMaxTimeLimit = 5 * time.Second
+)
+
 var (
 	invalidShardIdLowerBound = serviceerror.NewInvalidArgument("shard Id cannot be equal or lower than zero")
 	invalidShardIdUpperBound = serviceerror.NewInvalidArgument("shard Id cannot be larger than max shard count")
@@ -346,8 +350,10 @@ func (c *ControllerImpl) endLinger(shard ControllableContext) {
 
 func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext) {
 	startTime := time.Now()
-	timeout := util.Min(c.config.ShardLingerTimeLimit(), shardIOTimeout)
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// Enforce a max limit to ensure we close the shard in a reasonable time,
+	// and to indirectly limit the number of lingering shards.
+	timeLimit := util.Min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
+	ctx, cancel := context.WithTimeout(ctx, timeLimit)
 	defer cancel()
 
 	qps := c.config.ShardLingerOwnershipCheckQPS()
@@ -391,7 +397,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
 			if IsShardOwnershipLostError(err) {
 				// current host is not owner of shard, unload it if it is already loaded.
-				if c.config.ShardLingerEnabled() {
+				if c.config.ShardLingerTimeLimit() > 0 {
 					c.shardLingerThenClose(ctx, shardID)
 				} else {
 					c.CloseShardByID(shardID)
