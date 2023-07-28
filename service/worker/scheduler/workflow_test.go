@@ -1518,7 +1518,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) >= currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -1554,7 +1554,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) >= currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
@@ -1576,5 +1576,5 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(baseStartTime) >= currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(baseStartTime) == currentTweakablePolicies.RetentionTime)
 }
