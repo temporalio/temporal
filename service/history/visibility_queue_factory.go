@@ -114,8 +114,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 	)
-	if f.ActiveExecutorWrapper != nil {
-		executor = f.ActiveExecutorWrapper.Wrap(executor)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
 	return queues.NewImmediateQueue(

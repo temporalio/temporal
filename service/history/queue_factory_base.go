@@ -72,8 +72,7 @@ type (
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 
-		ActiveExecutorWrapper  queues.ExecutorWrapper `optional:"true"`
-		StandbyExecutorWrapper queues.ExecutorWrapper `optional:"true"`
+		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {

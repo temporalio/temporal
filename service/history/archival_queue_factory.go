@@ -130,8 +130,8 @@ func (f *archivalQueueFactory) CreateQueue(
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	executor := f.newArchivalTaskExecutor(shard, workflowCache)
-	if f.ActiveExecutorWrapper != nil {
-		executor = f.ActiveExecutorWrapper.Wrap(executor)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 	return f.newScheduledQueue(shard, executor)
 }
