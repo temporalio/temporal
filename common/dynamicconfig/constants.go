@@ -486,10 +486,10 @@ const (
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
 	// HistoryShutdownDrainDuration is the duration of traffic drain during shutdown
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
-	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
-	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
-	// EventsCacheMaxSizeBytes is max size of events cache in bytes
-	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
+	// EventsCacheInitialSize is initial size of events cache
+	EventsCacheInitialSize = "history.eventsCacheInitialSize"
+	// EventsCacheMaxSize is max size of events cache
+	EventsCacheMaxSize = "history.eventsCacheMaxSize"
 	// EventsCacheTTL is TTL of events cache
 	EventsCacheTTL = "history.eventsCacheTTL"
 	// AcquireShardInterval is interval that timer used to acquire shard

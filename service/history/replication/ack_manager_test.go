@@ -307,8 +307,8 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
 		false,
@@ -359,8 +359,8 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
 		false,
@@ -411,8 +411,8 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
 		false,
@@ -500,8 +500,8 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
 		false,
