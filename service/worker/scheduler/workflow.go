@@ -172,7 +172,7 @@ var (
 	currentTweakablePolicies = tweakablePolicies{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
-		RetentionTime:                     7 * 24 * time.Hour,
+		RetentionTime:                     0, // TODO: enable later: 7 * 24 * time.Hour,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
@@ -185,7 +185,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               10,
-		Version:                           NewCacheAndJitter,
+		Version:                           BatchAndCacheTimeQueries, // TODO: set later: NewCacheAndJitter
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
