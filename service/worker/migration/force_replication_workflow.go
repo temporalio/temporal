@@ -110,6 +110,10 @@ type (
 		Executions            []commonpb.WorkflowExecution
 	}
 
+	verifyReplicationTasksResponse struct {
+		SkippedWorkflowExecutions []SkippedWorkflowExecution
+	}
+
 	metadataRequest struct {
 		Namespace string
 	}
