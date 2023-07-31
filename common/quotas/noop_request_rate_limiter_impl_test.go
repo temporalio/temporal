@@ -25,54 +25,22 @@
 package quotas_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/quotas/quotastest"
 )
 
-func TestEffectiveResourceLimit(t *testing.T) {
+func TestNoopRequestRateLimiterImpl(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 5.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
+	testNoopRequestRateLimiterImpl(t, quotas.NoopRequestRateLimiter)
 }
 
-func TestEffectiveResourceLimit_NoPerClusterLimit(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(4),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  0,
-		},
-	))
-}
-
-func TestEffectiveResourceLimit_NoHosts(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(
-		quotastest.NewFakeInstanceCounter(0),
-		quotas.Limits{
-			InstanceLimit: 10,
-			ClusterLimit:  20,
-		},
-	))
-}
-
-func TestEffectiveResourceLimit_NilInstanceCounter(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 10.0, quotas.CalculateEffectiveResourceLimit(nil, quotas.Limits{
-		InstanceLimit: 10,
-		ClusterLimit:  20,
-	}))
+func testNoopRequestRateLimiterImpl(t *testing.T, rl quotas.RequestRateLimiter) {
+	assert.True(t, rl.Allow(time.Now(), quotas.Request{}))
+	assert.Equal(t, quotas.NoopReservation, rl.Reserve(time.Now(), quotas.Request{}))
+	assert.NoError(t, rl.Wait(context.Background(), quotas.Request{}))
 }

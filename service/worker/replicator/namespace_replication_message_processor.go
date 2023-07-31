@@ -68,6 +68,7 @@ func newNamespaceReplicationMessageProcessor(
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	matchingClient matchingservice.MatchingServiceClient,
+	namespaceRegistry namespace.Registry,
 ) *namespaceReplicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
@@ -89,6 +90,7 @@ func newNamespaceReplicationMessageProcessor(
 		done:                      make(chan struct{}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		matchingClient:            matchingClient,
+		namespaceRegistry:         namespaceRegistry,
 	}
 }
 
@@ -109,6 +111,7 @@ type (
 		done                      chan struct{}
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		matchingClient            matchingservice.MatchingServiceClient
+		namespaceRegistry         namespace.Registry
 	}
 )
 
@@ -201,15 +204,28 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
-
-	namespaceAttribute := task.GetNamespaceTaskAttributes()
-	if namespaceAttribute == nil {
+	switch task.TaskType {
+	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.NamespaceTag(task.GetNamespaceTaskAttributes().GetInfo().GetName()),
+			)
+	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
+		ns, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetTaskQueueUserDataAttributes().GetNamespaceId()))
+		if err != nil {
+			return err
+		}
+		p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
+			Record(1,
+				metrics.ReplicationTaskTypeTag(task.TaskType),
+				metrics.NamespaceTag(ns.Name().String()),
+			)
+	default:
 		return serviceerror.NewUnavailable(
-			"Namespace replication task does not set namespace task attribute",
+			fmt.Sprintf("Namespace replication task type not supported: %v", task.TaskType),
 		)
 	}
-	p.metricsHandler.Counter(metrics.NamespaceReplicationEnqueueDLQCount.GetMetricName()).
-		Record(1, metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()))
 	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
@@ -228,16 +244,38 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
 		return p.namespaceTaskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
 	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
-		attrs := task.GetTaskQueueUserDataAttributes()
-		_, err := p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
-			NamespaceId: attrs.GetNamespaceId(),
-			TaskQueue:   attrs.GetTaskQueueName(),
-			UserData:    attrs.GetUserData(),
-		})
-		return err
+		return p.handleTaskQueueUserDataReplicationTask(ctx, task.GetTaskQueueUserDataAttributes())
 	default:
 		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
 	}
+}
+
+func (p *namespaceReplicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
+	ctx context.Context,
+	attrs *replicationspb.TaskQueueUserDataAttributes,
+) error {
+	_, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(attrs.GetNamespaceId()))
+	switch err.(type) {
+	case nil:
+	case *serviceerror.NamespaceNotFound:
+		// The namespace in the request isn't registered on this cluster, drop the replication task.
+		// This is okay and enables using the cluster-global replication queue to replicate different namespaces to
+		// different sets of clusters.
+		// When this cluster is added to the list of replicated clusters for this namespace on the origin cluster, the
+		// force replication workflow should be triggered to seed the namespace replication queue with all task queue
+		// user data entries for the namespace.
+		return nil
+	default:
+		// return the original err
+		return err
+	}
+
+	_, err = p.matchingClient.ApplyTaskQueueUserDataReplicationEvent(ctx, &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: attrs.GetNamespaceId(),
+		TaskQueue:   attrs.GetTaskQueueName(),
+		UserData:    attrs.GetUserData(),
+	})
+	return err
 }
 
 func (p *namespaceReplicationMessageProcessor) Stop() {

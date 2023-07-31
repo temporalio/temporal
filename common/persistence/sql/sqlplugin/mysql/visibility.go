@@ -305,6 +305,13 @@ func (mdb *db) CountFromVisibility(
 	return 0, store.OperationNotSupportedErr
 }
 
+func (mdb *db) CountGroupByFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityCountRow, error) {
+	return nil, store.OperationNotSupportedErr
+}
+
 func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {
 	row.StartTime = mdb.converter.FromMySQLDateTime(row.StartTime)
 	row.ExecutionTime = mdb.converter.FromMySQLDateTime(row.ExecutionTime)

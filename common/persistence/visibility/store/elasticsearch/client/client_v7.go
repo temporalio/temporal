@@ -221,6 +221,20 @@ func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Quer
 	return c.esClient.Count(index).Query(query).Do(ctx)
 }
 
+func (c *clientImpl) CountGroupBy(
+	ctx context.Context,
+	index string,
+	query elastic.Query,
+	aggName string,
+	agg elastic.Aggregation,
+) (*elastic.SearchResult, error) {
+	searchSource := elastic.NewSearchSource().
+		Query(query).
+		Size(0).
+		Aggregation(aggName, agg)
+	return c.esClient.Search(index).SearchSource(searchSource).Do(ctx)
+}
+
 func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
 	esBulkProcessor, err := c.esClient.BulkProcessor().
 		Name(p.Name).
