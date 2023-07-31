@@ -126,10 +126,11 @@ func (a *actionQueuePendingTask) gatherStatistics(
 		})
 	}
 	for _, sliceList := range a.slicesPerNamespace {
-		slices.SortFunc(sliceList, func(this, that Slice) bool {
+		slices.SortFunc(sliceList, func(this, that Slice) int {
 			thisMin := this.Scope().Range.InclusiveMin
 			thatMin := that.Scope().Range.InclusiveMin
-			return thisMin.CompareTo(thatMin) > 0
+			// sort in largest to smallest order
+			return thisMin.CompareTo(thatMin) * -1
 		})
 	}
 }
