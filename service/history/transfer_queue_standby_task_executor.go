@@ -35,7 +35,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
@@ -75,7 +75,8 @@ func newTransferQueueStandbyTaskExecutor(
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	clusterName string,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyRawClient resource.HistoryRawClient,
+	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
@@ -85,7 +86,8 @@ func newTransferQueueStandbyTaskExecutor(
 			archivalClient,
 			logger,
 			metricProvider,
-			matchingClient,
+			historyRawClient,
+			matchingRawClient,
 			visibilityManager,
 		),
 		clusterName:        clusterName,
@@ -290,7 +292,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		if verifyCompletionRecorded {
-			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
 				ParentExecution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.ParentWorkflowId,
@@ -450,7 +452,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			}, nil
 		}
 
-		_, err = t.historyClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 			NamespaceId: transferTask.TargetNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: childWorkflowInfo.StartedWorkflowId,

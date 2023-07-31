@@ -31,12 +31,12 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -56,7 +56,7 @@ type (
 		fx.In
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
-		HistoryClient  historyservice.HistoryServiceClient
+		HistoryClient  resource.HistoryClient
 		FrontendClient workflowservice.WorkflowServiceClient
 	}
 

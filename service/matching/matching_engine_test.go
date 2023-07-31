@@ -157,7 +157,7 @@ func newMatchingEngine(
 		logger:            logger,
 		throttledLogger:   log.ThrottledLogger(logger),
 		metricsHandler:    metrics.NoopMetricsHandler,
-		matchingClient:    mockMatchingClient,
+		matchingRawClient: mockMatchingClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,

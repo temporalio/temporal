@@ -225,7 +225,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingRawClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -244,7 +244,7 @@ func newTaskQueueManager(
 		status:               common.DaemonStatusInitialized,
 		engine:               e,
 		namespaceRegistry:    e.namespaceRegistry,
-		matchingClient:       e.matchingClient,
+		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,
 		taskQueueID:          taskQueue,
 		stickyInfo:           stickyInfo,
@@ -278,7 +278,7 @@ func newTaskQueueManager(
 		// Forward without version set, the target will resolve the correct version set from
 		// the build id itself. TODO: check if we still need this here after tqm refactoring
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingClient)
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingRawClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {

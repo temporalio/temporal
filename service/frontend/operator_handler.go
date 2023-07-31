@@ -42,7 +42,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
@@ -82,7 +82,7 @@ type (
 		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
-		historyClient          historyservice.HistoryServiceClient
+		historyClient          resource.HistoryClient
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
@@ -98,7 +98,7 @@ type (
 		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
-		historyClient          historyservice.HistoryServiceClient
+		historyClient          resource.HistoryClient
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
