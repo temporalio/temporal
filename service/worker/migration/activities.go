@@ -525,7 +525,7 @@ func isNotFoundServiceError(err error) bool {
 	return ok
 }
 
-func (a *activities) shouldSkipVerify(
+func (a *activities) canSkipWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
 	we *commonpb.WorkflowExecution,
@@ -539,13 +539,15 @@ func (a *activities) shouldSkipVerify(
 	if err != nil {
 		if isNotFoundServiceError(err) {
 			// In a rare case, workflow could be deleted due to retention and never being replicated to target.
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.GetMetricName()).Record(1)
+			a.logger.Info("createReplicationTasks skip NotFound workflow", tags...)
 			return true, reasonWorkflowNotFound, nil
 		}
 
 		return false, "", err
 	}
 
-	// Zombie workflow should be a transient state. However, there is Zombie workflow on the source cluster,
+	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
 	// it is skipped to avoid such workflow being processed on the target cluster.
 	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.GetMetricName()).Record(1)
@@ -556,7 +558,8 @@ func (a *activities) shouldSkipVerify(
 	return false, "", nil
 }
 
-func (a *activities) checkSkippedWorkflowExecution(
+// Check the status of outstanding workflow executions on source cluster (local) to see if it can be skipped.
+func (a *activities) trySkipWorkflowExecution(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
@@ -566,12 +569,12 @@ func (a *activities) checkSkippedWorkflowExecution(
 	}
 
 	we := request.Executions[details.NextIndex]
-	skipped, reason, err := a.shouldSkipVerify(ctx, request.NamespaceID, &we)
+	canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request.NamespaceID, &we)
 	if err != nil {
 		return nil, err
 	}
 
-	if !skipped {
+	if !canSkip {
 		return nil, nil
 	}
 
@@ -625,7 +628,7 @@ func (a *activities) verifyReplicationTasks(
 }
 
 const (
-	checkSkippedWorkflowThreshold        = 10
+	defaultCheckSkipThreshold            = 10
 	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
 )
 
@@ -658,20 +661,19 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
 	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
 	// being verified. If no progress is made for long enough, then
-	//  - more than RetryableTimeout, the activity fails with retryable error and activity will restart. This gives us the chance
-	//    to identify case #2 and #3 by rerunning createReplicationTasks.
-	//  - more than NonRetryableTimeout, it means potentially we encountered #4. The activity returns
-	//    non-retryable error and force-replication workflow will restarted.
+	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
+	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
+	//    non-retryable error and force-replication will fail.
 
-	checkSkippedCount := 0
+	checkSkipCount := 0
 	for {
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
 		lastIndex := details.NextIndex
 
-		if checkSkippedCount >= checkSkippedWorkflowThreshold {
-			skippedExecution, err := a.checkSkippedWorkflowExecution(ctx, request, &details)
+		if checkSkipCount >= defaultCheckSkipThreshold {
+			skippedExecution, err := a.trySkipWorkflowExecution(ctx, request, &details)
 			if err != nil {
 				return response, err
 			}
@@ -680,7 +682,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 				response.SkippedWorkflowExecutions = append(response.SkippedWorkflowExecutions, *skippedExecution)
 			}
 
-			checkSkippedCount = 0
+			checkSkipCount = 0
 		}
 
 		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient)
@@ -691,9 +693,9 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		if lastIndex < details.NextIndex {
 			// Update CheckPoint where there is a progress
 			details.CheckPoint = time.Now()
-			checkSkippedCount = 0
+			checkSkipCount = 0
 		} else {
-			checkSkippedCount++
+			checkSkipCount++
 		}
 
 		activity.RecordHeartbeat(ctx, details)

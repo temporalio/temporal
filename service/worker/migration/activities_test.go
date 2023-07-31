@@ -203,7 +203,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	s.Equal(execution2, lastHeartBeat.LastNotFoundWorkflowExecution)
 }
 
-func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecution() {
+func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 	mockErr := serviceerror.NewInternal("mock error")
 	var testcases = []struct {
 		resp           *historyservice.DescribeMutableStateResponse
@@ -240,11 +240,11 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecuti
 	for _, t := range testcases {
 		env, iceptor := s.initEnv()
 
-		// Call DescribeMutableState for checkSkippedWorkflowThreshold times to trigger checkSkippedWorkflowExecution
+		// Call DescribeMutableState for enough times to trigger trySkipWorkflowExecution
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 			Namespace: mockedNamespace,
 			Execution: &execution1,
-		}).Return(nil, serviceerror.NewNotFound("")).Times(checkSkippedWorkflowThreshold)
+		}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold)
 
 		s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 			NamespaceId: mockedNamespaceID,
@@ -268,9 +268,9 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecuti
 	}
 }
 
-// Execution is found only after verifyTask was called for more than checkSkippedWorkflowThreshold*X times
+// Execution is found only after verifyTask was called for more than checkSkipThreshold*X times
 // checkSkippedWorkflowExecution should only be called for X times
-func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecutionMultiTimes() {
+func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecutionMore() {
 	env, iceptor := s.initEnv()
 
 	request := verifyReplicationTasksRequest{
@@ -284,7 +284,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecuti
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
 		Execution: &execution1,
-	}).Return(nil, serviceerror.NewNotFound("")).Times(checkSkippedWorkflowThreshold*X + 2)
+	}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold*X + 2)
 
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
@@ -304,8 +304,8 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecuti
 	s.Equal(execution1, lastHeartBeat.LastNotFoundWorkflowExecution)
 }
 
-// Replication is slow but not slow enough to trigger checkSkippedWorkflowExecution
-func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecutionNotCalled() {
+// Replication is slow but not slow enough to trigger trySkipWorkflowExecution
+func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecutionNotCalled() {
 	env, iceptor := s.initEnv()
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
@@ -313,12 +313,12 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_checkSkippedWorkflowExecuti
 		TargetClusterEndpoint: remoteRpcAddress,
 	}
 
-	for i := 0; i < checkSkippedWorkflowThreshold*10; i++ {
+	for i := 0; i < defaultCheckSkipThreshold*10; i++ {
 		request.Executions = append(request.Executions, execution1)
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 			Namespace: mockedNamespace,
 			Execution: &execution1,
-		}).Return(nil, serviceerror.NewNotFound("")).Times(checkSkippedWorkflowThreshold - 1)
+		}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold - 1)
 
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 			Namespace: mockedNamespace,
@@ -488,7 +488,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	}
 }
 
-func (s *activitiesSuite) Test_checkSkippedWorkflowExecutions() {
+func (s *activitiesSuite) Test_trySkipWorkflowExecution() {
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
 		NamespaceID:           mockedNamespaceID,
@@ -541,7 +541,7 @@ func (s *activitiesSuite) Test_checkSkippedWorkflowExecutions() {
 			NextIndex: index,
 		}
 
-		skipped, err := s.a.checkSkippedWorkflowExecution(ctx, &request, &details)
+		skipped, err := s.a.trySkipWorkflowExecution(ctx, &request, &details)
 		s.Equal(tc.expectedSkipped, skipped)
 		if tc.expectedErr == nil {
 			s.NoError(err)
