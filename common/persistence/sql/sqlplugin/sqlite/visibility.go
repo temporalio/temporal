@@ -164,6 +164,18 @@ func (mdb *db) CountFromVisibility(
 	return count, nil
 }
 
+func (mdb *db) CountGroupByFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityCountRow, error) {
+	rows, err := mdb.db.QueryContext(ctx, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return sqlplugin.ParseCountGroupByRows(rows, filter.GroupBy)
+}
+
 func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
 	if row == nil {
 		return nil

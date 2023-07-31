@@ -2478,6 +2478,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 
 	resp := &workflowservice.CountWorkflowExecutionsResponse{
 		Count: persistenceResp.Count,
+		Groups: persistenceResp.Groups,
 	}
 	return resp, nil
 }
