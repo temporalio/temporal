@@ -51,7 +51,7 @@ type (
 		MetricsHandler    metrics.Handler
 		Logger            log.SnTaggedLogger
 
-		ActiveExecutorWrapper queues.ExecutorWrapper `optional:"true"`
+		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
 	}
 
 	memoryScheduledQueueFactory struct {
