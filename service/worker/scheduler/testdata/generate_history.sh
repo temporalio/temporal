@@ -8,9 +8,10 @@ set -x
 
 id=sched1
 
-trap "temporal schedule delete -s $id" EXIT
+# shellcheck disable=SC2064
+trap "temporal schedule delete -s '$id'" EXIT
 
-temporal schedule create -s $id \
+temporal schedule create -s "$id" \
   --overlap-policy bufferall \
   --interval 10s \
   --jitter 8s \
@@ -22,7 +23,7 @@ temporal schedule create -s $id \
 sleep 50 # ~5 normal actions, some may be buffered
 
 # backfill 3 actions
-temporal schedule backfill -s $id  \
+temporal schedule backfill -s "$id"  \
   --overlap-policy allowall  \
   --start-time 2022-05-09T11:22:22Z  \
   --end-time   2022-05-09T11:22:55Z
@@ -40,7 +41,7 @@ sleep 21
 temporal schedule toggle -s sched1 --unpause --reason testing
 
 # update
-temporal schedule update -s $id  \
+temporal schedule update -s "$id"  \
   --calendar '{"hour":"*","minute":"*","second":"*/5"}' \
   --remaining-actions 1 \
   -w mywf \
@@ -53,4 +54,4 @@ sleep 12
 
 # capture history
 now=$(date +%s)
-temporal workflow show -w temporal-sys-scheduler:$id -o json | gzip -9c > replay_$now.json.gz
+temporal workflow show -w "temporal-sys-scheduler:$id" -o json | gzip -9c > "replay_$now.json.gz"
