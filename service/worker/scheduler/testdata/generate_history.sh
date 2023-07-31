@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Consider running this script to generate a new history for TestReplays
+# whenever there's some change to the scheduler workflow.
+# To use it, run a local server (any backend) and run this script.
 
 set -x
 

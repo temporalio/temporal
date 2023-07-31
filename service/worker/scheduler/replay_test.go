@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package scheduler_test
 
 import (
 	"compress/gzip"
@@ -36,11 +36,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
+// TestReplays tests workflow logic backwards compatibility from previous versions.
+// Whenever there's a change in logic, consider capturing a new history with the
+// testdata/generate_history.sh script and checking it in.
 func TestReplays(t *testing.T) {
 	replayer := worker.NewWorkflowReplayer()
-	replayer.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
+	replayer.RegisterWorkflowWithOptions(scheduler.SchedulerWorkflow, workflow.RegisterOptions{Name: scheduler.WorkflowType})
 
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
@@ -57,7 +61,7 @@ func TestReplays(t *testing.T) {
 		require.NoError(t, err)
 		err = replayer.ReplayWorkflowHistory(logger, history)
 		require.NoError(t, err)
-		r.Close()
-		f.Close()
+		_ = r.Close()
+		_ = f.Close()
 	}
 }
