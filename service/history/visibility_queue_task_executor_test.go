@@ -82,7 +82,7 @@ type (
 		version                     int64
 		now                         time.Time
 		timeSource                  *clock.EventTimeSource
-		visibilityQueueTaskExecutor *visibilityQueueTaskExecutor
+		visibilityQueueTaskExecutor queues.Executor
 
 		enableCloseWorkflowCleanup bool
 	}
