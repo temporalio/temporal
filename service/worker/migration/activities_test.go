@@ -78,6 +78,8 @@ const (
 )
 
 var (
+	emptyExecutions = commonpb.WorkflowExecution{}
+
 	execution1 = commonpb.WorkflowExecution{
 		WorkflowId: "workflow1",
 		RunId:      "run1",
@@ -194,8 +196,16 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 		}).Return(r.resp, r.err).Times(1)
 	}
 
-	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: mockedNamespaceID,
+		Execution:   &execution2,
+	}).Return(&completeState, nil).Times(2)
+
+	r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
+	var response verifyReplicationTasksResponse
+	r.Get(&response)
+	s.Empty(response.SkippedWorkflowExecutions)
 
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
@@ -244,93 +254,32 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 			Namespace: mockedNamespace,
 			Execution: &execution1,
-		}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold)
+		}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 		s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 			NamespaceId: mockedNamespaceID,
 			Execution:   &execution1,
 		}).Return(t.resp, t.err).Times(1)
 
-		_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+		r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 		s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 		lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
-
 		if t.expectedErr == nil {
 			s.NoError(err)
 			s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
+
+			var response verifyReplicationTasksResponse
+			r.Get(&response)
+			s.Equal(request.Executions[0], response.SkippedWorkflowExecutions[0].WorkflowExecution)
+			s.Equal(t.expectedReason, response.SkippedWorkflowExecutions[0].Reason)
 		} else {
 			s.ErrorContains(err, "mock error")
 			s.Equal(0, lastHeartBeat.NextIndex)
 		}
 
-		s.Equal(execution1, lastHeartBeat.LastNotFoundWorkflowExecution)
+		s.Equal(emptyExecutions, lastHeartBeat.LastNotFoundWorkflowExecution)
 		s.True(lastHeartBeat.CheckPoint.After(start))
 	}
-}
-
-// Execution is found only after verifyTask was called for more than checkSkipThreshold*X times
-// checkSkippedWorkflowExecution should only be called for X times
-func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecutionMore() {
-	env, iceptor := s.initEnv()
-
-	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1},
-	}
-
-	X := 3
-	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
-		Namespace: mockedNamespace,
-		Execution: &execution1,
-	}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold*X + 2)
-
-	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
-		Namespace: mockedNamespace,
-		Execution: &execution1,
-	}).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
-
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-		NamespaceId: mockedNamespaceID,
-		Execution:   &execution1,
-	}).Return(&completeState, nil).Times(X)
-
-	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
-	s.NoError(err)
-	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
-	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
-	s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
-	s.Equal(execution1, lastHeartBeat.LastNotFoundWorkflowExecution)
-}
-
-// Replication is slow but not slow enough to trigger trySkipWorkflowExecution
-func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecutionNotCalled() {
-	env, iceptor := s.initEnv()
-	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-	}
-
-	for i := 0; i < defaultCheckSkipThreshold*10; i++ {
-		request.Executions = append(request.Executions, execution1)
-		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
-			Namespace: mockedNamespace,
-			Execution: &execution1,
-		}).Return(nil, serviceerror.NewNotFound("")).Times(defaultCheckSkipThreshold - 1)
-
-		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
-			Namespace: mockedNamespace,
-			Execution: &execution1,
-		}).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
-	}
-
-	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
-	s.NoError(err)
-	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
-	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
-	s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
 }
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
@@ -341,6 +290,11 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 		TargetClusterEndpoint: remoteRpcAddress,
 		Executions:            []commonpb.WorkflowExecution{execution1},
 	}
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: mockedNamespaceID,
+		Execution:   &execution1,
+	}).Return(&completeState, nil)
 
 	// Workflow not found at target cluster.
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
@@ -468,6 +422,11 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		},
 	}
 
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: mockedNamespaceID,
+		Execution:   &execution1,
+	}).Return(&completeState, nil).AnyTimes()
+
 	for _, tc := range tests {
 		mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 		request.Executions = createExecutions(mockRemoteAdminClient, tc.executionStates, tc.nextIndex)
@@ -475,7 +434,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			NextIndex: tc.nextIndex,
 		}
 
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient)
+		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
@@ -484,74 +443,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		s.GreaterOrEqual(len(tc.executionStates), details.NextIndex)
 		if details.NextIndex < len(tc.executionStates) && tc.executionStates[details.NextIndex] == executionNotfound {
 			s.Equal(execution1, details.LastNotFoundWorkflowExecution)
-		}
-	}
-}
-
-func (s *activitiesSuite) Test_trySkipWorkflowExecution() {
-	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1, execution2, execution3},
-	}
-
-	ctx := context.TODO()
-	index := 1
-	currExecution := request.Executions[index]
-	var tests = []struct {
-		resp            *historyservice.DescribeMutableStateResponse
-		err             error
-		expectedSkipped *SkippedWorkflowExecution
-		expectedErr     error
-	}{
-		{
-			&completeState,
-			nil,
-			nil,
-			nil,
-		},
-		{
-			&zombieState,
-			nil,
-			&SkippedWorkflowExecution{
-				WorkflowExecution: currExecution,
-				Reason:            reasonZombieWorkflow,
-			},
-			nil,
-		},
-		{
-			nil,
-			serviceerror.NewNotFound(""),
-			&SkippedWorkflowExecution{
-				WorkflowExecution: currExecution,
-				Reason:            reasonWorkflowNotFound,
-			},
-			nil,
-		},
-	}
-
-	for _, tc := range tests {
-		s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
-			NamespaceId: mockedNamespaceID,
-			Execution:   &currExecution,
-		}).Return(tc.resp, tc.err)
-
-		details := replicationTasksHeartbeatDetails{
-			NextIndex: index,
-		}
-
-		skipped, err := s.a.trySkipWorkflowExecution(ctx, &request, &details)
-		s.Equal(tc.expectedSkipped, skipped)
-		if tc.expectedErr == nil {
-			s.NoError(err)
-		} else {
-			s.EqualError(err, tc.err.Error())
-		}
-
-		if skipped != nil {
-			// if current workflow is skipped, advance NextIndex
-			s.Equal(index+1, details.NextIndex)
 		}
 	}
 }

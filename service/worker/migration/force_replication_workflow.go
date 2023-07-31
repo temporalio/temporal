@@ -112,6 +112,7 @@ type (
 
 	verifyReplicationTasksResponse struct {
 		SkippedWorkflowExecutions []SkippedWorkflowExecution
+		SkippedWorkflowCount      int
 	}
 
 	metadataRequest struct {

@@ -530,7 +530,7 @@ func (a *activities) canSkipWorkflowExecution(
 	namespaceID string,
 	we *commonpb.WorkflowExecution,
 ) (bool, string, error) {
-	tags := []tag.Tag{tag.WorkflowType(forceReplicationWorkflowName), tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
+	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: namespaceID,
 		Execution:   we,
@@ -538,9 +538,8 @@ func (a *activities) canSkipWorkflowExecution(
 
 	if err != nil {
 		if isNotFoundServiceError(err) {
-			// In a rare case, workflow could be deleted due to retention and never being replicated to target.
+			// Workflow could be deleted due to retention and never being replicated to target.
 			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.GetMetricName()).Record(1)
-			a.logger.Info("createReplicationTasks skip NotFound workflow", tags...)
 			return true, reasonWorkflowNotFound, nil
 		}
 
@@ -558,45 +557,18 @@ func (a *activities) canSkipWorkflowExecution(
 	return false, "", nil
 }
 
-// Check the status of outstanding workflow executions on source cluster (local) to see if it can be skipped.
-func (a *activities) trySkipWorkflowExecution(
-	ctx context.Context,
-	request *verifyReplicationTasksRequest,
-	details *replicationTasksHeartbeatDetails,
-) (*SkippedWorkflowExecution, error) {
-	if details.NextIndex >= len(request.Executions) {
-		return nil, nil
-	}
-
-	we := request.Executions[details.NextIndex]
-	canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request.NamespaceID, &we)
-	if err != nil {
-		return nil, err
-	}
-
-	if !canSkip {
-		return nil, nil
-	}
-
-	details.NextIndex++
-
-	return &SkippedWorkflowExecution{
-		WorkflowExecution: we,
-		Reason:            reason,
-	}, nil
-}
-
 func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
-) (bool, error) {
+) (bool, []SkippedWorkflowExecution, error) {
 	start := time.Now()
 	defer func() {
 		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
 	}()
 
+	var skippedList []SkippedWorkflowExecution
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
 		we := request.Executions[details.NextIndex]
 		s := time.Now()
@@ -613,22 +585,33 @@ func (a *activities) verifyReplicationTasks(
 
 		case *serviceerror.NotFound:
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
-			details.LastNotFoundWorkflowExecution = we
-			return false, nil
+			canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request.NamespaceID, &we)
+			if err != nil {
+				return false, skippedList, err
+			}
+
+			if !canSkip {
+				details.LastNotFoundWorkflowExecution = we
+				return false, skippedList, nil
+			}
+
+			skippedList = append(skippedList, SkippedWorkflowExecution{
+				WorkflowExecution: we,
+				Reason:            reason,
+			})
 
 		default:
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
 				Counter(metrics.VerifyReplicationTaskFailed.GetMetricName()).Record(1)
 
-			return false, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
+			return false, skippedList, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
 		}
 	}
 
-	return true, nil
+	return true, skippedList, nil
 }
 
 const (
-	defaultCheckSkipThreshold            = 10
 	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
 )
 
@@ -665,27 +648,12 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
 	//    non-retryable error and force-replication will fail.
 
-	checkSkipCount := 0
 	for {
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
 		lastIndex := details.NextIndex
-
-		if checkSkipCount >= defaultCheckSkipThreshold {
-			skippedExecution, err := a.trySkipWorkflowExecution(ctx, request, &details)
-			if err != nil {
-				return response, err
-			}
-
-			if skippedExecution != nil {
-				response.SkippedWorkflowExecutions = append(response.SkippedWorkflowExecutions, *skippedExecution)
-			}
-
-			checkSkipCount = 0
-		}
-
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient)
+		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient)
 		if err != nil {
 			return response, err
 		}
@@ -693,12 +661,14 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		if lastIndex < details.NextIndex {
 			// Update CheckPoint where there is a progress
 			details.CheckPoint = time.Now()
-			checkSkipCount = 0
-		} else {
-			checkSkipCount++
 		}
 
 		activity.RecordHeartbeat(ctx, details)
+
+		if len(skippedList) > 0 {
+			response.SkippedWorkflowExecutions = append(response.SkippedWorkflowExecutions, skippedList...)
+			response.SkippedWorkflowCount = len(response.SkippedWorkflowExecutions)
+		}
 
 		if verified == true {
 			return response, nil
