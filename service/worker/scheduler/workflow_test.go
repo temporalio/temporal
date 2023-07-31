@@ -151,9 +151,10 @@ func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (
 			if resp == nil && err == nil { // fill in defaults so callers can be more concise
 				resp = &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamp.TimePtr(time.Now()),
+					RealStartTime: timestamp.TimePtr(s.env.Now()),
 				}
 			}
+
 			return resp, err
 		})
 }
@@ -1473,4 +1474,108 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		},
 		expected+1,
 	)
+}
+
+func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
+	scheduleId := "myschedule"
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:30:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(15 * time.Minute),
+				}},
+			},
+			State: &schedpb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 2,
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+}
+
+func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
+	scheduleId := "myschedule"
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T01:00:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Year:       "2022",
+					Month:      "June",
+					DayOfMonth: "1",
+					Hour:       "1",
+					Minute:     "0",
+					Second:     "0",
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+}
+
+func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
+	scheduleId := "myschedule"
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    scheduleId,
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.True(s.env.Now().Sub(baseStartTime) == currentTweakablePolicies.RetentionTime)
 }
