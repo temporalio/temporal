@@ -325,7 +325,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return false, err
-	} else if sticky && (baseTqm == nil || !baseTqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+	} else if sticky && !stickyWorkerAvailable(baseTqm) {
 		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -693,7 +693,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
-	} else if sticky && (baseTqm == nil || !baseTqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+	} else if sticky && !stickyWorkerAvailable(baseTqm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1508,4 +1508,10 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 		StateUpdateTimestamp:   &stamp,
 		BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 	}
+}
+
+// We use a very short timeout for considering a sticky worker available, since tasks can also
+// be processed on the normal queue.
+func stickyWorkerAvailable(tqm taskQueueManager) bool {
+	return tqm != nil && tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
 }
