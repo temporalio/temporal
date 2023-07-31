@@ -90,7 +90,7 @@ func NewMemoryScheduledQueueFactory(
 		timeSource:        params.TimeSource,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
-		executorWrapper:   params.ActiveExecutorWrapper,
+		executorWrapper:   params.ExecutorWrapper,
 	}
 }
 
