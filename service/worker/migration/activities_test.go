@@ -204,7 +204,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
 	var response verifyReplicationTasksResponse
-	r.Get(&response)
+	s.NoError(r.Get(&response))
 	s.Empty(response.SkippedWorkflowExecutions)
 
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
@@ -269,7 +269,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 			s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
 
 			var response verifyReplicationTasksResponse
-			r.Get(&response)
+			s.NoError(r.Get(&response))
 			s.Equal(request.Executions[0], response.SkippedWorkflowExecutions[0].WorkflowExecution)
 			s.Equal(t.expectedReason, response.SkippedWorkflowExecutions[0].Reason)
 		} else {
