@@ -538,7 +538,8 @@ func (a *activities) canSkipWorkflowExecution(
 
 	if err != nil {
 		if isNotFoundServiceError(err) {
-			// Workflow could be deleted due to retention and never being replicated to target.
+			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
+			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
 			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.GetMetricName()).Record(1)
 			return true, reasonWorkflowNotFound, nil
 		}
@@ -585,6 +586,8 @@ func (a *activities) verifyReplicationTasks(
 
 		case *serviceerror.NotFound:
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
+			// Calling canSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
+			// A better solution is to only check the existence for workflow which is close to retention period.
 			canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request.NamespaceID, &we)
 			if err != nil {
 				return false, skippedList, err
