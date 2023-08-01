@@ -30,9 +30,8 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	"google.golang.org/grpc"
 )
 
 func (c *clientImpl) CloseShard(

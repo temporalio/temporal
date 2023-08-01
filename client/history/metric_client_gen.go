@@ -29,9 +29,8 @@ package history
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"
 )
