@@ -719,11 +719,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RecordChildExecutionCompleted(gomock.Any(), &historyservice.RecordChildExecutionCompletedRequest{
 		NamespaceId:            parentNamespaceID,
-		WorkflowExecution:      parentExecution,
+		ParentExecution:        parentExecution,
 		ParentInitiatedId:      parentInitiatedID,
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
-		CompletedExecution:     &execution,
+		ChildExecution:         &execution,
 		CompletionEvent:        event,
 	}).Return(nil, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
