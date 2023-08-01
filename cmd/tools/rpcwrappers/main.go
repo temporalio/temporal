@@ -96,6 +96,7 @@ var (
 		"client.history.DescribeHistoryHost":                    true,
 		"client.history.GetReplicationMessages":                 true,
 		"client.history.GetReplicationStatus":                   true,
+		"client.history.RecordChildExecutionCompleted":          true,
 		"client.history.VerifyChildExecutionCompletionRecorded": true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,

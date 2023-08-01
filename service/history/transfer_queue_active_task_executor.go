@@ -384,13 +384,13 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if replyToParentWorkflow {
 		_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			ParentExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
 			ParentInitiatedId:      parentInitiatedID,
 			ParentInitiatedVersion: parentInitiatedVersion,
-			CompletedExecution:     &workflowExecution,
+			ChildExecution:         &workflowExecution,
 			Clock:                  parentClock,
 			CompletionEvent:        completionEvent,
 		})
