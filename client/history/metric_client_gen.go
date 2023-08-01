@@ -259,6 +259,20 @@ func (c *metricClient) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) NotifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.NotifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.NotifyChildExecutionCompletionRecordedResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientNotifyChildExecutionCompletionRecordedScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.NotifyChildExecutionCompletionRecorded(ctx, request, opts...)
+}
+
 func (c *metricClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,

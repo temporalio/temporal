@@ -81,7 +81,6 @@ type (
 		events           [][]*historypb.HistoryEvent
 		newEvents        []*historypb.HistoryEvent
 
-		// startTime time.Time
 		logger log.Logger
 	}
 )

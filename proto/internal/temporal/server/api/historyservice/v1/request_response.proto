@@ -388,6 +388,17 @@ message RecordChildExecutionCompletedRequest {
 message RecordChildExecutionCompletedResponse {
 }
 
+message NotifyChildExecutionCompletionRecordedRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 2;
+    temporal.api.common.v1.WorkflowExecution child_execution = 3;
+    int64 parent_initiated_id = 4;
+    int64 parent_initiated_version = 5;
+}
+
+message NotifyChildExecutionCompletionRecordedResponse {
+}
+
 message VerifyChildExecutionCompletionRecordedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution parent_execution = 2;

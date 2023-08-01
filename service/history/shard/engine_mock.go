@@ -289,6 +289,21 @@ func (mr *MockEngineMockRecorder) MergeDLQMessages(ctx, messagesRequest interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockEngine)(nil).MergeDLQMessages), ctx, messagesRequest)
 }
 
+// NotifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockEngine) NotifyChildExecutionCompletionRecorded(ctx context.Context, req *historyservice.NotifyChildExecutionCompletionRecordedRequest) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NotifyChildExecutionCompletionRecorded", ctx, req)
+	ret0, _ := ret[0].(*historyservice.NotifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NotifyChildExecutionCompletionRecorded indicates an expected call of NotifyChildExecutionCompletionRecorded.
+func (mr *MockEngineMockRecorder) NotifyChildExecutionCompletionRecorded(ctx, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockEngine)(nil).NotifyChildExecutionCompletionRecorded), ctx, req)
+}
+
 // NotifyNewHistoryEvent mocks base method.
 func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()

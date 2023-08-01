@@ -550,7 +550,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.Nil(err)
 }
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_VerifyChildExecutionCompletionVerification() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -655,6 +655,92 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
 	_, _, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_SkipVerifyChildExecutionCompletionVerification() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	parentNamespaceID := "some random parent namespace ID"
+	parentInitiatedID := int64(3222)
+	parentInitiatedVersion := int64(1234)
+	parentNamespace := "some random parent namespace Name"
+	parentExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random parent workflow ID",
+		RunId:      uuid.New(),
+	}
+	parentClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
+				NamespaceId:      parentNamespaceID,
+				Namespace:        parentNamespace,
+				Execution:        parentExecution,
+				InitiatedId:      parentInitiatedID,
+				InitiatedVersion: parentInitiatedVersion,
+				Clock:            parentClock,
+			},
+		},
+	)
+	s.Nil(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	now := time.Now().UTC()
+	transferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		VisibilityTimestamp: now,
+		TaskID:              taskID,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig()).AnyTimes()
+
+	wfContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(context.Background(), s.namespaceID, execution, workflow.LockPriorityHigh)
+	s.NoError(err)
+	ms, err := wfContext.LoadMutableState(context.Background())
+	s.NoError(err)
+	ms.GetEphemeralMessages().Set(workflow.NewEphemeralMessageChildCompletionKey(
+		parentInitiatedID,
+		parentInitiatedVersion,
+	), struct{}{})
+	release(nil)
+
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	_, _, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(err)
+	_, ok := mutableState.GetEphemeralMessages().Get(workflow.NewEphemeralMessageChildCompletionKey(
+		parentInitiatedID,
+		parentInitiatedVersion,
+	))
+	s.False(ok)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_CanSkipVisibilityArchival() {

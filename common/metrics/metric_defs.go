@@ -310,6 +310,8 @@ const (
 	HistoryClientVerifyFirstWorkflowTaskScheduled
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope = "HistoryClientRecordChildExecutionCompleted"
+	// HistoryClientNotifyChildExecutionCompletionRecordedScope tracks RPC calls to history service
+	HistoryClientNotifyChildExecutionCompletionRecordedScope = "HistoryClientNotifyChildExecutionCompletionRecorded"
 	// HistoryClientVerifyChildExecutionCompletionRecordedScope tracks RPC calls to history service
 	HistoryClientVerifyChildExecutionCompletionRecordedScope = "HistoryClientVerifyChildExecutionCompletionRecorded"
 	// HistoryClientReplicateEventsV2Scope tracks RPC calls to history service

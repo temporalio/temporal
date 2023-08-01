@@ -177,6 +177,7 @@ type (
 		GetWorkflowCloseTime(ctx context.Context) (*time.Time, error)
 		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
+		GetEphemeralMessages() EphemeralMessages
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetFirstRunID(ctx context.Context) (string, error)

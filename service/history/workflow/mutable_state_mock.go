@@ -1177,6 +1177,20 @@ func (mr *MockMutableStateMockRecorder) GetCurrentVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockMutableState)(nil).GetCurrentVersion))
 }
 
+// GetEphemeralMessages mocks base method.
+func (m *MockMutableState) GetEphemeralMessages() EphemeralMessages {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEphemeralMessages")
+	ret0, _ := ret[0].(EphemeralMessages)
+	return ret0
+}
+
+// GetEphemeralMessages indicates an expected call of GetEphemeralMessages.
+func (mr *MockMutableStateMockRecorder) GetEphemeralMessages() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEphemeralMessages", reflect.TypeOf((*MockMutableState)(nil).GetEphemeralMessages))
+}
+
 // GetExecutionInfo mocks base method.
 func (m *MockMutableState) GetExecutionInfo() *v112.WorkflowExecutionInfo {
 	m.ctrl.T.Helper()

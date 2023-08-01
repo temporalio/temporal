@@ -187,6 +187,10 @@ service HistoryService {
     rpc RecordChildExecutionCompleted (RecordChildExecutionCompletedRequest) returns (RecordChildExecutionCompletedResponse) {
     }
 
+    // NotifyChildExecutionCompletionRecorded notify child completion result is recorded in parent workflow.
+    rpc NotifyChildExecutionCompletionRecorded (NotifyChildExecutionCompletionRecordedRequest) returns (NotifyChildExecutionCompletionRecordedResponse) {
+    }
+
     // VerifyChildExecutionCompletionRecorded checks if child completion result is recorded in parent workflow.
     // This is only used by standby transfer close execution logic to make sure parent workflow has the result 
     // recorded before completing the task, otherwise during namespace failover, it's possible that none of the 

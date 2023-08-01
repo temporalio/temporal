@@ -381,6 +381,26 @@ func (mr *MockHistoryServiceClientMockRecorder) MergeDLQMessages(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// NotifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceClient) NotifyChildExecutionCompletionRecorded(ctx context.Context, in *historyservice.NotifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NotifyChildExecutionCompletionRecorded", varargs...)
+	ret0, _ := ret[0].(*historyservice.NotifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NotifyChildExecutionCompletionRecorded indicates an expected call of NotifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceClientMockRecorder) NotifyChildExecutionCompletionRecorded(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceClient)(nil).NotifyChildExecutionCompletionRecorded), varargs...)
+}
+
 // PollMutableState mocks base method.
 func (m *MockHistoryServiceClient) PollMutableState(ctx context.Context, in *historyservice.PollMutableStateRequest, opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1459,6 +1479,21 @@ func (m *MockHistoryServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *
 func (mr *MockHistoryServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).MergeDLQMessages), arg0, arg1)
+}
+
+// NotifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceServer) NotifyChildExecutionCompletionRecorded(arg0 context.Context, arg1 *historyservice.NotifyChildExecutionCompletionRecordedRequest) (*historyservice.NotifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NotifyChildExecutionCompletionRecorded", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.NotifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NotifyChildExecutionCompletionRecorded indicates an expected call of NotifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceServerMockRecorder) NotifyChildExecutionCompletionRecorded(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceServer)(nil).NotifyChildExecutionCompletionRecorded), arg0, arg1)
 }
 
 // PollMutableState mocks base method.
