@@ -264,10 +264,27 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 	stickyInfo stickyInfo,
 	create bool,
 ) (taskQueueManager, error) {
+	tqm, err := e.getTaskQueueManagerNoWait(taskQueue, stickyInfo, create)
+	if err != nil || tqm == nil {
+		return nil, err
+	}
+	if err = tqm.WaitUntilInitialized(ctx); err != nil {
+		return nil, err
+	}
+	return tqm, nil
+}
+
+// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// to get new range from DB and create one. This does not block for the task queue to be
+// initialized.
+func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
+	taskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+	create bool,
+) (taskQueueManager, error) {
 	e.taskQueuesLock.RLock()
 	tqm, ok := e.taskQueues[*taskQueue]
 	e.taskQueuesLock.RUnlock()
-
 	if !ok {
 		if !create {
 			return nil, nil
@@ -292,11 +309,6 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 			e.updateTaskQueueGauge(tqm, 1)
 		}
 	}
-
-	if err := tqm.WaitUntilInitialized(ctx); err != nil {
-		return nil, err
-	}
-
 	return tqm, nil
 }
 

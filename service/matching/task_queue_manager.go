@@ -126,6 +126,8 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
+		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
@@ -516,6 +518,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	return task, nil
 }
 
+func (c *taskQueueManagerImpl) MarkAlive() {
+	c.liveness.markAlive()
+}
+
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
@@ -793,16 +799,31 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(ctx context.Conte
 		return c, nil
 	}
 
-	versionSet, unknownBuild, err := lookupVersionSetForPoll(data, caps)
+	primarySetId, demotedSetIds, unknownBuild, err := lookupVersionSetForPoll(data, caps)
 	if err != nil {
 		return nil, err
 	}
 	if unknownBuild {
 		c.recordUnknownBuildPoll(caps.BuildId)
 	}
+	c.loadDemotedSetIds(demotedSetIds)
 
-	newId := newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet)
+	newId := newTaskQueueIDWithVersionSet(c.taskQueueID, primarySetId)
 	return c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
+}
+
+func (c *taskQueueManagerImpl) loadDemotedSetIds(demotedSetIds []string) {
+	// If we have demoted set ids, we need to load all task queues for them because even though
+	// no new tasks will be sent to them, they might have old tasks in the db.
+	// Also mark them alive, so that their liveness will be roughly synchronized.
+	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
+	for _, demotedSetId := range demotedSetIds {
+		newId := newTaskQueueIDWithVersionSet(c.taskQueueID, demotedSetId)
+		tqm, _ := c.engine.getTaskQueueManagerNoWait(newId, c.stickyInfo, true)
+		if tqm != nil {
+			tqm.MarkAlive()
+		}
+	}
 }
 
 func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Context, directive *taskqueuespb.TaskVersionDirective) (taskQueueManager, chan struct{}, error) {
