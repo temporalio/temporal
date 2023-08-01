@@ -321,6 +321,46 @@ func (mr *MockHistoryServiceClientMockRecorder) GetShard(ctx, in interface{}, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetShard), varargs...)
 }
 
+// IsActivityTaskValid mocks base method.
+func (m *MockHistoryServiceClient) IsActivityTaskValid(ctx context.Context, in *historyservice.IsActivityTaskValidRequest, opts ...grpc.CallOption) (*historyservice.IsActivityTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "IsActivityTaskValid", varargs...)
+	ret0, _ := ret[0].(*historyservice.IsActivityTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsActivityTaskValid indicates an expected call of IsActivityTaskValid.
+func (mr *MockHistoryServiceClientMockRecorder) IsActivityTaskValid(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActivityTaskValid", reflect.TypeOf((*MockHistoryServiceClient)(nil).IsActivityTaskValid), varargs...)
+}
+
+// IsWorkflowTaskValid mocks base method.
+func (m *MockHistoryServiceClient) IsWorkflowTaskValid(ctx context.Context, in *historyservice.IsWorkflowTaskValidRequest, opts ...grpc.CallOption) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "IsWorkflowTaskValid", varargs...)
+	ret0, _ := ret[0].(*historyservice.IsWorkflowTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsWorkflowTaskValid indicates an expected call of IsWorkflowTaskValid.
+func (mr *MockHistoryServiceClientMockRecorder) IsWorkflowTaskValid(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowTaskValid", reflect.TypeOf((*MockHistoryServiceClient)(nil).IsWorkflowTaskValid), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) MergeDLQMessages(ctx context.Context, in *historyservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1374,6 +1414,36 @@ func (m *MockHistoryServiceServer) GetShard(arg0 context.Context, arg1 *historys
 func (mr *MockHistoryServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetShard), arg0, arg1)
+}
+
+// IsActivityTaskValid mocks base method.
+func (m *MockHistoryServiceServer) IsActivityTaskValid(arg0 context.Context, arg1 *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsActivityTaskValid", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.IsActivityTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsActivityTaskValid indicates an expected call of IsActivityTaskValid.
+func (mr *MockHistoryServiceServerMockRecorder) IsActivityTaskValid(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActivityTaskValid", reflect.TypeOf((*MockHistoryServiceServer)(nil).IsActivityTaskValid), arg0, arg1)
+}
+
+// IsWorkflowTaskValid mocks base method.
+func (m *MockHistoryServiceServer) IsWorkflowTaskValid(arg0 context.Context, arg1 *historyservice.IsWorkflowTaskValidRequest) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowTaskValid", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.IsWorkflowTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsWorkflowTaskValid indicates an expected call of IsWorkflowTaskValid.
+func (mr *MockHistoryServiceServerMockRecorder) IsWorkflowTaskValid(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowTaskValid", reflect.TypeOf((*MockHistoryServiceServer)(nil).IsWorkflowTaskValid), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

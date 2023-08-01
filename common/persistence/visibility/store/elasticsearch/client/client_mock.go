@@ -104,6 +104,21 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
+// CountGroupBy mocks base method.
+func (m *MockClient) CountGroupBy(ctx context.Context, index string, query v7.Query, aggName string, agg v7.Aggregation) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountGroupBy", ctx, index, query, aggName, agg)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountGroupBy indicates an expected call of CountGroupBy.
+func (mr *MockClientMockRecorder) CountGroupBy(ctx, index, query, aggName, agg interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountGroupBy", reflect.TypeOf((*MockClient)(nil).CountGroupBy), ctx, index, query, aggName, agg)
+}
+
 // Get mocks base method.
 func (m *MockClient) Get(ctx context.Context, index, docID string) (*v7.GetResult, error) {
 	m.ctrl.T.Helper()
@@ -318,6 +333,21 @@ func (m *MockCLIClient) Count(ctx context.Context, index string, query v7.Query)
 func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
+}
+
+// CountGroupBy mocks base method.
+func (m *MockCLIClient) CountGroupBy(ctx context.Context, index string, query v7.Query, aggName string, agg v7.Aggregation) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountGroupBy", ctx, index, query, aggName, agg)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountGroupBy indicates an expected call of CountGroupBy.
+func (mr *MockCLIClientMockRecorder) CountGroupBy(ctx, index, query, aggName, agg interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountGroupBy", reflect.TypeOf((*MockCLIClient)(nil).CountGroupBy), ctx, index, query, aggName, agg)
 }
 
 // Delete mocks base method.

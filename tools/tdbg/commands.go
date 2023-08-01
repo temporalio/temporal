@@ -68,7 +68,6 @@ func AdminShowWorkflow(c *cli.Context) error {
 	client := cFactory.AdminClient(c)
 
 	serializer := serialization.NewSerializer()
-	var history []*commonpb.DataBlob
 
 	ctx, cancel := newContext(c)
 	defer cancel()
@@ -78,26 +77,32 @@ func AdminShowWorkflow(c *cli.Context) error {
 		return err
 	}
 
-	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		NamespaceId: nsID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
-		StartEventId:      startEventId,
-		EndEventId:        endEventId,
-		StartEventVersion: startEventVerion,
-		EndEventVersion:   endEventVersion,
-		MaximumPageSize:   100,
-		NextPageToken:     nil,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to read History Branch: %s", err)
+	var histories []*commonpb.DataBlob
+	var token []byte
+	for doContinue := true; doContinue; doContinue = len(token) != 0 {
+		resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: nsID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: wid,
+				RunId:      rid,
+			},
+			StartEventId:      startEventId,
+			EndEventId:        endEventId,
+			StartEventVersion: startEventVerion,
+			EndEventVersion:   endEventVersion,
+			MaximumPageSize:   100,
+			NextPageToken:     token,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to read History Branch: %s", err)
+		}
+		histories = append(histories, resp.HistoryBatches...)
+		token = resp.NextPageToken
 	}
 
 	allEvents := &historypb.History{}
 	totalSize := 0
-	for idx, b := range resp.HistoryBatches {
+	for idx, b := range histories {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
@@ -112,7 +117,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 		}
 		fmt.Println(string(data))
 	}
-	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
+	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()

@@ -1679,11 +1679,11 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 
 	request := &historyservice.RecordChildExecutionCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},

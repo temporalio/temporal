@@ -24,15 +24,15 @@
 
 package quotastest
 
-// NewFakeInstanceCounter returns a new fake quotas.InstanceCounter that always returns numInstances.
-func NewFakeInstanceCounter(numInstances int) instanceCounter {
-	return instanceCounter{numInstances: numInstances}
+// NewFakeMemberCounter returns a new fake quotas.MemberCounter that always returns numInstances.
+func NewFakeMemberCounter(numInstances int) memberCounter {
+	return memberCounter{numInstances: numInstances}
 }
 
-type instanceCounter struct {
+type memberCounter struct {
 	numInstances int
 }
 
-func (c instanceCounter) MemberCount() int {
+func (c memberCounter) MemberCount() int {
 	return c.numInstances
 }

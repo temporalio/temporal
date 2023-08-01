@@ -93,9 +93,11 @@ var (
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
 		// these are non-standard implementations. do not generate.
-		"client.history.DescribeHistoryHost":    true,
-		"client.history.GetReplicationMessages": true,
-		"client.history.GetReplicationStatus":   true,
+		"client.history.DescribeHistoryHost":                    true,
+		"client.history.GetReplicationMessages":                 true,
+		"client.history.GetReplicationStatus":                   true,
+		"client.history.RecordChildExecutionCompleted":          true,
+		"client.history.VerifyChildExecutionCompletionRecorded": true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
