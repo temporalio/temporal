@@ -429,9 +429,8 @@ func createTestTaskQueueManagerWithConfig(
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1307,12 +1306,11 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		normalName: normalName,
 	}
-	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta)
+	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config)
 	require.NoError(t, err)
 	tq := tlMgr.(*taskQueueManagerImpl)
 

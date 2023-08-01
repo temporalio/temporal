@@ -156,13 +156,16 @@ func (f *transferQueueFactory) CreateQueue(
 		f.VisibilityManager,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
 	)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
+	}
 
 	return queues.NewImmediateQueue(
 		shard,

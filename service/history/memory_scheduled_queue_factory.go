@@ -50,6 +50,8 @@ type (
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.Handler
 		Logger            log.SnTaggedLogger
+
+		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
 	}
 
 	memoryScheduledQueueFactory struct {
@@ -61,6 +63,8 @@ type (
 		timeSource        clock.TimeSource
 		metricsHandler    metrics.Handler
 		logger            log.SnTaggedLogger
+
+		executorWrapper queues.ExecutorWrapper
 	}
 )
 
@@ -86,6 +90,7 @@ func NewMemoryScheduledQueueFactory(
 		timeSource:        params.TimeSource,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
+		executorWrapper:   params.ExecutorWrapper,
 	}
 }
 
@@ -113,6 +118,9 @@ func (f *memoryScheduledQueueFactory) CreateQueue(
 		shardCtx.GetConfig(),
 		nil,
 	)
+	if f.executorWrapper != nil {
+		speculativeWorkflowTaskTimeoutExecutor = f.executorWrapper.Wrap(speculativeWorkflowTaskTimeoutExecutor)
+	}
 
 	return queues.NewSpeculativeWorkflowTaskTimeoutQueue(
 		f.scheduler,

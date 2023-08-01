@@ -71,6 +71,8 @@ type (
 		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
+
+		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {
