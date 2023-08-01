@@ -220,6 +220,7 @@ message UpdateWorkerBuildIdCompatibilityRequest {
         ApplyPublicRequest apply_public_request = 3;
         RemoveBuildIds remove_build_ids = 4;
         string persist_unknown_build_id = 5;
+        string clean_up_demoted_set_id = 6;
     }
 }
 message UpdateWorkerBuildIdCompatibilityResponse {}

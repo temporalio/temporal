@@ -153,21 +153,17 @@ func hashBuildId(buildID string) string {
 }
 
 func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
-	clone := persistencespb.VersioningData{
-		VersionSets: make([]*persistencespb.CompatibleVersionSet, len(data.GetVersionSets())),
+	return &persistencespb.VersioningData{
+		VersionSets: slices.Clone(data.GetVersionSets()),
 	}
-	copy(clone.VersionSets, data.GetVersionSets())
-	return &clone
 }
 
 func shallowCloneVersionSet(set *persistencespb.CompatibleVersionSet) *persistencespb.CompatibleVersionSet {
-	clone := &persistencespb.CompatibleVersionSet{
+	return &persistencespb.CompatibleVersionSet{
 		SetIds:                 set.SetIds,
-		BuildIds:               make([]*persistencespb.BuildId, len(set.BuildIds)),
+		BuildIds:               slices.Clone(set.BuildIds),
 		BecameDefaultTimestamp: set.BecameDefaultTimestamp,
 	}
-	copy(clone.BuildIds, set.BuildIds)
-	return clone
 }
 
 // UpdateVersionSets updates version sets given existing versioning data and an update request. The request is expected
@@ -531,4 +527,19 @@ func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData,
 		BecameDefaultTimestamp: &clock,
 	})
 	return newData
+}
+
+func CleanUpDemotedSetId(data *persistencespb.VersioningData, demotedSetId string) *persistencespb.VersioningData {
+	for setIdx, set := range data.GetVersionSets() {
+		if slices.Contains(set.SetIds, demotedSetId) {
+			newSet := shallowCloneVersionSet(set)
+			newSet.SetIds = util.FilterSlice(set.SetIds, func(setId string) bool {
+				return setId != demotedSetId
+			})
+			newData := shallowCloneVersioningData(data)
+			newData.VersionSets[setIdx] = newSet
+			return newData
+		}
+	}
+	return data
 }
