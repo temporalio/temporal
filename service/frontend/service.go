@@ -349,22 +349,19 @@ func (s *Service) Start() {
 	s.operatorHandler.Start()
 	s.handler.Start()
 
-	s.logger.Info("Starting to serve on frontend listener")
-
-	// Start the gRPC and HTTP server (if any) in the background
-	serveErrCh := make(chan error, 2)
-	serverCount := 1
-	go func() { serveErrCh <- s.server.Serve(s.grpcListener) }()
-	if s.httpAPIServer != nil {
-		serverCount++
-		go func() { serveErrCh <- s.httpAPIServer.Serve() }()
-	}
-
-	// Wait until one errors or they are both successfully complete
-	for i := 0; i < serverCount; i++ {
-		if err := <-serveErrCh; err != nil {
+	go func() {
+		s.logger.Info("Starting to serve on frontend listener")
+		if err := s.server.Serve(s.grpcListener); err != nil {
 			s.logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
 		}
+	}()
+
+	if s.httpAPIServer != nil {
+		go func() {
+			if err := s.httpAPIServer.Serve(); err != nil {
+				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
+			}
+		}()
 	}
 
 	go s.membershipMonitor.Start()

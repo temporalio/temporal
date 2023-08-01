@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc"
@@ -50,6 +52,11 @@ var defaultForwardedHeaders = []string{
 
 type httpRemoteAddrContextKey struct{}
 
+var (
+	errHTTPGRPCListenerNotTCP     = errors.New("must use TCP for gRPC listener to support HTTP API")
+	errHTTPGRPCStreamNotSupported = errors.New("stream not supported")
+)
+
 // NewHTTPAPIServer creates an [HTTPAPIServer].
 func NewHTTPAPIServer(
 	serviceConfig *Config,
@@ -65,13 +72,10 @@ func NewHTTPAPIServer(
 	// Create a TCP listener the same as the frontend one but with different port
 	tcpAddrRef, _ := grpcListener.Addr().(*net.TCPAddr)
 	if tcpAddrRef == nil {
-		return nil, fmt.Errorf("must use TCP for gRPC listener to support HTTP API")
+		return nil, errHTTPGRPCListenerNotTCP
 	}
 	tcpAddr := *tcpAddrRef
 	tcpAddr.Port = rpcConfig.HTTPPort
-	if tcpAddr.Port == 0 {
-		tcpAddr.Port = tcpAddrRef.Port + 10
-	}
 	var listener net.Listener
 	var err error
 	if listener, err = net.ListenTCP("tcp", &tcpAddr); err != nil {
@@ -102,10 +106,10 @@ func NewHTTPAPIServer(
 
 	// Build 4 possible marshalers in order based on content type
 	opts := []runtime.ServeMuxOption{
-		runtime.WithMarshalerOption("application/json+pretty+no-payload-shorthand", h.newMarshaler(true, true)),
-		runtime.WithMarshalerOption("application/json+no-payload-shorthand", h.newMarshaler(false, true)),
-		runtime.WithMarshalerOption("application/json+pretty", h.newMarshaler(true, false)),
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, h.newMarshaler(false, false)),
+		runtime.WithMarshalerOption("application/json+pretty+no-payload-shorthand", h.newMarshaler("  ", true)),
+		runtime.WithMarshalerOption("application/json+no-payload-shorthand", h.newMarshaler("", true)),
+		runtime.WithMarshalerOption("application/json+pretty", h.newMarshaler("  ", false)),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, h.newMarshaler("", false)),
 	}
 
 	// Set Temporal service error handler
@@ -164,7 +168,7 @@ func (h *HTTPAPIServer) Serve() error {
 	err := h.server.Serve(h.listener)
 	// If the error is for close, we have to wait for the shutdown to complete and
 	// we don't consider it an error
-	if err == http.ErrServerClosed {
+	if errors.Is(err, http.ErrServerClosed) {
 		<-h.stopped
 		err = nil
 	}
@@ -192,9 +196,9 @@ func (h *HTTPAPIServer) GracefulStop(gracefulDrainTime time.Duration) {
 func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// Limit the request body to max gRPC size. This is hardcoded to 4MB at the
 	// moment using gRPC's default at
-	// https://github.com/grpc/grpc-go/blob/0673105ebcb956e8bf50b96e28209ab7845a65ad/server.go#L58.
-	// Max header bytes is defaulted by Go to 1MB.
-	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024*4)
+	// https://github.com/grpc/grpc-go/blob/0673105ebcb956e8bf50b96e28209ab7845a65ad/server.go#L58
+	// which is what the constant is set as at the time of this comment.
+	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxHTTPAPIRequestBytes)
 
 	// If accept header is present but not application/json, we fail
 	if accept := r.Header.Get("Accept"); accept != "" && accept != "application/json" {
@@ -272,10 +276,10 @@ func (h *HTTPAPIServer) errorHandler(
 	_, _ = w.Write(buf)
 }
 
-func (h *HTTPAPIServer) newMarshaler(pretty bool, disablePayloadShorthand bool) runtime.Marshaler {
-	marshalOpts := proxy.JSONPBMarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
-	if pretty {
-		marshalOpts.Indent = "  "
+func (h *HTTPAPIServer) newMarshaler(indent string, disablePayloadShorthand bool) runtime.Marshaler {
+	marshalOpts := proxy.JSONPBMarshalerOptions{
+		Indent:                  indent,
+		DisablePayloadShorthand: disablePayloadShorthand,
 	}
 	unmarshalOpts := proxy.JSONPBUnmarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
 	if m, err := proxy.NewJSONPBMarshaler(marshalOpts); err != nil {
@@ -396,8 +400,8 @@ func (i *inlineClientConn) Invoke(
 
 	// Add metric
 	var namespaceTag metrics.Tag
-	if namespace := interceptor.MustGetNamespaceName(i.namespaceRegistry, args); namespace != "" {
-		namespaceTag = metrics.NamespaceTag(namespace.String())
+	if namespaceName := interceptor.MustGetNamespaceName(i.namespaceRegistry, args); namespaceName != "" {
+		namespaceTag = metrics.NamespaceTag(namespaceName.String())
 	} else {
 		namespaceTag = metrics.NamespaceUnknownTag()
 	}
@@ -435,7 +439,7 @@ func (*inlineClientConn) NewStream(
 	string,
 	...grpc.CallOption,
 ) (grpc.ClientStream, error) {
-	return nil, fmt.Errorf("stream not supported")
+	return nil, errHTTPGRPCStreamNotSupported
 }
 
 // Mostly taken from https://github.com/grpc/grpc-go/blob/v1.56.1/server.go#L1124-L1158

@@ -19,6 +19,9 @@ type SomeJSONStruct struct {
 }
 
 func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
 	// Create basic workflow that can answer queries, get signals, etc
 	workflowFn := func(ctx workflow.Context, arg *SomeJSONStruct) (*SomeJSONStruct, error) {
 		// Query that just returns query arg
@@ -130,6 +133,9 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 }
 
 func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
 	// Make a claim mapper and authorizer that capture info
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
@@ -173,6 +179,9 @@ func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
 }
 
 func (s *clientIntegrationSuite) TestHTTPAPIPretty() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
 	// Make a call to system info normal, confirm no newline, then ask for pretty
 	// and confirm newlines
 	_, b := s.httpGet(http.StatusOK, "/api/v1/system-info")
@@ -204,7 +213,7 @@ func (s *clientIntegrationSuite) httpRequest(expectedStatus int, req *http.Reque
 	resp, err := http.DefaultClient.Do(req)
 	s.Require().NoError(err)
 	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	s.Require().NoError(err)
 	s.Require().Equal(expectedStatus, resp.StatusCode, "Bad status, body: %s", body)
 	return resp, body

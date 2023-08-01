@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -467,6 +468,8 @@ func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
 }
 
+var errCannotAddCACertToPool = errors.New("failed adding CA to pool")
+
 func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) {
 	// We use the existing cert generation utilities even though they use slow
 	// RSA and use disk unnecessarily
@@ -492,7 +495,7 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 	if caCertBytes, err := os.ReadFile(certChain.CaPubFile); err != nil {
 		return nil, err
 	} else if !caCertPool.AppendCertsFromPEM(caCertBytes) {
-		return nil, fmt.Errorf("failed adding CA to pool")
+		return nil, errCannotAddCACertToPool
 	}
 
 	serverTLSConfig := &tls.Config{

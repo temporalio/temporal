@@ -30,7 +30,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"reflect"
 	"strconv"
@@ -98,7 +97,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.engine = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
-		s.httpAPIAddress = httpAPIAddressFromGRPC(TestFlags.FrontendAddr)
+		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
 		cluster, err := NewCluster(clusterConfig, s.Logger)
@@ -107,7 +106,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.engine = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 		s.operatorClient = s.testCluster.GetOperatorClient()
-		s.httpAPIAddress = httpAPIAddressFromGRPC(cluster.host.FrontendGRPCAddress())
+		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
 	}
 
 	s.namespace = s.randomizeStr("integration-test-namespace")
@@ -489,14 +488,4 @@ func (s *IntegrationBase) parseHistory(expectedHistory string) (string, map[int6
 		}
 	}
 	return s.formatHistoryCompact(h), eventsAttrs
-}
-
-func httpAPIAddressFromGRPC(grpcAddress string) string {
-	if host, port, err := net.SplitHostPort(grpcAddress); err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
-	} else if portNum, err := strconv.Atoi(port); err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
-	} else {
-		return net.JoinHostPort(host, strconv.Itoa(portNum+10))
-	}
 }

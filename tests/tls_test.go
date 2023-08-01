@@ -65,7 +65,7 @@ func (s *tlsIntegrationSuite) TestGRPCMTLS() {
 	calls := s.trackAuthInfoByCall()
 
 	// Make a list-open call
-	s.sdkClient.ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{})
+	_, _ = s.sdkClient.ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{})
 
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions")
@@ -74,6 +74,9 @@ func (s *tlsIntegrationSuite) TestGRPCMTLS() {
 }
 
 func (s *tlsIntegrationSuite) TestHTTPMTLS() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
 	// Track auth info
 	calls := s.trackAuthInfoByCall()
 

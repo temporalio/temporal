@@ -95,13 +95,9 @@ type (
 		// check net.ParseIP for supported syntax, only IPv4 is supported,
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
-		// HTTPPort is the port on which HTTP will listen. If unset/0 and HTTP is
-		// enabled (the default), this will be the gRPC port + 10. This setting only
-		// applies to the frontend service.
+		// HTTPPort is the port on which HTTP will listen. If unset/0, HTTP will be
+		// disabled. This setting only applies to the frontend service.
 		HTTPPort int `yaml:"httpPort"`
-		// HTTPDisabled can be set to true to disable HTTP API. This setting only
-		// applies to the frontend service.
-		HTTPDisabled bool `yaml:"httpDisabled"`
 		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
 		// forwarded from HTTP to gRPC.
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`

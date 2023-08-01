@@ -616,7 +616,7 @@ func HandlerProvider(
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
-	config *config.Config,
+	cfg *config.Config,
 	serviceName primitives.ServiceName,
 	serviceConfig *Config,
 	grpcListener net.Listener,
@@ -627,9 +627,13 @@ func HTTPAPIServerProvider(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
-	// If HTTP API server not enabled, return nil
-	rpcConfig := config.Services[string(serviceName)].RPC
-	if rpcConfig.HTTPDisabled {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return nil, nil
+	}
+	// If HTTP API port is 0, it is disabled
+	rpcConfig := cfg.Services[string(serviceName)].RPC
+	if rpcConfig.HTTPPort == 0 {
 		return nil, nil
 	}
 	return NewHTTPAPIServer(

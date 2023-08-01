@@ -290,6 +290,21 @@ func (c *temporalImpl) FrontendGRPCAddress() string {
 	}
 }
 
+func (c *temporalImpl) FrontendHTTPAddress() string {
+	host, port := c.FrontendHTTPHostPort()
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
+	if host, port, err := net.SplitHostPort(c.FrontendGRPCAddress()); err != nil {
+		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
+	} else if portNum, err := strconv.Atoi(port); err != nil {
+		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
+	} else {
+		return host, portNum + 10
+	}
+}
+
 func (c *temporalImpl) HistoryServiceAddress() []string {
 	var hosts []string
 	var startPort int
@@ -388,15 +403,8 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Supply(
 			persistenceConfig,
 			serviceName,
-			&config.Config{
-				// Set an HTTP forwarded header
-				Services: map[string]config.Service{
-					string(primitives.FrontendService): {
-						RPC: config.RPC{HTTPAdditionalForwardedHeaders: []string{"this-header-forwarded"}},
-					},
-				},
-			},
 		),
+		fx.Provide(c.frontendConfigProvider),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -759,6 +767,21 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 	return metrics.NoopMetricsHandler
 }
 
+func (c *temporalImpl) frontendConfigProvider() *config.Config {
+	// Set HTTP port and a test HTTP forwarded header
+	_, httpPort := c.FrontendHTTPHostPort()
+	return &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					HTTPPort:                       httpPort,
+					HTTPAdditionalForwardedHeaders: []string{"this-header-forwarded"},
+				},
+			},
+		},
+	}
+}
+
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
@@ -793,7 +816,7 @@ func (c *temporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
-	resolver membership.GRPCResolver,
+	grpcResolver membership.GRPCResolver,
 	tlsConfigProvider encryption.TLSConfigProvider,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
@@ -815,7 +838,7 @@ func (c *temporalImpl) newRPCFactory(
 		sn,
 		logger,
 		tlsConfigProvider,
-		resolver.MakeURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		frontendTLSConfig,
 		nil,
 	), nil
