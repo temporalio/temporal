@@ -52,6 +52,14 @@ type testCluster struct {
 	seedNode     string
 }
 
+type serviceHost struct {
+	port int
+}
+
+func (s serviceHost) GetGRPCPort() int {
+	return s.port
+}
+
 // newTestCluster creates a new test cluster with the given name and cluster size
 // All the nodes in the test cluster will register themselves in Ringpop
 // with the specified name. This is only intended for unit tests.
@@ -160,7 +168,7 @@ func newTestCluster(
 		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = newMonitor(
 			serviceName,
-			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
+			config.ServicePortMap{serviceName: serviceHost{int(port)}}, // use same port for "grpc" port
 			rpWrapper,
 			logger,
 			mockMgr,

@@ -108,8 +108,8 @@ func newMonitor(
 		hostID:                    uuid.NewUUID(),
 		initialized:               future.NewFuture[struct{}](),
 	}
-	for service, port := range services {
-		rpo.rings[service] = newServiceResolver(service, port, rp, logger)
+	for service, serviceHost := range services {
+		rpo.rings[service] = newServiceResolver(service, serviceHost.GetGRPCPort(), rp, logger)
 	}
 	return rpo
 }
@@ -144,8 +144,8 @@ func (rpo *monitor) Start() {
 	if err != nil {
 		rpo.logger.Fatal("unable to get ring pop labels", tag.Error(err))
 	}
-
-	if err = labels.Set(rolePort, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	servicePort := rpo.services[rpo.serviceName].GetGRPCPort()
+	if err = labels.Set(rolePort, strconv.Itoa(servicePort)); err != nil {
 		rpo.logger.Fatal("unable to set ring pop ServicePort label", tag.Error(err))
 	}
 

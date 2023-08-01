@@ -30,8 +30,12 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
+type ServiceHost interface {
+	GetGRPCPort() int
+}
+
 // ServicePortMap contains the gRPC ports for our services.
-type ServicePortMap map[primitives.ServiceName]int
+type ServicePortMap map[primitives.ServiceName]ServiceHost
 
 var Module = fx.Provide(
 	provideRPCConfig,
@@ -51,8 +55,8 @@ func provideMembershipConfig(cfg *Config) *Membership {
 
 func provideServicePortMap(cfg *Config) ServicePortMap {
 	servicePortMap := make(ServicePortMap)
-	for sn, sc := range cfg.Services {
-		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
+	for sn := range cfg.Services {
+		servicePortMap[primitives.ServiceName(sn)] = &(cfg.Services[sn]).RPC
 	}
 
 	return servicePortMap

@@ -251,7 +251,7 @@ func (factory *factory) getHostInfoProvider() (membership.HostInfoProvider, erro
 		return nil, err
 	}
 
-	servicePort, ok := factory.ServicePortMap[factory.ServiceName]
+	serviceHost, ok := factory.ServicePortMap[factory.ServiceName]
 	if !ok {
 		return nil, membership.ErrUnknownService
 	}
@@ -259,7 +259,7 @@ func (factory *factory) getHostInfoProvider() (membership.HostInfoProvider, erro
 	// The broadcastAddressResolver returns the host:port used to listen for
 	// ringpop messages. We use a different port for the service, so we
 	// replace that portion.
-	serviceAddress, err := replaceServicePort(address, servicePort)
+	serviceAddress, err := replaceServicePort(address, serviceHost.GetGRPCPort())
 	if err != nil {
 		return nil, err
 	}

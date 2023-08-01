@@ -148,6 +148,8 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 		if err != nil {
 			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 		}
+		d.logger.Info("Setting bound port for", tag.Service(d.serviceName))
+		d.config.SetBoundGRPCPort(d.grpcListener.Addr().(*net.TCPAddr).Port)
 
 		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
 	})

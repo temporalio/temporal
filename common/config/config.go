@@ -57,7 +57,7 @@ type (
 		// DCRedirectionPolicy contains the frontend datacenter redirection policy
 		DCRedirectionPolicy DCRedirectionPolicy `yaml:"dcRedirectionPolicy"`
 		// Services is a map of service name to service config items
-		Services map[string]Service `yaml:"services"`
+		Services map[string]*Service `yaml:"services"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
 		// PublicClient is config for connecting to temporal frontend
@@ -86,7 +86,8 @@ type (
 	// RPC contains the rpc config items
 	RPC struct {
 		// GRPCPort is the port  on which gRPC will listen
-		GRPCPort int `yaml:"grpcPort"`
+		GRPCPort      int `yaml:"grpcPort"`
+		boundGRPCPort *int
 		// Port used for membership listener
 		MembershipPort int `yaml:"membershipPort"`
 		// BindOnLocalHost is true if localhost is the bind address
@@ -631,4 +632,15 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 		}
 	}
 	return false
+}
+
+func (s *RPC) GetGRPCPort() int {
+	if s.boundGRPCPort != nil {
+		return *s.boundGRPCPort
+	}
+	return s.GRPCPort
+}
+
+func (r *RPC) SetBoundGRPCPort(port int) {
+	r.boundGRPCPort = &port
 }
