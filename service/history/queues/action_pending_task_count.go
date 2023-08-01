@@ -130,7 +130,7 @@ func (a *actionQueuePendingTask) gatherStatistics(
 			thisMin := this.Scope().Range.InclusiveMin
 			thatMin := that.Scope().Range.InclusiveMin
 			// sort in largest to smallest order
-			return thisMin.CompareTo(thatMin) * -1
+			return thatMin.CompareTo(thisMin)
 		})
 	}
 }
