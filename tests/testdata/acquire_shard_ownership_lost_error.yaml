@@ -13,4 +13,4 @@ faultinjection:
         methods:
           UpdateShard:
             errors:
-              ShardOwnershipLostError: 1.0  # 100% of the time, return a ShardOwnershipLostError
+              ShardOwnershipLost: 1.0  # 100% of the time, return a persistence.ShardOwnershipLost.

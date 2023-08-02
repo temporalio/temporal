@@ -14,4 +14,4 @@ faultinjection:
           UpdateShard:
             seed: 43  # deterministically generate a deadline exceeded error followed by a success
             errors:
-              DeadlineExceededError: 0.5 # 50% of the time, return a deadline exceeded error
+              DeadlineExceeded: 0.5 # 50% of the time, return a deadline exceeded error

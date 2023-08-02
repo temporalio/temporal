@@ -25,16 +25,25 @@
 package shard
 
 import (
+	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 )
 
-var Module = fx.Options(
-	fx.Provide(ControllerProvider),
-	fx.Provide(ContextFactoryProvider),
-	fx.Provide(fx.Annotate(
+var Module = fx.Provide(
+	ControllerProvider,
+	func(impl *ControllerImpl) Controller { return impl },
+	func(impl *ControllerImpl, cfg *configs.Config) (*OwnershipBasedQuotaScaler, error) {
+		return NewOwnershipBasedQuotaScaler(
+			impl,
+			int(cfg.NumberOfShards),
+			nil,
+		)
+	},
+	ContextFactoryProvider,
+	fx.Annotate(
 		func(p Controller) common.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
-	)),
+	),
 )
