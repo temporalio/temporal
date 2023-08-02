@@ -36,7 +36,6 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -287,6 +286,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
 	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+		return nil
+	}
+
+	if errors.Is(err, consts.ErrWorkflowResetSkipped) {
 		return nil
 	}
 

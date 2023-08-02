@@ -101,6 +101,8 @@ var (
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
 	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
+	// ErrWorkflowResetSkipped is an error indicating workflow auto-reset is skipped.
+	ErrWorkflowResetSkipped = serviceerror.NewWorkflowNotReady("Workflow auto-reset is skipped.")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

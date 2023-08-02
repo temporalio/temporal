@@ -714,13 +714,13 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 	if mutableState == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
 	if !ok {
-		release(nil) // release(nil) so that the mutable state is not unloaded
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrChildExecutionNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
@@ -750,7 +750,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
 		// 2. Standby start child logic need to verify if child workflow actually started instead of relying on the information
 		// in parent mutable state.
-		release(nil) // release(nil) so that the mutable state is not unloaded
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrUnableToStartChildWorkflow
 	}
 
@@ -902,7 +902,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return err
 	}
 	if currentMutableState == nil {
-		return nil
+		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	logger := log.With(
@@ -925,13 +926,15 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		}
 		if resp.RunID != task.RunID {
 			logger.Warn("Auto-Reset is skipped, because current run is stale.")
-			return nil
+			currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+			return consts.ErrWorkflowResetSkipped
 		}
 	}
 	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
 	if len(currentMutableState.GetPendingChildExecutionInfos()) > 0 {
 		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
-		return nil
+		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowResetSkipped
 	}
 
 	currentStartVersion, err := currentMutableState.GetStartVersion()
@@ -955,7 +958,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
-		return nil
+		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowResetSkipped
 	}
 	logger = log.With(
 		logger,
@@ -990,7 +994,9 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		if baseMutableState == nil {
-			return nil
+			currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+			baseRelease(nil)    // baseRelease(nil) so that the mutable state is not unloaded from cache
+			return consts.ErrWorkflowExecutionNotFound
 		}
 	}
 
