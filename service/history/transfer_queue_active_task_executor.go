@@ -183,13 +183,19 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
