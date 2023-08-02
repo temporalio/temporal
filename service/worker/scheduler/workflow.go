@@ -147,6 +147,7 @@ type (
 	}
 
 	nextTimeCacheV2 struct {
+		Version   SchedulerWorkflowVersion
 		Start     time.Time           // start time that the results were calculated from
 		Results   []getNextTimeResult // results of getNextTime in sequence
 		Completed bool                // whether the end of results represents the end of the schedule
@@ -408,8 +409,10 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 	// cacheBase must be before after
 	cacheBase = util.MinTime(cacheBase, after)
 
-	// Asking for a time before the cache, need to refill
-	if after.Before(s.nextTimeCacheV2.Start) {
+	// Asking for a time before the cache, need to refill.
+	// Also if version changed (so we can fix a bug immediately.
+	if after.Before(s.nextTimeCacheV2.Start) ||
+		s.nextTimeCacheV2.Version != s.tweakables.Version {
 		s.fillNextTimeCacheV2(cacheBase)
 	}
 
@@ -444,7 +447,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		cache := nextTimeCacheV2{Start: start}
+		cache := nextTimeCacheV2{Version: s.tweakables.Version, Start: start}
 		for t := start; len(cache.Results) < s.tweakables.NextTimeCacheV2Size; {
 			next := s.cspec.getNextTime(s.jitterSeed(), t)
 			if next.Next.IsZero() {
