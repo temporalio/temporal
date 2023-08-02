@@ -128,8 +128,9 @@ type (
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 
-		onGetClaims func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock sync.RWMutex // Must be used for above callbacks
 	}
 
 	// HistoryConfig contains configs for history service
@@ -844,11 +845,28 @@ func (c *temporalImpl) newRPCFactory(
 	), nil
 }
 
+func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	c.callbackLock.Lock()
+	c.onGetClaims = fn
+	c.callbackLock.Unlock()
+}
+
 func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-	if c.onGetClaims != nil {
-		return c.onGetClaims(authInfo)
+	c.callbackLock.RLock()
+	onGetClaims := c.onGetClaims
+	c.callbackLock.RUnlock()
+	if onGetClaims != nil {
+		return onGetClaims(authInfo)
 	}
 	return &authorization.Claims{System: authorization.RoleAdmin}, nil
+}
+
+func (c *temporalImpl) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	c.callbackLock.Lock()
+	c.onAuthorize = fn
+	c.callbackLock.Unlock()
 }
 
 func (c *temporalImpl) Authorize(
@@ -856,8 +874,11 @@ func (c *temporalImpl) Authorize(
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
 ) (authorization.Result, error) {
-	if c.onAuthorize != nil {
-		return c.onAuthorize(ctx, caller, target)
+	c.callbackLock.RLock()
+	onAuthorize := c.onAuthorize
+	c.callbackLock.RUnlock()
+	if onAuthorize != nil {
+		return onAuthorize(ctx, caller, target)
 	}
 	return authorization.Result{Decision: authorization.DecisionAllow}, nil
 }

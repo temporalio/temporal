@@ -132,13 +132,13 @@ func (s *tlsIntegrationSuite) TestHTTPMTLS() {
 func (s *tlsIntegrationSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
-	s.testCluster.host.onGetClaims = func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.testCluster.host.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
 			System:     authorization.RoleAdmin,
 			Extensions: authInfo,
 		}, nil
-	}
-	s.testCluster.host.onAuthorize = func(
+	})
+	s.testCluster.host.SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
@@ -147,6 +147,6 @@ func (s *tlsIntegrationSuite) trackAuthInfoByCall() *sync.Map {
 			calls.Store(target.APIName, authInfo)
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
-	}
+	})
 	return &calls
 }

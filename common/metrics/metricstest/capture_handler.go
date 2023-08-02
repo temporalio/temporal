@@ -39,25 +39,14 @@ type CapturedRecording struct {
 	Unit  metrics.MetricUnit
 }
 
-// CaptureHandler is a [metrics.Handler] that captures each metric recording.
-type CaptureHandler struct {
-	tags           []metrics.Tag
+// Capture is a specific capture instance.
+type Capture struct {
 	recordings     map[string][]*CapturedRecording
-	recordingsLock *sync.RWMutex
-}
-
-var _ metrics.Handler = (*CaptureHandler)(nil)
-
-// NewCaptureHandler creates a new [metrics.Handler] that captures.
-func NewCaptureHandler() *CaptureHandler {
-	return &CaptureHandler{
-		recordings:     map[string][]*CapturedRecording{},
-		recordingsLock: &sync.RWMutex{},
-	}
+	recordingsLock sync.RWMutex
 }
 
 // Snapshot returns a copy of all metrics recorded, keyed by name.
-func (c *CaptureHandler) Snapshot() map[string][]*CapturedRecording {
+func (c *Capture) Snapshot() map[string][]*CapturedRecording {
 	c.recordingsLock.RLock()
 	defer c.recordingsLock.RUnlock()
 	ret := make(map[string][]*CapturedRecording, len(c.recordings))
@@ -69,33 +58,68 @@ func (c *CaptureHandler) Snapshot() map[string][]*CapturedRecording {
 	return ret
 }
 
-// Clear clears all recorded metrics.
-func (c *CaptureHandler) Clear() {
+func (c *Capture) record(name string, r *CapturedRecording) {
 	c.recordingsLock.Lock()
 	defer c.recordingsLock.Unlock()
-	c.recordings = map[string][]*CapturedRecording{}
+	c.recordings[name] = append(c.recordings[name], r)
+}
+
+// CaptureHandler is a [metrics.Handler] that captures each metric recording.
+type CaptureHandler struct {
+	tags         []metrics.Tag
+	captures     map[*Capture]struct{}
+	capturesLock *sync.RWMutex
+}
+
+var _ metrics.Handler = (*CaptureHandler)(nil)
+
+// NewCaptureHandler creates a new [metrics.Handler] that captures.
+func NewCaptureHandler() *CaptureHandler {
+	return &CaptureHandler{
+		captures:     map[*Capture]struct{}{},
+		capturesLock: &sync.RWMutex{},
+	}
+}
+
+// StartCapture returns a started capture. StopCapture should be called on
+// complete.
+func (c *CaptureHandler) StartCapture() *Capture {
+	capture := &Capture{recordings: map[string][]*CapturedRecording{}}
+	c.capturesLock.Lock()
+	defer c.capturesLock.Unlock()
+	c.captures[capture] = struct{}{}
+	return capture
+}
+
+// StopCapture stops capturing metrics for the given capture instance.
+func (c *CaptureHandler) StopCapture(capture *Capture) {
+	c.capturesLock.Lock()
+	defer c.capturesLock.Unlock()
+	delete(c.captures, capture)
 }
 
 // WithTags implements [metrics.Handler.WithTags].
 func (c *CaptureHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 	return &CaptureHandler{
-		tags:           append(append(make([]metrics.Tag, 0, len(c.tags)+len(tags)), c.tags...), tags...),
-		recordings:     c.recordings,
-		recordingsLock: c.recordingsLock,
+		tags:         append(append(make([]metrics.Tag, 0, len(c.tags)+len(tags)), c.tags...), tags...),
+		captures:     c.captures,
+		capturesLock: c.capturesLock,
 	}
 }
 
 func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tags ...metrics.Tag) {
-	c.recordingsLock.Lock()
-	defer c.recordingsLock.Unlock()
-	tagMap := make(map[string]string, len(c.tags)+len(tags))
+	rec := &CapturedRecording{Value: v, Tags: make(map[string]string, len(c.tags)+len(tags)), Unit: unit}
 	for _, tag := range c.tags {
-		tagMap[tag.Key()] = tag.Value()
+		rec.Tags[tag.Key()] = tag.Value()
 	}
 	for _, tag := range tags {
-		tagMap[tag.Key()] = tag.Value()
+		rec.Tags[tag.Key()] = tag.Value()
 	}
-	c.recordings[name] = append(c.recordings[name], &CapturedRecording{Value: v, Tags: tagMap, Unit: unit})
+	c.capturesLock.RLock()
+	defer c.capturesLock.RUnlock()
+	for c := range c.captures {
+		c.record(name, rec)
+	}
 }
 
 // Counter implements [metrics.Handler.Counter].

@@ -30,6 +30,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/authorization"
@@ -73,6 +74,10 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: "http-basic-workflow"})
 
+	// Capture metrics
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
 	// Start
 	workflowID := s.randomizeStr("wf")
 	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{
@@ -85,15 +90,20 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 	}
 	s.Require().NoError(json.Unmarshal(respBody, &startResp))
 
-	// Check that our single HTTP call metric is present with the proper tags
-	httpMetrics := s.testCluster.host.captureMetricsHandler.Snapshot()[metrics.HTTPServiceRequests.GetMetricName()]
-	s.Require().Len(httpMetrics, 1)
-	s.Require().Equal(int64(1), httpMetrics[0].Value)
-	s.Require().Equal(
-		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
-		httpMetrics[0].Tags[metrics.OperationTagName],
-	)
-	s.Require().Equal(s.namespace, httpMetrics[0].Tags["namespace"])
+	// Check that there is a an HTTP call metric with the proper tags/value. We
+	// can't test overall counts because the metrics handler is shared across
+	// concurrently executing tests.
+	var found bool
+	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.GetMetricName()] {
+		found =
+			metric.Tags[metrics.OperationTagName] == "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution" &&
+				metric.Tags["namespace"] == s.namespace &&
+				metric.Value == int64(1)
+		if found {
+			break
+		}
+	}
+	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
 	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{
@@ -163,22 +173,27 @@ func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
 	// Make a claim mapper and authorizer that capture info
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
-	s.testCluster.host.onGetClaims = func(info *authorization.AuthInfo) (*authorization.Claims, error) {
+	var callbackLock sync.RWMutex
+	s.testCluster.host.SetOnGetClaims(func(info *authorization.AuthInfo) (*authorization.Claims, error) {
+		callbackLock.Lock()
+		defer callbackLock.Unlock()
 		if info != nil {
 			lastInfo = info
 		}
 		return &authorization.Claims{System: authorization.RoleAdmin}, nil
-	}
-	s.testCluster.host.onAuthorize = func(
+	})
+	s.testCluster.host.SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
 	) (authorization.Result, error) {
+		callbackLock.Lock()
+		defer callbackLock.Unlock()
 		if target.APIName == "/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions" {
 			listWorkflowMetadata, _ = metadata.FromIncomingContext(ctx)
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
-	}
+	})
 
 	// Make a simple list call that we don't care about the result
 	req, err := http.NewRequest("GET", "/api/v1/namespaces/"+s.namespace+"/workflows", nil)
@@ -191,6 +206,8 @@ func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
 	s.httpRequest(http.StatusOK, req)
 
 	// Confirm the claims got my auth token
+	callbackLock.RLock()
+	defer callbackLock.RUnlock()
 	s.Require().Equal("my-auth-token", lastInfo.AuthToken)
 
 	// Check headers
