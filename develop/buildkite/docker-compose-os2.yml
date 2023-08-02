@@ -46,5 +46,5 @@ services:
 
 networks:
   services-network:
-    name: services-network
+    name: net-${BUILDKITE_JOB_ID}
     driver: bridge
