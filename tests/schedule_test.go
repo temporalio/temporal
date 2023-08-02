@@ -825,7 +825,7 @@ func (s *scheduleIntegrationSuite) TestNextTimeCache() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(2 * time.Second)},
+				{Interval: timestamp.DurationPtr(1 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -859,10 +859,12 @@ func (s *scheduleIntegrationSuite) TestNextTimeCache() {
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 
-	// wait for at least three runs
-	s.Eventually(func() bool { return runs.Load() >= 3 }, 10*time.Second, 500*time.Millisecond)
+	// wait for at least 13 runs
+	const count = 13
+	s.Eventually(func() bool { return runs.Load() >= count }, (count+5)*time.Second, 500*time.Millisecond)
 
-	// there should be only two side effects for three runs, and only one mentioning "Next"
+	// there should be only four side effects for 13 runs, and only two mentioning "Next"
+	// (cache refills)
 	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	var sideEffects, nextTimeSideEffects int
 	for _, e := range events {
@@ -873,8 +875,20 @@ func (s *scheduleIntegrationSuite) TestNextTimeCache() {
 			}
 		}
 	}
-	s.Equal(2, sideEffects)
-	s.Equal(1, nextTimeSideEffects)
+
+	const (
+		// These match the ones in the scheduler workflow, but they're not exported.
+		// Change these if those change.
+		FutureActionCountForList = 5
+		NextTimeCacheV2Size      = 14
+
+		// Calculate expected results
+		expectedCacheSize = NextTimeCacheV2Size - FutureActionCountForList + 1
+		expectedRefills   = (count + expectedCacheSize - 1) / expectedCacheSize
+		uuidCacheRefills  = (count + 9) / 10
+	)
+	s.Equal(expectedRefills+uuidCacheRefills, sideEffects)
+	s.Equal(expectedRefills, nextTimeSideEffects)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{

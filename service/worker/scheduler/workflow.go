@@ -184,9 +184,14 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               10,
+		NextTimeCacheV2Size:               14,                       // see note below
 		Version:                           BatchAndCacheTimeQueries, // TODO: set later: NewCacheAndJitter
 	}
+
+	// Note on NextTimeCacheV2Size: Each iteration we ask for FutureActionCountForList times
+	// from the cache. If the cache size was 10, we would need to refill it on the 7th
+	// iteration, to get times 7, 8, 9, 10, 11, so the effective size would only be 6. To get
+	// an effective size of 10, we need the size to be 10 + FutureActionCountForList - 1 = 14.
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
 )
@@ -399,26 +404,37 @@ func (s *scheduler) getNextTimeV1(after time.Time) getNextTimeResult {
 	return s.nextTimeCacheV1[after]
 }
 
-func (s *scheduler) getNextTimeV2(after time.Time) getNextTimeResult {
+func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult {
+	// cacheBase must be before after
+	cacheBase = util.MinTime(cacheBase, after)
+
 	// Asking for a time before the cache, need to refill
 	if after.Before(s.nextTimeCacheV2.Start) {
-		s.fillNextTimeCacheV2(after)
+		s.fillNextTimeCacheV2(cacheBase)
 	}
-	// Results covers a contiguous time range so we can search in it
-	for _, result := range s.nextTimeCacheV2.Results {
-		if result.Next.After(after) {
-			return result
+
+	// We may need up to three tries: the first is in the cache as it exists now,
+	// the second is refilled from cacheBase, and the third is if cacheBase was set
+	// too far in the past, we ignore it and fill the cache from after.
+	for try := 1; try <= 3; try++ {
+		// Results covers a contiguous time range so we can search in it
+		for _, result := range s.nextTimeCacheV2.Results {
+			if result.Next.After(after) {
+				return result
+			}
 		}
+		// Ran off end: if completed, then we're done
+		if s.nextTimeCacheV2.Completed {
+			return getNextTimeResult{}
+		}
+		// Otherwise refill from base
+		s.fillNextTimeCacheV2(cacheBase)
+		// Reset cacheBase so that if it was set too early and we run off the end again, the
+		// third try will work.
+		cacheBase = after
 	}
-	// Ran off end: if completed, then we're done
-	if s.nextTimeCacheV2.Completed {
-		return getNextTimeResult{}
-	}
-	// Otherwise refill and take first result, or none
-	s.fillNextTimeCacheV2(after)
-	if len(s.nextTimeCacheV2.Results) > 0 {
-		return s.nextTimeCacheV2.Results[0]
-	}
+
+	// This should never happen unless there's a bug.
 	return getNextTimeResult{}
 }
 
@@ -444,7 +460,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 
 func (s *scheduler) getNextTime(after time.Time) getNextTimeResult {
 	if s.hasMinVersion(NewCacheAndJitter) {
-		return s.getNextTimeV2(after)
+		return s.getNextTimeV2(after, after)
 	}
 	return s.getNextTimeV1(after)
 }
@@ -696,15 +712,17 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*time.
 	// or in a query. In that case inWorkflowContext will be false, and this function and
 	// anything it calls should not use s.ctx.
 
+	base := timestamp.TimeValue(s.State.LastProcessedTime)
+
 	// Pure version not using workflow context
-	next := func(t1 time.Time) time.Time {
-		return s.cspec.getNextTime(s.jitterSeed(), t1).Next
+	next := func(t time.Time) time.Time {
+		return s.cspec.getNextTime(s.jitterSeed(), t).Next
 	}
 
 	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
 		// We can use the cache here
-		next = func(t1 time.Time) time.Time {
-			return s.getNextTime(t1).Next
+		next = func(t time.Time) time.Time {
+			return s.getNextTimeV2(base, t).Next
 		}
 	}
 
@@ -712,7 +730,7 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*time.
 		return nil
 	}
 	out := make([]*time.Time, 0, n)
-	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
+	t1 := base
 	for len(out) < n {
 		t1 = next(t1)
 		if t1.IsZero() {
