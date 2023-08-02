@@ -65,6 +65,8 @@ var (
 	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
 	ErrWorkflowParent = serviceerror.NewNotFound("workflow parent does not match")
+	// ErrUnableToStartChildWorkflow is th error when parent workflow is not running AND (child is not started OR parent close policy is not abandon)
+	ErrUnableToStartChildWorkflow = serviceerror.NewWorkflowNotReady("unable to start child workflow")
 	// ErrDeserializingToken is the error to indicate task token is invalid
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events

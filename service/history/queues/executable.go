@@ -290,6 +290,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	if errors.Is(err, consts.ErrUnableToStartChildWorkflow) {
+		return nil
+	}
+
 	if err == consts.ErrDependencyTaskNotCompleted {
 		e.taggedMetricsHandler.Counter(metrics.TasksDependencyTaskNotCompleted.GetMetricName()).Record(1)
 		return err
