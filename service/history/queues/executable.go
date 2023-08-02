@@ -290,7 +290,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if err == consts.ErrDuplicate {
+	if errors.Is(err, consts.ErrDuplicate) {
 		return nil
 	}
 
