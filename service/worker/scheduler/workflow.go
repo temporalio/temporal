@@ -57,11 +57,11 @@ type SchedulerWorkflowVersion int64
 
 const (
 	// represents the state before Version is introduced
-	InitialVersion SchedulerWorkflowVersion = iota
+	InitialVersion SchedulerWorkflowVersion = 0
 	// skip over entire time range if paused and batch and cache getNextTime queries
-	BatchAndCacheTimeQueries
+	BatchAndCacheTimeQueries = 1
 	// use cache v2, and include ids in jitter
-	NewCacheAndJitter
+	NewCacheAndJitter = 2
 )
 
 const (
