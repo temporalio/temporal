@@ -170,12 +170,12 @@ type (
 		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		metricsHandler       metrics.Handler
+		clusterMeta          cluster.Metadata
 		namespace            namespace.Name
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory    *pollerHistory
 		currentPolls     atomic.Int64
-		clusterMeta      cluster.Metadata
 		goroGroup        goro.Group
 		initializedError *future.FutureImpl[struct{}]
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
@@ -214,7 +214,6 @@ func newTaskQueueManager(
 	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	config *Config,
-	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
@@ -246,6 +245,7 @@ func newTaskQueueManager(
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
+		clusterMeta:          e.clusterMeta,
 		taskQueueID:          taskQueue,
 		stickyInfo:           stickyInfo,
 		logger:               logger,
@@ -254,7 +254,6 @@ func newTaskQueueManager(
 		taskAckManager:       newAckManager(e.logger),
 		taskGC:               newTaskGC(db, taskQueueConfig),
 		config:               taskQueueConfig,
-		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),

@@ -71,6 +71,10 @@ type (
 		// active/standby queue processing logic
 		Execute(context.Context, Executable) (tags []metrics.Tag, isActive bool, err error)
 	}
+
+	ExecutorWrapper interface {
+		Wrap(delegate Executor) Executor
+	}
 )
 
 var (

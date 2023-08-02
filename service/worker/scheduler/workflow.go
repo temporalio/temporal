@@ -56,6 +56,9 @@ import (
 type SchedulerWorkflowVersion int64
 
 const (
+	// Versions of workflow logic. When introducing a new version, consider generating a new
+	// history for TestReplays using generate_history.sh.
+
 	// represents the state before Version is introduced
 	InitialVersion SchedulerWorkflowVersion = 0
 	// skip over entire time range if paused and batch and cache getNextTime queries
@@ -144,6 +147,9 @@ type (
 		NextTimeCacheV2Size int                      // Size of next time cache (v2)
 		Version             SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
+
+		// When introducing a new field with new workflow logic, consider generating a new
+		// history for TestReplays using generate_history.sh.
 	}
 
 	nextTimeCacheV2 struct {
