@@ -566,8 +566,13 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -575,7 +580,8 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return errSignalNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if err != nil {
