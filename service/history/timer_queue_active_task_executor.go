@@ -149,9 +149,13 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	if mutableState == nil {
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
@@ -433,9 +437,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	if mutableState == nil {
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	// generate activity task
@@ -452,8 +460,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 				tag.FailoverVersion(activityInfo.Version),
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.Attempt))
-			return consts.ErrDuplicate
 		}
+		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
@@ -505,8 +513,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state doesn't get unloaded from cache
-		return consts.ErrWorkflowExecutionNotFound
+		return nil
 	}
 
 	startVersion, err := mutableState.GetStartVersion()
