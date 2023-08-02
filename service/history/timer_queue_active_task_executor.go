@@ -150,7 +150,8 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
@@ -179,7 +180,8 @@ Loop:
 	}
 
 	if !timerFired {
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return errNoTimerFired
 	}
 
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, timerFired)
@@ -432,12 +434,14 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
 	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
@@ -448,8 +452,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 				tag.FailoverVersion(activityInfo.Version),
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.Attempt))
+			return consts.ErrDuplicate
 		}
-		return nil
+		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if err != nil {
@@ -500,7 +505,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		release(nil) // release(nil) so mutable state doesn't get unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	startVersion, err := mutableState.GetStartVersion()
