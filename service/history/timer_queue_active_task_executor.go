@@ -449,7 +449,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
 	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
