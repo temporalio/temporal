@@ -1574,6 +1574,7 @@ var (
 
 	// Force replication
 	EncounterZombieWorkflowCount      = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount    = NewCounterDef("encounter_not_found_workflow_count")
 	GenerateReplicationTasksLatency   = NewTimerDef("generate_replication_tasks_latency")
 	VerifyReplicationTaskSuccess      = NewCounterDef("verify_replication_task_success")
 	VerifyReplicationTaskNotFound     = NewCounterDef("verify_replication_task_not_found")
