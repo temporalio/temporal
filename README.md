@@ -38,7 +38,7 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal CLI](https://docs.temporal.io/cli/) to interact with the local Temporal server.
+Use [Temporal CLI](https://docs.temporal.io/cli/) to interact with the running Temporal server.
 
 ```bash
 temporal operator namespace list
