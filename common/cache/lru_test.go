@@ -452,11 +452,11 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	maxTotalBytes := 10
 	cache := NewLRU(maxTotalBytes)
 
-	key1 := uuid.New()
+	key1 := "A"
 	cache.Put(key1, &testEntryWithCacheSize{4})
 	assert.Equal(t, 4, cache.Size())
 
-	key2 := uuid.New()
+	key2 := "B"
 	cache.Put(key2, &testEntryWithCacheSize{4})
 	// 4 + 4 = 8 < 10 should not evict any items
 	assert.Equal(t, 8, cache.Size())
@@ -470,8 +470,9 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	cache.Put(key2, &testEntryWithCacheSize{6})
 	// 7 - 3 + 6 = 10 =< 10, should not evict any items
 	assert.Equal(t, 10, cache.Size())
-	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
+	// get key1 after to make it the most recently used
 	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{6})
+	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
 
 	// put same key with larger size, but take all cache size, should evict all items
 	cache.Put(key2, &testEntryWithCacheSize{10})
