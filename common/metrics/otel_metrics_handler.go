@@ -81,7 +81,7 @@ func NewOtelMetricsHandler(
 	}
 	return &otelMetricsHandler{
 		l:            l,
-		set:          *attribute.EmptySet(),
+		set:          makeInitialSet(cfg.Tags),
 		provider:     o,
 		tagConverter: makeTagConverter(configExcludeTags(cfg)),
 		catalog:      c,
@@ -201,6 +201,17 @@ func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
 	}
 	for _, t := range tags {
 		attrs = append(attrs, omp.tagConverter(t))
+	}
+	return attribute.NewSet(attrs...)
+}
+
+func makeInitialSet(tags map[string]string) attribute.Set {
+	if len(tags) == 0 {
+		return *attribute.EmptySet()
+	}
+	var attrs []attribute.KeyValue
+	for k, v := range tags {
+		attrs = append(attrs, attribute.String(k, v))
 	}
 	return attribute.NewSet(attrs...)
 }
