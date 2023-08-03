@@ -153,10 +153,6 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
 	}
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
-	}
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shard.GetTimeSource().Now()
@@ -175,6 +171,11 @@ Loop:
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
+		}
+
+		if !mutableState.IsWorkflowExecutionRunning() {
+			release(nil) // release(nil) so mutable state is not unloaded from cache
+			return consts.ErrWorkflowCompleted
 		}
 
 		if _, err := mutableState.AddTimerFiredEvent(timerInfo.GetTimerId()); err != nil {
@@ -441,10 +442,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
 	}
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
-	}
 
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
@@ -466,6 +463,11 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{
