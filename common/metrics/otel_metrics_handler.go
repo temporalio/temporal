@@ -27,6 +27,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -37,13 +38,28 @@ import (
 )
 
 // otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
-type otelMetricsHandler struct {
-	l           log.Logger
-	tags        []Tag
-	provider    OpenTelemetryProvider
-	excludeTags excludeTags
-	catalog     catalog
-}
+type (
+	otelMetricsHandler struct {
+		l           log.Logger
+		tags        []Tag
+		provider    OpenTelemetryProvider
+		excludeTags excludeTags
+		catalog     catalog
+		gauges      *sync.Map // string -> *gaugeAdapter
+	}
+
+	// This is to work around the lack of synchronous gauge:
+	// https://github.com/open-telemetry/opentelemetry-specification/issues/2318
+	gaugeAdapter struct {
+		omp    *otelMetricsHandler
+		lock   sync.Mutex
+		values map[attribute.Distinct]gaugeValue
+	}
+	gaugeValue struct {
+		value float64
+		set   attribute.Set
+	}
+)
 
 var _ Handler = (*otelMetricsHandler)(nil)
 
@@ -66,6 +82,7 @@ func NewOtelMetricsHandler(
 		provider:    o,
 		excludeTags: configExcludeTags(cfg),
 		catalog:     c,
+		gauges:      new(sync.Map),
 	}, nil
 }
 
@@ -94,23 +111,41 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 
 // Gauge obtains a gauge for the given name.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
-	opts := addOptions(omp, gaugeOptions{}, gauge)
-	c, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, opts...)
+	adapterIface, ok := omp.gauges.Load(gauge)
+	if !ok {
+		adapterIface, _ = omp.gauges.LoadOrStore(gauge, &gaugeAdapter{
+			omp:    omp,
+			values: make(map[attribute.Set]float64),
+		})
+	}
+	adapter := adapterIface.(*gaugeAdapter)
+
+	opts := addOptions(omp, gaugeOptions{
+		metric.WithFloat64Callback(adapter.callback),
+	}, gauge)
+	_, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 		return GaugeFunc(func(i float64, t ...Tag) {})
 	}
 
-	return GaugeFunc(func(i float64, t ...Tag) {
-		_, err = omp.provider.GetMeter().RegisterCallback(func(ctx context.Context, o metric.Observer) error {
-			option := metric.WithAttributes(tagsToAttributes(omp.tags, t, omp.excludeTags)...)
-			o.ObserveFloat64(c, i, option)
-			return nil
-		}, c)
-		if err != nil {
-			omp.l.Error("error setting callback metric update", tag.NewStringTag("MetricName", gauge), tag.Error(err))
-		}
-	})
+	return adapter
+}
+
+func (a *gaugeAdapter) callback(ctx context.Context, o metric.Float64Observer) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	for _, v := range a.values {
+		o.Observe(v.value, metric.WithAttributeSet(v.set))
+	}
+	return nil
+}
+
+func (a *gaugeAdapter) Record(v float64, tags ...Tag) {
+	set := attribute.NewSet(tagsToAttributes(a.omp.tags, tags, a.omp.excludeTags)...)
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.values[set.Equivalent()] = gaugeValue{value: v, set: set}
 }
 
 // Timer obtains a timer for the given name.
