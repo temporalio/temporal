@@ -917,8 +917,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return err
 	}
 	if currentMutableState == nil {
-		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowExecutionNotFound
+		return nil
 	}
 
 	logger := log.With(
@@ -927,23 +926,6 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		tag.WorkflowID(task.WorkflowID),
 		tag.WorkflowRunID(task.RunID),
 	)
-
-	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
-	if len(currentMutableState.GetPendingChildExecutionInfos()) > 0 {
-		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
-		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowResetSkipped
-	}
-
-	currentStartVersion, err := currentMutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
-
-	err = CheckTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
-	if err != nil {
-		return err
-	}
 
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
@@ -958,9 +940,23 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		}
 		if resp.RunID != task.RunID {
 			logger.Warn("Auto-Reset is skipped, because current run is stale.")
-			currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-			return consts.ErrWorkflowResetSkipped
+			return nil
 		}
+	}
+	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
+	if len(currentMutableState.GetPendingChildExecutionInfos()) > 0 {
+		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
+		return nil
+	}
+
+	currentStartVersion, err := currentMutableState.GetStartVersion()
+	if err != nil {
+		return err
+	}
+
+	err = CheckTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
+	if err != nil {
+		return err
 	}
 
 	executionInfo := currentMutableState.GetExecutionInfo()
@@ -974,8 +970,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
-		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowResetSkipped
+		return nil
 	}
 	logger = log.With(
 		logger,
@@ -1010,9 +1005,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		if baseMutableState == nil {
-			currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-			baseRelease(nil)    // baseRelease(nil) so that the mutable state is not unloaded from cache
-			return consts.ErrWorkflowExecutionNotFound
+			return nil
 		}
 	}
 
@@ -1457,7 +1450,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			metrics.OperationTag(metrics.TransferQueueProcessorScope),
 		)
 		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
-		return consts.ErrWorkflowResetSkipped
+		return nil
 
 	default:
 		// log this error and retry

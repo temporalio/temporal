@@ -289,10 +289,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if errors.Is(err, consts.ErrWorkflowResetSkipped) {
-		return nil
-	}
-
 	if errors.Is(err, consts.ErrUnableToStartChildWorkflow) {
 		return nil
 	}
