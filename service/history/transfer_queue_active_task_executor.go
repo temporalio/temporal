@@ -187,19 +187,21 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
 	}
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
-	}
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
 		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
 	}
+
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
@@ -576,10 +578,6 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		release(nil) // release(nil) so that the mutable state is not unloaded from cache
 		return consts.ErrWorkflowExecutionNotFound
 	}
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
-	}
 
 	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
 	if !ok {
@@ -635,6 +633,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			attributes.Control,
 			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	if err = t.signalExternalExecution(
@@ -925,6 +928,23 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		tag.WorkflowRunID(task.RunID),
 	)
 
+	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
+	if len(currentMutableState.GetPendingChildExecutionInfos()) > 0 {
+		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
+		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowResetSkipped
+	}
+
+	currentStartVersion, err := currentMutableState.GetStartVersion()
+	if err != nil {
+		return err
+	}
+
+	err = CheckTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
+	if err != nil {
+		return err
+	}
+
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
@@ -941,22 +961,6 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
 			return consts.ErrWorkflowResetSkipped
 		}
-	}
-	// TODO: current reset doesn't allow childWFs, in the future we will release this restriction
-	if len(currentMutableState.GetPendingChildExecutionInfos()) > 0 {
-		logger.Warn("Auto-Reset is skipped, because current run has pending child executions.")
-		currentRelease(nil) // currentRelease(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowResetSkipped
-	}
-
-	currentStartVersion, err := currentMutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
-
-	err = CheckTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
-	if err != nil {
-		return err
 	}
 
 	executionInfo := currentMutableState.GetExecutionInfo()
@@ -1453,7 +1457,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			metrics.OperationTag(metrics.TransferQueueProcessorScope),
 		)
 		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
-		return nil
+		return consts.ErrWorkflowResetSkipped
 
 	default:
 		// log this error and retry
