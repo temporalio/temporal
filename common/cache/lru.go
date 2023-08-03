@@ -289,13 +289,17 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 					// calculate again after eviction
 					newCacheSize = c.calculateNewCacheSize(newEntrySize, existingEntry.Size())
 					if newCacheSize > c.maxSize {
+						// This should never happen since allowUpdate is always **true** for non-pinned cache,
+						// and if all entries are not pinned(ref==0), then the cache should never be full as long as
+						// new entry's size is less than max size.
+						// However, to prevent any unexpected behavior, it checks the cache size again.
 						return nil, ErrCacheFull
 					}
 				}
 				c.currSize -= existingEntry.Size()
 				existingEntry.value = value
 				existingEntry.size = newEntrySize
-				c.currSize += newEntrySize
+				c.currSize = newCacheSize
 				c.updateEntryTTL(existingEntry)
 			}
 
@@ -308,7 +312,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		c.deleteInternal(elt)
 	}
 
-	c.tryEvictUntilEnoughSpace(newEntrySize)
+	c.tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize, nil)
 
 	// check if the new entry can fit in the cache
 	newCacheSize := c.calculateNewCacheSize(newEntrySize, emptyEntrySize)
@@ -340,24 +344,18 @@ func (c *lru) deleteInternal(element *list.Element) {
 	delete(c.byKey, entry.key)
 }
 
-// tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry
-func (c *lru) tryEvictUntilEnoughSpace(newEntrySize int) {
-	element := c.byAccess.Back()
-	// currSize will be updated within deleteInternal
-	for c.calculateNewCacheSize(newEntrySize, emptyEntrySize) > c.maxSize && element != nil {
-		entry := element.Value.(*entryImpl)
-		element = c.tryEvictAndGetPreviousElement(entry, element)
-	}
-}
-
 // tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry without
 // evicting the existing entry. the existing entry is skipped because it is being updated.
 func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEntry *entryImpl) {
 	element := c.byAccess.Back()
-	// currSize will be updated within deleteInternal
-	for c.calculateNewCacheSize(newEntrySize, existingEntry.Size()) > c.maxSize && element != nil {
+	existingEntrySize := 0
+	if existingEntry != nil {
+		existingEntrySize = existingEntry.Size()
+	}
+
+	for c.calculateNewCacheSize(newEntrySize, existingEntrySize) > c.maxSize && element != nil {
 		entry := element.Value.(*entryImpl)
-		if entry.key == existingEntry.key {
+		if existingEntry != nil && entry.key == existingEntry.key {
 			element = element.Prev()
 			continue
 		}
@@ -368,6 +366,7 @@ func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEn
 func (c *lru) tryEvictAndGetPreviousElement(entry *entryImpl, element *list.Element) *list.Element {
 	if entry.refCount == 0 {
 		elementPrev := element.Prev()
+		// currSize will be updated within deleteInternal
 		c.deleteInternal(element)
 		return elementPrev
 	}
