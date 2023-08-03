@@ -500,6 +500,7 @@ func TestCache_ItemHasCacheSizeDefined_PutIfNotExistWithNewKeys(t *testing.T) {
 	// PutIfNotExist with new keys with size less than cache size, should evict item and add to cache
 	val, err = cache.PutIfNotExist(uuid.New(), &testEntryWithCacheSize{5})
 	assert.NoError(t, err)
+	assert.Equal(t, &testEntryWithCacheSize{5}, val)
 	assert.Equal(t, 5, cache.Size())
 }
 
