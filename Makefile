@@ -527,11 +527,13 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+	@go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
+	@go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
