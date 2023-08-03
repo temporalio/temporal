@@ -41,12 +41,12 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal's command line tool](https://docs.temporal.io/tctl-v1) `tctl` to interact with the local Temporal server.
+Use [Temporal command-line tool](https://docs.temporal.io/cli/) to interact with the local Temporal server.
 
 ```bash
-alias tctl="docker exec temporal-admin-tools tctl"
-tctl namespace list
-tctl workflow list
+alias temporal="docker exec temporal-admin-tools temporal"
+temporal operator namespace list
+temporal workflow list
 ```
 
 ### Use Temporal Web UI
