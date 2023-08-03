@@ -45,7 +45,7 @@ type (
 		provider     OpenTelemetryProvider
 		tagConverter tagConverter
 		catalog      catalog
-		gauges       *sync.Map // string -> *gaugeAdapter
+		gauges       *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
 	}
 
 	tagConverter func(Tag) attribute.KeyValue
@@ -53,13 +53,19 @@ type (
 	// This is to work around the lack of synchronous gauge:
 	// https://github.com/open-telemetry/opentelemetry-specification/issues/2318
 	gaugeAdapter struct {
-		omp    *otelMetricsHandler
 		lock   sync.Mutex
 		values map[attribute.Distinct]gaugeValue
 	}
 	gaugeValue struct {
 		value float64
-		set   attribute.Set
+		// In practice, we can use attribute.Set itself as the map key in gaugeAdapter and it
+		// works, but according to the API we should use attribute.Distinct. But we can't get a
+		// Set back from a Distinct, so we have to store the set here also.
+		set attribute.Set
+	}
+	gaugeAdapterGauge struct {
+		omp     *otelMetricsHandler
+		adapter *gaugeAdapter
 	}
 )
 
@@ -112,18 +118,15 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	})
 }
 
-// Gauge obtains a gauge for the given name.
-func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
+func (omp *otelMetricsHandler) getGaugeAdapter(gauge string) (*gaugeAdapter, error) {
 	if v, ok := omp.gauges.Load(gauge); ok {
-		return v.(*gaugeAdapter)
+		return v.(*gaugeAdapter), nil
 	}
-
 	adapter := &gaugeAdapter{
-		omp:    omp,
 		values: make(map[attribute.Distinct]gaugeValue),
 	}
 	if v, wasLoaded := omp.gauges.LoadOrStore(gauge, adapter); wasLoaded {
-		return v.(*gaugeAdapter)
+		return v.(*gaugeAdapter), nil
 	}
 
 	opts := addOptions(omp, gaugeOptions{
@@ -133,10 +136,22 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
 	if err != nil {
 		omp.gauges.Delete(gauge)
 		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
-		return GaugeFunc(func(i float64, t ...Tag) {})
+		return nil, err
 	}
 
-	return adapter
+	return adapter, nil
+}
+
+// Gauge obtains a gauge for the given name.
+func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
+	adapter, err := omp.getGaugeAdapter(gauge)
+	if err != nil {
+		return GaugeFunc(func(i float64, t ...Tag) {})
+	}
+	return &gaugeAdapterGauge{
+		omp:     omp,
+		adapter: adapter,
+	}
 }
 
 func (a *gaugeAdapter) callback(ctx context.Context, o metric.Float64Observer) error {
@@ -148,11 +163,11 @@ func (a *gaugeAdapter) callback(ctx context.Context, o metric.Float64Observer) e
 	return nil
 }
 
-func (a *gaugeAdapter) Record(v float64, tags ...Tag) {
-	set := a.omp.makeSet(tags)
-	a.lock.Lock()
-	defer a.lock.Unlock()
-	a.values[set.Equivalent()] = gaugeValue{value: v, set: set}
+func (g *gaugeAdapterGauge) Record(v float64, tags ...Tag) {
+	set := g.omp.makeSet(tags)
+	g.adapter.lock.Lock()
+	defer g.adapter.lock.Unlock()
+	g.adapter.values[set.Equivalent()] = gaugeValue{value: v, set: set}
 }
 
 // Timer obtains a timer for the given name.
