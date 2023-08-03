@@ -472,6 +472,13 @@ func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testin
 	assert.Equal(t, 10, cache.Size())
 	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
 	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{6})
+
+	// put same key with larger size, but take all cache size, should evict all items
+	cache.Put(key2, &testEntryWithCacheSize{10})
+	// 10 - 4 - 6 + 10 = 10 =< 10, should evict all items
+	assert.Equal(t, 10, cache.Size())
+	assert.Equal(t, cache.Get(key1), nil)
+	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{10})
 }
 
 func TestCache_ItemHasCacheSizeDefined_PutWithSameKey(t *testing.T) {
