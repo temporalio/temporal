@@ -81,7 +81,7 @@ services:
       - BUILDKITE_PARALLEL_JOB
       - BUILDKITE_PARALLEL_JOB_COUNT
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
   db-integration-test:
@@ -104,7 +104,7 @@ services:
       - mysql
       - postgresql
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -132,7 +132,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -160,7 +160,7 @@ services:
       - cassandra
       - elasticsearch8
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -188,7 +188,7 @@ services:
       - cassandra
       - opensearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -216,7 +216,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -241,7 +241,7 @@ services:
     depends_on:
       - mysql
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -269,7 +269,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -320,7 +320,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -365,7 +365,7 @@ services:
       - BUILDKITE_PARALLEL_JOB
       - BUILDKITE_PARALLEL_JOB_COUNT
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -394,7 +394,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -423,7 +423,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -449,7 +449,7 @@ services:
     depends_on:
       - mysql
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -478,7 +478,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -531,7 +531,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -588,7 +588,7 @@ services:
       - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
     volumes:
-      - ../..:/temporal
+      - ../../.coverage:/temporal/.coverage
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
 networks:
