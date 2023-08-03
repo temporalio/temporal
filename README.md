@@ -51,7 +51,7 @@ Try [Temporal Web UI](https://docs.temporal.io/web-ui) by opening [http://localh
 
 ## Repository
 
-This repository contains the source code of the Temporal server. To implement Workflows, Activities and Workers, use any of the [supported languages](https://docs.temporal.io/dev-guide/).
+This repository contains the source code of the Temporal server. To implement Workflows, Activities and Workers, use one of the [supported languages](https://docs.temporal.io/dev-guide/).
 
 ## Contributing
 
