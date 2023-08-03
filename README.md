@@ -29,7 +29,7 @@ brew install temporal
 temporal server start-dev
 ```
 
-Refer to Temporal [Temporal CLI](https://github.com/temporalio/cli#-install) repo for more installation options.
+Refer to [Temporal CLI](https://docs.temporal.io/cli/#installation) documentation for more installation options.
 
 ### Run the Samples
 
@@ -38,7 +38,7 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal command-line tool](https://docs.temporal.io/cli/) to interact with the local Temporal server.
+Use [Temporal CLI](https://docs.temporal.io/cli/) to interact with the local Temporal server.
 
 ```bash
 temporal operator namespace list
@@ -47,7 +47,7 @@ temporal workflow list
 
 ### Use Temporal Web UI
 
-Try [Temporal Web UI](https://github.com/temporalio/ui) by opening [http://localhost:8233](http://localhost:8233) for viewing your sample workflows executing on Temporal.
+Try [Temporal Web UI](https://docs.temporal.io/web-ui) by opening [http://localhost:8233](http://localhost:8233) for viewing your sample workflows executing on Temporal.
 
 ## Repository
 
