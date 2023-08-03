@@ -40,6 +40,8 @@ var (
 	ErrCacheItemTooLarge = errors.New("cache item size is larger than max cache capacity")
 )
 
+const emptyEntrySize = 0
+
 // lru is a concurrent fixed size cache that evicts elements in lru order
 type (
 	lru struct {
@@ -274,44 +276,43 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
-	if allowUpdate {
-		c.tryEvictUntilEnoughSpace(newEntrySize)
-	} else {
-		c.tryEvictUntilEnoughSpaceWithSkipKey(newEntrySize, key)
-	}
-
 	elt := c.byKey[key]
 	// If the entry exists, check if it has expired or update the value
 	if elt != nil {
 		existingEntry := elt.Value.(*entryImpl)
 		if !c.isEntryExpired(existingEntry, time.Now().UTC()) {
-			existing := existingEntry.value
+			existingVal := existingEntry.value
 			if allowUpdate {
-				newCacheSize := c.currSize - existingEntry.Size() + newEntrySize
+				newCacheSize := c.calculateNewCacheSize(newEntrySize, existingEntry.Size())
 				if newCacheSize > c.maxSize {
-					// This should never happen since allowUpdate is always **true** for non-pinned cache,
-					// and if all entries are not pinned, then the cache should never be full as long as
-					// new entry's size is less than max size.
-					// However, to prevent any unexpected behavior, it checks the cache size again.
-					return nil, ErrCacheFull
+					c.tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize, existingEntry)
+					// calculate again after eviction
+					newCacheSize = c.calculateNewCacheSize(newEntrySize, existingEntry.Size())
+					if newCacheSize > c.maxSize {
+						return nil, ErrCacheFull
+					}
 				}
 				c.currSize -= existingEntry.Size()
 				existingEntry.value = value
+				existingEntry.size = newEntrySize
 				c.currSize += newEntrySize
 				c.updateEntryTTL(existingEntry)
 			}
 
 			c.updateEntryRefCount(existingEntry)
 			c.byAccess.MoveToFront(elt)
-			return existing, nil
+			return existingVal, nil
 		}
 
 		// Entry has expired
 		c.deleteInternal(elt)
 	}
 
+	c.tryEvictUntilEnoughSpace(newEntrySize)
+
 	// check if the new entry can fit in the cache
-	if c.currSize+newEntrySize > c.maxSize {
+	newCacheSize := c.calculateNewCacheSize(newEntrySize, emptyEntrySize)
+	if newCacheSize > c.maxSize {
 		return nil, ErrCacheFull
 	}
 
@@ -329,6 +330,10 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	return nil, nil
 }
 
+func (c *lru) calculateNewCacheSize(newEntrySize int, existingEntrySize int) int {
+	return c.currSize - existingEntrySize + newEntrySize
+}
+
 func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
 	c.currSize -= entry.Size()
@@ -339,20 +344,20 @@ func (c *lru) deleteInternal(element *list.Element) {
 func (c *lru) tryEvictUntilEnoughSpace(newEntrySize int) {
 	element := c.byAccess.Back()
 	// currSize will be updated within deleteInternal
-	for c.currSize+newEntrySize > c.maxSize && element != nil {
+	for c.calculateNewCacheSize(newEntrySize, emptyEntrySize) > c.maxSize && element != nil {
 		entry := element.Value.(*entryImpl)
 		element = c.tryEvictAndGetPreviousElement(entry, element)
 	}
 }
 
-// tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry
-func (c *lru) tryEvictUntilEnoughSpaceWithSkipKey(newEntrySize int, key interface{}) {
+// tryEvictUntilEnoughSpace try to evict entries until there is enough space for the new entry without
+// evicting the existing entry. the existing entry is skipped because it is being updated.
+func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEntry *entryImpl) {
 	element := c.byAccess.Back()
 	// currSize will be updated within deleteInternal
-	for c.currSize+newEntrySize > c.maxSize && element != nil {
+	for c.calculateNewCacheSize(newEntrySize, existingEntry.Size()) > c.maxSize && element != nil {
 		entry := element.Value.(*entryImpl)
-		// do not delete the entry that the key request to be updated but not allowed
-		if entry.key == key {
+		if entry.key == existingEntry.key {
 			element = element.Prev()
 			continue
 		}

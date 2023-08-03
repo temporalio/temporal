@@ -446,6 +446,34 @@ func TestCache_ItemHasCacheSizeDefined_PutWithNewKeys(t *testing.T) {
 	assert.Equal(t, 10, cache.Size())
 }
 
+func TestCache_ItemHasCacheSizeDefined_PutWithSameKeyAndDifferentSizes(t *testing.T) {
+	t.Parallel()
+
+	maxTotalBytes := 10
+	cache := NewLRU(maxTotalBytes)
+
+	key1 := uuid.New()
+	cache.Put(key1, &testEntryWithCacheSize{4})
+	assert.Equal(t, 4, cache.Size())
+
+	key2 := uuid.New()
+	cache.Put(key2, &testEntryWithCacheSize{4})
+	// 4 + 4 = 8 < 10 should not evict any items
+	assert.Equal(t, 8, cache.Size())
+	// put same key with smaller size, should not evict any items
+	cache.Put(key2, &testEntryWithCacheSize{3})
+	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
+	// 8 - 4 + 3 = 7 < 10, should not evict any items
+	assert.Equal(t, 7, cache.Size())
+
+	// put same key with larger size, but below cache size, should not evict any items
+	cache.Put(key2, &testEntryWithCacheSize{6})
+	// 7 - 3 + 6 = 10 =< 10, should not evict any items
+	assert.Equal(t, 10, cache.Size())
+	assert.Equal(t, cache.Get(key1), &testEntryWithCacheSize{4})
+	assert.Equal(t, cache.Get(key2), &testEntryWithCacheSize{6})
+}
+
 func TestCache_ItemHasCacheSizeDefined_PutWithSameKey(t *testing.T) {
 	t.Parallel()
 
