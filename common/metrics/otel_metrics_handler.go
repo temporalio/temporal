@@ -112,20 +112,24 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 
 // Gauge obtains a gauge for the given name.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
-	adapterIface, ok := omp.gauges.Load(gauge)
-	if !ok {
-		adapterIface, _ = omp.gauges.LoadOrStore(gauge, &gaugeAdapter{
-			omp:    omp,
-			values: make(map[attribute.Distinct]gaugeValue),
-		})
+	if v, ok := omp.gauges.Load(gauge); ok {
+		return v.(*gaugeAdapter)
 	}
-	adapter := adapterIface.(*gaugeAdapter)
+
+	adapter := &gaugeAdapter{
+		omp:    omp,
+		values: make(map[attribute.Distinct]gaugeValue),
+	}
+	if v, wasLoaded := omp.gauges.LoadOrStore(gauge, adapter); wasLoaded {
+		return v.(*gaugeAdapter)
+	}
 
 	opts := addOptions(omp, gaugeOptions{
 		metric.WithFloat64Callback(adapter.callback),
 	}, gauge)
 	_, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, opts...)
 	if err != nil {
+		omp.gauges.Delete(gauge)
 		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 		return GaugeFunc(func(i float64, t ...Tag) {})
 	}
@@ -196,7 +200,7 @@ func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
 	for _, t := range tags {
 		attrs = append(attrs, omp.convertOneTag(t))
 	}
-	return attribute.NewSet(attrs)
+	return attribute.NewSet(attrs...)
 }
 
 // convertOneTag turns one Tag into an otel attribute.KeyValue, respecting excludeTags.
