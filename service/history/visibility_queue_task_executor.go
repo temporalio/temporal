@@ -210,13 +210,8 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowExecutionNotFound
-	}
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
