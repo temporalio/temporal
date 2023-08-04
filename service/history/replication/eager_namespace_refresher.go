@@ -26,13 +26,14 @@ package replication
 
 import (
 	"context"
+	"sync"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"sync"
 )
 
 type (
@@ -66,10 +67,10 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NamespaceNotFound:
-		//TODO: Handle NamespaceNotFound case, probably retrieve the namespace from the source cluster?
+		// TODO: Handle NamespaceNotFound case, probably retrieve the namespace from the source cluster?
 		return nil
 	default:
-		//do nothing as this is the best effort to update the namespace
+		// do nothing as this is the best effort to update the namespace
 		e.logger.Debug("Failed to get namespace from registry", tag.Error(err))
 		return err
 	}
@@ -108,8 +109,8 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 	request.Namespace.FailoverVersion = targetFailoverVersion
 	request.Namespace.FailoverNotificationVersion = metadata.NotificationVersion
 
-	//Question: is it ok to only update failover version WITHOUT updating FailoverHistory?
-	//request.Namespace.ReplicationConfig.FailoverHistory = ??
+	// Question: is it ok to only update failover version WITHOUT updating FailoverHistory?
+	// request.Namespace.ReplicationConfig.FailoverHistory = ??
 
 	if err := e.metadataManager.UpdateNamespace(ctx, request); err != nil {
 		e.logger.Info("Failed to update namespace", tag.Error(err))
