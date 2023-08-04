@@ -5110,14 +5110,21 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 }
 
 func (ms *MutableStateImpl) closeTransactionCollapseUpsertVisibilityTasks() {
-	// check if we have >= 2 tasks that are all upsert visibility with the same version
+	// check if we have >= 2 tasks that are identical upsert visibility tasks
+	// note that VisibilityTimestamp and TaskID are not assigned yet
 	visTasks := ms.InsertTasks[tasks.CategoryVisibility]
 	if len(visTasks) < 2 {
 		return
 	}
-	for _, task := range visTasks {
-		if task.GetType() != enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION ||
-			task.GetVersion() != visTasks[0].GetVersion() {
+	var task0 *tasks.UpsertExecutionVisibilityTask
+	for i, task := range visTasks {
+		task, ok := task.(*tasks.UpsertExecutionVisibilityTask)
+		if !ok {
+			return
+		}
+		if i == 0 {
+			task0 = task
+		} else if *task != *task0 {
 			return
 		}
 	}
