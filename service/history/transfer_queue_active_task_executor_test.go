@@ -1835,7 +1835,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplic
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	_, _, err := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.ErrorIs(err, errSignalNotFound)
+	s.Nil(err)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) setupSignalExternalWorkflowInitiated() (

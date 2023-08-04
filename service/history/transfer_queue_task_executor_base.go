@@ -64,7 +64,6 @@ const (
 
 var (
 	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
-	errSignalNotFound      = serviceerror.NewNotFound("SignalInfo not found.")
 )
 
 type (
