@@ -135,7 +135,6 @@ type (
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
-		RefreshNamespace(id ID)
 		// Registers callback for namespace state changes.
 		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
@@ -261,15 +260,6 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 			MetricsName: metrics.NamespaceRegistryLockLatency.GetMetricName(),
 		},
 	}
-}
-
-func (r *registry) RefreshNamespace(namespaceId ID) {
-	namespace, err := r.getNamespaceByIDPersistence(namespaceId)
-	if err != nil {
-		return
-	}
-
-	r.updateCachesSingleNamespace(namespace)
 }
 
 func (r *registry) getAllNamespace() map[ID]*Namespace {
@@ -664,8 +654,7 @@ func namespaceStateChanged(old *Namespace, new *Namespace) bool {
 		old.State() != new.State() ||
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
 		old.ActiveClusterName() != new.ActiveClusterName() ||
-		old.ReplicationState() != new.ReplicationState() ||
-		old.failoverVersion != new.failoverVersion
+		old.ReplicationState() != new.ReplicationState()
 }
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works

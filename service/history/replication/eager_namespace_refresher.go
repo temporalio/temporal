@@ -31,6 +31,7 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NamespaceNotFound:
+		//TODO: Handle NamespaceNotFound case, probably retrieve the namespace from the source cluster?
 		return nil
 	default:
 		//do nothing as this is the best effort to update the namespace
@@ -78,6 +79,5 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 		e.logger.Info("Failed to update namespace", tag.Error(err))
 		return err
 	}
-	e.namespaceRegistry.RefreshNamespace(ns.ID())
 	return nil
 }
