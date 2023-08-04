@@ -584,8 +584,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return errSignalNotFound
+		return nil
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if err != nil {
@@ -765,8 +764,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
 		// 2. Standby start child logic need to verify if child workflow actually started instead of relying on the information
 		// in parent mutable state.
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrUnableToStartChildWorkflow
+		return nil
 	}
 
 	// ChildExecution already started, just create WorkflowTask and complete transfer task
