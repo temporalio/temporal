@@ -73,16 +73,8 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_BRANCH
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
   db-integration-test:
     build:
@@ -93,19 +85,12 @@ services:
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - cassandra
       - mysql
       - postgresql
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -122,18 +107,11 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - cassandra
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -150,18 +128,11 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - cassandra
       - elasticsearch8
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -178,18 +149,11 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - cassandra
       - opensearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -206,18 +170,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - mysql
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -232,17 +189,10 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql8"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - mysql
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -259,18 +209,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -311,17 +254,10 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - postgresql
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -358,15 +294,8 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=sqlite"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -384,18 +313,11 @@ services:
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - cassandra
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -413,18 +335,11 @@ services:
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - mysql
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -440,17 +355,10 @@ services:
       - "PERSISTENCE_DRIVER=mysql8"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - mysql
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -468,18 +376,11 @@ services:
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -522,17 +423,10 @@ services:
       - "PERSISTENCE_DRIVER=postgres12"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
     depends_on:
       - postgresql
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
@@ -567,29 +461,9 @@ services:
       context: ../..
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
-      - CI
-      - BUILDKITE
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_PARALLEL_JOB
-      - BUILDKITE_PARALLEL_JOB_COUNT
-      - BUILDKITE_BRANCH
-      - BUILDKITE_BUILD_URL
-      - BUILDKITE_PROJECT_SLUG
-      - BUILDKITE_COMMIT
-      - BUILDKITE_PULL_REQUEST
-      - BUILDKITE_TAG
-      - BUILDKITE_REPO
-      - BUILDKITE_BUILD_CREATOR
-      - BUILDKITE_BUILD_CREATOR_EMAIL
-      - BUILDKITE_BUILD_CREATOR_TEAMS
-      - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
     volumes:
       - ../../.coverage:/temporal/.coverage
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
 networks:
   services-network:

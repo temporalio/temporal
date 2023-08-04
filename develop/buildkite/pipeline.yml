@@ -29,6 +29,7 @@ steps:
           # TODO: write instructions for uploading this
           # TODO: pin in ecr
           cache-from: "build:283266070392.dkr.ecr.us-west-2.amazonaws.com/buildkite:cache"
+          propagate-environment: true
 
   - wait
 
@@ -42,6 +43,8 @@ steps:
       - docker-compose#v4.14.0:
           run: build
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: unit test"
     agents:
@@ -56,6 +59,8 @@ steps:
       - docker-compose#v4.14.0:
           run: build
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: integration test"
     agents:
@@ -70,6 +75,8 @@ steps:
       - docker-compose#v4.14.0:
           run: db-integration-test
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with cassandra"
     agents:
@@ -88,6 +95,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with cassandra (ES8)"
     agents:
@@ -106,6 +115,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-cassandra-es8
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   # TODO(rodrigozhou): olivere client is incompatible with OpenSearch PIT
   # - label: ":golang: functional test with cassandra (OpenSearch 2)"
@@ -123,6 +134,8 @@ steps:
   #     - docker-compose#v4.14.0:
   #         run: integration-test-cassandra-opensearch
   #         config: ./develop/buildkite/docker-compose.yml
+  #         mount-buildkite-agent: true
+  #         propagate-environment: true
 
   - label: ":golang: functional xdc test with cassandra"
     agents:
@@ -140,6 +153,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with cassandra"
     agents:
@@ -157,6 +172,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with mysql"
     agents:
@@ -175,6 +192,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-mysql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with mysql"
     agents:
@@ -192,6 +211,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with mysql"
     agents:
@@ -209,6 +230,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with mysql 8"
     agents:
@@ -227,6 +250,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-mysql8
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with mysql 8"
     agents:
@@ -244,6 +269,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql8
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with mysql 8"
     agents:
@@ -261,6 +288,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-mysql8
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with postgresql"
     agents:
@@ -279,6 +308,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-postgresql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with postgresql"
     agents:
@@ -296,6 +327,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with postgresql"
     agents:
@@ -313,6 +346,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with postgresql pgx"
     agents:
@@ -330,6 +365,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-postgresql-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with postgresql pgx"
     agents:
@@ -347,6 +384,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with postgresql pgx"
     agents:
@@ -364,6 +403,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with postgresql 12"
     agents:
@@ -382,6 +423,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-postgresql12
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with postgresql 12"
     agents:
@@ -399,6 +442,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with postgresql 12"
     agents:
@@ -416,6 +461,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with postgresql 12 pgx"
     agents:
@@ -431,10 +478,11 @@ steps:
         limit: 1
     plugins:
       - ecr#v2.7.0: {login: true}
-<<<<<<< HEAD
       - docker-compose#v4.14.0:
           run: integration-test-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional xdc test with postgresql 12 pgx"
     agents:
@@ -452,6 +500,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional ndc test with postgresql 12 pgx"
     agents:
@@ -469,6 +519,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - label: ":golang: functional test with sqlite"
     agents:
@@ -486,6 +538,8 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-sqlite
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
 
   - wait: ~
     continue_on_failure: true  # required for test reports of failed build to be picked up
@@ -521,3 +575,5 @@ steps:
       - docker-compose#v4.14.0:
           run: coverage-report
           config: ./develop/buildkite/docker-compose.yml
+          mount-buildkite-agent: true
+          propagate-environment: true
