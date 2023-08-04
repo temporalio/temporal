@@ -25,14 +25,11 @@ Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 Execute the following commands to start a pre-built image along with all the dependencies.
 
 ```bash
-git clone https://github.com/temporalio/docker-compose.git
-cd docker-compose
-docker-compose up
+brew install temporal
+temporal server start-dev
 ```
 
-Refer to Temporal [docker-compose](https://github.com/temporalio/docker-compose) repo for more advanced options.
-
-For more details on Docker images refer to [docker-builds](https://github.com/temporalio/docker-builds) repo.
+Refer to [Temporal CLI](https://docs.temporal.io/cli/#installation) documentation for more installation options.
 
 ### Run the Samples
 
@@ -41,21 +38,20 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal's command line tool](https://docs.temporal.io/tctl-v1) `tctl` to interact with the local Temporal server.
+Use [Temporal CLI](https://docs.temporal.io/cli/) to interact with the running Temporal server.
 
 ```bash
-alias tctl="docker exec temporal-admin-tools tctl"
-tctl namespace list
-tctl workflow list
+temporal operator namespace list
+temporal workflow list
 ```
 
 ### Use Temporal Web UI
 
-Try [Temporal Web UI](https://github.com/temporalio/ui) by opening [http://localhost:8080](http://localhost:8080) for viewing your sample workflows executing on Temporal.
+Try [Temporal Web UI](https://docs.temporal.io/web-ui) by opening [http://localhost:8233](http://localhost:8233) for viewing your sample workflows executing on Temporal.
 
 ## Repository
 
-This repository contains the source code of the Temporal server. To implement Workflows, Activities and Workers, use [Go SDK](https://github.com/temporalio/sdk-go) or [Java SDK](https://github.com/temporalio/sdk-java).
+This repository contains the source code of the Temporal server. To implement Workflows, Activities and Workers, use one of the [supported languages](https://docs.temporal.io/dev-guide/).
 
 ## Contributing
 
