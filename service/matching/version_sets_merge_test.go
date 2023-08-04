@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 )
 
@@ -180,4 +181,40 @@ func TestSetMerge_SetPromoted_PreservesGlobalDefault(t *testing.T) {
 	}
 	assert.Equal(t, b, MergeVersioningData(a, b))
 	assert.Equal(t, b, MergeVersioningData(b, a))
+}
+
+func TestPersistUnknownBuildId_Merge(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Next(hlc.Zero(1), commonclock.NewRealTimeSource())
+	initialData := mkInitialData(2, clock) // ids: "0", "1"
+
+	// on a's side, 1.1 was added as unknown
+	a := PersistUnknownBuildId(clock, initialData, "1.1")
+
+	// on b's side, 1.1 was added compatible with 1
+	req := mkNewCompatReq("1.1", "1", true)
+	nextClock := hlc.Next(clock, commonclock.NewRealTimeSource())
+	b, err := UpdateVersionSets(nextClock, initialData, req, 0, 0)
+	assert.NoError(t, err)
+
+	// now merge them. we should see 1.1 in a set with 1, but it should have two set ids
+	ab := MergeVersioningData(a, b)
+	expected := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			mkSingleBuildIdSet("0", clock),
+			{
+				SetIds: []string{hashBuildId("1"), hashBuildId("1.1")},
+				BuildIds: []*persistencespb.BuildId{
+					mkBuildId("1", clock),
+					mkBuildId("1.1", nextClock),
+				},
+				BecameDefaultTimestamp: &nextClock,
+			},
+		},
+	}
+	assert.Equal(t, expected, ab)
+
+	// the other way too
+	ba := MergeVersioningData(b, a)
+	assert.Equal(t, expected, ba)
 }

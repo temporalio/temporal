@@ -102,13 +102,17 @@ type (
 		RPS         float64
 	}
 
-	genearteAndVerifyReplicationTasksRequest struct {
+	verifyReplicationTasksRequest struct {
 		Namespace             string
 		NamespaceID           string
-		RPS                   float64
 		TargetClusterEndpoint string
 		VerifyInterval        time.Duration `validate:"gte=0"`
 		Executions            []commonpb.WorkflowExecution
+	}
+
+	verifyReplicationTasksResponse struct {
+		SkippedWorkflowExecutions []SkippedWorkflowExecution
+		SkippedWorkflowCount      int
 	}
 
 	metadataRequest struct {
@@ -134,7 +138,7 @@ const (
 	taskQueueUserDataReplicationDoneSignalType = "task-queue-user-data-replication-done"
 	taskQueueUserDataReplicationVersionMarker  = "replicate-task-queue-user-data"
 
-	defaultListWorkflowsPageSize                   = 100
+	defaultListWorkflowsPageSize                   = 1000
 	defaultPageCountPerExecution                   = 200
 	maxPageCountPerExecution                       = 1000
 	defaultPageSizeForTaskQueueUserDataReplication = 20
@@ -359,7 +363,8 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 
 func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params ForceReplicationParams) error {
 	selector := workflow.NewSelector(ctx)
-	pendingActivities := 0
+	pendingGenerateTasks := 0
+	pendingVerifyTasks := 0
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
@@ -374,41 +379,49 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	var lastActivityErr error
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
-		var replicationTaskFuture workflow.Future
-		if params.EnableVerification {
-			replicationTaskFuture = workflow.ExecuteActivity(actx, a.GenerateAndVerifyReplicationTasks, &genearteAndVerifyReplicationTasksRequest{
-				TargetClusterEndpoint: params.TargetClusterEndpoint,
-				Namespace:             params.Namespace,
-				NamespaceID:           namespaceID,
-				Executions:            workflowExecutions,
-				RPS:                   params.OverallRps / float64(params.ConcurrentActivityCount),
-				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
-			})
-		} else {
-			replicationTaskFuture = workflow.ExecuteActivity(actx, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
-				NamespaceID: namespaceID,
-				Executions:  workflowExecutions,
-				RPS:         params.OverallRps / float64(params.ConcurrentActivityCount),
-			})
-		}
+		generateTaskFuture := workflow.ExecuteActivity(actx, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
+			NamespaceID: namespaceID,
+			Executions:  workflowExecutions,
+			RPS:         params.OverallRps / float64(params.ConcurrentActivityCount),
+		})
 
-		pendingActivities++
-		selector.AddFuture(replicationTaskFuture, func(f workflow.Future) {
-			pendingActivities--
+		pendingGenerateTasks++
+		selector.AddFuture(generateTaskFuture, func(f workflow.Future) {
+			pendingGenerateTasks--
 
 			if err := f.Get(ctx, nil); err != nil {
 				lastActivityErr = err
 			}
 		})
+		futures = append(futures, generateTaskFuture)
 
-		if pendingActivities >= params.ConcurrentActivityCount {
+		if params.EnableVerification {
+			verifyTaskFuture := workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
+				TargetClusterEndpoint: params.TargetClusterEndpoint,
+				Namespace:             params.Namespace,
+				NamespaceID:           namespaceID,
+				Executions:            workflowExecutions,
+				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+			})
+
+			pendingVerifyTasks++
+			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {
+				pendingVerifyTasks--
+
+				if err := f.Get(ctx, nil); err != nil {
+					lastActivityErr = err
+				}
+			})
+
+			futures = append(futures, verifyTaskFuture)
+		}
+
+		for pendingGenerateTasks >= params.ConcurrentActivityCount || pendingVerifyTasks >= params.ConcurrentActivityCount {
 			selector.Select(ctx) // this will block until one of the in-flight activities completes
 			if lastActivityErr != nil {
 				return lastActivityErr
 			}
 		}
-
-		futures = append(futures, replicationTaskFuture)
 	}
 
 	for _, future := range futures {

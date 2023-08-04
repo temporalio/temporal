@@ -84,6 +84,7 @@ type (
 		shard              shard.Context
 		config             *configs.Config
 		workflowCache      wcache.Cache
+		eventBlobCache     persistence.XDCCache
 		executionMgr       persistence.ExecutionManager
 		metricsHandler     metrics.Handler
 		logger             log.Logger
@@ -115,6 +116,7 @@ var (
 func NewAckManager(
 	shard shard.Context,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
@@ -131,6 +133,7 @@ func NewAckManager(
 		shard:              shard,
 		config:             shard.GetConfig(),
 		workflowCache:      workflowCache,
+		eventBlobCache:     eventBlobCache,
 		executionMgr:       executionMgr,
 		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
@@ -496,6 +499,7 @@ func (p *ackMgrImpl) ConvertTask(
 			task,
 			p.shard.GetShardID(),
 			p.workflowCache,
+			p.eventBlobCache,
 			p.executionMgr,
 			p.logger,
 		)

@@ -38,8 +38,10 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -47,6 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -1381,6 +1384,357 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.HasPrefix(err.Error(), "invalid query"), err.Error())
+}
+
+func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
+	request := &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		Query:       "GROUP BY ExecutionStatus",
+	}
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
+				MustNot(namespaceDivisionExists),
+			searchattribute.ExecutionStatus,
+			elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					searchattribute.ExecutionStatus: json.RawMessage(
+						`{"buckets":[{"key":"Completed","doc_count":100},{"key":"Running","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err := s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	payload1, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	payload2, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	s.Equal(
+		&manager.CountWorkflowExecutionsResponse{
+			Count: 110,
+			Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				{
+					GroupValues: []*commonpb.Payload{payload1},
+					Count:       100,
+				},
+				{
+					GroupValues: []*commonpb.Payload{payload2},
+					Count:       10,
+				},
+			},
+		},
+		resp,
+	)
+
+	// test only allowed to group by a single field
+	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.Error(err)
+	s.Contains(err.Error(), "'group by' clause supports only a single field")
+	s.Nil(resp)
+
+	// test only allowed to group by ExecutionStatus
+	request.Query = "GROUP BY WorkflowType"
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.Error(err)
+	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+	s.Nil(resp)
+}
+
+func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
+	statusCompletedPayload, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	statusRunningPayload, _ := searchattribute.EncodeValue(
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	wfType1Payload, _ := searchattribute.EncodeValue("wf-type-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfType2Payload, _ := searchattribute.EncodeValue("wf-type-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfId1Payload, _ := searchattribute.EncodeValue("wf-id-1", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfId2Payload, _ := searchattribute.EncodeValue("wf-id-2", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfId3Payload, _ := searchattribute.EncodeValue("wf-id-3", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfId4Payload, _ := searchattribute.EncodeValue("wf-id-4", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	wfId5Payload, _ := searchattribute.EncodeValue("wf-id-5", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+
+	testCases := []struct {
+		name         string
+		groupBy      []string
+		aggName      string
+		agg          elastic.Aggregation
+		mockResponse *elastic.SearchResult
+		response     *manager.CountWorkflowExecutionsResponse
+	}{
+		{
+			name:    "group by one field",
+			groupBy: []string{searchattribute.ExecutionStatus},
+			aggName: searchattribute.ExecutionStatus,
+			agg:     elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+			mockResponse: &elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					searchattribute.ExecutionStatus: json.RawMessage(
+						`{
+							"buckets":[
+								{
+									"key": "Completed",
+									"doc_count": 100
+								},
+								{
+									"key": "Running",
+									"doc_count": 10
+								}
+							]
+						}`,
+					),
+				},
+			},
+			response: &manager.CountWorkflowExecutionsResponse{
+				Count: 110,
+				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload},
+						Count:       100,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusRunningPayload},
+						Count:       10,
+					},
+				},
+			},
+		},
+
+		{
+			name:    "group by two fields",
+			groupBy: []string{searchattribute.ExecutionStatus, searchattribute.WorkflowType},
+			aggName: searchattribute.ExecutionStatus,
+			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
+				searchattribute.WorkflowType,
+				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType),
+			),
+			mockResponse: &elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					searchattribute.ExecutionStatus: json.RawMessage(
+						`{
+							"buckets":[
+								{
+									"key": "Completed",
+									"doc_count": 100,
+									"WorkflowType": {
+										"buckets": [
+											{
+												"key": "wf-type-1",
+												"doc_count": 75
+											},
+											{
+												"key": "wf-type-2",
+												"doc_count": 25
+											}
+										]
+									}
+								},
+								{
+									"key": "Running",
+									"doc_count": 10,
+									"WorkflowType": {
+										"buckets": [
+											{
+												"key": "wf-type-1",
+												"doc_count": 7
+											},
+											{
+												"key": "wf-type-2",
+												"doc_count": 3
+											}
+										]
+									}
+								}
+							]
+						}`,
+					),
+				},
+			},
+			response: &manager.CountWorkflowExecutionsResponse{
+				Count: 110,
+				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType1Payload},
+						Count:       75,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload},
+						Count:       25,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType1Payload},
+						Count:       7,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType2Payload},
+						Count:       3,
+					},
+				},
+			},
+		},
+
+		{
+			name: "group by three fields",
+			groupBy: []string{
+				searchattribute.ExecutionStatus,
+				searchattribute.WorkflowType,
+				searchattribute.WorkflowID,
+			},
+			aggName: searchattribute.ExecutionStatus,
+			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
+				searchattribute.WorkflowType,
+				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType).SubAggregation(
+					searchattribute.WorkflowID,
+					elastic.NewTermsAggregation().Field(searchattribute.WorkflowID),
+				),
+			),
+			mockResponse: &elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					searchattribute.ExecutionStatus: json.RawMessage(
+						`{
+							"buckets":[
+								{
+									"key": "Completed",
+									"doc_count": 100,
+									"WorkflowType": {
+										"buckets": [
+											{
+												"key": "wf-type-1",
+												"doc_count": 75,
+												"WorkflowId": {
+													"buckets": [
+														{
+															"key": "wf-id-1",
+															"doc_count": 75
+														}
+													]
+												}
+											},
+											{
+												"key": "wf-type-2",
+												"doc_count": 25,
+												"WorkflowId": {
+													"buckets": [
+														{
+															"key": "wf-id-2",
+															"doc_count": 20
+														},
+														{
+															"key": "wf-id-3",
+															"doc_count": 5
+														}
+													]
+												}
+											}
+										]
+									}
+								},
+								{
+									"key": "Running",
+									"doc_count": 10,
+									"WorkflowType": {
+										"buckets": [
+											{
+												"key": "wf-type-1",
+												"doc_count": 7,
+												"WorkflowId": {
+													"buckets": [
+														{
+															"key": "wf-id-4",
+															"doc_count": 7
+														}
+													]
+												}
+											},
+											{
+												"key": "wf-type-2",
+												"doc_count": 3,
+												"WorkflowId": {
+													"buckets": [
+														{
+															"key": "wf-id-5",
+															"doc_count": 3
+														}
+													]
+												}
+											}
+										]
+									}
+								}
+							]
+						}`,
+					),
+				},
+			},
+			response: &manager.CountWorkflowExecutionsResponse{
+				Count: 110,
+				Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType1Payload, wfId1Payload},
+						Count:       75,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload, wfId2Payload},
+						Count:       20,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusCompletedPayload, wfType2Payload, wfId3Payload},
+						Count:       5,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType1Payload, wfId4Payload},
+						Count:       7,
+					},
+					{
+						GroupValues: []*commonpb.Payload{statusRunningPayload, wfType2Payload, wfId5Payload},
+						Count:       3,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			searchParams := &query.QueryParams{
+				Query: elastic.NewBoolQuery().
+					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
+					MustNot(namespaceDivisionExists),
+				GroupBy: tc.groupBy,
+			}
+			s.mockESClient.EXPECT().
+				CountGroupBy(
+					gomock.Any(),
+					testIndex,
+					elastic.NewBoolQuery().
+						Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
+						MustNot(namespaceDivisionExists),
+					tc.aggName,
+					tc.agg,
+				).
+				Return(tc.mockResponse, nil)
+			resp, err := s.visibilityStore.countGroupByWorkflowExecutions(context.Background(), searchParams)
+			s.NoError(err)
+			s.Equal(tc.response, resp)
+		})
+	}
 }
 
 func (s *ESVisibilitySuite) TestGetWorkflowExecution() {

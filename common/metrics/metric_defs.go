@@ -40,6 +40,7 @@ const (
 	visibilityTypeTagName      = "visibility_type"
 	ErrorTypeTagName           = "error_type"
 	httpStatusTagName          = "http_status"
+	versionedTagName           = "versioned"
 	resourceExhaustedTag       = "resource_exhausted_cause"
 	standardVisibilityTagValue = "standard_visibility"
 	advancedVisibilityTagValue = "advanced_visibility"
@@ -349,6 +350,10 @@ const (
 	HistoryClientGetDLQReplicationMessagesScope = "HistoryClientGetDLQReplicationMessages"
 	// HistoryClientGetShardScope tracks RPC calls to history service
 	HistoryClientGetShardScope = "HistoryClientGetShard"
+	// HistoryClientIsActivityTaskValidScope tracks RPC calls to history service
+	HistoryClientIsActivityTaskValidScope = "HistoryClientIsActivityTaskValid"
+	// HistoryClientIsWorkflowTaskValidScope tracks RPC calls to history service
+	HistoryClientIsWorkflowTaskValidScope = "HistoryClientIsWorkflowTaskValid"
 	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
 	HistoryClientRebuildMutableStateScope = "HistoryClientRebuildMutableState"
 	// HistoryClientRemoveTaskScope tracks RPC calls to history service
@@ -1426,6 +1431,8 @@ var (
 	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
+	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
+	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
@@ -1455,6 +1462,8 @@ var (
 	TaskWriteLatencyPerTaskQueue              = NewTimerDef("task_write_latency")
 	TaskLagPerTaskQueueGauge                  = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
@@ -1564,10 +1573,14 @@ var (
 	ScheduleTerminateWorkflowErrors                   = NewCounterDef("schedule_terminate_workflow_errors")
 
 	// Force replication
-	EncounterZombieWorkflowCount  = NewCounterDef("encounter_zombie_workflow_count")
-	CreateReplicationTasksLatency = NewTimerDef("create_replication_tasks_latency")
-	VerifyReplicationTaskSuccess  = NewCounterDef("verify_replication_task_success")
-	VerifyReplicationTasksLatency = NewTimerDef("verify_replication_tasks_latency")
+	EncounterZombieWorkflowCount      = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount    = NewCounterDef("encounter_not_found_workflow_count")
+	GenerateReplicationTasksLatency   = NewTimerDef("generate_replication_tasks_latency")
+	VerifyReplicationTaskSuccess      = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTaskNotFound     = NewCounterDef("verify_replication_task_not_found")
+	VerifyReplicationTaskFailed       = NewCounterDef("verify_replication_task_failed")
+	VerifyReplicationTasksLatency     = NewTimerDef("verify_replication_tasks_latency")
+	VerifyDescribeMutableStateLatency = NewTimerDef("verify_describe_mutable_state_latency")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

@@ -82,8 +82,9 @@ type (
 	notSupportedExprConverter struct{}
 
 	QueryParams struct {
-		Query  elastic.Query
-		Sorter []elastic.Sorter
+		Query   elastic.Query
+		Sorter  []elastic.Sorter
+		GroupBy []string
 	}
 )
 
@@ -195,7 +196,9 @@ func NewNotSupportedExprConverter() ExprConverter {
 func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*QueryParams, error) {
 	whereOrderBy = strings.TrimSpace(whereOrderBy)
 
-	if whereOrderBy != "" && !strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") {
+	if whereOrderBy != "" &&
+		!strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") &&
+		!strings.HasPrefix(strings.ToLower(whereOrderBy), "group by ") {
 		whereOrderBy = "where " + whereOrderBy
 	}
 	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
@@ -219,10 +222,6 @@ func (c *Converter) ConvertSql(sql string) (*QueryParams, error) {
 }
 
 func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
-	if sel.GroupBy != nil {
-		return nil, NewConverterError("%s: 'group by' clause", NotSupportedErrMessage)
-	}
-
 	if sel.Limit != nil {
 		return nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
 	}
@@ -240,6 +239,17 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 		queryParams.Query = query
 	}
 
+	if len(sel.GroupBy) > 1 {
+		return nil, NewConverterError("%s: 'group by' clause supports only a single field", NotSupportedErrMessage)
+	}
+	for _, groupByExpr := range sel.GroupBy {
+		colName, err := convertColName(c.fnInterceptor, groupByExpr, FieldNameGroupBy)
+		if err != nil {
+			return nil, wrapConverterError("unable to convert 'group by' column name", err)
+		}
+		queryParams.GroupBy = append(queryParams.GroupBy, colName)
+	}
+
 	for _, orderByExpr := range sel.OrderBy {
 		colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
@@ -250,6 +260,13 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 			fieldSort = fieldSort.Desc()
 		}
 		queryParams.Sorter = append(queryParams.Sorter, fieldSort)
+	}
+
+	if len(queryParams.GroupBy) > 0 && len(queryParams.Sorter) > 0 {
+		return nil, NewConverterError(
+			"%s: 'order by' clause is not supported with 'group by' clause",
+			NotSupportedErrMessage,
+		)
 	}
 
 	return queryParams, nil

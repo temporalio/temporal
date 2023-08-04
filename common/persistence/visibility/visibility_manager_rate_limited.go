@@ -81,6 +81,12 @@ func (m *visibilityManagerRateLimited) GetIndexName() string {
 	return m.delegate.GetIndexName()
 }
 
+func (m *visibilityManagerRateLimited) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	return m.delegate.ValidateCustomSearchAttributes(searchAttributes)
+}
+
 // Below are write APIs.
 
 func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(

@@ -56,6 +56,9 @@ import (
 type SchedulerWorkflowVersion int64
 
 const (
+	// Versions of workflow logic. When introducing a new version, consider generating a new
+	// history for TestReplays using generate_history.sh.
+
 	// represents the state before Version is introduced
 	InitialVersion SchedulerWorkflowVersion = iota
 	// skip over entire time range if paused and batch and cache getNextTime queries
@@ -124,6 +127,7 @@ type (
 	tweakablePolicies struct {
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
+		RetentionTime                     time.Duration // How long to keep schedules after they're done
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
 		FutureActionCount                 int           // The number of future action times to include in Describe.
@@ -139,6 +143,9 @@ type (
 		ReuseTimer     bool                     // Whether to reuse timer. Used for workflow compatibility.
 		Version        SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
+
+		// When introducing a new field with new workflow logic, consider generating a new
+		// history for TestReplays using generate_history.sh.
 	}
 )
 
@@ -161,6 +168,7 @@ var (
 	currentTweakablePolicies = tweakablePolicies{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
+		RetentionTime:                     7 * 24 * time.Hour,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
@@ -246,12 +254,19 @@ func (s *scheduler) run() error {
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
+
+		// if schedule is not paused and out of actions or do not have anything scheduled, exit the schedule workflow after retention period has passed
+		if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() && !exp.After(s.now()) {
+			return nil
+		}
+
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
 		s.sleep(nextWakeup)
 		s.updateTweakables()
+
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
@@ -395,7 +410,7 @@ func (s *scheduler) processTimeRange(
 	// A previous version would record a marker for each time which could make a workflow
 	// fail. With the new version, the entire time range is skipped if the workflow is paused
 	// or we are not going to take an action now
-	if s.tweakables.Version >= BatchAndCacheTimeQueries {
+	if s.hasMinVersion(BatchAndCacheTimeQueries) {
 		// Peek at paused/remaining actions state and don't bother if we're not going to
 		// take an action now. (Don't count as missed catchup window either.)
 		// Skip over entire time range if paused or no actions can be taken
@@ -406,7 +421,7 @@ func (s *scheduler) processTimeRange(
 
 	for {
 		var next getNextTimeResult
-		if s.tweakables.Version < BatchAndCacheTimeQueries {
+		if !s.hasMinVersion(BatchAndCacheTimeQueries) {
 			// Run this logic in a SideEffect so that we can fix bugs there without breaking
 			// existing schedule workflows.
 			panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
@@ -419,7 +434,7 @@ func (s *scheduler) processTimeRange(
 		if t1.IsZero() || t1.After(t2) {
 			return t1
 		}
-		if s.tweakables.Version < BatchAndCacheTimeQueries && !s.canTakeScheduledAction(manual, false) {
+		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
 		if !manual && t2.Sub(t1) > catchupWindow {
@@ -476,6 +491,11 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	// if we're paused or out of actions, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
 		nextWakeup = time.Time{}
+	}
+
+	// if retention is not zero, it means there is no more job to schedule, so sleep for retention time and then exit if no signal is received
+	if exp := s.getRetentionExpiration(nextWakeup); !exp.IsZero() {
+		nextWakeup = exp
 	}
 
 	if !nextWakeup.IsZero() {
@@ -1050,6 +1070,31 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 	// If this failed, that's okay, we'll try it again the next time we try to take an action.
 }
 
+func (s *scheduler) getRetentionExpiration(nextWakeup time.Time) time.Time {
+	// if RetentionTime is not set or the schedule is paused or nextWakeup time is not zero
+	// or there is more action to take, there is no need for retention
+	if s.tweakables.RetentionTime == 0 || s.Schedule.State.Paused || (!nextWakeup.IsZero() && s.canTakeScheduledAction(false, false)) {
+		return time.Time{}
+	}
+
+	lastActionTime := timestamp.TimePtr(time.Time{})
+	if len(s.Info.RecentActions) > 0 {
+		lastActionTime = s.Info.RecentActions[len(s.Info.RecentActions)-1].ActualTime
+	}
+
+	// retention base is max(CreateTime, UpdateTime, and last action time)
+	retentionBase := lastActionTime
+
+	if s.Info.CreateTime != nil && s.Info.CreateTime.After(*retentionBase) {
+		retentionBase = s.Info.CreateTime
+	}
+	if s.Info.UpdateTime != nil && s.Info.UpdateTime.After(*retentionBase) {
+		retentionBase = s.Info.UpdateTime
+	}
+
+	return retentionBase.Add(s.tweakables.RetentionTime)
+}
+
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
 		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
@@ -1063,6 +1108,10 @@ func (s *scheduler) newUUIDString() string {
 	next := s.uuidBatch[0]
 	s.uuidBatch = s.uuidBatch[1:]
 	return next
+}
+
+func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
+	return s.tweakables.Version >= version
 }
 
 func panicIfErr(err error) {

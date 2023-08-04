@@ -39,32 +39,35 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-var (
-	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "namespace concurrent poller limit exceeded")
-)
-
 type (
-	NamespaceCountLimitInterceptor struct {
+	// ConcurrentRequestLimitInterceptor intercepts requests to the server and enforces a limit on the number of
+	// requests that can be in-flight at any given time, according to the configured quotas.
+	ConcurrentRequestLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
-
-		countFn func(namespace string) int
-		tokens  map[string]int
+		countFn           func(ns string) int
+		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
+		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
+		tokens map[string]int
 
 		sync.Mutex
 		activeTokensCount map[string]*int32
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Intercept
+var (
+	_ grpc.UnaryServerInterceptor = (*ConcurrentRequestLimitInterceptor)(nil).Intercept
 
-func NewNamespaceCountLimitInterceptor(
+	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "namespace concurrent poller limit exceeded")
+)
+
+func NewConcurrentRequestLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	countFn func(namespace string) int,
+	countFn func(ns string) int,
 	tokens map[string]int,
-) *NamespaceCountLimitInterceptor {
-	return &NamespaceCountLimitInterceptor{
+) *ConcurrentRequestLimitInterceptor {
+	return &ConcurrentRequestLimitInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
 		countFn:           countFn,
@@ -73,7 +76,7 @@ func NewNamespaceCountLimitInterceptor(
 	}
 }
 
-func (ni *NamespaceCountLimitInterceptor) Intercept(
+func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -111,7 +114,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func (ni *NamespaceCountLimitInterceptor) counter(
+func (ni *ConcurrentRequestLimitInterceptor) counter(
 	namespace namespace.Name,
 	methodName string,
 ) *int32 {
@@ -128,7 +131,7 @@ func (ni *NamespaceCountLimitInterceptor) counter(
 	return counter
 }
 
-func (ni *NamespaceCountLimitInterceptor) getTokenKey(
+func (ni *ConcurrentRequestLimitInterceptor) getTokenKey(
 	namespace namespace.Name,
 	methodName string,
 ) string {

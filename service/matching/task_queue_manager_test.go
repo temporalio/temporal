@@ -44,6 +44,8 @@ import (
 	"google.golang.org/grpc"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -92,7 +94,9 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
+			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{},
+			}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
 			tlm.taskReader.gorogrp.Cancel()
@@ -112,7 +116,9 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	defer controller.Finish()
 
 	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
+	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{},
+	}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
 	tlm.taskReader.gorogrp.Cancel()
@@ -140,7 +146,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testi
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataEnabled, nil)
+	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(3 * taskReaderOfferThrottleWait)
@@ -175,7 +181,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing
 	}
 
 	tlm.SetInitializedError(nil)
-	tlm.SetUserDataState(userDataEnabled, nil)
+	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
 	time.Sleep(taskReaderOfferThrottleWait)
@@ -420,9 +426,11 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
-	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
+	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
+	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
+	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +652,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -678,7 +686,7 @@ func TestUserData_DontLoadWhenDisabled(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 	tq.Stop()
@@ -720,14 +728,14 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 
 	loadUserData <- false
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.Equal(t, err, errUserDataDisabled)
 	require.Nil(t, userData)
 
@@ -752,7 +760,7 @@ func TestUserData_LoadDisableEnable(t *testing.T) {
 	loadUserData <- true
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 
@@ -780,13 +788,13 @@ func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
 
 	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Nil(t, userData)
 
 	require.Equal(t, 1, tm.getGetUserDataCount(tqId))
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Nil(t, userData)
 
@@ -830,7 +838,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -901,7 +909,7 @@ func TestUserData_FetchesAndFetchesAgain(t *testing.T) {
 	tq.Start()
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 	tq.Stop()
@@ -912,7 +920,6 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	defer controller.Finish()
-	ctx := context.Background()
 	// note: using activity here
 	tqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	require.NoError(t, err)
@@ -1000,7 +1007,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	loadUserData <- true
 	time.Sleep(100 * time.Millisecond)
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data2, userData)
 
@@ -1008,7 +1015,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// should have fetched twice but now user data is disabled
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.Nil(t, userData)
 	require.Equal(t, err, errUserDataDisabled)
 
@@ -1017,7 +1024,7 @@ func TestUserData_FetchDisableEnable(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// should be available again with data3
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data3, userData)
 
@@ -1092,7 +1099,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 
 	// now it should be ready
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1160,7 +1167,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	// at this point it should have tried once and gotten unimplemented. it should be ready already.
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
 
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.Nil(t, userData)
 	require.NoError(t, err)
 
@@ -1168,7 +1175,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 	ch <- struct{}{}
 	time.Sleep(100 * time.Millisecond) // time to return
 
-	userData, _, err = tq.GetUserData(ctx)
+	userData, _, err = tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1209,7 +1216,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1250,7 +1257,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()
@@ -1299,19 +1306,18 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		normalName: normalName,
 	}
-	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta)
+	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config)
 	require.NoError(t, err)
 	tq := tlMgr.(*taskQueueManagerImpl)
 
 	tq.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	tq.Start()
 	require.NoError(t, tq.WaitUntilInitialized(ctx))
-	userData, _, err := tq.GetUserData(ctx)
+	userData, _, err := tq.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	tq.Stop()

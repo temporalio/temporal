@@ -217,6 +217,34 @@ func (c *metricClient) GetShard(
 	return c.client.GetShard(ctx, request, opts...)
 }
 
+func (c *metricClient) IsActivityTaskValid(
+	ctx context.Context,
+	request *historyservice.IsActivityTaskValidRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.IsActivityTaskValidResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientIsActivityTaskValidScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.IsActivityTaskValid(ctx, request, opts...)
+}
+
+func (c *metricClient) IsWorkflowTaskValid(
+	ctx context.Context,
+	request *historyservice.IsWorkflowTaskValidRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.IsWorkflowTaskValidResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientIsWorkflowTaskValidScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.IsWorkflowTaskValid(ctx, request, opts...)
+}
+
 func (c *metricClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

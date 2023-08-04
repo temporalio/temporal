@@ -832,6 +832,23 @@ func (ms *MutableStateImpl) GetActivityByActivityID(
 	return ms.GetActivityInfo(eventID)
 }
 
+// GetActivityType gets the ActivityType from ActivityInfo if set,
+// or from the events history otherwise for backwards compatibility.
+func (ms *MutableStateImpl) GetActivityType(
+	ctx context.Context,
+	ai *persistencespb.ActivityInfo,
+) (*commonpb.ActivityType, error) {
+	if ai.GetActivityType() != nil {
+		return ai.GetActivityType(), nil
+	}
+	// For backwards compatibility in case ActivityType is not set in ActivityInfo.
+	scheduledEvent, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+	if err != nil {
+		return nil, err
+	}
+	return scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType, nil
+}
+
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (ms *MutableStateImpl) GetChildExecutionInfo(
 	initiatedEventID int64,
@@ -2351,6 +2368,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 		UseCompatibleVersion:    attributes.UseCompatibleVersion,
+		ActivityType:            attributes.GetActivityType(),
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()

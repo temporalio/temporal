@@ -244,6 +244,36 @@ func (mr *MockEngineMockRecorder) GetReplicationTasksIter(ctx, pollingCluster, m
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksIter", reflect.TypeOf((*MockEngine)(nil).GetReplicationTasksIter), ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
+// IsActivityTaskValid mocks base method.
+func (m *MockEngine) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsActivityTaskValid", ctx, request)
+	ret0, _ := ret[0].(*historyservice.IsActivityTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsActivityTaskValid indicates an expected call of IsActivityTaskValid.
+func (mr *MockEngineMockRecorder) IsActivityTaskValid(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActivityTaskValid", reflect.TypeOf((*MockEngine)(nil).IsActivityTaskValid), ctx, request)
+}
+
+// IsWorkflowTaskValid mocks base method.
+func (m *MockEngine) IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (*historyservice.IsWorkflowTaskValidResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowTaskValid", ctx, request)
+	ret0, _ := ret[0].(*historyservice.IsWorkflowTaskValidResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsWorkflowTaskValid indicates an expected call of IsWorkflowTaskValid.
+func (mr *MockEngineMockRecorder) IsWorkflowTaskValid(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowTaskValid", reflect.TypeOf((*MockEngine)(nil).IsWorkflowTaskValid), ctx, request)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()

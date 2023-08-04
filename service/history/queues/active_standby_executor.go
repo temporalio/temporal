@@ -35,7 +35,7 @@ import (
 )
 
 type (
-	executorWrapper struct {
+	activeStandbyExecutor struct {
 		currentClusterName string
 		registry           namespace.Registry
 		activeExecutor     Executor
@@ -44,14 +44,14 @@ type (
 	}
 )
 
-func NewExecutorWrapper(
+func NewActiveStandbyExecutor(
 	currentClusterName string,
 	registry namespace.Registry,
 	activeExecutor Executor,
 	standbyExecutor Executor,
 	logger log.Logger,
 ) Executor {
-	return &executorWrapper{
+	return &activeStandbyExecutor{
 		currentClusterName: currentClusterName,
 		registry:           registry,
 		activeExecutor:     activeExecutor,
@@ -60,7 +60,7 @@ func NewExecutorWrapper(
 	}
 }
 
-func (e *executorWrapper) Execute(
+func (e *activeStandbyExecutor) Execute(
 	ctx context.Context,
 	executable Executable,
 ) ([]metrics.Tag, bool, error) {
@@ -75,7 +75,7 @@ func (e *executorWrapper) Execute(
 	)
 }
 
-func (e *executorWrapper) isActiveTask(
+func (e *activeStandbyExecutor) isActiveTask(
 	executable Executable,
 ) bool {
 	// Following is the existing task allocator logic for verifying active task

@@ -22,31 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package clock_test
 
-type (
-	// InstanceCounter returns the total number of instances there are for a given service.
-	InstanceCounter interface {
-		MemberCount() int
-	}
-	// Limits contains the per instance and per cluster limits. It exists to make it harder to mix up the two limits
-	// when calling CalculateEffectiveResourceLimit.
-	Limits struct {
-		InstanceLimit int
-		ClusterLimit  int
-	}
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 )
 
-// CalculateEffectiveResourceLimit returns the effective resource limit for a host given the per instance and per
-// cluster limits. The "resource" here could be requests per second, total number of active requests, etc. The
-// cluster-wide limit is used if and only if it is configured to a value greater than zero and the number of instances
-// that membership reports is greater than zero. Otherwise, the per-instance limit is used.
-func CalculateEffectiveResourceLimit(instanceCounter InstanceCounter, limits Limits) float64 {
-	if clusterLimit := limits.ClusterLimit; clusterLimit > 0 && instanceCounter != nil {
-		if clusterSize := instanceCounter.MemberCount(); clusterSize > 0 {
-			return float64(clusterLimit) / float64(clusterSize)
-		}
-	}
+func TestNewRealClock_Now(t *testing.T) {
+	t.Parallel()
 
-	return float64(limits.InstanceLimit)
+	source := clock.NewRealTimeSource()
+	location := source.Now().Location()
+	assert.Equal(t, "UTC", location.String())
+}
+
+func TestNewRealClock_AfterFunc(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewRealTimeSource()
+	ch := make(chan struct{})
+	timer := source.AfterFunc(0, func() {
+		close(ch)
+	})
+
+	<-ch
+	assert.False(t, timer.Stop())
 }
