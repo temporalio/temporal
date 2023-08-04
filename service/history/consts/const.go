@@ -76,7 +76,7 @@ var (
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
-	ErrConsistentQueryBufferExceeded = serviceerror.NewWorkflowNotReady("consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
+	ErrConsistentQueryBufferExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
