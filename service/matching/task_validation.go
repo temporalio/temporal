@@ -34,6 +34,8 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -56,8 +58,10 @@ type (
 	}
 
 	taskValidatorImpl struct {
-		newIOContextFn func() (context.Context, context.CancelFunc)
-		historyClient  historyservice.HistoryServiceClient
+		newIOContextFn    func() (context.Context, context.CancelFunc)
+		clusterMetadata   cluster.Metadata
+		namespaceRegistry namespace.Registry
+		historyClient     historyservice.HistoryServiceClient
 
 		lastValidatedTaskInfo taskValidationInfo
 	}
@@ -65,11 +69,15 @@ type (
 
 func newTaskValidator(
 	newIOContextFn func() (context.Context, context.CancelFunc),
+	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
-		newIOContextFn: newIOContextFn,
-		historyClient:  historyClient,
+		newIOContextFn:    newIOContextFn,
+		clusterMetadata:   clusterMetadata,
+		namespaceRegistry: namespaceRegistry,
+		historyClient:     historyClient,
 	}
 }
 
@@ -101,6 +109,22 @@ func (v *taskValidatorImpl) maybeValidate(
 func (v *taskValidatorImpl) preValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
+	namespaceID := task.Data.NamespaceId
+	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		// if cannot find the namespace entry, treat task as active
+		return v.preValidateActive(task)
+	}
+	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName() {
+		return v.preValidateActive(task)
+	}
+	return v.preValidatePassive(task)
+}
+
+// preValidateActive track a task and return if validation should be done, if namespace is active
+func (v *taskValidatorImpl) preValidateActive(
+	task *persistencespb.AllocatedTaskInfo,
+) bool {
 	if v.lastValidatedTaskInfo.taskID != task.TaskId {
 		// first time seen the task, caller should try to dispatch first
 		if task.Data.CreateTime != nil {
@@ -115,6 +139,29 @@ func (v *taskValidatorImpl) preValidate(
 			}
 		}
 		return false
+	}
+
+	// this task has been validated before
+	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+}
+
+// preValidatePassive track a task and return if validation should be done, if namespace is passive
+func (v *taskValidatorImpl) preValidatePassive(
+	task *persistencespb.AllocatedTaskInfo,
+) bool {
+	if v.lastValidatedTaskInfo.taskID != task.TaskId {
+		// first time seen the task, make a decision based on task creation time
+		if task.Data.CreateTime != nil {
+			v.lastValidatedTaskInfo = taskValidationInfo{
+				taskID:         task.TaskId,
+				validationTime: *task.Data.CreateTime, // task is valid when created
+			}
+		} else {
+			v.lastValidatedTaskInfo = taskValidationInfo{
+				taskID:         task.TaskId,
+				validationTime: time.Now().UTC(), // if no creation time specified, use now
+			}
+		}
 	}
 
 	// this task has been validated before
