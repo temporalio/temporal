@@ -90,7 +90,7 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 
 	currentFailoverVersion := resp.Namespace.FailoverVersion
 	if currentFailoverVersion >= targetFailoverVersion {
-		//DB may have a fresher version of namespace, so compare again
+		// DB may have a fresher version of namespace, so compare again
 		return nil
 	}
 
