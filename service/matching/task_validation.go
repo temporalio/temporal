@@ -58,10 +58,10 @@ type (
 	}
 
 	taskValidatorImpl struct {
-		newIOContextFn  func() (context.Context, context.CancelFunc)
-		clusterMetadata cluster.Metadata
-		namespaceCache  namespace.Registry
-		historyClient   historyservice.HistoryServiceClient
+		newIOContextFn    func() (context.Context, context.CancelFunc)
+		clusterMetadata   cluster.Metadata
+		namespaceRegistry namespace.Registry
+		historyClient     historyservice.HistoryServiceClient
 
 		lastValidatedTaskInfo taskValidationInfo
 	}
@@ -70,14 +70,14 @@ type (
 func newTaskValidator(
 	newIOContextFn func() (context.Context, context.CancelFunc),
 	clusterMetadata cluster.Metadata,
-	namespaceCache namespace.Registry,
+	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
-		newIOContextFn:  newIOContextFn,
-		clusterMetadata: clusterMetadata,
-		namespaceCache:  namespaceCache,
-		historyClient:   historyClient,
+		newIOContextFn:    newIOContextFn,
+		clusterMetadata:   clusterMetadata,
+		namespaceRegistry: namespaceRegistry,
+		historyClient:     historyClient,
 	}
 }
 
@@ -110,7 +110,7 @@ func (v *taskValidatorImpl) preValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
 	namespaceID := task.Data.NamespaceId
-	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
+	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
