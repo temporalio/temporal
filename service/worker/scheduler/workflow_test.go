@@ -1477,8 +1477,6 @@ func (s *workflowSuite) TestLotsOfIterations() {
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
-	s.T().Skip("re-enable later")
-
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -1525,8 +1523,6 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
-	s.T().Skip("re-enable later")
-
 	scheduleId := "myschedule"
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC).Equal(s.now()))
@@ -1563,8 +1559,6 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
-	s.T().Skip("re-enable later")
-
 	scheduleId := "myschedule"
 
 	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
