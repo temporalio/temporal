@@ -195,10 +195,12 @@ var (
 		Version:                           BatchAndCacheTimeQueries, // TODO: set later: NewCacheAndJitter
 	}
 
-	// Note on NextTimeCacheV2Size: Each iteration we ask for FutureActionCountForList times
-	// from the cache. If the cache size was 10, we would need to refill it on the 7th
-	// iteration, to get times 7, 8, 9, 10, 11, so the effective size would only be 6. To get
-	// an effective size of 10, we need the size to be 10 + FutureActionCountForList - 1 = 14.
+	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
+	// iteration we ask for FutureActionCountForList times from the cache. If the cache size
+	// was 10, we would need to refill it on the 7th iteration, to get times 7, 8, 9, 10, 11,
+	// so the effective size would only be 6. To get an effective size of 10, we need the size
+	// to be 10 + FutureActionCountForList - 1 = 14. With that size, we'll fill every 10
+	// iterations, on 1, 11, 21, etc.
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
 )
@@ -411,12 +413,15 @@ func (s *scheduler) getNextTimeV1(after time.Time) getNextTimeResult {
 	return s.nextTimeCacheV1[after]
 }
 
+// Gets the next scheduled time after `after`, making use of a cache. If the cache needs to be
+// refilled, try to refill it starting from `cacheBase` instead of `after`. This avoids having
+// the cache range jump back and forth when generating a sequence of times.
 func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult {
 	// cacheBase must be before after
 	cacheBase = util.MinTime(cacheBase, after)
 
 	// Asking for a time before the cache, need to refill.
-	// Also if version changed (so we can fix a bug immediately.
+	// Also if version changed (so we can fix a bug immediately).
 	if after.Before(s.nextTimeCacheV2.Start) ||
 		s.nextTimeCacheV2.Version != s.tweakables.Version {
 		s.fillNextTimeCacheV2(cacheBase)
@@ -444,6 +449,7 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) getNextTimeResult 
 	}
 
 	// This should never happen unless there's a bug.
+	s.logger.Error("getNextTimeV2: time not found in cache", "after", after)
 	return getNextTimeResult{}
 }
 
@@ -717,9 +723,9 @@ func (s *scheduler) processSignals() bool {
 }
 
 func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*time.Time {
-	// Note that `s` may be a fake scheduler used to compute list info at creation time
-	// or in a query. In that case inWorkflowContext will be false, and this function and
-	// anything it calls should not use s.ctx.
+	// Note that `s` may be a `scheduler` created outside of a workflow context, used to
+	// compute list info at creation time or in a query. In that case inWorkflowContext will
+	// be false, and this function and anything it calls should not use s.ctx.
 
 	base := timestamp.TimeValue(s.State.LastProcessedTime)
 
@@ -788,9 +794,9 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo(inWorkflowContext bool) *schedpb.ScheduleListInfo {
-	// Note that `s` may be a fake scheduler used to compute list info at creation time.
-	// In that case inWorkflowContext will be false, and this function and anything it calls
-	// should not use s.ctx.
+	// Note that `s` may be a `scheduler` created outside of a workflow context, used to
+	// compute list info at creation time. In that case inWorkflowContext will be false,
+	// and this function and anything it calls should not use s.ctx.
 
 	// make shallow copy
 	spec := *s.Schedule.Spec
@@ -1221,13 +1227,14 @@ func panicIfErr(err error) {
 }
 
 func GetListInfoFromStartArgs(args *schedspb.StartScheduleArgs, now time.Time) *schedpb.ScheduleListInfo {
-	// note that this does not take into account InitialPatch
-	fakeScheduler := &scheduler{
+	// Create a scheduler outside of workflow context with just the fields we need to call
+	// getListInfo. Note that this does not take into account InitialPatch.
+	s := &scheduler{
 		StartScheduleArgs: *args,
 		tweakables:        currentTweakablePolicies,
 	}
-	fakeScheduler.ensureFields()
-	fakeScheduler.compileSpec()
-	fakeScheduler.State.LastProcessedTime = timestamp.TimePtr(now)
-	return fakeScheduler.getListInfo(false)
+	s.ensureFields()
+	s.compileSpec()
+	s.State.LastProcessedTime = timestamp.TimePtr(now)
+	return s.getListInfo(false)
 }
