@@ -110,6 +110,8 @@ var (
 			},
 		},
 	}
+
+	testNamespace = namespace.Namespace{}
 )
 
 func TestActivitiesSuite(t *testing.T) {
@@ -136,6 +138,8 @@ func (s *activitiesSuite) SetupTest() {
 		Return(s.mockRemoteAdminClient).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).
 		Return(namespace.Name(mockedNamespace), nil).AnyTimes()
+	s.mockNamespaceRegistry.EXPECT().GetNamespace(gomock.Any()).
+		Return(&testNamespace, nil).AnyTimes()
 
 	s.a = &activities{
 		namespaceRegistry:              s.mockNamespaceRegistry,
@@ -434,7 +438,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			NextIndex: tc.nextIndex,
 		}
 
-		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient)
+		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
@@ -444,6 +448,89 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		if details.NextIndex < len(tc.executionStates) && tc.executionStates[details.NextIndex] == executionNotfound {
 			s.Equal(execution1, details.LastNotFoundWorkflowExecution)
 		}
+	}
+}
+
+//                            Now
+//                    │        │    bias │
+// ───────────────────┼────────▼─────────┼──────
+//   closeTime        │    Skip Range    │
+//      │                 deleteTime
+//      └───────────────────┘
+//         retention
+
+func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
+	bias := time.Minute
+	request := verifyReplicationTasksRequest{
+		Namespace:             mockedNamespace,
+		NamespaceID:           mockedNamespaceID,
+		TargetClusterEndpoint: remoteRpcAddress,
+		RetentionBiasDuration: bias,
+		Executions:            []commonpb.WorkflowExecution{execution1},
+	}
+
+	var tests = []struct {
+		deleteDiff time.Duration // diff between deleteTime and now
+		verified   bool
+	}{
+		{
+			-30 * time.Second,
+			true,
+		},
+		{
+			30 * time.Second,
+			true,
+		},
+		{
+			-(bias + time.Minute),
+			false,
+		},
+		{
+			bias + time.Minute,
+			false,
+		},
+	}
+
+	for _, tc := range tests {
+		deleteTime := time.Now().Add(tc.deleteDiff)
+		retention := time.Hour
+		closeTime := deleteTime.Add(-retention)
+
+		mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+		mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
+			Namespace: mockedNamespace,
+			Execution: &execution1,
+		}).Return(nil, serviceerror.NewNotFound("")).Times(1)
+
+		s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+			NamespaceId: mockedNamespaceID,
+			Execution:   &execution1,
+		}).Return(&historyservice.DescribeMutableStateResponse{
+			DatabaseMutableState: &persistencepb.WorkflowMutableState{
+				ExecutionState: &persistencepb.WorkflowExecutionState{
+					State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				},
+				ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+					CloseTime: &closeTime,
+				},
+			},
+		}, nil).Times(1)
+
+		ns := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+			Namespace: &persistencepb.NamespaceDetail{
+				Info: &persistencepb.NamespaceInfo{},
+				Config: &persistencepb.NamespaceConfig{
+					Retention: &retention,
+				},
+				ReplicationConfig: &persistencepb.NamespaceReplicationConfig{},
+			},
+		})
+
+		details := replicationTasksHeartbeatDetails{}
+		ctx := context.TODO()
+		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns)
+		s.NoError(err)
+		s.Equal(tc.verified, verified)
 	}
 }
 
@@ -530,4 +617,12 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
+}
+
+func (s *activitiesSuite) Test_isCloseToCurrentTime() {
+	d := time.Minute
+	now := time.Now()
+	s.True(isCloseToCurrentTime(now, d))
+	s.False(isCloseToCurrentTime(now.Add(2*time.Minute), d))
+	s.False(isCloseToCurrentTime(now.Add(-2*time.Minute), d))
 }

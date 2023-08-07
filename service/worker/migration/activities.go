@@ -73,8 +73,9 @@ type (
 )
 
 const (
-	reasonZombieWorkflow   = "Zombie workflow"
-	reasonWorkflowNotFound = "Workflow not found"
+	reasonZombieWorkflow           = "Zombie workflow"
+	reasonWorkflowNotFound         = "Workflow not found"
+	reasonWorkflowCloseToRetention = "Workflow close to retention"
 )
 
 func (e verifyReplicationTasksTimeoutErr) Error() string {
@@ -525,11 +526,27 @@ func isNotFoundServiceError(err error) bool {
 	return ok
 }
 
+func isCloseToCurrentTime(t time.Time, duration time.Duration) bool {
+	currentTime := time.Now()
+	diff := currentTime.Sub(t)
+
+	// check both before and after current time in case:
+	//   - workflow deletion time has passed (slow delete)
+	//   - workflow is abort to be deleted (target may run with a faster clock)
+	if diff < -duration || diff > duration {
+		return false
+	}
+
+	return true
+}
+
 func (a *activities) canSkipWorkflowExecution(
 	ctx context.Context,
-	namespaceID string,
+	request *verifyReplicationTasksRequest,
 	we *commonpb.WorkflowExecution,
+	ns *namespace.Namespace,
 ) (bool, string, error) {
+	namespaceID := request.NamespaceID
 	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: namespaceID,
@@ -555,6 +572,17 @@ func (a *activities) canSkipWorkflowExecution(
 		return true, reasonZombieWorkflow, nil
 	}
 
+	// source and target cluster handles workflow retention separately. For a workflow which is abort to be deleted,
+	// it may be already deleted on target cluster but still exist on source, which cause verification delay.
+	// Here, we skip workflow of which retention time is close to current time to continue the verification.
+	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
+		deleteTime := closeTime.Add(ns.Retention())
+		if isCloseToCurrentTime(deleteTime, request.RetentionBiasDuration) {
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterCloseToRetentionWorkflowCount.GetMetricName()).Record(1)
+			return true, reasonWorkflowCloseToRetention, nil
+		}
+	}
+
 	return false, "", nil
 }
 
@@ -563,6 +591,7 @@ func (a *activities) verifyReplicationTasks(
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
+	ns *namespace.Namespace,
 ) (bool, []SkippedWorkflowExecution, error) {
 	start := time.Now()
 	defer func() {
@@ -588,7 +617,7 @@ func (a *activities) verifyReplicationTasks(
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
 			// Calling canSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
 			// A better solution is to only check the existence for workflow which is close to retention period.
-			canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request.NamespaceID, &we)
+			canSkip, reason, err := a.canSkipWorkflowExecution(ctx, request, &we, ns)
 			if err != nil {
 				return false, skippedList, err
 			}
@@ -638,6 +667,11 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		activity.RecordHeartbeat(ctx, details)
 	}
 
+	nsEntry, err := a.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
+	if err != nil {
+		return response, err
+	}
+
 	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
 	//  1. replication lag
 	//  2. Zombie workflow execution
@@ -656,7 +690,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		time.Sleep(request.VerifyInterval)
 
 		lastIndex := details.NextIndex
-		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient)
+		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry)
 		if err != nil {
 			return response, err
 		}
