@@ -272,13 +272,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+		if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			err = consts.ErrResourceExhaustedBusyWorkflow
+		} else {
+			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
+				err = consts.ErrResourceExhaustedAPSLimit
+			}
 			e.resourceExhaustedCount++
 			e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.GetMetricName()).Record(1)
 			return err
 		}
-
-		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
 	e.resourceExhaustedCount = 0
 
