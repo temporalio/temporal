@@ -34,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/searchattribute"
 
@@ -156,6 +157,7 @@ func (v *visibilityArchiver) Archive(
 	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
 	return nil
 }
+
 func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {
 	return []indexToArchive{
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
@@ -209,12 +211,58 @@ func (v *visibilityArchiver) queryAll(
 	request *archiver.QueryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-	return v.queryPrefix(ctx, uri, &queryVisibilityRequest{
-		namespaceID:   request.NamespaceID,
-		pageSize:      request.PageSize,
-		nextPageToken: request.NextPageToken,
-		parsedQuery:   &parsedQuery{},
-	}, saTypeMap, constructVisibilitySearchPrefix(uri.Path(), request.NamespaceID))
+	// remaining is the number of workflow executions left to return before we reach pageSize.
+	remaining := request.PageSize
+	nextPageToken := request.NextPageToken
+	var executions []*workflowpb.WorkflowExecutionInfo
+	// We need to loop because the number of workflow executions returned by each call to query may be fewer than
+	// pageSize. This is because we may have to skip some workflow executions after querying S3 (client-side filtering)
+	// because there are 2 entries in S3 for each workflow execution indexed by workflowTypeName (one for closeTimeout
+	// and one for startTimeout), and we only want to return one entry per workflow execution. See
+	// createIndexesToArchive for a list of all indexes.
+	for {
+		searchPrefix := constructVisibilitySearchPrefix(uri.Path(), request.NamespaceID)
+		// We suffix searchPrefix with workflowTypeName because the data in S3 is duplicated across combinations of 2
+		// different primary indices (workflowID and workflowTypeName) and 2 different secondary indices (closeTimeout
+		// and startTimeout). We only want to return one entry per workflow execution, but the full path to the S3 key
+		// is <primaryIndexKey>/<primaryIndexValue>/<secondaryIndexKey>/<secondaryIndexValue>/<runID>, and we don't have
+		// the primaryIndexValue when we make the call to query, so we can only specify the primaryIndexKey.
+		searchPrefix += "/" + primaryIndexKeyWorkflowTypeName
+		// The pageSize we supply here is actually the maximum number of keys to fetch from S3. For each execution,
+		// there should be 2 keys in S3 for this prefix, so you might think that we should multiply the pageSize by 2.
+		// However, if we do that, we may end up returning more than pageSize workflow executions to the end user of
+		// this API. This is because we aren't guaranteed that both keys for a given workflow execution will be returned
+		// in the same call. For example, if the user supplies a pageSize of 1, and we specify a maximum number of keys
+		// of 2 to S3, we may get back entries from S3 for 2 different workflow executions. You might think that we can
+		// just truncate this result to 1 workflow execution, but then the nextPageToken would be incorrect. So, we may
+		// need to make multiple calls to S3 to get the correct number of workflow executions, which will probably make
+		// this API call slower.
+		res, err := v.queryPrefix(ctx, uri, &queryVisibilityRequest{
+			namespaceID:   request.NamespaceID,
+			pageSize:      remaining,
+			nextPageToken: nextPageToken,
+			parsedQuery:   &parsedQuery{},
+		}, saTypeMap, searchPrefix, func(key string) bool {
+			// We only want to return entries for the closeTimeout secondary index, which will always be of the form:
+			// .../closeTimeout/<closeTimeout>/<runID>, so we split the key on "/" and check that the third-to-last
+			// element is "closeTimeout".
+			elements := strings.Split(key, "/")
+			return len(elements) >= 3 && elements[len(elements)-3] == secondaryIndexKeyCloseTimeout
+		})
+		if err != nil {
+			return nil, err
+		}
+		nextPageToken = res.NextPageToken
+		executions = append(executions, res.Executions...)
+		remaining -= len(res.Executions)
+		if len(nextPageToken) == 0 || remaining <= 0 {
+			break
+		}
+	}
+	return &archiver.QueryVisibilityResponse{
+		Executions:    executions,
+		NextPageToken: nextPageToken,
+	}, nil
 }
 
 func (v *visibilityArchiver) query(
@@ -260,15 +308,19 @@ func (v *visibilityArchiver) query(
 		)
 	}
 
-	return v.queryPrefix(ctx, URI, request, saTypeMap, prefix)
+	return v.queryPrefix(ctx, URI, request, saTypeMap, prefix, nil)
 }
 
+// queryPrefix returns all workflow executions in the archive that match the given prefix. The keyFilter function is an
+// optional filter that can be used to further filter the results. If keyFilter returns false for a given key, that key
+// will be skipped, and the object will not be downloaded from S3 or included in the results.
 func (v *visibilityArchiver) queryPrefix(
 	ctx context.Context,
 	uri archiver.URI,
 	request *queryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 	prefix string,
+	keyFilter func(key string) bool,
 ) (*archiver.QueryVisibilityResponse, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
@@ -299,6 +351,10 @@ func (v *visibilityArchiver) queryPrefix(
 		response.NextPageToken = serializeQueryVisibilityToken(*results.NextContinuationToken)
 	}
 	for _, item := range results.Contents {
+		if keyFilter != nil && !keyFilter(*item.Key) {
+			continue
+		}
+
 		encodedRecord, err := Download(ctx, v.s3cli, uri, *item.Key)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
