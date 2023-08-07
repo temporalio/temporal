@@ -53,12 +53,12 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 	}
 }
 
-func (s *specSuite) checkSequenceFull(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
+func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
 	cs, err := NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.getNextTime(start)
+		result := cs.getNextTime(jitterSeed, start)
 		if exp.IsZero() {
 			s.Require().True(result.Nominal.IsZero())
 			s.Require().True(result.Next.IsZero())
@@ -356,6 +356,7 @@ func (s *specSuite) TestSpecMixedCalendarInterval() {
 
 func (s *specSuite) TestSpecExclude() {
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
@@ -379,6 +380,7 @@ func (s *specSuite) TestSpecExclude() {
 
 func (s *specSuite) TestSpecStartTime() {
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
@@ -395,6 +397,7 @@ func (s *specSuite) TestSpecStartTime() {
 
 func (s *specSuite) TestSpecEndTime() {
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
@@ -411,6 +414,7 @@ func (s *specSuite) TestSpecEndTime() {
 
 func (s *specSuite) TestSpecBoundedJitter() {
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
@@ -426,6 +430,7 @@ func (s *specSuite) TestSpecBoundedJitter() {
 
 func (s *specSuite) TestSpecJitterSingleRun() {
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Calendar: []*schedpb.CalendarSpec{
 				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
@@ -435,6 +440,7 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 		time.Date(2022, 4, 7, 13, 55, 0, 0, time.UTC),
 	)
 	s.checkSequenceFull(
+		"",
 		&schedpb.ScheduleSpec{
 			Calendar: []*schedpb.CalendarSpec{
 				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
@@ -443,5 +449,32 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 		},
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 4, 7, 13, 57, 26, 927000000, time.UTC),
+	)
+}
+
+func (s *specSuite) TestSpecJitterSeed() {
+	spec := &schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{
+			{Interval: timestamp.DurationPtr(24 * time.Hour)},
+		},
+		Jitter: timestamp.DurationPtr(1 * time.Hour),
+	}
+	s.checkSequenceFull(
+		"",
+		spec,
+		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 0, 35, 24, 276000000, time.UTC),
+	)
+	s.checkSequenceFull(
+		"seed-1",
+		spec,
+		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 0, 6, 12, 519000000, time.UTC),
+	)
+	s.checkSequenceFull(
+		"seed-2",
+		spec,
+		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 0, 39, 16, 922000000, time.UTC),
 	)
 }
