@@ -421,7 +421,8 @@ func (e *executableImpl) Nack(err error) {
 	if !submitted {
 		backoffDuration := e.backoffDuration(err, e.Attempt())
 		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
-		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
+			!errors.Is(err, consts.ErrResourceExhaustedAPSLimit) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 	}
