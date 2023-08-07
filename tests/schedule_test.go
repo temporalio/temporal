@@ -816,8 +816,6 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 }
 
 func (s *scheduleIntegrationSuite) TestNextTimeCache() {
-	s.T().Skip("re-enable after enabling new cache")
-
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"

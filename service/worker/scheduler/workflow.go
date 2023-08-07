@@ -179,7 +179,7 @@ var (
 	currentTweakablePolicies = tweakablePolicies{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
-		RetentionTime:                     0, // TODO: enable later: 7 * 24 * time.Hour,
+		RetentionTime:                     7 * 24 * time.Hour,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
@@ -191,8 +191,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14,                       // see note below
-		Version:                           BatchAndCacheTimeQueries, // TODO: set later: NewCacheAndJitter
+		NextTimeCacheV2Size:               14, // see note below
+		Version:                           NewCacheAndJitter,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
