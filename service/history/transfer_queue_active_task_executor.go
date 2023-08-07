@@ -36,6 +36,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -591,6 +592,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return err
 	}
 
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
+	}
+
 	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedEventID)
 	if err != nil {
 		return err
@@ -632,11 +638,6 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			attributes.Control,
 			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
-	}
-
-	if !mutableState.IsWorkflowExecutionRunning() {
-		release(nil) // release(nil) so that the mutable state is not unloaded from cache
-		return consts.ErrWorkflowCompleted
 	}
 
 	if err = t.signalExternalExecution(
