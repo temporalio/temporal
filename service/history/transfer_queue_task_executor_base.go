@@ -62,7 +62,9 @@ const (
 	taskHistoryOpTimeout = 20 * time.Second
 )
 
-var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
+var (
+	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
+)
 
 type (
 	transferQueueTaskExecutorBase struct {

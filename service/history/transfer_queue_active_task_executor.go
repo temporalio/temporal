@@ -184,17 +184,25 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
+
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
@@ -567,8 +575,9 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -581,6 +590,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedEventID)
@@ -715,12 +729,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 	if mutableState == nil {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
 	if !ok {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrChildExecutionNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
 	if err != nil {
@@ -742,12 +758,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// 1. Once workflow is closed, we can't update mutable state or record child started event.
 		// If the RPC call for scheduling first workflow task times out but the call actually succeeds on child workflow.
 		// Then the child workflow can run, complete and another unrelated workflow can reuse this workflowID.
-		// Now when the start child task retries, we can't rely on requestID to dedup the start child call. (We can use runID instead of requestID to dedup)
+		// Now when the start child task retries, we can't rely on requestID to dedupe the start child call. (We can use runID instead of requestID to dedupe)
 		// 2. No update to mutable state and child started event means we are not able to replicate the information
 		// to the standby cluster, so standby start child logic won't be able to verify the child has started.
 		// To resolve the issue above, we need to
 		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
-		// 2. Standby start child logic need to verify if child worflow actually started instead of relying on the information
+		// 2. Standby start child logic need to verify if child workflow actually started instead of relying on the information
 		// in parent mutable state.
 		return nil
 	}
