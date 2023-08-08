@@ -32,6 +32,9 @@ import (
 	"strings"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 )
@@ -42,24 +45,24 @@ func NewTargetedDataStoreErrorGenerator(cfg *config.FaultInjectionDataStoreConfi
 	methods := make(map[string]ErrorGenerator, len(cfg.Methods))
 	for methodName, methodConfig := range cfg.Methods {
 		var faultWeights []FaultWeight
-		methodErrorRate := 0.0
-		for errorName, errorRate := range methodConfig.Errors {
-			err := getErrorFromName(errorName)
+		methodErrRate := 0.0
+		for errName, errRate := range methodConfig.Errors {
+			err := newError(errName, errRate)
 			faultWeights = append(faultWeights, FaultWeight{
 				errFactory: func(data string) error {
 					return err
 				},
-				weight: errorRate,
+				weight: errRate,
 			})
-			methodErrorRate += errorRate
+			methodErrRate += errRate
 		}
-		errorGenerator := NewDefaultErrorGenerator(methodErrorRate, faultWeights)
+		errGenerator := NewDefaultErrorGenerator(methodErrRate, faultWeights)
 		seed := methodConfig.Seed
 		if seed == 0 {
 			seed = time.Now().UnixNano()
 		}
-		errorGenerator.r = rand.New(rand.NewSource(seed))
-		methods[methodName] = errorGenerator
+		errGenerator.r = rand.New(rand.NewSource(seed))
+		methods[methodName] = errGenerator
 	}
 	return &dataStoreErrorGenerator{MethodErrorGenerators: methods}
 }
@@ -95,16 +98,20 @@ func (d *dataStoreErrorGenerator) Generate() error {
 	return methodErrorGenerator.Generate()
 }
 
-// getErrorFromName returns an error based on the provided name. If the name is not recognized, then this method will
+// newError returns an error based on the provided name. If the name is not recognized, then this method will
 // panic.
-func getErrorFromName(name string) error {
-	switch name {
-	case "ShardOwnershipLostError":
-		return &persistence.ShardOwnershipLostError{}
-	case "DeadlineExceededError":
-		return context.DeadlineExceeded
+func newError(errName string, errRate float64) error {
+	switch errName {
+	case "ShardOwnershipLost":
+		return &persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("fault injection error (%f): persistence.ShardOwnershipLostError", errRate)}
+	case "DeadlineExceeded":
+		return fmt.Errorf("fault injection error (%f): %w", errRate, context.DeadlineExceeded)
+	case "ResourceExhausted":
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, fmt.Sprintf("fault injection error (%f): serviceerror.ResourceExhausted", errRate))
+	case "Unavailable":
+		return serviceerror.NewUnavailable(fmt.Sprintf("fault injection error (%f): serviceerror.Unavailable", errRate))
 	default:
-		panic(fmt.Sprintf("unknown error type: %v", name))
+		panic(fmt.Sprintf("unknown error type: %v", errName))
 	}
 }
 

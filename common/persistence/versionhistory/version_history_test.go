@@ -110,22 +110,22 @@ func (s *versionHistorySuite) TestDuplicateUntilLCAItem_Failure() {
 	history := NewVersionHistory(BranchToken, Items)
 
 	_, err := CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(4, 0))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(2, 1))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(5, 3))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(7, 5))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(4, 0))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 
 	_, err = CopyVersionHistoryUntilLCAVersionHistoryItem(history, NewVersionHistoryItem(7, 4))
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 }
 
 func (s *versionHistorySuite) TestSetBranchToken() {
@@ -398,7 +398,7 @@ func (s *versionHistorySuite) TestGetFirstItem_Failure() {
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{})
 
 	_, err := GetFirstVersionHistoryItem(history)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 }
 
 func (s *versionHistorySuite) TestGetLastItem_Success() {
@@ -432,7 +432,7 @@ func (s *versionHistorySuite) TestGetLastItem_Failure() {
 	history := NewVersionHistory(BranchToken, []*historyspb.VersionHistoryItem{})
 
 	_, err := GetLastVersionHistoryItem(history)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.Internal{}, err)
 }
 
 func (s *versionHistoriesSuite) TestGetVersion_Success() {

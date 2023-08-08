@@ -49,6 +49,10 @@ import (
 	"go.temporal.io/server/service/history/configs"
 )
 
+const (
+	shardLingerMaxTimeLimit = 5 * time.Second
+)
+
 var (
 	invalidShardIdLowerBound = serviceerror.NewInvalidArgument("shard Id cannot be equal or lower than zero")
 	invalidShardIdUpperBound = serviceerror.NewInvalidArgument("shard Id cannot be larger than max shard count")
@@ -71,6 +75,14 @@ type (
 		ownership            *ownership
 		status               int32
 		taggedMetricsHandler metrics.Handler
+		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
+		// shards that this controller owns changes.
+		shardCountSubscriptions map[*shardCountSubscription]struct{}
+	}
+	// shardCountSubscription is a subscription to shard count updates.
+	shardCountSubscription struct {
+		controller *ControllerImpl
+		ch         chan int
 	}
 )
 
@@ -83,7 +95,7 @@ func ControllerProvider(
 	metricsHandler metrics.Handler,
 	hostInfoProvider membership.HostInfoProvider,
 	contextFactory ContextFactory,
-) Controller {
+) *ControllerImpl {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	contextTaggedLogger := log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
 	taggedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope))
@@ -97,13 +109,14 @@ func ControllerProvider(
 	)
 
 	c := &ControllerImpl{
-		config:               config,
-		contextFactory:       contextFactory,
-		contextTaggedLogger:  contextTaggedLogger,
-		historyShards:        make(map[int32]ControllableContext),
-		hostInfoProvider:     hostInfoProvider,
-		ownership:            ownership,
-		taggedMetricsHandler: taggedMetricsHandler,
+		config:                  config,
+		contextFactory:          contextFactory,
+		contextTaggedLogger:     contextTaggedLogger,
+		historyShards:           make(map[int32]ControllableContext),
+		hostInfoProvider:        hostInfoProvider,
+		ownership:               ownership,
+		taggedMetricsHandler:    taggedMetricsHandler,
+		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
 	}
 	c.lingerState.shards = make(map[ControllableContext]struct{})
 	return c
@@ -227,7 +240,7 @@ func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 // getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
-func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (Context, error) {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableContext, error) {
 	if err := c.validateShardId(shardID); err != nil {
 		return nil, err
 	}
@@ -346,8 +359,10 @@ func (c *ControllerImpl) endLinger(shard ControllableContext) {
 
 func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext) {
 	startTime := time.Now()
-	timeout := util.Min(c.config.ShardLingerTimeLimit(), shardIOTimeout)
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// Enforce a max limit to ensure we close the shard in a reasonable time,
+	// and to indirectly limit the number of lingering shards.
+	timeLimit := util.Min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
+	ctx, cancel := context.WithTimeout(ctx, timeLimit)
 	defer cancel()
 
 	qps := c.config.ShardLingerOwnershipCheckQPS()
@@ -391,7 +406,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
 			if IsShardOwnershipLostError(err) {
 				// current host is not owner of shard, unload it if it is already loaded.
-				if c.config.ShardLingerEnabled() {
+				if c.config.ShardLingerTimeLimit() > 0 {
 					c.shardLingerThenClose(ctx, shardID)
 				} else {
 					c.CloseShardByID(shardID)
@@ -440,6 +455,20 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	c.RUnlock()
 
 	c.taggedMetricsHandler.Gauge(metrics.NumShardsGauge.GetMetricName()).Record(float64(numOfOwnedShards))
+	c.publishShardCountUpdate(numOfOwnedShards)
+}
+
+// publishShardCountUpdate publishes the current number of shards that this controller owns to all shard count
+// subscribers in a non-blocking manner.
+func (c *ControllerImpl) publishShardCountUpdate(shardCount int) {
+	c.RLock()
+	defer c.RUnlock()
+	for sub := range c.shardCountSubscriptions {
+		select {
+		case sub.ch <- shardCount:
+		default:
+		}
+	}
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -460,6 +489,35 @@ func (c *ControllerImpl) validateShardId(shardID int32) error {
 		return invalidShardIdUpperBound
 	}
 	return nil
+}
+
+// SubscribeShardCount returns a subscription to shard count updates with a 1-buffered channel. This method is thread-safe.
+func (c *ControllerImpl) SubscribeShardCount() ShardCountSubscription {
+	c.Lock()
+	defer c.Unlock()
+	sub := &shardCountSubscription{
+		controller: c,
+		ch:         make(chan int, 1), // buffered because we do a non-blocking send
+	}
+	c.shardCountSubscriptions[sub] = struct{}{}
+	return sub
+}
+
+// ShardCount returns a channel that receives the current shard count. This channel will be closed when the subscription
+// is canceled.
+func (s *shardCountSubscription) ShardCount() <-chan int {
+	return s.ch
+}
+
+// Unsubscribe removes the subscription from the controller's list of subscriptions.
+func (s *shardCountSubscription) Unsubscribe() {
+	s.controller.Lock()
+	defer s.controller.Unlock()
+	if _, ok := s.controller.shardCountSubscriptions[s]; !ok {
+		return
+	}
+	delete(s.controller.shardCountSubscriptions, s)
+	close(s.ch)
 }
 
 func IsShardOwnershipLostError(err error) bool {

@@ -450,3 +450,40 @@ func (mr *MockExecutorMockRecorder) Execute(arg0, arg1 interface{}) *gomock.Call
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockExecutor)(nil).Execute), arg0, arg1)
 }
+
+// MockExecutorWrapper is a mock of ExecutorWrapper interface.
+type MockExecutorWrapper struct {
+	ctrl     *gomock.Controller
+	recorder *MockExecutorWrapperMockRecorder
+}
+
+// MockExecutorWrapperMockRecorder is the mock recorder for MockExecutorWrapper.
+type MockExecutorWrapperMockRecorder struct {
+	mock *MockExecutorWrapper
+}
+
+// NewMockExecutorWrapper creates a new mock instance.
+func NewMockExecutorWrapper(ctrl *gomock.Controller) *MockExecutorWrapper {
+	mock := &MockExecutorWrapper{ctrl: ctrl}
+	mock.recorder = &MockExecutorWrapperMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockExecutorWrapper) EXPECT() *MockExecutorWrapperMockRecorder {
+	return m.recorder
+}
+
+// Wrap mocks base method.
+func (m *MockExecutorWrapper) Wrap(delegate Executor) Executor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Wrap", delegate)
+	ret0, _ := ret[0].(Executor)
+	return ret0
+}
+
+// Wrap indicates an expected call of Wrap.
+func (mr *MockExecutorWrapperMockRecorder) Wrap(delegate interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wrap", reflect.TypeOf((*MockExecutorWrapper)(nil).Wrap), delegate)
+}

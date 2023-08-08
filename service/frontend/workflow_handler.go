@@ -2477,7 +2477,8 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	}
 
 	resp := &workflowservice.CountWorkflowExecutionsResponse{
-		Count: persistenceResp.Count,
+		Count:  persistenceResp.Count,
+		Groups: persistenceResp.Groups,
 	}
 	return resp, nil
 }
@@ -4154,7 +4155,12 @@ func (wh *WorkflowHandler) getHistory(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		wh.logger.Error("encountered data loss event",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err),
+		)
 		return nil, nil, err
 	default:
 		return nil, nil, err

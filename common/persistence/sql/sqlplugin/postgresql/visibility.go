@@ -324,6 +324,13 @@ func (pdb *db) CountFromVisibility(
 	return 0, store.OperationNotSupportedErr
 }
 
+func (pdb *db) CountGroupByFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilitySelectFilter,
+) ([]sqlplugin.VisibilityCountRow, error) {
+	return nil, store.OperationNotSupportedErr
+}
+
 func (pdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {
 	row.StartTime = pdb.converter.FromPostgreSQLDateTime(row.StartTime)
 	row.ExecutionTime = pdb.converter.FromPostgreSQLDateTime(row.ExecutionTime)

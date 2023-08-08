@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -1215,4 +1216,29 @@ func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []st
 		binaryChecksums[i] = point.GetBinaryChecksum()
 	}
 	return binaryChecksums
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_CollapseUpsert() {
+	ms := s.mutableState
+
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	s.Equal(3, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(1, len(ms.InsertTasks[tasks.CategoryVisibility]))
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_DontCollapseOthers() {
+	ms := s.mutableState
+
+	// it doesn't make any sense to have two start tasks, but just for testing logic
+	startEvent := &historypb.HistoryEvent{Version: 1}
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
 }

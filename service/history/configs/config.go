@@ -74,15 +74,13 @@ type Config struct {
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheInitialSizeBytes dynamicconfig.IntPropertyFn
-	EventsCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
-	EventsCacheTTL              dynamicconfig.DurationPropertyFn
+	EventsCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheTTL          dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
 	RangeSizeBits                uint
 	AcquireShardInterval         dynamicconfig.DurationPropertyFn
 	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
-	ShardLingerEnabled           dynamicconfig.BoolPropertyFn
 	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
 	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
 
@@ -360,16 +358,14 @@ func NewConfig(
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 
-		EventsCacheInitialSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheInitialSizeBytes, 128*1024), // 128KB
-		EventsCacheMaxSizeBytes:     dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024),     // 512KB
-		EventsCacheTTL:              dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
+		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 
 		RangeSizeBits:                20, // 20 bits for sequencer, 2^20 sequence number for any range
 		AcquireShardInterval:         dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
 		AcquireShardConcurrency:      dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
-		ShardLingerEnabled:           dc.GetBoolProperty(dynamicconfig.ShardLingerEnabled, false),
 		ShardLingerOwnershipCheckQPS: dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
-		ShardLingerTimeLimit:         dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 3*time.Second),
+		ShardLingerTimeLimit:         dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 

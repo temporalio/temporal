@@ -851,3 +851,15 @@ func TestMergeInvalidTargets(t *testing.T) {
 	_, err2 := UpdateVersionSets(nextClock, initialData, req2, 0, 0)
 	assert.Error(t, err2)
 }
+
+func TestPersistUnknownBuildId(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Next(hlc.Zero(1), commonclock.NewRealTimeSource())
+	initialData := mkInitialData(2, clock)
+
+	actual := PersistUnknownBuildId(clock, initialData, "new-build-id")
+	assert.Equal(t, 3, len(actual.VersionSets))
+	newSet := actual.VersionSets[0]
+	assert.Equal(t, 1, len(newSet.BuildIds))
+	assert.Equal(t, "new-build-id", newSet.BuildIds[0].Id)
+}

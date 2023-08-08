@@ -1061,6 +1061,21 @@ func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
+// GetActivityType mocks base method.
+func (m *MockMutableState) GetActivityType(arg0 context.Context, arg1 *v112.ActivityInfo) (*v10.ActivityType, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActivityType", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ActivityType)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActivityType indicates an expected call of GetActivityType.
+func (mr *MockMutableStateMockRecorder) GetActivityType(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityType", reflect.TypeOf((*MockMutableState)(nil).GetActivityType), arg0, arg1)
+}
+
 // GetApproximatePersistedSize mocks base method.
 func (m *MockMutableState) GetApproximatePersistedSize() int {
 	m.ctrl.T.Helper()

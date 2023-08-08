@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
@@ -167,14 +168,15 @@ type (
 		matcher              *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry    namespace.Registry
 		logger               log.Logger
+		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		metricsHandler       metrics.Handler
+		clusterMeta          cluster.Metadata
 		namespace            namespace.Name
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory    *pollerHistory
 		currentPolls     atomic.Int64
-		clusterMeta      cluster.Metadata
 		goroGroup        goro.Group
 		initializedError *future.FutureImpl[struct{}]
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
@@ -213,7 +215,6 @@ func newTaskQueueManager(
 	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	config *Config,
-	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
@@ -229,6 +230,10 @@ func newTaskQueueManager(
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
+	throttledLogger := log.With(e.throttledLogger,
+		tag.WorkflowTaskQueueName(taskQueue.FullName()),
+		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowNamespace(nsName.String()))
 	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
 		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
@@ -241,14 +246,15 @@ func newTaskQueueManager(
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
+		clusterMeta:          e.clusterMeta,
 		taskQueueID:          taskQueue,
 		stickyInfo:           stickyInfo,
 		logger:               logger,
+		throttledLogger:      throttledLogger,
 		db:                   db,
 		taskAckManager:       newAckManager(e.logger),
 		taskGC:               newTaskGC(db, taskQueueConfig),
 		config:               taskQueueConfig,
-		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
@@ -350,6 +356,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.goroGroup.Cancel()
+	c.db.Close()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
@@ -430,7 +437,9 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, err
 	}
 
-	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+	// If this is the versioned task dlq, skip sync match since we know we have no pollers.
+	isDlq := c.taskQueueID.VersionSet() == dlqVersionSet
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) && !isDlq {
 		syncMatch, err := c.trySyncMatch(ctx, params)
 		if syncMatch {
 			return syncMatch, err
@@ -773,13 +782,22 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(caps *commonpb.Wo
 
 	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
-		err := checkVersionForStickyPoll(data, caps)
-		return c.taskQueueID, err
+		unknownBuild, err := checkVersionForStickyPoll(data, caps)
+		if err != nil {
+			return nil, err
+		}
+		if unknownBuild {
+			c.recordUnknownBuildPoll(caps.BuildId)
+		}
+		return c.taskQueueID, nil
 	}
 
-	versionSet, err := lookupVersionSetForPoll(data, caps)
+	versionSet, unknownBuild, err := lookupVersionSetForPoll(data, caps)
 	if err != nil {
 		return nil, err
+	}
+	if unknownBuild {
+		c.recordUnknownBuildPoll(caps.BuildId)
 	}
 	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), nil
 }
@@ -799,9 +817,17 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 	// Have to look up versioning data.
 	userData, userDataChanged, err := c.GetUserData()
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) && buildId == "" {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data disabled, send "default" tasks to unversioned queue.
-			return c.taskQueueID, userDataChanged, nil
+			if buildId == "" {
+				return c.taskQueueID, userDataChanged, nil
+			}
+			// Send versioned sticky back to regular queue so they can go in the dlq.
+			if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				return nil, nil, serviceerrors.NewStickyWorkerUnavailable()
+			}
+			// Send versioned tasks to dlq.
+			return newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet), userDataChanged, nil
 		}
 		return nil, nil, err
 	}
@@ -809,18 +835,50 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 
 	if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// In the sticky case we don't redirect, but we may kick off this worker if there's a newer one.
-		err := checkVersionForStickyAdd(data, buildId)
-		return c.taskQueueID, userDataChanged, err
+		unknownBuild, err := checkVersionForStickyAdd(data, buildId)
+		if err != nil {
+			return nil, nil, err
+		}
+		if unknownBuild {
+			c.recordUnknownBuildTask(buildId)
+			// Don't bother persisting the unknown build id in this case: sticky tasks have a
+			// short timeout, so it doesn't matter if they get lost.
+		}
+		return c.taskQueueID, userDataChanged, nil
 	}
 
-	versionSet, err := lookupVersionSetForAdd(data, buildId)
+	versionSet, unknownBuild, err := lookupVersionSetForAdd(data, buildId)
 	if err == errEmptyVersioningData { // nolint:goerr113
 		// default was requested for an unversioned queue
 		return c.taskQueueID, userDataChanged, nil
 	} else if err != nil {
 		return nil, nil, err
 	}
+	if unknownBuild {
+		c.recordUnknownBuildTask(buildId)
+		// Send rpc to root partition to persist the unknown build id before we return success.
+		_, err = c.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+			NamespaceId: c.taskQueueID.namespaceID.String(),
+			TaskQueue:   c.taskQueueID.Root().FullName(),
+			Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
+				PersistUnknownBuildId: buildId,
+			},
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), userDataChanged, nil
+}
+
+func (c *taskQueueManagerImpl) recordUnknownBuildPoll(buildId string) {
+	c.logger.Warn("unknown build id in poll", tag.BuildId(buildId))
+	c.taggedMetricsHandler.Counter(metrics.UnknownBuildPollsCounter.GetMetricName()).Record(1)
+}
+
+func (c *taskQueueManagerImpl) recordUnknownBuildTask(buildId string) {
+	c.logger.Warn("unknown build id in task", tag.BuildId(buildId))
+	c.taggedMetricsHandler.Counter(metrics.UnknownBuildTasksCounter.GetMetricName()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) callerInfoContext(ctx context.Context) context.Context {
