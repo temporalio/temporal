@@ -296,7 +296,6 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 						return nil, ErrCacheFull
 					}
 				}
-				c.currSize -= existingEntry.Size()
 				existingEntry.value = value
 				existingEntry.size = newEntrySize
 				c.currSize = newCacheSize
@@ -330,7 +329,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	c.updateEntryRefCount(entry)
 	element := c.byAccess.PushFront(entry)
 	c.byKey[key] = element
-	c.currSize += newEntrySize
+	c.currSize = newCacheSize
 	return nil, nil
 }
 
