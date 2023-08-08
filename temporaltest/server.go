@@ -167,8 +167,8 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		DynamicConfig: dynamicconfig.StaticClient{
 			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead: []dynamicconfig.ConstrainedValue{{Value: true}},
 			// Avoid potential race conditions in tests that describe task queues
-			dynamicconfig.MatchingNumTaskqueueReadPartitions:  []dynamicconfig.ConstrainedValue{{Value: 1}},
-			dynamicconfig.MatchingNumTaskqueueWritePartitions: []dynamicconfig.ConstrainedValue{{Value: 1}},
+			// dynamicconfig.MatchingNumTaskqueueReadPartitions:  []dynamicconfig.ConstrainedValue{{Value: 1}},
+			// dynamicconfig.MatchingNumTaskqueueWritePartitions: []dynamicconfig.ConstrainedValue{{Value: 1}},
 		},
 		// Disable "accept incoming network connections?" prompt on macOS
 		FrontendIP: "127.0.0.1",
@@ -201,7 +201,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 	// /Users/jacoblegrone/Development/github.com/temporalio/temporal/service/matching/service.go:110 +0x1f5
 	// FAIL	go.temporal.io/server/temporaltest	486.783s
 	// FAIL
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	return &ts
 }
