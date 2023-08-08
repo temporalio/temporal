@@ -145,7 +145,6 @@ func (ts *TestServer) Stop() {
 // If not specifying the WithT option, the caller should execute Stop when finished to close
 // the server and release resources.
 func NewServer(opts ...TestServerOption) *TestServer {
-	rand.Seed(time.Now().UnixNano())
 	testNamespace := fmt.Sprintf("temporaltest-%d", rand.Intn(1e6))
 
 	ts := TestServer{
