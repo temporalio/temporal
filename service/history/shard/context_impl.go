@@ -1957,7 +1957,6 @@ func newContext(
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
-		shardContext.GetConfig().EventsCacheInitialSizeBytes(),
 		shardContext.GetConfig().EventsCacheMaxSizeBytes(),
 		shardContext.GetConfig().EventsCacheTTL(),
 		shardContext.GetExecutionManager(),
