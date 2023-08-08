@@ -250,8 +250,8 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports: MERGE_BASE ?= $(shell git merge-base $(MAIN_BRANCH) HEAD)
-goimports: MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
+goimports: MERGE_BASE ?= $(shell test -d .git && git merge-base $(MAIN_BRANCH) HEAD)
+goimports: MODIFIED_FILES := $(shell test -d .git && git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
 	@printf "Merge base: $(MERGE_BASE)\n"
