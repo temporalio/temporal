@@ -1,4 +1,4 @@
-FROM temporalio/base-ci-builder:1.10.3
+FROM temporalio/base-ci-builder:1.9.2
 WORKDIR /temporal
 
 # Populate some data in the go build cache to speed up subsequent builds.
@@ -13,11 +13,3 @@ RUN go mod download
 # Build deps (in two layers).
 RUN head -100 third_party_deps.txt | xargs go build -race
 RUN tail +100 third_party_deps.txt | xargs go build -race
-
-# Note: Everything above this line should be the same as prebuild-Dockerfile.
-# If you change something here, change that too.
-
-ADD . /temporal
-
-# Build functional tests with race and coverage (the same way most of the tests run them).
-RUN make pre-build-functional-test-coverage

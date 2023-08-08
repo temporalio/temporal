@@ -1,0 +1,7 @@
+version: "3.5"
+
+services:
+  build:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/prebuild-Dockerfile
