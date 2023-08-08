@@ -167,7 +167,7 @@ func (s *activitiesSuite) initEnv() (*testsuite.TestActivityEnvironment, *heartb
 	return env, &iceptor
 }
 
-func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
+func (s *activitiesSuite) TestVerifyReplicationTasksV2_Success() {
 	env, iceptor := s.initEnv()
 
 	request := verifyReplicationTasksRequest{
@@ -205,7 +205,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 		Execution:   &execution2,
 	}).Return(&completeState, nil).Times(2)
 
-	r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+	r, err := env.ExecuteActivity(s.a.VerifyReplicationTasksV2, &request)
 	s.NoError(err)
 	var response verifyReplicationTasksResponse
 	s.NoError(r.Get(&response))
@@ -217,7 +217,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	s.Equal(execution2, lastHeartBeat.LastNotFoundWorkflowExecution)
 }
 
-func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
+func (s *activitiesSuite) TestVerifyReplicationTasksV2_SkipWorkflowExecution() {
 	mockErr := serviceerror.NewInternal("mock error")
 	var testcases = []struct {
 		resp           *historyservice.DescribeMutableStateResponse
@@ -265,7 +265,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 			Execution:   &execution1,
 		}).Return(t.resp, t.err).Times(1)
 
-		r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+		r, err := env.ExecuteActivity(s.a.VerifyReplicationTasksV2, &request)
 		s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 		lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 		if t.expectedErr == nil {
@@ -286,7 +286,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 	}
 }
 
-func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
+func (s *activitiesSuite) TestVerifyReplicationTasksV2_FailedNotFound() {
 	env, iceptor := s.initEnv()
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
@@ -307,12 +307,12 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	}).Return(nil, serviceerror.NewNotFound("")).AnyTimes()
 
 	// Set CheckPoint to an early to trigger failure.
-	env.SetHeartbeatDetails(&replicationTasksHeartbeatDetails{
+	env.SetHeartbeatDetails(&verifyTasksHeartbeatDetails{
 		NextIndex:  0,
 		CheckPoint: time.Now().Add(-defaultNoProgressNotRetryableTimeout),
 	})
 
-	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasksV2, &request)
 	s.Error(err)
 	s.ErrorContains(err, "verifyReplicationTasks was not able to make progress")
 
@@ -322,7 +322,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	s.Equal(execution1, lastHeartBeat.LastNotFoundWorkflowExecution)
 }
 
-func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
+func (s *activitiesSuite) TestVerifyReplicationTasksV2_AlreadyVerified() {
 	env, iceptor := s.initEnv()
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
@@ -332,12 +332,12 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	}
 
 	// Set NextIndex to indicate all executions have been verified. No additional mock is needed.
-	env.SetHeartbeatDetails(&replicationTasksHeartbeatDetails{
+	env.SetHeartbeatDetails(&verifyTasksHeartbeatDetails{
 		NextIndex:  len(request.Executions),
 		CheckPoint: time.Now(),
 	})
 
-	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasksV2, &request)
 	s.NoError(err)
 
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
@@ -434,7 +434,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	for _, tc := range tests {
 		mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 		request.Executions = createExecutions(mockRemoteAdminClient, tc.executionStates, tc.nextIndex)
-		details := replicationTasksHeartbeatDetails{
+		details := verifyTasksHeartbeatDetails{
 			NextIndex: tc.nextIndex,
 		}
 
@@ -526,7 +526,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			},
 		})
 
-		details := replicationTasksHeartbeatDetails{}
+		details := verifyTasksHeartbeatDetails{}
 		ctx := context.TODO()
 		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns)
 		s.NoError(err)

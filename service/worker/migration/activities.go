@@ -60,15 +60,10 @@ type (
 		Reason            string
 	}
 
-	replicationTasksHeartbeatDetails struct {
+	verifyTasksHeartbeatDetails struct {
 		NextIndex                     int
 		CheckPoint                    time.Time
 		LastNotFoundWorkflowExecution commonpb.WorkflowExecution
-	}
-
-	verifyReplicationTasksTimeoutErr struct {
-		timeout time.Duration
-		details replicationTasksHeartbeatDetails
 	}
 )
 
@@ -77,13 +72,6 @@ const (
 	reasonWorkflowNotFound         = "Workflow not found"
 	reasonWorkflowCloseToRetention = "Workflow close to retention"
 )
-
-func (e verifyReplicationTasksTimeoutErr) Error() string {
-	return fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (retryable). Not found WorkflowExecution: %v,",
-		e.timeout,
-		e.details.LastNotFoundWorkflowExecution,
-	)
-}
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
 // However, activity background context is per-worker, which means once set, all activities processed by the
@@ -589,7 +577,7 @@ func (a *activities) canSkipWorkflowExecution(
 func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	details *replicationTasksHeartbeatDetails,
+	details *verifyTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 ) (bool, []SkippedWorkflowExecution, error) {
@@ -647,7 +635,7 @@ const (
 	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
 )
 
-func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
+func (a *activities) VerifyReplicationTasksV2(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(request.Namespace))
 	remoteClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.TargetClusterEndpoint,
@@ -656,7 +644,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	)
 
 	var response verifyReplicationTasksResponse
-	var details replicationTasksHeartbeatDetails
+	var details verifyTasksHeartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {
 			return response, err

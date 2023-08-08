@@ -403,14 +403,26 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		futures = append(futures, generateTaskFuture)
 
 		if params.EnableVerification {
-			verifyTaskFuture := workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
-				TargetClusterEndpoint: params.TargetClusterEndpoint,
-				Namespace:             params.Namespace,
-				NamespaceID:           namespaceID,
-				Executions:            workflowExecutions,
-				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
-				RetentionBiasDuration: time.Duration(params.RetentionBiasInSeconds) * time.Second,
-			})
+			var verifyTaskFuture workflow.Future
+			version := workflow.GetVersion(ctx, "VerifyReplicationTasks-1.21.5", workflow.DefaultVersion, 1)
+			if version == workflow.DefaultVersion {
+				verifyTaskFuture = workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            workflowExecutions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+				})
+			} else {
+				verifyTaskFuture = workflow.ExecuteActivity(actx, a.VerifyReplicationTasksV2, &verifyReplicationTasksRequest{
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            workflowExecutions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					RetentionBiasDuration: time.Duration(params.RetentionBiasInSeconds) * time.Second,
+				})
+			}
 
 			pendingVerifyTasks++
 			selector.AddFuture(verifyTaskFuture, func(f workflow.Future) {

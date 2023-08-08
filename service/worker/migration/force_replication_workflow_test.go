@@ -85,7 +85,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 	}).Times(totalPageCount)
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(totalPageCount)
-	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(totalPageCount)
+	env.OnActivity(a.VerifyReplicationTasksV2, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(totalPageCount)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil).Times(1)
@@ -152,7 +152,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	}).Times(maxPageCountPerExecution)
 
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Times(maxPageCountPerExecution)
-	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(maxPageCountPerExecution)
+	env.OnActivity(a.VerifyReplicationTasksV2, mock.Anything, mock.Anything).Return(verifyReplicationTasksResponse{}, nil).Times(maxPageCountPerExecution)
 
 	env.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	env.OnActivity(a.SeedReplicationQueueWithUserDataEntries, mock.Anything, mock.Anything).Return(nil)
@@ -344,9 +344,9 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 	})
 
 	var errMsg = "mock verify replication tasks error"
-	// GenerateReplicationTasks and VerifyReplicationTasks runs in paralle. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
+	// GenerateReplicationTasks and VerifyReplicationTasksV2 runs in paralle. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Maybe()
-	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(
+	env.OnActivity(a.VerifyReplicationTasksV2, mock.Anything, mock.Anything).Return(
 		verifyReplicationTasksResponse{},
 		temporal.NewNonRetryableApplicationError(errMsg, "", nil),
 	).Times(1)
@@ -486,7 +486,7 @@ type heartbeatRecordingInterceptor struct {
 	interceptor.ActivityInboundInterceptorBase
 	interceptor.ActivityOutboundInterceptorBase
 	seedRecordedHeartbeats                []seedReplicationQueueWithUserDataEntriesHeartbeatDetails
-	replicationRecordedHeartbeats         []replicationTasksHeartbeatDetails
+	replicationRecordedHeartbeats         []verifyTasksHeartbeatDetails
 	generateReplicationRecordedHeartbeats []int
 	T                                     *testing.T
 }
@@ -504,7 +504,7 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
 	if d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails); ok {
 		i.seedRecordedHeartbeats = append(i.seedRecordedHeartbeats, d)
-	} else if d, ok := details[0].(replicationTasksHeartbeatDetails); ok {
+	} else if d, ok := details[0].(verifyTasksHeartbeatDetails); ok {
 		i.replicationRecordedHeartbeats = append(i.replicationRecordedHeartbeats, d)
 	} else if d, ok := details[0].(int); ok {
 		i.generateReplicationRecordedHeartbeats = append(i.generateReplicationRecordedHeartbeats, d)
