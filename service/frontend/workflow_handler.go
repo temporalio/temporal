@@ -2777,6 +2777,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			EagerWorkflowStart:              true,
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
+			CountGroupByExecutionStatus:     true,
 		},
 	}, nil
 }
