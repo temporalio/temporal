@@ -116,7 +116,7 @@ var (
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
-		// this is the workflow that sent a cancel request
+		// this is the workflow that sent a signal
 		"SignalWorkflowExecutionRequest.ExternalWorkflowExecution": true,
 		// this is the workflow that sent a cancel request
 		"RequestCancelWorkflowExecutionRequest.ExternalWorkflowExecution": true,
