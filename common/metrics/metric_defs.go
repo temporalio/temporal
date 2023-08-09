@@ -1564,22 +1564,45 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef("schedule_missed_catchup_window")
-	ScheduleRateLimited                               = NewCounterDef("schedule_rate_limited")
-	ScheduleBufferOverruns                            = NewCounterDef("schedule_buffer_overruns")
-	ScheduleActionSuccess                             = NewCounterDef("schedule_action_success")
-	ScheduleActionErrors                              = NewCounterDef("schedule_action_errors")
-	ScheduleCancelWorkflowErrors                      = NewCounterDef("schedule_cancel_workflow_errors")
-	ScheduleTerminateWorkflowErrors                   = NewCounterDef("schedule_terminate_workflow_errors")
+	ScheduleMissedCatchupWindow                       = NewCounterDef(
+		"schedule_missed_catchup_window",
+		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
+	)
+	ScheduleRateLimited = NewCounterDef(
+		"schedule_rate_limited",
+		WithDescription("The number of times a schedule action was delayed by more than 1s due to rate limiting"),
+	)
+	ScheduleBufferOverruns = NewCounterDef(
+		"schedule_buffer_overruns",
+		WithDescription("The number of schedule actions that were dropped due to the action buffer being full"),
+	)
+	ScheduleActionSuccess = NewCounterDef(
+		"schedule_action_success",
+		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+	)
+	ScheduleActionErrors = NewCounterDef(
+		"schedule_action_errors",
+		WithDescription("The number of schedule actions that failed to start"),
+	)
+	ScheduleCancelWorkflowErrors = NewCounterDef(
+		"schedule_cancel_workflow_errors",
+		WithDescription("The number of times a schedule got an error trying to cancel a previous run"),
+	)
+	ScheduleTerminateWorkflowErrors = NewCounterDef(
+		"schedule_terminate_workflow_errors",
+		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
 
 	// Force replication
-	EncounterZombieWorkflowCount      = NewCounterDef("encounter_zombie_workflow_count")
-	GenerateReplicationTasksLatency   = NewTimerDef("generate_replication_tasks_latency")
-	VerifyReplicationTaskSuccess      = NewCounterDef("verify_replication_task_success")
-	VerifyReplicationTaskNotFound     = NewCounterDef("verify_replication_task_not_found")
-	VerifyReplicationTaskFailed       = NewCounterDef("verify_replication_task_failed")
-	VerifyReplicationTasksLatency     = NewTimerDef("verify_replication_tasks_latency")
-	VerifyDescribeMutableStateLatency = NewTimerDef("verify_describe_mutable_state_latency")
+	EncounterZombieWorkflowCount           = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount         = NewCounterDef("encounter_not_found_workflow_count")
+	EncounterCloseToRetentionWorkflowCount = NewCounterDef("encounter_close_to_retention_workflow_count")
+	GenerateReplicationTasksLatency        = NewTimerDef("generate_replication_tasks_latency")
+	VerifyReplicationTaskSuccess           = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTaskNotFound          = NewCounterDef("verify_replication_task_not_found")
+	VerifyReplicationTaskFailed            = NewCounterDef("verify_replication_task_failed")
+	VerifyReplicationTasksLatency          = NewTimerDef("verify_replication_tasks_latency")
+	VerifyDescribeMutableStateLatency      = NewTimerDef("verify_describe_mutable_state_latency")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

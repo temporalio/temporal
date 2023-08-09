@@ -98,7 +98,6 @@ const (
 func NewCache(shard shard.Context) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
-	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 

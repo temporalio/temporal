@@ -280,7 +280,7 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 		tqm, ok = e.taskQueues[*taskQueue]
 		if !ok {
 			var err error
-			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config, e.clusterMeta)
+			tqm, err = newTaskQueueManager(e, taskQueue, stickyInfo, e.config)
 			if err != nil {
 				e.taskQueuesLock.Unlock()
 				return nil, err
@@ -332,11 +332,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) {
-			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
-			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
-			err = nil
-		}
 		return false, err
 	}
 
@@ -400,11 +395,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	// - if we spool to db, we'll re-resolve when it comes out of the db
 	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) {
-			// When user data loading is disabled, we intentionally drop tasks for versioned workflows
-			// to avoid breaking versioning semantics and dispatching tasks to the wrong workers.
-			err = nil
-		}
 		return false, err
 	}
 
@@ -699,11 +689,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	// or fail with a relatively short timeout.
 	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) {
-			// Rewrite to nicer error message
-			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-		}
 		return nil, err
+	} else if taskQueue.VersionSet() == dlqVersionSet {
+		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 	}
 
 	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY

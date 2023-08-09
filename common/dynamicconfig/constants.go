@@ -493,8 +493,6 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
-	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
 	// EventsCacheMaxSizeBytes is max size of events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache

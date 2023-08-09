@@ -67,7 +67,7 @@ func (s *executorSuite) SetupTest() {
 	s.registry = namespace.NewMockRegistry(s.ctrl)
 	s.activeExecutor = NewMockExecutor(s.ctrl)
 	s.standbyExecutor = NewMockExecutor(s.ctrl)
-	s.executor = NewExecutorWrapper(
+	s.executor = NewActiveStandbyExecutor(
 		currentCluster,
 		s.registry,
 		s.activeExecutor,

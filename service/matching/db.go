@@ -47,6 +47,10 @@ const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
 
+	// "Version set id" for the dlq for versioned tasks. This won't match any real version set
+	// since those are based on hashes of build ids.
+	dlqVersionSet = "dlq"
+
 	// userDataEnabled is the default state: user data is enabled.
 	userDataEnabled userDataState = iota
 	// userDataDisabled means user data is disabled due to the LoadUserData dynamic config
@@ -119,6 +123,12 @@ func newTaskQueueDB(
 		userDataChanged: make(chan struct{}),
 		matchingClient:  matchingClient,
 	}
+}
+
+func (db *taskQueueDB) Close() {
+	db.Lock()
+	defer db.Unlock()
+	close(db.userDataChanged)
 }
 
 // RangeID returns the current persistence view of rangeID
@@ -329,7 +339,9 @@ func (db *taskQueueDB) getUserDataLocked() (*persistencespb.VersionedTaskQueueUs
 	case userDataEnabled:
 		return db.userData, db.userDataChanged, nil
 	case userDataDisabled:
-		return nil, nil, errUserDataDisabled
+		// return userDataChanged even with an error here so that a blocking wait can be
+		// interrupted when user data is enabled again.
+		return nil, db.userDataChanged, errUserDataDisabled
 	case userDataSpecificVersion:
 		return nil, nil, errNoUserDataOnVersionedTQM
 	default:
@@ -369,10 +381,15 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 	return nil
 }
 
-func (db *taskQueueDB) setUserDataState(setUserDataState userDataState) {
+func (db *taskQueueDB) setUserDataState(userDataState userDataState) {
 	db.Lock()
 	defer db.Unlock()
-	db.userDataState = setUserDataState
+
+	if userDataState != db.userDataState {
+		db.userDataState = userDataState
+		close(db.userDataChanged)
+		db.userDataChanged = make(chan struct{})
+	}
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed

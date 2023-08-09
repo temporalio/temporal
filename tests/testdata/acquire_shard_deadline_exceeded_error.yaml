@@ -13,4 +13,4 @@ faultinjection:
         methods:
           UpdateShard:
             errors:
-              DeadlineExceededError: 1.0 # 100% of the time, return a deadline exceeded error
+              DeadlineExceeded: 1.0 # 100% of the time, return a deadline exceeded error

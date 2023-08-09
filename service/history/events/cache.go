@@ -79,7 +79,6 @@ var _ Cache = (*CacheImpl)(nil)
 
 func NewEventsCache(
 	shardID int32,
-	initialCount int,
 	maxCount int,
 	ttl time.Duration,
 	eventsMgr persistence.ExecutionManager,
@@ -88,7 +87,6 @@ func NewEventsCache(
 	metricsHandler metrics.Handler,
 ) *CacheImpl {
 	opts := &cache.Options{}
-	opts.InitialCapacity = initialCount
 	opts.TTL = ttl
 
 	return &CacheImpl{

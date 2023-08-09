@@ -38,7 +38,7 @@ type shardCounter struct {
 	closed bool
 }
 
-func (s *shardCounter) Subscribe() shard.ShardCountSubscription {
+func (s *shardCounter) SubscribeShardCount() shard.ShardCountSubscription {
 	return s
 }
 
@@ -69,20 +69,19 @@ func newRateBurst(rate float64, burst int) constantRateBurst {
 	return constantRateBurst{rate: rate, burst: burst}
 }
 
-func TestOwnershipScaledRateBurst_NonPositiveTotalNumShards(t *testing.T) {
+func TestOwnershipBasedQuotaScaler_NonPositiveTotalNumShards(t *testing.T) {
 	t.Parallel()
 
-	rb := newRateBurst(1, 1)
 	sco := &shardCounter{
 		ch:     make(chan int),
 		closed: false,
 	}
 	totalNumShards := 0
-	_, err := shard.NewOwnershipScaledRateBurst(rb, sco, totalNumShards, nil)
+	_, err := shard.NewOwnershipBasedQuotaScaler(sco, totalNumShards, nil)
 	assert.ErrorIs(t, err, shard.ErrNonPositiveTotalNumShards)
 }
 
-func TestOwnershipScaledRateBurst(t *testing.T) {
+func TestOwnershipBasedQuotaScaler(t *testing.T) {
 	t.Parallel()
 
 	rb := newRateBurst(2, 4)
@@ -92,12 +91,11 @@ func TestOwnershipScaledRateBurst(t *testing.T) {
 	}
 	totalNumShards := 10
 	updateAppliedCallback := make(chan struct{})
-	srb, err := shard.NewOwnershipScaledRateBurst(rb, sc, totalNumShards, updateAppliedCallback)
+	scaler, err := shard.NewOwnershipBasedQuotaScaler(sc, totalNumShards, updateAppliedCallback)
 	require.NoError(t, err)
-	assert.Equal(t, 2.0, srb.Rate(), "Rate should be equal to the base rate before any shard "+
-		"count updates")
-	assert.Equal(t, 4, srb.Burst(), "Burst should be equal to the base burst before any shard "+
-		"count updates")
+	srb := scaler.ScaleRateBurst(rb)
+	assert.Equal(t, 2.0, srb.Rate(), "Rate should be equal to the base rate before any shard count updates")
+	assert.Equal(t, 4, srb.Burst(), "Burst should be equal to the base burst before any shard count updates")
 	sc.ch <- 3
 
 	// Wait for the update to be applied. Even though the send above is blocking, we still need to wait for the

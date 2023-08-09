@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
@@ -170,12 +171,12 @@ type (
 		throttledLogger      log.ThrottledLogger
 		matchingClient       matchingservice.MatchingServiceClient
 		metricsHandler       metrics.Handler
+		clusterMeta          cluster.Metadata
 		namespace            namespace.Name
 		taggedMetricsHandler metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory    *pollerHistory
 		currentPolls     atomic.Int64
-		clusterMeta      cluster.Metadata
 		goroGroup        goro.Group
 		initializedError *future.FutureImpl[struct{}]
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
@@ -214,7 +215,6 @@ func newTaskQueueManager(
 	taskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	config *Config,
-	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
@@ -246,6 +246,7 @@ func newTaskQueueManager(
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
 		metricsHandler:       e.metricsHandler,
+		clusterMeta:          e.clusterMeta,
 		taskQueueID:          taskQueue,
 		stickyInfo:           stickyInfo,
 		logger:               logger,
@@ -254,7 +255,6 @@ func newTaskQueueManager(
 		taskAckManager:       newAckManager(e.logger),
 		taskGC:               newTaskGC(db, taskQueueConfig),
 		config:               taskQueueConfig,
-		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
@@ -356,6 +356,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.goroGroup.Cancel()
+	c.db.Close()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
@@ -436,7 +437,9 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, err
 	}
 
-	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+	// If this is the versioned task dlq, skip sync match since we know we have no pollers.
+	isDlq := c.taskQueueID.VersionSet() == dlqVersionSet
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) && !isDlq {
 		syncMatch, err := c.trySyncMatch(ctx, params)
 		if syncMatch {
 			return syncMatch, err
@@ -814,9 +817,17 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 	// Have to look up versioning data.
 	userData, userDataChanged, err := c.GetUserData()
 	if err != nil {
-		if errors.Is(err, errUserDataDisabled) && buildId == "" {
+		if errors.Is(err, errUserDataDisabled) {
 			// When user data disabled, send "default" tasks to unversioned queue.
-			return c.taskQueueID, userDataChanged, nil
+			if buildId == "" {
+				return c.taskQueueID, userDataChanged, nil
+			}
+			// Send versioned sticky back to regular queue so they can go in the dlq.
+			if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				return nil, nil, serviceerrors.NewStickyWorkerUnavailable()
+			}
+			// Send versioned tasks to dlq.
+			return newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet), userDataChanged, nil
 		}
 		return nil, nil, err
 	}

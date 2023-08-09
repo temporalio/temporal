@@ -165,13 +165,16 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
 	)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
+	}
 
 	return queues.NewScheduledQueue(
 		shard,
