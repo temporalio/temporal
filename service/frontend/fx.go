@@ -364,12 +364,15 @@ func NamespaceRateLimitInterceptorProvider(
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
+	serviceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
 ) *interceptor.ConcurrentRequestLimitInterceptor {
 	return interceptor.NewConcurrentRequestLimitInterceptor(
 		namespaceRegistry,
+		serviceResolver,
 		logger,
-		serviceConfig.MaxNamespaceCountPerInstance,
+		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
 		configs.ExecutionAPICountLimitOverride,
 	)
 }

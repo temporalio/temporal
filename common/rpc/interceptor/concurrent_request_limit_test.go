@@ -32,6 +32,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/quotastest"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -43,10 +45,14 @@ type nsCountLimitTestCase struct {
 	name string
 	// request to be intercepted by the ConcurrentRequestLimitInterceptor
 	request any
-	// numBlockedRequests is the number of pending requests that will be blocked before the final request is sent.
+	// numBlockedRequests is the number of pending requests that will be blocked including the final request.
 	numBlockedRequests int
+	// memberCounter returns the number of members in the namespace.
+	memberCounter quotas.MemberCounter
 	// perInstanceLimit is the limit on the number of pending requests per-instance.
 	perInstanceLimit int
+	// globalLimit is the limit on the number of pending requests across all instances.
+	globalLimit int
 	// methodName is the fully-qualified name of the gRPC method being intercepted.
 	methodName string
 	// tokens is a map of method slugs (e.g. just the part of the method name after the final slash) to the number of
@@ -62,10 +68,12 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []nsCountLimitTestCase{
 		{
-			name:               "no limit hit",
+			name:               "no limit exceeded",
 			request:            nil,
 			numBlockedRequests: 2,
-			perInstanceLimit:   3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
 				"DescribeNamespace": 1,
@@ -73,10 +81,12 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			expectRateLimit: false,
 		},
 		{
-			name:               "per-instance limit hit",
+			name:               "per-instance limit exceeded",
 			request:            nil,
-			numBlockedRequests: 2,
+			numBlockedRequests: 3,
 			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens: map[string]int{
 				"DescribeNamespace": 1,
@@ -84,10 +94,38 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			expectRateLimit: true,
 		},
 		{
+			name:               "global limit exceeded",
+			request:            nil,
+			numBlockedRequests: 3,
+			perInstanceLimit:   3,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+			tokens: map[string]int{
+				"DescribeNamespace": 1,
+			},
+			expectRateLimit: true,
+		},
+		{
+			name:               "global limit zero",
+			request:            nil,
+			numBlockedRequests: 3,
+			perInstanceLimit:   3,
+			globalLimit:        0,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+			tokens: map[string]int{
+				"DescribeNamespace": 1,
+			},
+			expectRateLimit: false,
+		},
+		{
 			name:               "method name does not consume token",
 			request:            nil,
-			numBlockedRequests: 2,
+			numBlockedRequests: 3,
 			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
 			tokens:             map[string]int{},
 			expectRateLimit:    false,
@@ -95,8 +133,10 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 		{
 			name:               "long poll request",
 			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: true},
-			numBlockedRequests: 2,
+			numBlockedRequests: 3,
 			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
 			tokens: map[string]int{
 				"GetWorkflowExecutionHistory": 1,
@@ -106,8 +146,10 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 		{
 			name:               "non-long poll request",
 			request:            &workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: false},
-			numBlockedRequests: 2,
+			numBlockedRequests: 3,
 			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
 			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
 			tokens: map[string]int{
 				"GetWorkflowExecutionHistory": 1,
@@ -146,7 +188,7 @@ func (tc *nsCountLimitTestCase) run(t *testing.T) {
 	// Clean up by unblocking all the requests.
 	handler.Unblock()
 
-	for i := 0; i < tc.numBlockedRequests; i++ {
+	for i := 0; i < tc.numBlockedRequests-1; i++ {
 		assert.NoError(t, <-handler.errs)
 	}
 }
@@ -155,7 +197,7 @@ func (tc *nsCountLimitTestCase) createRequestHandler() *testRequestHandler {
 	return &testRequestHandler{
 		started: make(chan struct{}),
 		respond: make(chan struct{}),
-		errs:    make(chan error, tc.numBlockedRequests),
+		errs:    make(chan error, tc.numBlockedRequests-1),
 	}
 }
 
@@ -164,7 +206,7 @@ func (tc *nsCountLimitTestCase) spawnBlockedRequests(
 	handler *testRequestHandler,
 	interceptor *ConcurrentRequestLimitInterceptor,
 ) {
-	for i := 0; i < tc.numBlockedRequests; i++ {
+	for i := 0; i < tc.numBlockedRequests-1; i++ {
 		go func() {
 			_, err := interceptor.Intercept(context.Background(), tc.request, &grpc.UnaryServerInfo{
 				FullMethod: tc.methodName,
@@ -173,7 +215,7 @@ func (tc *nsCountLimitTestCase) spawnBlockedRequests(
 		}()
 	}
 
-	for i := 0; i < tc.numBlockedRequests; i++ {
+	for i := 0; i < tc.numBlockedRequests-1; i++ {
 		<-handler.started
 	}
 }
@@ -182,12 +224,12 @@ func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *Conc
 	registry := namespace.NewMockRegistry(ctrl)
 	registry.EXPECT().GetNamespace(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 
-	logger := log.NewNoopLogger()
-	perInstanceCountLimit := dynamicconfig.GetIntPropertyFilteredByNamespace(tc.perInstanceLimit)
 	interceptor := NewConcurrentRequestLimitInterceptor(
 		registry,
-		logger,
-		perInstanceCountLimit,
+		tc.memberCounter,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.perInstanceLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.globalLimit),
 		tc.tokens,
 	)
 
