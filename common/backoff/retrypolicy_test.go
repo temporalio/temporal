@@ -113,16 +113,18 @@ func (s *RetryPolicySuite) TestExponentialBackoff() {
 }
 
 func (s *RetryPolicySuite) TestNumberOfAttempts() {
+	maxAttempts := 5
 	policy := createPolicy(time.Second).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(maxAttempts)
 
 	r, _ := createRetrier(policy)
 	var next time.Duration
-	for i := 0; i < 6; i++ {
+	for i := 0; i < maxAttempts-1; i++ {
 		next = r.NextBackOff()
+		s.NotEqual(done, next)
 	}
 
-	s.Equal(done, next)
+	s.Equal(done, r.NextBackOff())
 }
 
 // Test to make sure relative maximum interval for each retry is honoured

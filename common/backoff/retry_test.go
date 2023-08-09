@@ -234,7 +234,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	throttleRetryPolicy = testThrottleRetryPolicy
 
 	policy := NewExponentialRetryPolicy(10 * time.Millisecond).
-		WithMaximumAttempts(1)
+		WithMaximumAttempts(2)
 
 	// test if throttle retry policy is used on resource exhausted error
 	attempt := 1
