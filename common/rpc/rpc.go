@@ -162,7 +162,21 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	}
 
 	if cfg.BindOnLocalHost {
-		return net.IPv4(127, 0, 0, 1)
+		// lookup localhost and favor the first ipv4 address
+		// unless there are only ipv6 addresses available
+		ips, err := net.LookupIP("localhost")
+		if err != nil || len(ips) == 0 {
+			// fallback to ipv4 loopback instead of error
+			return net.IPv4(127, 0, 0, 1)
+		}
+		var listenIp net.IP
+		for _, ip := range ips {
+			listenIp = ip
+			if listenIp.To4() != nil {
+				return listenIp
+			}
+		}
+		return listenIp
 	}
 
 	if len(cfg.BindOnIP) > 0 {

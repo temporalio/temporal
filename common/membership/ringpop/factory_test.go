@@ -27,6 +27,7 @@ package ringpop
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -60,10 +61,12 @@ type (
 		internodeConfigMutualTLS config.GroupTLS
 		internodeConfigServerTLS config.GroupTLS
 
-		mutualTLSFactoryA *factory
-		mutualTLSFactoryB *factory
-		serverTLSFactoryA *factory
-		serverTLSFactoryB *factory
+		mutualTLSFactoryA     *factory
+		mutualTLSFactoryB     *factory
+		serverTLSFactoryA     *factory
+		serverTLSFactoryB     *factory
+		serverIPv6TLSFactoryA *factory
+		serverIPv6TLSFactoryB *factory
 
 		insecureFactory *factory
 	}
@@ -71,6 +74,7 @@ type (
 
 const (
 	localhostIPv4 = "127.0.0.1"
+	localhostIPv6 = "0::1"
 )
 
 var (
@@ -199,6 +203,10 @@ func (s *RingpopSuite) TestRingpopInvalidTLS() {
 	s.Error(runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
 }
 
+func (s *RingpopSuite) TestRingpopIPv6TLS() {
+	s.Error(runRingpopTLSTest(&s.Suite, s.serverIPv6TLSFactoryA, s.serverIPv6TLSFactoryB))
+}
+
 func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error {
 	// Start two ringpop nodes
 	chA := serverA.getTChannel()
@@ -208,12 +216,16 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 
 	// Ping A through B to make sure B's dialer uses TLS to communicate with A
 	hostPortA := chA.PeerInfo().HostPort
+	fmt.Printf("hostPortA: %s", hostPortA)
 	if err := chB.Ping(context.Background(), hostPortA); err != nil {
 		return err
 	}
 
 	// Confirm that A's listener is actually using TLS
 	clientTLSConfig, err := serverB.TLSFactory.GetInternodeClientConfig()
+
+	fmt.Printf("clientTLSConfig: %v", clientTLSConfig)
+
 	s.NoError(err)
 
 	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)
@@ -248,6 +260,8 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 
 	rpcCfgA := &config.RPC{GRPCPort: 0, MembershipPort: 7600, BindOnIP: localhostIPv4}
 	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
+	rpcCfgC := &config.RPC{GRPCPort: 0, MembershipPort: 7602, BindOnIP: localhostIPv6}
+	rpcCfgD := &config.RPC{GRPCPort: 0, MembershipPort: 7603, BindOnIP: localhostIPv6}
 
 	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableRingpopTLS: true,
@@ -266,4 +280,11 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	s.NotNil(s.serverTLSFactoryA)
 	s.serverTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
 	s.NotNil(s.serverTLSFactoryB)
+
+	provider, err = encryption.NewTLSConfigProviderFromConfig(serverTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
+	s.NoError(err)
+	s.serverIPv6TLSFactoryA = newTestRingpopFactory("tester-C", s.logger, rpcCfgC, provider, dc)
+	s.NotNil(s.serverIPv6TLSFactoryA)
+	s.serverIPv6TLSFactoryB = newTestRingpopFactory("tester-D", s.logger, rpcCfgD, provider, dc)
+	s.NotNil(s.serverIPv6TLSFactoryB)
 }
