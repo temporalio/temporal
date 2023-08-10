@@ -216,7 +216,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
-		s.mockShard.Resource.GetMatchingClient(),
+		s.mockShard.Resource.HistoryClient,
+		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 	).(*transferQueueStandbyTaskExecutor)
 }

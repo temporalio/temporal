@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -75,7 +74,7 @@ type (
 		hostInfo               membership.HostInfo
 		executionManager       persistence.ExecutionManager
 		taskManager            persistence.TaskManager
-		historyClient          historyservice.HistoryServiceClient
+		historyClient          resource.HistoryClient
 		namespaceRegistry      namespace.Registry
 		workerServiceResolver  membership.ServiceResolver
 		visibilityManager      manager.VisibilityManager
@@ -145,7 +144,7 @@ func NewService(
 	metricsHandler metrics.Handler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,

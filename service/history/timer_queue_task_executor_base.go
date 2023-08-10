@@ -31,12 +31,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -59,7 +59,7 @@ type (
 		deleteManager      deletemanager.DeleteManager
 		cache              wcache.Cache
 		logger             log.Logger
-		matchingClient     matchingservice.MatchingServiceClient
+		matchingRawClient  resource.MatchingRawClient
 		metricHandler      metrics.Handler
 		config             *configs.Config
 	}
@@ -69,7 +69,7 @@ func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	deleteManager deletemanager.DeleteManager,
-	matchingClient matchingservice.MatchingServiceClient,
+	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
 	metricHandler metrics.Handler,
 	config *configs.Config,
@@ -81,7 +81,7 @@ func newTimerQueueTaskExecutorBase(
 		cache:              workflowCache,
 		deleteManager:      deleteManager,
 		logger:             logger,
-		matchingClient:     matchingClient,
+		matchingRawClient:  matchingRawClient,
 		metricHandler:      metricHandler,
 		config:             config,
 	}

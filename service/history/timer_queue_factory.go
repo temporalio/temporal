@@ -57,7 +57,7 @@ type (
 
 		ClientBean        client.Bean
 		ArchivalClient    archiver.Client
-		MatchingClient    resource.MatchingClient
+		MatchingRawClient resource.MatchingRawClient
 		VisibilityManager manager.VisibilityManager
 	}
 
@@ -133,7 +133,7 @@ func (f *timerQueueFactory) CreateQueue(
 		logger,
 		f.MetricsHandler,
 		f.Config,
-		f.MatchingClient,
+		f.MatchingRawClient,
 	)
 
 	standbyExecutor := newTimerQueueStandbyTaskExecutor(
@@ -154,7 +154,7 @@ func (f *timerQueueFactory) CreateQueue(
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
 		),
-		f.MatchingClient,
+		f.MatchingRawClient,
 		logger,
 		f.MetricsHandler,
 		// note: the cluster name is for calculating time for standby tasks,
