@@ -40,18 +40,18 @@ import (
 // otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
 type (
 	otelMetricsHandler struct {
-		l            log.Logger
-		set          attribute.Set
-		provider     OpenTelemetryProvider
-		tagConverter tagConverter
-		catalog      catalog
-		gauges       *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
+		l           log.Logger
+		set         attribute.Set
+		provider    OpenTelemetryProvider
+		excludeTags map[string]map[string]struct{}
+		catalog     catalog
+		gauges      *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
 	}
-
-	tagConverter func(Tag) attribute.KeyValue
 
 	// This is to work around the lack of synchronous gauge:
 	// https://github.com/open-telemetry/opentelemetry-specification/issues/2318
+	// Basically, otel gauges only support getting a value with a callback, they can't store a
+	// value for us. So we have to store it ourselves and supply it to a callback.
 	gaugeAdapter struct {
 		lock   sync.Mutex
 		values map[attribute.Distinct]gaugeValue
@@ -86,12 +86,12 @@ func NewOtelMetricsHandler(
 		return nil, fmt.Errorf("failed to build metrics catalog: %w", err)
 	}
 	return &otelMetricsHandler{
-		l:            l,
-		set:          makeInitialSet(cfg.Tags),
-		provider:     o,
-		tagConverter: makeTagConverter(configExcludeTags(cfg)),
-		catalog:      c,
-		gauges:       new(sync.Map),
+		l:           l,
+		set:         makeInitialSet(cfg.Tags),
+		provider:    o,
+		excludeTags: configExcludeTags(cfg),
+		catalog:     c,
+		gauges:      new(sync.Map),
 	}, nil
 }
 
@@ -132,6 +132,7 @@ func (omp *otelMetricsHandler) getGaugeAdapter(gauge string) (*gaugeAdapter, err
 	opts := addOptions(omp, gaugeOptions{
 		metric.WithFloat64Callback(adapter.callback),
 	}, gauge)
+	// Register the gauge with otel. It will call our callback when it wants to read the values.
 	_, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, opts...)
 	if err != nil {
 		omp.gauges.Delete(gauge)
@@ -215,9 +216,18 @@ func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
 		attrs = append(attrs, i.Attribute())
 	}
 	for _, t := range tags {
-		attrs = append(attrs, omp.tagConverter(t))
+		attrs = append(attrs, omp.convertTag(t))
 	}
 	return attribute.NewSet(attrs...)
+}
+
+func (omp *otelMetricsHandler) convertTag(tag Tag) attribute.KeyValue {
+	if vals, ok := omp.excludeTags[tag.Key()]; ok {
+		if _, ok := vals[tag.Value()]; !ok {
+			return attribute.String(tag.Key(), tagExcludedValue)
+		}
+	}
+	return attribute.String(tag.Key(), tag.Value())
 }
 
 func makeInitialSet(tags map[string]string) attribute.Set {
@@ -229,20 +239,4 @@ func makeInitialSet(tags map[string]string) attribute.Set {
 		attrs = append(attrs, attribute.String(k, v))
 	}
 	return attribute.NewSet(attrs...)
-}
-
-func makeTagConverter(excludeTags excludeTags) tagConverter {
-	if len(excludeTags) == 0 {
-		return func(tag Tag) attribute.KeyValue {
-			return attribute.String(tag.Key(), tag.Value())
-		}
-	}
-	return func(tag Tag) attribute.KeyValue {
-		if vals, ok := excludeTags[tag.Key()]; ok {
-			if _, ok := vals[tag.Value()]; !ok {
-				return attribute.String(tag.Key(), tagExcludedValue)
-			}
-		}
-		return attribute.String(tag.Key(), tag.Value())
-	}
 }
