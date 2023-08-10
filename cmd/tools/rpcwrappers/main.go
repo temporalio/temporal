@@ -174,42 +174,46 @@ func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) 
 	return fields[0]
 }
 
-func findZeroOrOneNestedFields(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
-	fields := findNestedField(t, name, path, maxDepth)
-	if len(fields) == 0 {
-		return fieldWithPath{}
-	} else if len(fields) > 1 {
-		panic(fmt.Sprintf("Found more than one %s in %s (%v)", name, t, fields))
-	}
-	return fields[0]
-}
-
 func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
-	if field := findZeroOrOneNestedFields(t, "ShardId", "request", 1); field.path != "" {
-		return fmt.Sprintf("shardID := %s", field.path)
+
+	shardIdField := findNestedField(t, "ShardId", "request", 1)
+	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)
+	taskTokenField := findNestedField(t, "TaskToken", "request", 2)
+	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
+
+	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
+	if found < 1 {
+		panic(fmt.Sprintf("Found no routing fields in %s", t))
+	} else if found > 1 {
+		panic(fmt.Sprintf("Found more than one routing field in %s (%v, %v, %v, %v)",
+			t, shardIdField, workflowIdField, taskTokenField, taskInfosField))
 	}
-	if field := findZeroOrOneNestedFields(t, "WorkflowId", "request", 4); field.path != "" {
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", field.path)
-	}
-	if field := findZeroOrOneNestedFields(t, "TaskToken", "request", 2); field.path != "" {
+
+	switch {
+	case len(shardIdField) == 1:
+		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
+	case len(workflowIdField) == 1:
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
+	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, err
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
-`, field.path)
-	}
-	// slice needs a tiny bit of extra handling for namespace
-	if field := findZeroOrOneNestedFields(t, "TaskInfos", "request", 1); field.path != "" {
+`, taskTokenField[0].path)
+	case len(taskInfosField) == 1:
+		p := taskInfosField[0].path
+		// slice needs a tiny bit of extra handling for namespace
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	if len(%s) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, field.path, field.path, field.path)
+	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
+	default:
+		panic("not reached")
 	}
-	panic("I don't know how to get a client from a " + t.String())
 }
 
 func makeGetMatchingClient(reqType reflect.Type) string {
