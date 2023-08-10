@@ -47,6 +47,12 @@ const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
 
+	// "Version set id" for the dlq for versioned tasks. This won't match any real version set
+	// since those are based on hashes of build ids.
+	dlqVersionSet = "dlq"
+)
+
+const (
 	// userDataEnabled is the default state: user data is enabled.
 	userDataEnabled userDataState = iota
 	// userDataDisabled means user data is disabled due to the LoadUserData dynamic config
@@ -57,6 +63,8 @@ const (
 	// have its own user data and it should not be used. This should cause GetUserData to
 	// return an Internal error (access would indicate a bug).
 	userDataSpecificVersion
+	// userDataClosed means the task queue is closed.
+	userDataClosed
 )
 
 type (
@@ -90,6 +98,8 @@ var (
 	errNoUserDataOnVersionedTQM = serviceerror.NewInternal("should not get user data on versioned tqm")
 
 	errUserDataDisabled = serviceerror.NewFailedPrecondition("Task queue user data operations are disabled")
+
+	errTaskQueueClosed = serviceerror.NewUnavailable("task queue closed")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -329,9 +339,13 @@ func (db *taskQueueDB) getUserDataLocked() (*persistencespb.VersionedTaskQueueUs
 	case userDataEnabled:
 		return db.userData, db.userDataChanged, nil
 	case userDataDisabled:
-		return nil, nil, errUserDataDisabled
+		// return userDataChanged even with an error here so that a blocking wait can be
+		// interrupted when user data is enabled again.
+		return nil, db.userDataChanged, errUserDataDisabled
 	case userDataSpecificVersion:
 		return nil, nil, errNoUserDataOnVersionedTQM
+	case userDataClosed:
+		return nil, nil, errTaskQueueClosed
 	default:
 		// shouldn't happen
 		return nil, nil, serviceerror.NewInternal("unexpected user data enabled state")
@@ -369,10 +383,15 @@ func (db *taskQueueDB) loadUserData(ctx context.Context) error {
 	return nil
 }
 
-func (db *taskQueueDB) setUserDataState(setUserDataState userDataState) {
+func (db *taskQueueDB) setUserDataState(userDataState userDataState) {
 	db.Lock()
 	defer db.Unlock()
-	db.userDataState = setUserDataState
+
+	if userDataState != db.userDataState && db.userDataState != userDataClosed {
+		db.userDataState = userDataState
+		close(db.userDataChanged)
+		db.userDataChanged = make(chan struct{})
+	}
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed

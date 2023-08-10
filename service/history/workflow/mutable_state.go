@@ -169,6 +169,7 @@ type (
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfoWithTimerHeartbeat(scheduledEventID int64) (*persistencespb.ActivityInfo, time.Time, bool)
+		GetActivityType(context.Context, *persistencespb.ActivityInfo) (*commonpb.ActivityType, error)
 		GetActivityScheduledEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetRequesteCancelExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)

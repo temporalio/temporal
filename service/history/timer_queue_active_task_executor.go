@@ -150,8 +150,9 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
@@ -173,6 +174,11 @@ Loop:
 			break Loop
 		}
 
+		if !mutableState.IsWorkflowExecutionRunning() {
+			release(nil) // release(nil) so mutable state is not unloaded from cache
+			return consts.ErrWorkflowCompleted
+		}
+
 		if _, err := mutableState.AddTimerFiredEvent(timerInfo.GetTimerId()); err != nil {
 			return err
 		}
@@ -180,7 +186,8 @@ Loop:
 	}
 
 	if !timerFired {
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return errNoTimerFired
 	}
 
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, timerFired)
@@ -432,8 +439,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	// generate activity task
@@ -450,11 +458,17 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.Attempt))
 		}
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{

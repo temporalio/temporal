@@ -377,9 +377,9 @@ message VerifyFirstWorkflowTaskScheduledResponse {
 **/
 message RecordChildExecutionCompletedRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 2;
     int64 parent_initiated_id = 3;
-    temporal.api.common.v1.WorkflowExecution completed_execution = 4;
+    temporal.api.common.v1.WorkflowExecution child_execution = 4;
     temporal.api.history.v1.HistoryEvent completion_event = 5;
     temporal.server.api.clock.v1.VectorClock clock = 6;
     int64 parent_initiated_version = 7;

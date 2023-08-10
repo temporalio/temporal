@@ -43,6 +43,8 @@ var readOnlyNamespaceAPI = map[string]struct{}{
 	"ListScheduleMatchingTimes":          {},
 	"DescribeBatchOperation":             {},
 	"ListBatchOperations":                {},
+	"GetWorkerBuildIdCompatibility":      {},
+	"GetWorkerTaskReachability":          {},
 }
 
 var readOnlyGlobalAPI = map[string]struct{}{

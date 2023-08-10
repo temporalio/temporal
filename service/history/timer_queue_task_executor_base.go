@@ -46,7 +46,10 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
+var (
+	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
+	errNoTimerFired     = serviceerror.NewNotFound("no expired timer to fire found")
+)
 
 type (
 	timerQueueTaskExecutorBase struct {

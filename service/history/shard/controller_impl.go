@@ -75,6 +75,14 @@ type (
 		ownership            *ownership
 		status               int32
 		taggedMetricsHandler metrics.Handler
+		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
+		// shards that this controller owns changes.
+		shardCountSubscriptions map[*shardCountSubscription]struct{}
+	}
+	// shardCountSubscription is a subscription to shard count updates.
+	shardCountSubscription struct {
+		controller *ControllerImpl
+		ch         chan int
 	}
 )
 
@@ -87,7 +95,7 @@ func ControllerProvider(
 	metricsHandler metrics.Handler,
 	hostInfoProvider membership.HostInfoProvider,
 	contextFactory ContextFactory,
-) Controller {
+) *ControllerImpl {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	contextTaggedLogger := log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
 	taggedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope))
@@ -101,13 +109,14 @@ func ControllerProvider(
 	)
 
 	c := &ControllerImpl{
-		config:               config,
-		contextFactory:       contextFactory,
-		contextTaggedLogger:  contextTaggedLogger,
-		historyShards:        make(map[int32]ControllableContext),
-		hostInfoProvider:     hostInfoProvider,
-		ownership:            ownership,
-		taggedMetricsHandler: taggedMetricsHandler,
+		config:                  config,
+		contextFactory:          contextFactory,
+		contextTaggedLogger:     contextTaggedLogger,
+		historyShards:           make(map[int32]ControllableContext),
+		hostInfoProvider:        hostInfoProvider,
+		ownership:               ownership,
+		taggedMetricsHandler:    taggedMetricsHandler,
+		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
 	}
 	c.lingerState.shards = make(map[ControllableContext]struct{})
 	return c
@@ -446,6 +455,20 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	c.RUnlock()
 
 	c.taggedMetricsHandler.Gauge(metrics.NumShardsGauge.GetMetricName()).Record(float64(numOfOwnedShards))
+	c.publishShardCountUpdate(numOfOwnedShards)
+}
+
+// publishShardCountUpdate publishes the current number of shards that this controller owns to all shard count
+// subscribers in a non-blocking manner.
+func (c *ControllerImpl) publishShardCountUpdate(shardCount int) {
+	c.RLock()
+	defer c.RUnlock()
+	for sub := range c.shardCountSubscriptions {
+		select {
+		case sub.ch <- shardCount:
+		default:
+		}
+	}
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -466,6 +489,35 @@ func (c *ControllerImpl) validateShardId(shardID int32) error {
 		return invalidShardIdUpperBound
 	}
 	return nil
+}
+
+// SubscribeShardCount returns a subscription to shard count updates with a 1-buffered channel. This method is thread-safe.
+func (c *ControllerImpl) SubscribeShardCount() ShardCountSubscription {
+	c.Lock()
+	defer c.Unlock()
+	sub := &shardCountSubscription{
+		controller: c,
+		ch:         make(chan int, 1), // buffered because we do a non-blocking send
+	}
+	c.shardCountSubscriptions[sub] = struct{}{}
+	return sub
+}
+
+// ShardCount returns a channel that receives the current shard count. This channel will be closed when the subscription
+// is canceled.
+func (s *shardCountSubscription) ShardCount() <-chan int {
+	return s.ch
+}
+
+// Unsubscribe removes the subscription from the controller's list of subscriptions.
+func (s *shardCountSubscription) Unsubscribe() {
+	s.controller.Lock()
+	defer s.controller.Unlock()
+	if _, ok := s.controller.shardCountSubscriptions[s]; !ok {
+		return
+	}
+	delete(s.controller.shardCountSubscriptions, s)
+	close(s.ch)
 }
 
 func IsShardOwnershipLostError(err error) bool {

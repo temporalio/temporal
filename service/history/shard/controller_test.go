@@ -119,7 +119,7 @@ func NewTestController(
 		metricsTestHandler,
 		resource.GetHostInfoProvider(),
 		contextFactory,
-	).(*ControllerImpl)
+	)
 }
 
 func TestShardControllerSuite(t *testing.T) {
@@ -147,6 +147,10 @@ func (s *controllerSuite) SetupTest() {
 	metricsTestHandler, err := metricstest.NewHandler(log.NewNoopLogger(), metrics.ClientConfig{})
 	s.NoError(err)
 	s.metricsTestHandler = metricsTestHandler
+
+	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 
 	s.shardController = NewTestController(
 		s.mockEngineFactory,
@@ -180,9 +184,6 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 		}
 	}
 
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards(context.Background())
 	count := 0
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -221,9 +222,6 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 		}
 	}
 
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards(context.Background())
 	count := 0
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -265,9 +263,6 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards(context.Background())
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -298,9 +293,6 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards(context.Background())
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -342,9 +334,6 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName,
 		gomock.Any()).Return(nil).AnyTimes()
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
 	s.shardController.acquireShards(context.Background())
 
@@ -444,9 +433,6 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	}
 
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
 	s.shardController.acquireShards(context.Background())
 
@@ -484,8 +470,6 @@ func (s *controllerSuite) TestShardControllerClosed() {
 func (s *controllerSuite) TestShardExplicitUnload() {
 	s.config.NumberOfShards = 1
 
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 	s.setupMocksForAcquireShard(1, mockEngine, 5, 6, false)
@@ -507,8 +491,6 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	s.config.NumberOfShards = 1
 
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
@@ -550,8 +532,6 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	s.config.NumberOfShards = 1
 
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	mockEngine := NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
@@ -608,8 +588,6 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 
 	// only for MockEngines: we just need to hook Start/Stop, not verify calls
 	disconnectedMockController := gomock.NewController(nil)
@@ -750,9 +728,6 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	historyEngines[shardID] = mockEngine
 	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 
-	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards(context.Background())
 
 	s.Len(s.shardController.ShardIDs(), 1)
@@ -824,8 +799,6 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 		ShardID: shardID,
 		RangeID: 6,
 	}).Return(nil).Times(1)
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 
 	s.shardController.acquireShards(context.Background())
 	s.Len(s.shardController.ShardIDs(), 1)
@@ -858,6 +831,46 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 	time.Sleep(expectedWait + 100*time.Millisecond)
 
 	s.Len(s.shardController.ShardIDs(), 0)
+}
+
+// TestShardCounter verifies that we can subscribe to shard count updates, receive them when shards are acquired, and
+// unsubscribe from the updates when needed.
+func (s *controllerSuite) TestShardCounter() {
+	// subscribe to shard count updates
+	sub1 := s.shardController.SubscribeShardCount()
+
+	// validate that we get the initial shard count
+	s.Empty(sub1.ShardCount(), "Should not publish shard count before acquiring shards")
+	s.setupAndAcquireShards(2)
+	s.Equal(2, <-sub1.ShardCount(), "Should publish shard count after acquiring shards")
+	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
+
+	// acquire shards twice to validate that this does not block even if there's no capacity left on the channel
+	s.setupAndAcquireShards(3)
+	s.setupAndAcquireShards(4)
+	s.Equal(3, <-sub1.ShardCount(), "Shard count is buffered, so we should only get the first value")
+	s.Empty(sub1.ShardCount(), "Shard count channel should be drained")
+
+	// unsubscribe and validate that the channel is closed, but the other subscriber is still receiving updates
+	sub2 := s.shardController.SubscribeShardCount()
+	sub1.Unsubscribe()
+	s.setupAndAcquireShards(4)
+	_, ok := <-sub1.ShardCount()
+	s.False(ok, "Channel should be closed because sub1 is canceled")
+	sub1.Unsubscribe() // should not panic if called twice
+	s.Equal(4, <-sub2.ShardCount(), "Should receive shard count updates on sub2 even if sub1 is canceled")
+	sub2.Unsubscribe()
+}
+
+// setupAndAcquireShards sets up the mocks for acquiring the given number of shards and then calls acquireShards. It is
+// safe to call this multiple times throughout a test.
+func (s *controllerSuite) setupAndAcquireShards(numShards int) {
+	s.config.NumberOfShards = int32(numShards)
+	mockEngine := NewMockEngine(s.controller)
+	for shardID := 1; shardID <= numShards; shardID++ {
+		s.setupMocksForAcquireShard(int32(shardID), mockEngine, 5, 6, false)
+	}
+	s.shardController.acquireShards(context.Background())
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(

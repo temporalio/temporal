@@ -142,12 +142,10 @@ func Invoke(
 				p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
 				p.HeartbeatDetails = ai.LastHeartbeatDetails
 			}
-			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+			p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
 			if err != nil {
 				return nil, err
 			}
-			p.ActivityType = scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType
 			if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 				p.ScheduledTime = ai.ScheduledTime
 			} else {

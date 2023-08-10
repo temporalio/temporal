@@ -35,6 +35,14 @@ import (
 )
 
 type (
+	// OwnershipBasedQuotaScaler scales rate-limiting quotas linearly with the fraction of the total shards in the
+	// cluster owned by this host. The purpose is to allocate more quota to hosts with a higher workload. This object
+	// can be obtained from the fx Module within this package.
+	OwnershipBasedQuotaScaler struct {
+		shardCounter          ShardCounter
+		totalNumShards        int
+		updateAppliedCallback chan struct{}
+	}
 	// OwnershipScaledRateBurst is a quotas.RateBurst implementation that scales the RPS and burst quotas linearly with
 	// the fraction of the total shards in the cluster owned by this host. The effective Rate and Burst are both
 	// multiplied by (shardCount / totalShards). Note that there is no scaling until the first shard count update is
@@ -64,8 +72,8 @@ type (
 	}
 	// ShardCounter is an observable object that emits the current shard count.
 	ShardCounter interface {
-		// Subscribe returns a ShardCountSubscription for receiving shard count updates.
-		Subscribe() ShardCountSubscription
+		// SubscribeShardCount returns a ShardCountSubscription for receiving shard count updates.
+		SubscribeShardCount() ShardCountSubscription
 	}
 )
 
@@ -76,6 +84,56 @@ var (
 
 	ErrNonPositiveTotalNumShards = errors.New("totalNumShards must be greater than 0")
 )
+
+// NewOwnershipBasedQuotaScaler returns an OwnershipBasedQuotaScaler. The updateAppliedCallback field is a channel which
+// is sent to in a blocking fashion when the shard count updates are applied. This is useful for testing. In production,
+// you should pass in nil, which will cause the callback to be ignored. If totalNumShards is non-positive, then an error
+// is returned.
+func NewOwnershipBasedQuotaScaler(
+	shardCounter ShardCounter,
+	totalNumShards int,
+	updateAppliedCallback chan struct{},
+) (*OwnershipBasedQuotaScaler, error) {
+	if totalNumShards <= 0 {
+		return nil, fmt.Errorf("%w: %d", ErrNonPositiveTotalNumShards, totalNumShards)
+	}
+
+	return &OwnershipBasedQuotaScaler{
+		shardCounter:          shardCounter,
+		totalNumShards:        totalNumShards,
+		updateAppliedCallback: updateAppliedCallback,
+	}, nil
+}
+
+// ScaleRateBurst returns a new OwnershipScaledRateBurst instance which scales the rate/burst quotas of the base
+// RateBurst by the fraction of the total shards in the cluster owned by this host. You should call
+// OwnershipScaledRateBurst.StopScaling on the returned instance when you are done with it to avoid leaking resources.
+func (s *OwnershipBasedQuotaScaler) ScaleRateBurst(rb quotas.RateBurst) *OwnershipScaledRateBurst {
+	return newOwnershipScaledRateBurst(rb, s.shardCounter, s.totalNumShards, s.updateAppliedCallback)
+}
+
+func newOwnershipScaledRateBurst(
+	rb quotas.RateBurst,
+	shardCounter ShardCounter,
+	totalNumShards int,
+	updateAppliedCallback chan struct{},
+) *OwnershipScaledRateBurst {
+	subscription := shardCounter.SubscribeShardCount()
+	srb := &OwnershipScaledRateBurst{
+		rb:                    rb,
+		totalShards:           totalNumShards,
+		subscription:          subscription,
+		updateAppliedCallback: updateAppliedCallback,
+	}
+	// Initialize the shard count to the shardCountNotSet sentinel value so that we don't try to apply the scale factor
+	// until we receive the first shard count.
+	srb.shardCount.Store(shardCountNotSet)
+	srb.wg.Add(1)
+
+	go srb.startScaling()
+
+	return srb
+}
 
 // Rate returns the rate of the base rate limiter multiplied by the shard ownership share.
 func (rb *OwnershipScaledRateBurst) Rate() float64 {
@@ -101,42 +159,12 @@ func (rb *OwnershipScaledRateBurst) scaleFactor() float64 {
 	return float64(shardCount) / float64(rb.totalShards)
 }
 
-// NewOwnershipScaledRateBurst returns a OwnershipScaledRateBurst that scales the rate/burst quotas of the base
-// RateBurst by the fraction of the total shards in the cluster owned by this host. The updateAppliedCallback field is a
-// channel which is sent to in a blocking fashion when the shard count updates are applied. This is useful for testing.
-// In production, you should pass in nil, which will cause the callback to be ignored. If totalNumShards is
-// non-positive, then an error is returned.
-func NewOwnershipScaledRateBurst(
-	rb quotas.RateBurst,
-	shardCounter ShardCounter,
-	totalNumShards int,
-	updateAppliedCallback chan struct{},
-) (*OwnershipScaledRateBurst, error) {
-	if totalNumShards <= 0 {
-		return nil, fmt.Errorf("%w: %d", ErrNonPositiveTotalNumShards, totalNumShards)
-	}
-	subscription := shardCounter.Subscribe()
-	srb := &OwnershipScaledRateBurst{
-		rb:                    rb,
-		totalShards:           totalNumShards,
-		subscription:          subscription,
-		updateAppliedCallback: updateAppliedCallback,
-	}
-	// Initialize the shard count to the shardCountNotSet sentinel value so that we don't try to apply the scale factor
-	// until we receive the first shard count.
-	srb.shardCount.Store(shardCountNotSet)
-	srb.wg.Add(1)
-
-	go srb.startScaling()
-
-	return srb, nil
-}
-
 func (rb *OwnershipScaledRateBurst) startScaling() {
 	defer rb.wg.Done()
 
 	for shardCount := range rb.subscription.ShardCount() {
 		rb.shardCount.Store(int64(shardCount))
+
 		if rb.updateAppliedCallback != nil {
 			rb.updateAppliedCallback <- struct{}{}
 		}
