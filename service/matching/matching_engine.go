@@ -151,9 +151,7 @@ var (
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
-	// ErrNoTasks is exported temporarily for integration test
-	ErrNoTasks    = errors.New("no tasks")
-	errPumpClosed = errors.New("task queue pump closed its channel")
+	errNoTasks = errors.New("no tasks")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -494,8 +492,7 @@ pollLoop:
 		}
 		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			// TODO: Is empty poll the best reply for errPumpClosed?
-			if err == ErrNoTasks || err == errPumpClosed {
+			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
@@ -613,8 +610,7 @@ pollLoop:
 		}
 		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			// TODO: Is empty poll the best reply for errPumpClosed?
-			if err == ErrNoTasks || err == errPumpClosed {
+			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
