@@ -333,12 +333,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
-	}
-
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		return false, err
 	}
@@ -391,12 +386,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
-	}
-
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		return false, err
 	}
@@ -441,16 +431,15 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
+		// If normal queue: always load the base tqm to get versioning data.
+		// If sticky queue: sticky is not versioned, so if we got here (by taskReader calling this),
+		// the queue is already loaded.
+		// So we can always use true here.
 		baseTqm, err := e.getTaskQueueManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
 		if err != nil {
 			return err
 		}
-		taskQueue, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
-		if err != nil {
-			return err
-		}
-		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
-		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
+		tqm, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
 		if err != nil {
 			return err
 		}
@@ -688,16 +677,11 @@ func (e *matchingEngineImpl) QueryWorkflow(
 
 	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
 	// or fail with a relatively short timeout.
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
 	if err != nil {
 		return nil, err
-	} else if taskQueue.VersionSet() == dlqVersionSet {
+	} else if tqm.QueueID().VersionSet() == dlqVersionSet {
 		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-	}
-
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
-	if err != nil {
-		return nil, err
 	}
 
 	taskID := uuid.New()
@@ -1200,16 +1184,12 @@ func (e *matchingEngineImpl) getTask(
 		return nil, err
 	}
 
-	taskQueue, err := baseTqm.RedirectToVersionedQueueForPoll(pollMetadata.workerVersionCapabilities)
+	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
-		return nil, err
-	}
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
 		return nil, err
 	}
 
