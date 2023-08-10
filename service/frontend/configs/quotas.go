@@ -62,7 +62,6 @@ var (
 		"TerminateWorkflowExecution":       1,
 		"GetWorkflowExecutionHistory":      1,
 		"UpdateWorkflowExecution":          1,
-		"PollWorkflowExecutionUpdate":      1,
 
 		// priority 2
 		"RecordActivityTaskHeartbeat":      2,
@@ -74,15 +73,16 @@ var (
 		"RespondActivityTaskCompleted":     2,
 		"RespondActivityTaskCompletedById": 2,
 		"RespondWorkflowTaskCompleted":     2,
+		"RespondWorkflowTaskFailed":        2,
+		"RespondQueryTaskCompleted":        2,
 
 		// priority 3
 		"ResetWorkflowExecution":             3,
 		"DescribeWorkflowExecution":          3,
-		"RespondWorkflowTaskFailed":          3,
 		"QueryWorkflow":                      3,
-		"RespondQueryTaskCompleted":          3,
 		"PollWorkflowTaskQueue":              3,
 		"PollActivityTaskQueue":              3,
+		"PollWorkflowExecutionUpdate":        3,
 		"GetWorkflowExecutionHistoryReverse": 3,
 		"GetWorkerBuildIdCompatibility":      3,
 		"GetWorkerTaskReachability":          3,
