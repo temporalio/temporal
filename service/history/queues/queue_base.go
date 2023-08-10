@@ -392,7 +392,7 @@ func (p *queueBase) checkpoint() {
 	// for the queue
 	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
-		p.updateShardRangeID() {
+		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
 		// when shard rangeID is updated, perform range completion again in case the underlying persistence implementation
 		// serves traffic based on the persisted shardInfo
 		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
