@@ -830,6 +830,8 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 			}
 			// Send versioned tasks to dlq.
 			newId := newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet)
+			// If we're called by QueryWorkflow, then we technically don't need to load the dlq
+			// tqm here. But it's not a big deal if we do.
 			tqm, err := c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
 			if err != nil {
 				return nil, nil, err

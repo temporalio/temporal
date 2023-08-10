@@ -433,6 +433,10 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
+		// If normal queue: always load the base tqm to get versioning data.
+		// If sticky queue: sticky is not versioned, so if we got here (by taskReader calling this),
+		// the queue is already loaded.
+		// So we can always use true here.
 		baseTqm, err := e.getTaskQueueManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
 		if err != nil {
 			return err
