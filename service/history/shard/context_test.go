@@ -415,9 +415,8 @@ func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
 	s.mockShard.state = contextStateAcquiring
 	s.mockShard.acquireShardRetryPolicy = backoff.NewExponentialRetryPolicy(time.Nanosecond).
 		WithMaximumAttempts(5)
-	// TODO: make this 5 times instead of 6 when retry policy is fixed
 	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).
-		Return(fmt.Errorf("temp error")).Times(6)
+		Return(fmt.Errorf("temp error")).Times(5)
 
 	s.mockShard.acquireShard()
 
