@@ -109,7 +109,7 @@ func newMonitor(
 		initialized:               future.NewFuture[struct{}](),
 	}
 	for service, serviceHost := range services {
-		rpo.rings[service] = newServiceResolver(service, serviceHost.GetGRPCPort(), rp, logger)
+		rpo.rings[service] = newServiceResolver(service, serviceHost, rp, logger)
 	}
 	return rpo
 }

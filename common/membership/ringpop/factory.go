@@ -259,11 +259,19 @@ func (factory *factory) getHostInfoProvider() (membership.HostInfoProvider, erro
 	// The broadcastAddressResolver returns the host:port used to listen for
 	// ringpop messages. We use a different port for the service, so we
 	// replace that portion.
-	serviceAddress, err := replaceServicePort(address, serviceHost.GetGRPCPort())
+	serviceAddress, err := extractHostFromAddress(address)
 	if err != nil {
 		return nil, err
 	}
 
-	hostInfo := membership.NewHostInfoFromAddress(serviceAddress)
+	hostInfo := membership.NewHostInfoFromServiceHost(serviceAddress, serviceHost)
 	return membership.NewHostInfoProvider(hostInfo), nil
+}
+
+func extractHostFromAddress(address string) (string, error) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", membership.ErrIncorrectAddressFormat
+	}
+	return host, nil
 }

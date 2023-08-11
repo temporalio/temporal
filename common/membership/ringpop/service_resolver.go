@@ -26,6 +26,7 @@ package ringpop
 
 import (
 	"errors"
+	"go.temporal.io/server/common/config"
 	"net"
 	"strconv"
 	"sync"
@@ -65,7 +66,7 @@ const (
 type serviceResolver struct {
 	status      int32
 	service     primitives.ServiceName
-	port        int
+	serviceHost config.ServiceHost
 	rp          *service
 	refreshChan chan struct{}
 	shutdownCh  chan struct{}
@@ -86,14 +87,14 @@ var _ membership.ServiceResolver = (*serviceResolver)(nil)
 
 func newServiceResolver(
 	service primitives.ServiceName,
-	port int,
+	serviceHost config.ServiceHost,
 	rp *service,
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
 		status:      common.DaemonStatusInitialized,
 		service:     service,
-		port:        port,
+		serviceHost: serviceHost,
 		rp:          rp,
 		refreshChan: make(chan struct{}),
 		shutdownCh:  make(chan struct{}),
@@ -289,7 +290,7 @@ func (r *serviceResolver) getReachableMembers() ([]string, error) {
 
 	var hostPorts []string
 	for _, member := range members {
-		servicePort := r.port
+		servicePort := r.serviceHost.GetGRPCPort()
 
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
 		// on via a service label. If we cannot find the label, we will assume that the

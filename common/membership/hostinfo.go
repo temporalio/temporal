@@ -24,6 +24,12 @@
 
 package membership
 
+import (
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/convert"
+	"net"
+)
+
 // HostInfo represents the host of a Temporal service.
 type HostInfo interface {
 	// Identity returns the unique identifier of the host.
@@ -39,6 +45,13 @@ func NewHostInfoFromAddress(address string) HostInfo {
 	return hostAddress(address)
 }
 
+func NewHostInfoFromServiceHost(serviceAddress string, serviceHost config.ServiceHost) HostInfo {
+	return serviceHostAddress{
+		serviceAddress: serviceAddress,
+		serviceHost:    serviceHost,
+	}
+}
+
 // hostAddress is a HostInfo implementation that uses a string as the address and identity.
 type hostAddress string
 
@@ -50,4 +63,18 @@ func (a hostAddress) GetAddress() string {
 // Identity returns the value of the hostAddress.
 func (a hostAddress) Identity() string {
 	return string(a)
+}
+
+// serviceHostAddress is a HostInfo implementation that uses a ServiceHost to resolve the identity later
+type serviceHostAddress struct {
+	serviceHost    config.ServiceHost
+	serviceAddress string
+}
+
+func (a serviceHostAddress) GetAddress() string {
+	return net.JoinHostPort(a.serviceAddress, convert.IntToString(a.serviceHost.GetGRPCPort()))
+}
+
+func (a serviceHostAddress) Identity() string {
+	return a.GetAddress()
 }
