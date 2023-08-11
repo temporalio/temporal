@@ -451,14 +451,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	}
 }
 
-//                            Now
-//                    │        │    bias │
-// ───────────────────┼────────▼─────────┼──────
-//   closeTime        │    Skip Range    │
-//      │                 deleteTime
-//      └───────────────────┘
-//         retention
-
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	bias := time.Minute
 	request := verifyReplicationTasksRequest{
@@ -479,14 +471,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		},
 		{
 			30 * time.Second,
-			true,
-		},
-		{
-			-(bias + time.Minute),
-			false,
-		},
-		{
-			bias + time.Minute,
 			false,
 		},
 	}

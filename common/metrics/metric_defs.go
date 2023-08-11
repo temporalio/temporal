@@ -1633,15 +1633,15 @@ var (
 	)
 
 	// Force replication
-	EncounterZombieWorkflowCount           = NewCounterDef("encounter_zombie_workflow_count")
-	EncounterNotFoundWorkflowCount         = NewCounterDef("encounter_not_found_workflow_count")
-	EncounterCloseToRetentionWorkflowCount = NewCounterDef("encounter_close_to_retention_workflow_count")
-	GenerateReplicationTasksLatency        = NewTimerDef("generate_replication_tasks_latency")
-	VerifyReplicationTaskSuccess           = NewCounterDef("verify_replication_task_success")
-	VerifyReplicationTaskNotFound          = NewCounterDef("verify_replication_task_not_found")
-	VerifyReplicationTaskFailed            = NewCounterDef("verify_replication_task_failed")
-	VerifyReplicationTasksLatency          = NewTimerDef("verify_replication_tasks_latency")
-	VerifyDescribeMutableStateLatency      = NewTimerDef("verify_describe_mutable_state_latency")
+	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount      = NewCounterDef("encounter_not_found_workflow_count")
+	EncounterPassRetentionWorkflowCount = NewCounterDef("encounter_pass_retention_workflow_count")
+	GenerateReplicationTasksLatency     = NewTimerDef("generate_replication_tasks_latency")
+	VerifyReplicationTaskSuccess        = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTaskNotFound       = NewCounterDef("verify_replication_task_not_found")
+	VerifyReplicationTaskFailed         = NewCounterDef("verify_replication_task_failed")
+	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
+	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")
