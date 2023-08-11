@@ -642,7 +642,7 @@ func (a *activities) verifyReplicationTasks(
 }
 
 const (
-	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
+	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
 )
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
