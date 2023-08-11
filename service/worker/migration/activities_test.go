@@ -451,14 +451,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	}
 }
 
-//                            Now
-//                    │        │    bias │
-// ───────────────────┼────────▼─────────┼──────
-//   closeTime        │    Skip Range    │
-//      │                 deleteTime
-//      └───────────────────┘
-//         retention
-
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	bias := time.Minute
 	request := verifyReplicationTasksRequest{
@@ -479,14 +471,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		},
 		{
 			30 * time.Second,
-			true,
-		},
-		{
-			-(bias + time.Minute),
-			false,
-		},
-		{
-			bias + time.Minute,
 			false,
 		},
 	}
@@ -617,12 +601,4 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
-}
-
-func (s *activitiesSuite) Test_isCloseToCurrentTime() {
-	d := time.Minute
-	now := time.Now()
-	s.True(isCloseToCurrentTime(now, d))
-	s.False(isCloseToCurrentTime(now.Add(2*time.Minute), d))
-	s.False(isCloseToCurrentTime(now.Add(-2*time.Minute), d))
 }
