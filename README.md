@@ -1,5 +1,5 @@
-[![Build status](https://badge.buildkite.com/98c157ed502d55722ef7f28e6470aa20702c76d6989a0a5a89.svg?branch=master)](https://buildkite.com/temporal/temporal-public)
-[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=master)](https://coveralls.io/github/temporalio/temporal?branch=master)
+[![Build status](https://badge.buildkite.com/98c157ed502d55722ef7f28e6470aa20702c76d6989a0a5a89.svg?branch=main)](https://buildkite.com/temporal/temporal-public)
+[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](https://coveralls.io/github/temporalio/temporal?branch=main)
 [![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
 
@@ -64,4 +64,4 @@ Once you're sure the proposal is not covered elsewhere, please follow our [propo
 
 ## License
 
-[MIT License](https://github.com/temporalio/temporal/blob/master/LICENSE)
+[MIT License](https://github.com/temporalio/temporal/blob/main/LICENSE)
