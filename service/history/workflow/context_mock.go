@@ -116,6 +116,20 @@ func (mr *MockContextMockRecorder) GetWorkflowKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockContext)(nil).GetWorkflowKey))
 }
 
+// IsDirty mocks base method.
+func (m *MockContext) IsDirty() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDirty")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDirty indicates an expected call of IsDirty.
+func (mr *MockContextMockRecorder) IsDirty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockContext)(nil).IsDirty))
+}
+
 // LoadExecutionStats mocks base method.
 func (m *MockContext) LoadExecutionStats(ctx context.Context) (*v1.ExecutionStats, error) {
 	m.ctrl.T.Helper()
