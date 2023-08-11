@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	replicationpb "go.temporal.io/api/replication/v1"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/client/history"
@@ -2032,4 +2033,73 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	}()
 	<-shutdownChan.Channel()
 	return nil
+}
+
+func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+	req := &persistence.GetNamespaceRequest{
+		Name: request.GetNamespace(),
+		ID:   request.GetId(),
+	}
+	resp, err := adh.persistenceMetadataManager.GetNamespace(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	info := resp.Namespace.GetInfo()
+	nsConfig := resp.Namespace.GetConfig()
+	replicationConfig := resp.Namespace.GetReplicationConfig()
+
+	task := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                 resp.Namespace.GetInfo().Id,
+		Info: &namespacepb.NamespaceInfo{
+			Name:        info.Name,
+			State:       info.State,
+			Description: info.Description,
+			OwnerEmail:  info.Owner,
+			Data:        info.Data,
+		},
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: nsConfig.Retention,
+			HistoryArchivalState:          nsConfig.HistoryArchivalState,
+			HistoryArchivalUri:            nsConfig.HistoryArchivalUri,
+			VisibilityArchivalState:       nsConfig.VisibilityArchivalState,
+			VisibilityArchivalUri:         nsConfig.VisibilityArchivalUri,
+			BadBinaries:                   nsConfig.BadBinaries,
+			CustomSearchAttributeAliases:  nsConfig.CustomSearchAttributeAliases,
+		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+		},
+		ConfigVersion:   resp.Namespace.GetConfigVersion(),
+		FailoverVersion: resp.Namespace.GetFailoverVersion(),
+		FailoverHistory: convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+	}
+	return &adminservice.GetNamespaceResponse{
+		Namespace: task,
+	}, nil
+}
+
+func convertClusterReplicationConfigToProto(
+	input []string,
+) []*replicationpb.ClusterReplicationConfig {
+	output := make([]*replicationpb.ClusterReplicationConfig, 0, len(input))
+	for _, clusterName := range input {
+		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
+	}
+	return output
+}
+
+func convertFailoverHistoryToReplicationProto(
+	failoverHistoy []*persistencespb.FailoverStatus,
+) []*replicationpb.FailoverStatus {
+	var replicationProto []*replicationpb.FailoverStatus
+	for _, failoverStatus := range failoverHistoy {
+		replicationProto = append(replicationProto, &replicationpb.FailoverStatus{
+			FailoverTime:    failoverStatus.GetFailoverTime(),
+			FailoverVersion: failoverStatus.GetFailoverVersion(),
+		})
+	}
+
+	return replicationProto
 }

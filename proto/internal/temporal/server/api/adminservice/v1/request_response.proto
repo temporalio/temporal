@@ -389,3 +389,14 @@ message StreamWorkflowReplicationMessagesResponse {
         temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
     }
 }
+
+message GetNamespaceRequest {
+    oneof attributes {
+        string namespace = 1;
+        string id = 2;
+    }
+}
+
+message GetNamespaceResponse {
+    temporal.server.api.replication.v1.NamespaceTaskAttributes namespace = 1;
+}

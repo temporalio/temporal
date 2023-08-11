@@ -29,34 +29,52 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
+var ErrOutlierNamespace = serviceerror.NewInvalidArgument("Namespace does not belong to current cluster")
+
 type (
 	EagerNamespaceRefresher interface {
 		UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error
+		SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error
 	}
 
 	eagerNamespaceRefresherImpl struct {
-		metadataManager   persistence.MetadataManager
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		lock              sync.Mutex
+		metadataManager         persistence.MetadataManager
+		namespaceRegistry       namespace.Registry
+		logger                  log.Logger
+		lock                    sync.Mutex
+		clientBean              client.Bean
+		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		currentCluster          string
+		metricsHandler          metrics.Handler
 	}
 )
 
 func NewEagerNamespaceRefresher(
 	metadataManager persistence.MetadataManager,
 	namespaceRegistry namespace.Registry,
-	logger log.Logger) EagerNamespaceRefresher {
+	logger log.Logger,
+	clientBean client.Bean,
+	replicationTaskExecutor namespace.ReplicationTaskExecutor,
+	currentCluster string,
+	metricsHandler metrics.Handler) EagerNamespaceRefresher {
 	return &eagerNamespaceRefresherImpl{
-		metadataManager:   metadataManager,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		metadataManager:         metadataManager,
+		namespaceRegistry:       namespaceRegistry,
+		logger:                  logger,
+		clientBean:              clientBean,
+		replicationTaskExecutor: replicationTaskExecutor,
+		currentCluster:          currentCluster,
+		metricsHandler:          metricsHandler,
 	}
 }
 
@@ -117,4 +135,33 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 		return err
 	}
 	return nil
+}
+
+func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error {
+	// Potential Perf improvement: one lock per namespaceID
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	adminClient, err := e.clientBean.GetRemoteAdminClient(sourceCluster)
+	if err != nil {
+		return err
+	}
+	resp, err := adminClient.GetNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	hasCurrentCluster := false
+	for _, c := range resp.GetNamespace().GetReplicationConfig().GetClusters() {
+		if e.currentCluster == c.GetClusterName() {
+			hasCurrentCluster = true
+		}
+	}
+	if !hasCurrentCluster {
+		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.GetMetricName()).Record(1)
+		return ErrOutlierNamespace
+	}
+	return e.replicationTaskExecutor.Execute(ctx, resp.Namespace)
 }
