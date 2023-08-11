@@ -86,7 +86,9 @@ type (
 	// RPC contains the rpc config items
 	RPC struct {
 		// GRPCPort is the port  on which gRPC will listen
-		GRPCPort      int `yaml:"grpcPort"`
+		GRPCPort int `yaml:"grpcPort"`
+		// To correctly support providing 0 as a value for GRPCPort,
+		// we need to save the actual port on which the GPRC listener is active
 		boundGRPCPort *int
 		// Port used for membership listener
 		MembershipPort int `yaml:"membershipPort"`
@@ -634,13 +636,18 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 	return false
 }
 
-func (s *RPC) GetGRPCPort() int {
-	if s.boundGRPCPort != nil {
-		return *s.boundGRPCPort
+// GetGRPCPort return the port on which the GRPC listener is currently
+// listening if the listener has been started, or the configured port
+// if the listener hasn't been started yet
+func (r *RPC) GetGRPCPort() int {
+	if r.boundGRPCPort != nil {
+		return *r.boundGRPCPort
 	}
-	return s.GRPCPort
+	return r.GRPCPort
 }
 
+// SetBoundGRPCPort allows to update the RPC configuration with the
+// actual port on which the GRPC Listener is actively listening on
 func (r *RPC) SetBoundGRPCPort(port int) {
 	r.boundGRPCPort = &port
 }

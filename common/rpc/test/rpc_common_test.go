@@ -100,7 +100,6 @@ func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, 
 	helloworld.RegisterGreeterServer(server, greeter)
 	previousValue := rpcTestCfgDefault.GetGRPCPort()
 	listener := factory.GetGRPCListener()
-	s.NotNil(rpcTestCfgDefault.GetGRPCPort())
 	s.NotEqual(rpcTestCfgDefault.GRPCPort, rpcTestCfgDefault.GetGRPCPort())
 	// rpcTestCfgDefault is a shared instance, so if multiple servers instance will be started from it, we also
 	// want to the test that the listener always bind a different port
