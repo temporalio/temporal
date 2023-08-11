@@ -602,11 +602,3 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
 }
-
-func (s *activitiesSuite) Test_isCloseToCurrentTime() {
-	d := time.Minute
-	now := time.Now()
-	s.True(isCloseToCurrentTime(now, d))
-	s.False(isCloseToCurrentTime(now.Add(2*time.Minute), d))
-	s.False(isCloseToCurrentTime(now.Add(-2*time.Minute), d))
-}
