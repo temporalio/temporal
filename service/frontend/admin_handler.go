@@ -2048,15 +2048,14 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	nsConfig := resp.Namespace.GetConfig()
 	replicationConfig := resp.Namespace.GetReplicationConfig()
 
-	task := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Id:                 resp.Namespace.GetInfo().Id,
+	nsResponse := &adminservice.GetNamespaceResponse{
 		Info: &namespacepb.NamespaceInfo{
 			Name:        info.Name,
 			State:       info.State,
 			Description: info.Description,
 			OwnerEmail:  info.Owner,
 			Data:        info.Data,
+			Id:          info.Id,
 		},
 		Config: &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionTtl: nsConfig.Retention,
@@ -2070,14 +2069,13 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: replicationConfig.ActiveClusterName,
 			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+			State:             replicationConfig.GetState(),
 		},
 		ConfigVersion:   resp.Namespace.GetConfigVersion(),
 		FailoverVersion: resp.Namespace.GetFailoverVersion(),
 		FailoverHistory: convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
 	}
-	return &adminservice.GetNamespaceResponse{
-		Namespace: task,
-	}, nil
+	return nsResponse, nil
 }
 
 func convertClusterReplicationConfigToProto(

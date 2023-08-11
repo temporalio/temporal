@@ -30,6 +30,8 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -38,8 +40,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
-
-var ErrOutlierNamespace = serviceerror.NewInvalidArgument("Namespace does not belong to current cluster")
 
 type (
 	EagerNamespaceRefresher interface {
@@ -56,6 +56,10 @@ type (
 		replicationTaskExecutor namespace.ReplicationTaskExecutor
 		currentCluster          string
 		metricsHandler          metrics.Handler
+	}
+
+	OutlierNamespace struct {
+		Message string
 	}
 )
 
@@ -76,6 +80,10 @@ func NewEagerNamespaceRefresher(
 		currentCluster:          currentCluster,
 		metricsHandler:          metricsHandler,
 	}
+}
+
+func (e *OutlierNamespace) Error() string {
+	return e.Message
 }
 
 func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error {
@@ -154,14 +162,26 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 		return err
 	}
 	hasCurrentCluster := false
-	for _, c := range resp.GetNamespace().GetReplicationConfig().GetClusters() {
+	for _, c := range resp.GetReplicationConfig().GetClusters() {
 		if e.currentCluster == c.GetClusterName() {
 			hasCurrentCluster = true
 		}
 	}
 	if !hasCurrentCluster {
 		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.GetMetricName()).Record(1)
-		return ErrOutlierNamespace
+		return &OutlierNamespace{
+			Message: "Namespace does not belong to current cluster",
+		}
 	}
-	return e.replicationTaskExecutor.Execute(ctx, resp.Namespace)
+	task := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                 resp.GetInfo().Id,
+		Info:               resp.GetInfo(),
+		Config:             resp.GetConfig(),
+		ReplicationConfig:  resp.GetReplicationConfig(),
+		ConfigVersion:      resp.GetConfigVersion(),
+		FailoverVersion:    resp.GetFailoverVersion(),
+		FailoverHistory:    resp.GetFailoverHistory(),
+	}
+	return e.replicationTaskExecutor.Execute(ctx, task)
 }

@@ -161,6 +161,20 @@ func (c *metricClient) GetDLQReplicationMessages(
 	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) GetNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetNamespaceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminClientGetNamespaceScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetNamespace(ctx, request, opts...)
+}
+
 func (c *metricClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

@@ -33,6 +33,8 @@ import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/namespace/v1/message.proto";
+import "temporal/api/replication/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -398,5 +400,10 @@ message GetNamespaceRequest {
 }
 
 message GetNamespaceResponse {
-    temporal.server.api.replication.v1.NamespaceTaskAttributes namespace = 1;
+    temporal.api.namespace.v1.NamespaceInfo info = 3;
+    temporal.api.namespace.v1.NamespaceConfig config = 4;
+    temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 5;
+    int64 config_version = 6;
+    int64 failover_version = 7;
+    repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
 }

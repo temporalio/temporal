@@ -25,17 +25,24 @@
 package replication
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -44,17 +51,24 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const mockCurrentCuster = "current_cluster_1"
+
 type (
 	EagerNamespaceRefresherSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		controller              *gomock.Controller
-		mockShard               *shard.ContextTest
-		mockMetadataManager     *persistence.MockMetadataManager
-		mockNamespaceRegistry   *namespace.MockRegistry
-		eagerNamespaceRefresher EagerNamespaceRefresher
-		logger                  log.Logger
+		controller                  *gomock.Controller
+		mockShard                   *shard.ContextTest
+		mockMetadataManager         *persistence.MockMetadataManager
+		mockNamespaceRegistry       *namespace.MockRegistry
+		eagerNamespaceRefresher     EagerNamespaceRefresher
+		logger                      log.Logger
+		clientBean                  *client.MockBean
+		mockReplicationTaskExecutor *namespace.MockReplicationTaskExecutor
+		currentCluster              string
+		mockMetricsHandler          metrics.Handler
+		remoteAdminClient           *adminservicemock.MockAdminServiceClient
 	}
 )
 
@@ -65,7 +79,26 @@ func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.mockMetadataManager = persistence.NewMockMetadataManager(s.controller)
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
-	s.eagerNamespaceRefresher = NewEagerNamespaceRefresher(s.mockMetadataManager, s.mockNamespaceRegistry, s.logger)
+	s.clientBean = client.NewMockBean(s.controller)
+	s.remoteAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.remoteAdminClient, nil).AnyTimes()
+	scope := tally.NewTestScope("test", nil)
+	s.mockReplicationTaskExecutor = namespace.NewMockReplicationTaskExecutor(s.controller)
+	s.mockMetricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+		metrics.ServiceNameTag("serviceName"))
+	s.eagerNamespaceRefresher = NewEagerNamespaceRefresher(
+		s.mockMetadataManager,
+		s.mockNamespaceRegistry,
+		s.logger,
+		s.clientBean,
+		s.mockReplicationTaskExecutor,
+		mockCurrentCuster,
+		s.mockMetricsHandler,
+	)
+}
+
+func TestEagerNamespaceRefresherSuite(t *testing.T) {
+	suite.Run(t, new(EagerNamespaceRefresherSuite))
 }
 
 func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion() {
@@ -319,6 +352,88 @@ func (s *EagerNamespaceRefresherSuite) TestUpdateNamespaceFailoverVersion_GetMet
 	s.Error(err)
 }
 
-func TestEagerNamespaceRefresherSuite(t *testing.T) {
-	suite.Run(t, new(EagerNamespaceRefresherSuite))
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Success() {
+	namespaceId := namespace.ID("abc")
+
+	nsResponse := &adminservice.GetNamespaceResponse{
+		Info: &namespacepb.NamespaceInfo{
+			Id:    namespace.NewID().String(),
+			Name:  "another random namespace name",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+			Data:  make(map[string]string)},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: mockCurrentCuster},
+				{ClusterName: "not_current_cluster_1"},
+			},
+		},
+	}
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	}).Return(nsResponse, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	s.Nil(err)
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceNotBelongsToCurrentCluster() {
+	namespaceId := namespace.ID("abc")
+
+	nsResponse := &adminservice.GetNamespaceResponse{
+		Info: &namespacepb.NamespaceInfo{
+			Id:    namespace.NewID().String(),
+			Name:  "another random namespace name",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+			Data:  make(map[string]string)},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: "not_current_cluster_1"},
+				{ClusterName: "not_current_cluster_2"},
+			},
+		},
+	}
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	}).Return(nsResponse, nil).Times(1)
+
+	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	s.Error(err)
+	s.IsType(&OutlierNamespace{}, err)
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ExecutorReturnsError() {
+	namespaceId := namespace.ID("abc")
+
+	nsResponse := &adminservice.GetNamespaceResponse{
+		Info: &namespacepb.NamespaceInfo{
+			Id:    namespace.NewID().String(),
+			Name:  "another random namespace name",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+			Data:  make(map[string]string)},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: mockCurrentCuster},
+				{ClusterName: "not_current_cluster_2"},
+			},
+		},
+	}
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	}).Return(nsResponse, nil).Times(1)
+
+	expectedError := errors.New("some error")
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(expectedError)
+	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	s.Error(err)
+	s.Equal(expectedError, err)
 }

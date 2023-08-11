@@ -33,6 +33,7 @@ import (
 	"testing"
 	"time"
 
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"google.golang.org/grpc/metadata"
 
 	historyclient "go.temporal.io/server/client/history"
@@ -1539,4 +1540,82 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
 	waitGroupEnd.Wait()
+}
+
+func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
+	namespaceID := "someId"
+	nsResponse := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			FailoverVersion: 1,
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespaceID,
+				Name:  "another random namespace name",
+				State: enumspb.NAMESPACE_STATE_DELETED,
+				Data:  make(map[string]string)},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(2),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				}},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverNotificationVersion: 0,
+		},
+	}
+	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: namespaceID,
+	}).Return(nsResponse, nil)
+	resp, err := s.handler.GetNamespace(context.Background(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceID,
+		},
+	})
+	s.NoError(err)
+	s.Equal(namespaceID, resp.GetInfo().GetId())
+	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
+}
+
+func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
+	namespaceName := "some name"
+	namespaceId := "some id"
+	nsResponse := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			FailoverVersion: 1,
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespaceId,
+				Name:  namespaceName,
+				State: enumspb.NAMESPACE_STATE_DELETED,
+				Data:  make(map[string]string)},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(2),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				}},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverNotificationVersion: 0,
+		},
+	}
+	s.mockResource.MetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: namespaceName,
+	}).Return(nsResponse, nil)
+	resp, err := s.handler.GetNamespace(context.Background(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Namespace{
+			Namespace: namespaceName,
+		},
+	})
+	s.NoError(err)
+	s.Equal(namespaceId, resp.GetInfo().GetId())
+	s.Equal(namespaceName, resp.GetInfo().GetName())
+	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
 }
