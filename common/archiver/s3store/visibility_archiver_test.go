@@ -396,42 +396,34 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	uri, err := archiver.NewURI(testBucketURI)
 	s.NoError(err)
 
-	response := &archiver.QueryVisibilityResponse{
-		Executions:    nil,
-		NextPageToken: nil,
-	}
+	executions := make(map[string]*workflowpb.WorkflowExecutionInfo, len(s.visibilityRecords))
+	var nextPageToken []byte
 
-	limit := 10
-	executions := make(map[string]*workflowpb.WorkflowExecutionInfo, limit)
-
-	for i := 0; i < limit; i++ {
+	for {
 		req := &archiver.QueryVisibilityRequest{
 			NamespaceID:   testNamespaceID,
 			PageSize:      1,
-			NextPageToken: response.NextPageToken,
+			NextPageToken: nextPageToken,
 			Query:         "",
 		}
-		response, err = arc.Query(context.Background(), uri, req, searchattribute.TestNameTypeMap)
+		response, err := arc.Query(context.Background(), uri, req, searchattribute.TestNameTypeMap)
 		s.NoError(err)
 		s.NotNil(response)
-		s.Len(response.Executions, 1)
-
-		if response.NextPageToken == nil {
-			break
-		}
-
+		nextPageToken = response.NextPageToken
 		for _, execution := range response.Executions {
 			key := execution.Execution.GetWorkflowId() +
 				"/" + execution.Execution.GetRunId() +
 				"/" + execution.CloseTime.String()
+			if executions[key] != nil {
+				s.Fail("duplicate key", key)
+			}
 			executions[key] = execution
 		}
-
-		if len(executions) > 1 {
-			return
+		if len(nextPageToken) == 0 {
+			break
 		}
 	}
-	s.Fail("there should be at least 2 unique executions across all pages")
+	s.Len(executions, len(s.visibilityRecords))
 }
 
 type precisionTest struct {

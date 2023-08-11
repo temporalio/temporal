@@ -149,7 +149,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
@@ -217,7 +216,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		s.clusterName,
-		s.mockShard.Resource.GetMatchingClient(),
+		s.mockShard.Resource.HistoryClient,
+		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 	).(*transferQueueStandbyTaskExecutor)
 }

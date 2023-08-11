@@ -29,11 +29,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
@@ -44,7 +44,7 @@ type (
 	deleteNamespaceComponent struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		historyClient     historyservice.HistoryServiceClient
+		historyClient     resource.HistoryClient
 		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
@@ -62,7 +62,7 @@ var Module = fx.Options(
 func newComponent(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) component {

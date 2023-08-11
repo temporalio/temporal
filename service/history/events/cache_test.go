@@ -89,7 +89,6 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 	shardId := int32(10)
 	return NewEventsCache(
 		shardId,
-		16,
 		32,
 		time.Minute,
 		s.mockExecutionManager,

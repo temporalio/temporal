@@ -1408,7 +1408,7 @@ func (s *workflowSuite) TestLimitedActions() {
 func (s *workflowSuite) TestLotsOfIterations() {
 	// This is mostly testing getNextTime caching logic.
 	const runIterations = 30
-	const backfillIterations = 15
+	const backfillIterations = 3
 
 	runs := make([]workflowRun, runIterations)
 	for i := range runs {
@@ -1424,15 +1424,15 @@ func (s *workflowSuite) TestLotsOfIterations() {
 	delayedCallbacks := make([]delayedCallback, backfillIterations)
 
 	expected := runIterations
-	// schedule a call back every hour to spray backfills among scheduled runs
-	// each call back adds random number of backfills in
-	// [maxNextTimeResultCacheSize, 2*maxNextTimeResultCacheSize) range
+	// schedule some callbacks to spray backfills among scheduled runs
+	// each call back adds random number of backfills in [10, 20) range
 	for i := range delayedCallbacks {
 
-		maxRuns := rand.Intn(maxNextTimeResultCacheSize) + maxNextTimeResultCacheSize
+		maxRuns := rand.Intn(10) + 10
 		expected += maxRuns
 		// a point in time to send the callback request
-		callbackTime := time.Date(2022, 6, 1, i+15, 2, 0, 0, time.UTC)
+		offset := i * runIterations / backfillIterations
+		callbackTime := time.Date(2022, 6, 1, offset, 2, 0, 0, time.UTC)
 		// start time for callback request
 		callBackRangeStartTime := time.Date(2022, 5, i, 0, 0, 0, 0, time.UTC)
 

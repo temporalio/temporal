@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/matching"
 )
 
 func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -157,10 +156,10 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == errNoTasks)
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
@@ -343,7 +342,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == matching.ErrNoTasks, err)
+	s.True(err == nil || err == errNoTasks, err)
 
 	descResp, err := describeWorkflowExecution()
 	s.NoError(err)
@@ -358,7 +357,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	err = poller2.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == matching.ErrNoTasks, err)
+	s.True(err == nil || err == errNoTasks, err)
 
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
@@ -589,7 +588,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
 	// Not s.ErrorIs() because error goes through RPC.
@@ -714,7 +713,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks, err)
+	s.True(err == nil || err == errNoTasks, err)
 
 	cancelCh := make(chan struct{})
 	go func() {
@@ -741,7 +740,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 
 	s.Logger.Info("Start activity.")
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == matching.ErrNoTasks, err)
+	s.True(err == nil || err == errNoTasks, err)
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
 	<-cancelCh
@@ -843,7 +842,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == errNoTasks)
 
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
@@ -869,7 +868,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	scheduleActivity = false
 	requestCancellation = false
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil || err == matching.ErrNoTasks)
+	s.True(err == nil || err == errNoTasks)
 }
 
 func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {

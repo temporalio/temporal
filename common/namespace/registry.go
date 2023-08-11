@@ -58,9 +58,8 @@ const (
 )
 
 const (
-	cacheInitialSize = 10 * 1024
-	cacheMaxSize     = 64 * 1024
-	cacheTTL         = 0 // 0 means infinity
+	cacheMaxSize = 64 * 1024
+	cacheTTL     = 0 // 0 means infinity
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
@@ -78,12 +77,10 @@ const (
 
 var (
 	cacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             cacheTTL,
+		TTL: cacheTTL,
 	}
 	readthroughNotFoundCacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             readthroughCacheTTL,
+		TTL: readthroughCacheTTL,
 	}
 )
 

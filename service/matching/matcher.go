@@ -297,13 +297,13 @@ forLoop:
 
 // Poll blocks until a task is found or context deadline is exceeded
 // On success, the returned task could be a query task or a regular task
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, false)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, true)
 }
@@ -363,7 +363,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	default:
 	}
 
@@ -386,7 +386,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
@@ -409,7 +409,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)

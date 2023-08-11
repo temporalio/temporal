@@ -832,6 +832,23 @@ func (ms *MutableStateImpl) GetActivityByActivityID(
 	return ms.GetActivityInfo(eventID)
 }
 
+// GetActivityType gets the ActivityType from ActivityInfo if set,
+// or from the events history otherwise for backwards compatibility.
+func (ms *MutableStateImpl) GetActivityType(
+	ctx context.Context,
+	ai *persistencespb.ActivityInfo,
+) (*commonpb.ActivityType, error) {
+	if ai.GetActivityType() != nil {
+		return ai.GetActivityType(), nil
+	}
+	// For backwards compatibility in case ActivityType is not set in ActivityInfo.
+	scheduledEvent, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+	if err != nil {
+		return nil, err
+	}
+	return scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType, nil
+}
+
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (ms *MutableStateImpl) GetChildExecutionInfo(
 	initiatedEventID int64,
@@ -2351,6 +2368,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 		UseCompatibleVersion:    attributes.UseCompatibleVersion,
+		ActivityType:            attributes.GetActivityType(),
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
@@ -4376,10 +4394,14 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	return setStateStatus(ms.executionState, state, status)
 }
 
+func (ms *MutableStateImpl) IsDirty() bool {
+	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0
+}
+
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
-	if ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 {
+	if ms.IsDirty() {
 		ms.logger.Error("MutableState encountered dirty transaction",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
@@ -4609,6 +4631,8 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	); err != nil {
 		return err
 	}
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
 
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
@@ -5087,6 +5111,29 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	default:
 		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
+}
+
+func (ms *MutableStateImpl) closeTransactionCollapseUpsertVisibilityTasks() {
+	// check if we have >= 2 tasks that are identical upsert visibility tasks
+	// note that VisibilityTimestamp and TaskID are not assigned yet
+	visTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	if len(visTasks) < 2 {
+		return
+	}
+	var task0 *tasks.UpsertExecutionVisibilityTask
+	for i, task := range visTasks {
+		task, ok := task.(*tasks.UpsertExecutionVisibilityTask)
+		if !ok {
+			return
+		}
+		if i == 0 {
+			task0 = task
+		} else if *task != *task0 {
+			return
+		}
+	}
+	// collapse to one
+	ms.InsertTasks[tasks.CategoryVisibility] = visTasks[:1]
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {

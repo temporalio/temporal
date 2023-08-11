@@ -257,7 +257,7 @@ func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
 // jitter applied. If there is no matching time, Nominal and Next will be the zero time.
-func (cs *CompiledSpec) getNextTime(after time.Time) getNextTimeResult {
+func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
@@ -285,7 +285,7 @@ func (cs *CompiledSpec) getNextTime(after time.Time) getNextTimeResult {
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
 		maxJitter = util.Min(maxJitter, following.Sub(nominal))
 	}
-	next := cs.addJitter(nominal, maxJitter)
+	next := cs.addJitter(jitterSeed, nominal, maxJitter)
 
 	return getNextTimeResult{Nominal: nominal, Next: next}
 }
@@ -340,8 +340,8 @@ func (cs *CompiledSpec) excluded(nominal time.Time) bool {
 	return false
 }
 
-// Adds jitter to a nominal time, deterministically (by hashing the given time).
-func (cs *CompiledSpec) addJitter(nominal time.Time, maxJitter time.Duration) time.Time {
+// Adds jitter to a nominal time, deterministically (by hashing the given time and a seed).
+func (cs *CompiledSpec) addJitter(seed string, nominal time.Time, maxJitter time.Duration) time.Time {
 	if maxJitter < 0 {
 		maxJitter = 0
 	}
@@ -350,6 +350,8 @@ func (cs *CompiledSpec) addJitter(nominal time.Time, maxJitter time.Duration) ti
 	if err != nil {
 		return nominal
 	}
+
+	bin = append(bin, []byte(seed)...)
 
 	// we want to fit the result of a multiply in 64 bits, and use 32 bits of hash, which
 	// leaves 32 bits for the range. if we use nanoseconds or microseconds, our range is

@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -71,14 +72,14 @@ func newTimerQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
+	matchingRawClient resource.MatchingRawClient,
 ) queues.Executor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
-			matchingClient,
+			matchingRawClient,
 			logger,
 			metricProvider,
 			config,
@@ -149,8 +150,9 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
@@ -172,6 +174,11 @@ Loop:
 			break Loop
 		}
 
+		if !mutableState.IsWorkflowExecutionRunning() {
+			release(nil) // release(nil) so mutable state is not unloaded from cache
+			return consts.ErrWorkflowCompleted
+		}
+
 		if _, err := mutableState.AddTimerFiredEvent(timerInfo.GetTimerId()); err != nil {
 			return err
 		}
@@ -179,7 +186,8 @@ Loop:
 	}
 
 	if !timerFired {
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return errNoTimerFired
 	}
 
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, timerFired)
@@ -431,8 +439,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	// generate activity task
@@ -449,11 +458,17 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.Attempt))
 		}
-		return nil
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
 	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -466,7 +481,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	_, retError = t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
