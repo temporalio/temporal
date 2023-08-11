@@ -153,8 +153,17 @@ func (m *BuildId) GetBecameDefaultTimestamp() *v1.HybridLogicalClock {
 type CompatibleVersionSet struct {
 	// Set IDs are used internally by matching.
 	// A set typically has one set ID and extra care is taken to enforce this.
-	// In split brain scenarios, there may be conflicting concurrent writes to the task queue versioning data, in which
-	// case a set might end up with more than one ID.
+	// In some situations, including:
+	// - Replication race between task queue user data and history events
+	// - Replication split-brain + later merge
+	// - Delayed user data propagation between partitions
+	// - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
+	//   versioning data
+	// we have to guess the set id for a build id. If that happens, and then the build id is
+	// discovered to be in a different set, then the sets will be merged and both (or more)
+	// build ids will be preserved, so that we don't lose tasks.
+	// The first set id is considered the "primary", and the others are "demoted". Once a build
+	// id is demoted, it cannot be made the primary again.
 	SetIds []string `protobuf:"bytes,1,rep,name=set_ids,json=setIds,proto3" json:"set_ids,omitempty"`
 	// All the compatible versions, unordered except for the last element, which is considered the set "default".
 	BuildIds []*BuildId `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
