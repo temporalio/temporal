@@ -1619,3 +1619,9 @@ func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
 	s.Equal(namespaceName, resp.GetInfo().GetName())
 	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
 }
+
+func (s *adminHandlerSuite) TestGetNamespace_EmptyRequest() {
+	v := &adminservice.GetNamespaceRequest{}
+	_, err := s.handler.GetNamespace(context.Background(), v)
+	s.Equal(errRequestNotSet, err)
+}

@@ -2035,7 +2035,12 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	return nil
 }
 
-func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice.GetNamespaceRequest) (_ *adminservice.GetNamespaceResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil || (len(request.GetId()) == 0 && len(request.GetNamespace()) == 0) {
+		return nil, errRequestNotSet
+	}
 	req := &persistence.GetNamespaceRequest{
 		Name: request.GetNamespace(),
 		ID:   request.GetId(),
