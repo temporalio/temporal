@@ -3,7 +3,7 @@ name: 'Trigger Docker image build'
 on:
   push:
     branches:
-      - master
+      - main
       - release/*
 
 jobs:
