@@ -572,13 +572,11 @@ func (a *activities) canSkipWorkflowExecution(
 		return true, reasonZombieWorkflow, nil
 	}
 
-	// source and target cluster handles workflow retention separately. For a workflow which is abort to be deleted,
-	// it may be already deleted on target cluster but still exist on source, which cause verification delay.
-	// Here, we skip workflow of which retention time is close to current time to continue the verification.
+	// Skip verifying workflow which has already passed retention time.
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.Add(ns.Retention())
-		if isCloseToCurrentTime(deleteTime, request.RetentionBiasDuration) {
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterCloseToRetentionWorkflowCount.GetMetricName()).Record(1)
+		if deleteTime.Before(time.Now()) {
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.GetMetricName()).Record(1)
 			return true, reasonWorkflowCloseToRetention, nil
 		}
 	}
@@ -644,7 +642,7 @@ func (a *activities) verifyReplicationTasks(
 }
 
 const (
-	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
+	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
 )
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
