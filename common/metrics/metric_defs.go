@@ -115,7 +115,7 @@ const (
 	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetNamespaceReplicationMessagesScope = "AdminClientGetNamespaceReplicationMessages"
 	// AdminClientGetNamespaceScope tracks RPC calls to admin service
-	AdminClientGetNamespaceScope = "AdminClientGetNamespaceReplicationMessages"
+	AdminClientGetNamespaceScope = "AdminClientGetNamespace"
 	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQReplicationMessagesScope = "AdminClientGetDLQReplicationMessages"
 	// AdminClientReapplyEventsScope tracks RPC calls to admin service

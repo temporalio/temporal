@@ -405,7 +405,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 
 	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
-	s.IsType(&OutlierNamespace{}, err)
+	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_ExecutorReturnsError() {

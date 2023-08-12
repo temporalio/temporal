@@ -57,10 +57,6 @@ type (
 		currentCluster          string
 		metricsHandler          metrics.Handler
 	}
-
-	OutlierNamespace struct {
-		Message string
-	}
 )
 
 func NewEagerNamespaceRefresher(
@@ -80,10 +76,6 @@ func NewEagerNamespaceRefresher(
 		currentCluster:          currentCluster,
 		metricsHandler:          metricsHandler,
 	}
-}
-
-func (e *OutlierNamespace) Error() string {
-	return e.Message
 }
 
 func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error {
@@ -169,9 +161,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 	}
 	if !hasCurrentCluster {
 		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.GetMetricName()).Record(1)
-		return &OutlierNamespace{
-			Message: "Namespace does not belong to current cluster",
-		}
+		return serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	task := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
