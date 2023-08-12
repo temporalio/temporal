@@ -203,8 +203,8 @@ func (a *actionSliceCount) pickCompactCandidates(
 	candidates []compactCandidate,
 	numSliceToCompact int,
 ) map[Slice]struct{} {
-	slices.SortFunc(candidates, func(this, that compactCandidate) bool {
-		return this.distance.CompareTo(that.distance) < 0
+	slices.SortFunc(candidates, func(this, that compactCandidate) int {
+		return this.distance.CompareTo(that.distance)
 	})
 
 	sliceToCompact := make(map[Slice]struct{}, numSliceToCompact)
