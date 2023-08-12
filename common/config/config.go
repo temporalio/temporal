@@ -230,7 +230,7 @@ type (
 		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
-		// This is generally used when BindOnIP would be the same across several nodes (ie: `0.0.0.0` or `::1`)
+		// This is generally used when BindOnIP would be the same across several nodes (ie: `0.0.0.0` or `::`)
 		// and for nat traversal scenarios. Check net.ParseIP for supported syntax
 		BroadcastAddress string `yaml:"broadcastAddress"`
 	}

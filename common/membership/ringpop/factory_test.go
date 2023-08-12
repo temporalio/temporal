@@ -27,7 +27,6 @@ package ringpop
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -216,15 +215,12 @@ func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error
 
 	// Ping A through B to make sure B's dialer uses TLS to communicate with A
 	hostPortA := chA.PeerInfo().HostPort
-	fmt.Printf("hostPortA: %s", hostPortA)
 	if err := chB.Ping(context.Background(), hostPortA); err != nil {
 		return err
 	}
 
 	// Confirm that A's listener is actually using TLS
 	clientTLSConfig, err := serverB.TLSFactory.GetInternodeClientConfig()
-
-	fmt.Printf("clientTLSConfig: %v", clientTLSConfig)
 
 	s.NoError(err)
 
