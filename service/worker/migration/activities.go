@@ -590,9 +590,17 @@ func (a *activities) verifyReplicationTasks(
 	details *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
+	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, []SkippedWorkflowExecution, error) {
 	start := time.Now()
+	progress := false
 	defer func() {
+		if progress {
+			// Update CheckPoint where there is a progress
+			details.CheckPoint = time.Now()
+		}
+
+		heartbeat(*details)
 		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
 	}()
 
@@ -636,6 +644,9 @@ func (a *activities) verifyReplicationTasks(
 
 			return false, skippedList, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
 		}
+
+		heartbeat(*details)
+		progress = true
 	}
 
 	return true, skippedList, nil
@@ -682,23 +693,18 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
 	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
 	//    non-retryable error and force-replication will fail.
-
 	for {
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
-		lastIndex := details.NextIndex
-		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry)
+		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry,
+			func(d replicationTasksHeartbeatDetails) {
+				activity.RecordHeartbeat(ctx, d)
+			})
+
 		if err != nil {
 			return response, err
 		}
-
-		if lastIndex < details.NextIndex {
-			// Update CheckPoint where there is a progress
-			details.CheckPoint = time.Now()
-		}
-
-		activity.RecordHeartbeat(ctx, details)
 
 		if len(skippedList) > 0 {
 			response.SkippedWorkflowExecutions = append(response.SkippedWorkflowExecutions, skippedList...)
