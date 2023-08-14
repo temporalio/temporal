@@ -739,7 +739,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 		return err
 	}
 
-	transactionID, err := r.shard.GenerateTaskID()
+	transactionIDs, err := r.shard.GenerateTaskIDs(len(task.getEvents()))
 	if err != nil {
 		return err
 	}
@@ -752,7 +752,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
 			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
-			TxnID:       transactionID,
+			TxnID:       transactionIDs[i],
 			Events:      events,
 		}
 	}
