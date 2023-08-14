@@ -224,12 +224,6 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// which is what the constant is set as at the time of this comment.
 	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxHTTPAPIRequestBytes)
 
-	// If accept header is present but not application/json, we fail
-	if accept := r.Header.Get("Accept"); accept != "" && accept != "application/json" {
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
-	}
-
 	h.logger.Debug(
 		"HTTP API call",
 		tag.NewStringTag("http-method", r.Method),
