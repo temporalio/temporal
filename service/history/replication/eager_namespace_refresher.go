@@ -138,7 +138,12 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 }
 
 func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error {
-	// Potential Perf improvement: one lock per namespaceID
+	/* TODO: 1. Lock here is to prevent multiple creation happening at same time. Current implementation
+	   actually does not help in this case(i.e. after getting the lock, each thread will still fetch from remote and
+	   try to create the namespace). Once we have mechanism to immediate refresh the cache, we
+	   can add logic to check the cache again before doing the remote call and creating namespace
+	   2. Based on which caller is invoking this method, we may not want to block the caller thread.
+	*/
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	adminClient, err := e.clientBean.GetRemoteAdminClient(sourceCluster)
