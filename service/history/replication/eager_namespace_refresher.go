@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination eager_namespace_refresher_mock.go
+
 type (
 	EagerNamespaceRefresher interface {
 		UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error

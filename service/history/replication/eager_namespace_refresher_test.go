@@ -376,7 +376,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
-	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 }
 
@@ -403,7 +403,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 		},
 	}).Return(nsResponse, nil).Times(1)
 
-	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
@@ -433,7 +433,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 
 	expectedError := errors.New("some error")
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(expectedError)
-	err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
 	s.Equal(expectedError, err)
 }

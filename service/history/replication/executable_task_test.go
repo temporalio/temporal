@@ -58,14 +58,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		sourceCluster           string
+		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 
 		task *ExecutableTaskImpl
 	}
@@ -93,23 +95,27 @@ func (s *executableTaskSuite) SetupTest() {
 	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
+	s.sourceCluster = "some cluster"
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
 	s.task = NewExecutableTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		},
 		rand.Int63(),
 		"metrics-tag",
 		creationTime,
 		receivedTime,
+		s.sourceCluster,
 	)
 }
 
@@ -368,7 +374,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.True(toProcess)
@@ -395,7 +401,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	name, toProcess, err := s.task.GetNamespaceInfo(namespaceID)
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
@@ -406,6 +412,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("OwO")).AnyTimes()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	_, _, err := s.task.GetNamespaceInfo(namespaceID)
+	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Error(err)
 }

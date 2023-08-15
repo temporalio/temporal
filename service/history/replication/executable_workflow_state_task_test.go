@@ -55,15 +55,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
-		executableTask     *MockExecutableTask
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		executableTask          *MockExecutableTask
+		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
@@ -96,6 +97,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.replicationTask = &replicationspb.SyncWorkflowStateTaskAttributes{
 		WorkflowState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
@@ -112,13 +114,14 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
@@ -135,7 +138,7 @@ func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -165,7 +168,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -176,7 +179,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -185,7 +188,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 
 func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := shard.NewMockContext(s.controller)
@@ -211,7 +214,7 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(

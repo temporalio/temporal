@@ -61,15 +61,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
-		executableTask     *MockExecutableTask
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		executableTask          *MockExecutableTask
+		EagerNamespaceRefresher *MockEagerNamespaceRefresher
 
 		replicationTask   *replicationspb.SyncActivityTaskAttributes
 		sourceClusterName string
@@ -102,6 +103,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
+	s.EagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.replicationTask = &replicationspb.SyncActivityTaskAttributes{
 		NamespaceId:        uuid.NewString(),
 		WorkflowId:         uuid.NewString(),
@@ -146,7 +148,7 @@ func (s *executableActivityStateTaskSuite) TearDownTest() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -188,7 +190,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -199,7 +201,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -208,7 +210,7 @@ func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := shard.NewMockContext(s.controller)
@@ -252,7 +254,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(
