@@ -44,7 +44,7 @@ import (
 type (
 	EagerNamespaceRefresher interface {
 		UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error
-		SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error
+		SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) (*namespace.Namespace, error)
 	}
 
 	eagerNamespaceRefresherImpl struct {
@@ -137,7 +137,9 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 	return nil
 }
 
-func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error {
+func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
+	ctx context.Context, namespaceId namespace.ID,
+	sourceCluster string) (*namespace.Namespace, error) {
 	/* TODO: 1. Lock here is to prevent multiple creation happening at same time. Current implementation
 	   actually does not help in this case(i.e. after getting the lock, each thread will still fetch from remote and
 	   try to create the namespace). Once we have mechanism to immediate refresh the cache, we
@@ -148,7 +150,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 	defer e.lock.Unlock()
 	adminClient, err := e.clientBean.GetRemoteAdminClient(sourceCluster)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := adminClient.GetNamespace(ctx, &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
@@ -156,7 +158,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hasCurrentCluster := false
 	for _, c := range resp.GetReplicationConfig().GetClusters() {
@@ -166,7 +168,7 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 	}
 	if !hasCurrentCluster {
 		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.GetMetricName()).Record(1)
-		return serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
+		return nil, serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
 	}
 	task := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
@@ -178,5 +180,10 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),
 	}
-	return e.replicationTaskExecutor.Execute(ctx, task)
+	err = e.replicationTaskExecutor.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+	namespaceEntry := &namespace.Namespace{}
+	return namespaceEntry, err
 }

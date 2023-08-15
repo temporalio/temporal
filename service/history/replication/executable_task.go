@@ -72,6 +72,7 @@ type (
 	ExecutableTask interface {
 		TaskID() int64
 		TaskCreationTime() time.Time
+		SourceClusterName() string
 		Ack()
 		Nack(err error)
 		Abort()
@@ -92,6 +93,7 @@ type (
 			workflowKey definition.WorkflowKey,
 		) (retError error)
 		GetNamespaceInfo(
+			ctx context.Context,
 			namespaceID string,
 		) (string, bool, error)
 	}
@@ -99,10 +101,11 @@ type (
 		ProcessToolBox
 
 		// immutable data
-		taskID           int64
-		metricsTag       string
-		taskCreationTime time.Time
-		taskReceivedTime time.Time
+		taskID            int64
+		metricsTag        string
+		taskCreationTime  time.Time
+		taskReceivedTime  time.Time
+		sourceClusterName string
 
 		// mutable data
 		taskState int32
@@ -117,13 +120,15 @@ func NewExecutableTask(
 	metricsTag string,
 	taskCreationTime time.Time,
 	taskReceivedTime time.Time,
+	sourceClusterName string,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
-		ProcessToolBox:   processToolBox,
-		taskID:           taskID,
-		metricsTag:       metricsTag,
-		taskCreationTime: taskCreationTime,
-		taskReceivedTime: taskReceivedTime,
+		ProcessToolBox:    processToolBox,
+		taskID:            taskID,
+		metricsTag:        metricsTag,
+		taskCreationTime:  taskCreationTime,
+		taskReceivedTime:  taskReceivedTime,
+		sourceClusterName: sourceClusterName,
 
 		taskState: taskStatePending,
 		attempt:   1,
@@ -136,6 +141,10 @@ func (e *ExecutableTaskImpl) TaskID() int64 {
 
 func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 	return e.taskCreationTime
+}
+
+func (e *ExecutableTaskImpl) SourceClusterName() string {
+	return e.sourceClusterName
 }
 
 func (e *ExecutableTaskImpl) Ack() {
@@ -355,35 +364,40 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 }
 
 func (e *ExecutableTaskImpl) GetNamespaceInfo(
+	ctx context.Context,
 	namespaceID string,
 ) (string, bool, error) {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
-		e.namespace.Store(namespaceEntry.Name())
-		shouldProcessTask := false
-	FilterLoop:
-		for _, targetCluster := range namespaceEntry.ClusterNames() {
-			if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
-				shouldProcessTask = true
-				break FilterLoop
-			}
-		}
-		return string(namespaceEntry.Name()), shouldProcessTask, nil
 	case *serviceerror.NamespaceNotFound:
-		return "", false, nil
+		namespaceEntry, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		if err != nil {
+			return "", false, err
+		}
 	default:
 		return "", false, err
 	}
+
+	e.namespace.Store(namespaceEntry.Name())
+	shouldProcessTask := false
+FilterLoop:
+	for _, targetCluster := range namespaceEntry.ClusterNames() {
+		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
+			shouldProcessTask = true
+			break FilterLoop
+		}
+	}
+	return string(namespaceEntry.Name()), shouldProcessTask, nil
 }
 
 func newTaskContext(
-	namespaceName string,
+	namespaceId string,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,
 	)
-	ctx = headers.SetCallerName(ctx, namespaceName)
+	ctx = headers.SetCallerName(ctx, namespaceId)
 	return context.WithTimeout(ctx, applyReplicationTimeout)
 }

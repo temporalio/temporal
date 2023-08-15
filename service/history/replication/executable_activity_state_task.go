@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -49,9 +50,6 @@ type (
 		definition.WorkflowKey
 		ExecutableTask
 		req *historyservice.SyncActivityRequest
-
-		// variables to be perhaps removed (not essential to logic)
-		sourceClusterName string
 	}
 )
 
@@ -75,6 +73,7 @@ func NewExecutableActivityStateTask(
 			metrics.SyncActivityTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
+			sourceClusterName,
 		),
 		req: &historyservice.SyncActivityRequest{
 			NamespaceId:        task.NamespaceId,
@@ -93,8 +92,6 @@ func NewExecutableActivityStateTask(
 			BaseExecutionInfo:  task.BaseExecutionInfo,
 			VersionHistory:     task.VersionHistory,
 		},
-
-		sourceClusterName: sourceClusterName,
 	}
 }
 
@@ -107,7 +104,9 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		return nil
 	}
 
-	namespaceName, apply, nsError := e.GetNamespaceInfo(e.NamespaceID)
+	ctx, cancel := newTaskContext(e.NamespaceID)
+	defer cancel()
+	namespaceName, apply, nsError := e.GetNamespaceInfo(ctx, e.NamespaceID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -118,8 +117,6 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		)
 		return nil
 	}
-	ctx, cancel := newTaskContext(namespaceName)
-	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
@@ -140,7 +137,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
+		namespaceName, _, nsError := e.GetNamespaceInfo(context.Background(), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
@@ -149,7 +146,7 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 
 		if resendErr := e.Resend(
 			ctx,
-			e.sourceClusterName,
+			e.ExecutableTask.SourceClusterName(),
 			retryErr,
 		); resendErr != nil {
 			return err
@@ -179,7 +176,7 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
-		SourceClusterName: e.sourceClusterName,
+		SourceClusterName: e.ExecutableTask.SourceClusterName(),
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:      e.NamespaceID,
 			WorkflowId:       e.WorkflowID,
