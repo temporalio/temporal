@@ -85,6 +85,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -4690,15 +4691,15 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowExecutionTimeout()) {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowRunTimeout()) {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowTaskTimeout()) {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4708,15 +4709,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowExecutionTimeout()) {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowRunTimeout()) {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if !timer.ValidateTimer(request.GetWorkflowTaskTimeout()) {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4731,7 +4732,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if timestamp.DurationValue(startDelay) < 0 {
+	if !timer.ValidateTimer(startDelay) {
 		return errInvalidWorkflowStartDelaySeconds
 	}
 

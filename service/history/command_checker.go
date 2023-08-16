@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -325,8 +326,10 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) < 0 ||
-		timestamp.DurationValue(attributes.GetStartToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetHeartbeatTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetScheduleToCloseTimeout()) ||
+		!timer.ValidateTimer(attributes.GetScheduleToStartTimeout()) ||
+		!timer.ValidateTimer(attributes.GetStartToCloseTimeout()) ||
+		!timer.ValidateTimer(attributes.GetHeartbeatTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("A valid timeout may not be negative.")
 	}
 
@@ -391,7 +394,7 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
 	}
-	if timestamp.DurationValue(attributes.GetStartToFireTimeout()) <= 0 {
+	if !timer.ValidateTimer(attributes.GetStartToFireTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("A valid StartToFireTimeout is not set on command.")
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -636,15 +639,15 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetWorkflowRunTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetWorkflowTaskTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
-	if timestamp.DurationValue(attributes.GetBackoffStartInterval()) < 0 {
+	if !timer.ValidateTimer(attributes.GetBackoffStartInterval()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid BackoffStartInterval.")
 	}
 
@@ -724,15 +727,15 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetWorkflowExecutionTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeout.")
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetWorkflowRunTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
+	if !timer.ValidateTimer(attributes.GetWorkflowTaskTimeout()) {
 		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
 	}
 
