@@ -235,6 +235,12 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
+	case *adminservice.GetNamespaceRequest:
+		//special case for Admin.GetNamespace API which accept either Namespace ID or Namespace name as input
+		if request.GetId() == "" && namespaceName.IsEmpty() {
+			return nil, errNamespaceNotSet
+		}
+		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
 		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
 		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
