@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
@@ -113,8 +114,8 @@ type (
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
-		historyClient        historyservice.HistoryServiceClient
-		matchingClient       matchingservice.MatchingServiceClient
+		historyClient        resource.HistoryClient
+		matchingRawClient    resource.MatchingRawClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
@@ -162,8 +163,8 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyClient resource.HistoryClient,
+	matchingRawClient resource.MatchingRawClient,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -179,7 +180,7 @@ func NewEngine(
 		status:                    common.DaemonStatusInitialized,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
-		matchingClient:            matchingClient,
+		matchingRawClient:         matchingRawClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
@@ -264,10 +265,27 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 	stickyInfo stickyInfo,
 	create bool,
 ) (taskQueueManager, error) {
+	tqm, err := e.getTaskQueueManagerNoWait(taskQueue, stickyInfo, create)
+	if err != nil || tqm == nil {
+		return nil, err
+	}
+	if err = tqm.WaitUntilInitialized(ctx); err != nil {
+		return nil, err
+	}
+	return tqm, nil
+}
+
+// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// to get new range from DB and create one. This does not block for the task queue to be
+// initialized.
+func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
+	taskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+	create bool,
+) (taskQueueManager, error) {
 	e.taskQueuesLock.RLock()
 	tqm, ok := e.taskQueues[*taskQueue]
 	e.taskQueuesLock.RUnlock()
-
 	if !ok {
 		if !create {
 			return nil, nil
@@ -292,11 +310,6 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 			e.updateTaskQueueGauge(tqm, 1)
 		}
 	}
-
-	if err := tqm.WaitUntilInitialized(ctx); err != nil {
-		return nil, err
-	}
-
 	return tqm, nil
 }
 

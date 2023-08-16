@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -75,8 +75,8 @@ type (
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.Handler
-		historyClient            historyservice.HistoryServiceClient
-		matchingClient           matchingservice.MatchingServiceClient
+		historyRawClient         resource.HistoryRawClient
+		matchingRawClient        resource.MatchingRawClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
 		visibilityManager        manager.VisibilityManager
@@ -90,7 +90,8 @@ func newTransferQueueTaskExecutorBase(
 	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.Handler,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyRawClient resource.HistoryRawClient,
+	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -101,8 +102,8 @@ func newTransferQueueTaskExecutorBase(
 		archivalClient:           archivalClient,
 		logger:                   logger,
 		metricHandler:            metricHandler,
-		historyClient:            shard.GetHistoryClient(),
-		matchingClient:           matchingClient,
+		historyRawClient:         historyRawClient,
+		matchingRawClient:        matchingRawClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
 		visibilityManager:        visibilityManager,
@@ -123,7 +124,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	activityScheduleToStartTimeout *time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 ) error {
-	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -154,7 +155,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	workflowTaskScheduleToStartTimeout *time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
 ) error {
-	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	_, err := t.matchingRawClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,

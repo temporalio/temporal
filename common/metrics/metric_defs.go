@@ -114,6 +114,8 @@ const (
 	AdminClientGetReplicationMessagesScope = "AdminClientGetReplicationMessages"
 	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetNamespaceReplicationMessagesScope = "AdminClientGetNamespaceReplicationMessages"
+	// AdminClientGetNamespaceScope tracks RPC calls to admin service
+	AdminClientGetNamespaceScope = "AdminClientGetNamespace"
 	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQReplicationMessagesScope = "AdminClientGetDLQReplicationMessages"
 	// AdminClientReapplyEventsScope tracks RPC calls to admin service
@@ -1443,6 +1445,7 @@ var (
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
+	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1633,15 +1636,15 @@ var (
 	)
 
 	// Force replication
-	EncounterZombieWorkflowCount           = NewCounterDef("encounter_zombie_workflow_count")
-	EncounterNotFoundWorkflowCount         = NewCounterDef("encounter_not_found_workflow_count")
-	EncounterCloseToRetentionWorkflowCount = NewCounterDef("encounter_close_to_retention_workflow_count")
-	GenerateReplicationTasksLatency        = NewTimerDef("generate_replication_tasks_latency")
-	VerifyReplicationTaskSuccess           = NewCounterDef("verify_replication_task_success")
-	VerifyReplicationTaskNotFound          = NewCounterDef("verify_replication_task_not_found")
-	VerifyReplicationTaskFailed            = NewCounterDef("verify_replication_task_failed")
-	VerifyReplicationTasksLatency          = NewTimerDef("verify_replication_tasks_latency")
-	VerifyDescribeMutableStateLatency      = NewTimerDef("verify_describe_mutable_state_latency")
+	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount      = NewCounterDef("encounter_not_found_workflow_count")
+	EncounterPassRetentionWorkflowCount = NewCounterDef("encounter_pass_retention_workflow_count")
+	GenerateReplicationTasksLatency     = NewTimerDef("generate_replication_tasks_latency")
+	VerifyReplicationTaskSuccess        = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTaskNotFound       = NewCounterDef("verify_replication_task_not_found")
+	VerifyReplicationTaskFailed         = NewCounterDef("verify_replication_task_failed")
+	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
+	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

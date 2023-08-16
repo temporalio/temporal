@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -473,7 +472,7 @@ func AdminHandlerProvider(
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
@@ -530,7 +529,7 @@ func OperatorHandlerProvider(
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
@@ -565,7 +564,7 @@ func HandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,

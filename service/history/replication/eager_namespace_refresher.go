@@ -29,9 +29,14 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -39,24 +44,37 @@ import (
 type (
 	EagerNamespaceRefresher interface {
 		UpdateNamespaceFailoverVersion(namespaceId namespace.ID, targetFailoverVersion int64) error
+		SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error
 	}
 
 	eagerNamespaceRefresherImpl struct {
-		metadataManager   persistence.MetadataManager
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		lock              sync.Mutex
+		metadataManager         persistence.MetadataManager
+		namespaceRegistry       namespace.Registry
+		logger                  log.Logger
+		lock                    sync.Mutex
+		clientBean              client.Bean
+		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		currentCluster          string
+		metricsHandler          metrics.Handler
 	}
 )
 
 func NewEagerNamespaceRefresher(
 	metadataManager persistence.MetadataManager,
 	namespaceRegistry namespace.Registry,
-	logger log.Logger) EagerNamespaceRefresher {
+	logger log.Logger,
+	clientBean client.Bean,
+	replicationTaskExecutor namespace.ReplicationTaskExecutor,
+	currentCluster string,
+	metricsHandler metrics.Handler) EagerNamespaceRefresher {
 	return &eagerNamespaceRefresherImpl{
-		metadataManager:   metadataManager,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		metadataManager:         metadataManager,
+		namespaceRegistry:       namespaceRegistry,
+		logger:                  logger,
+		clientBean:              clientBean,
+		replicationTaskExecutor: replicationTaskExecutor,
+		currentCluster:          currentCluster,
+		metricsHandler:          metricsHandler,
 	}
 }
 
@@ -117,4 +135,48 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 		return err
 	}
 	return nil
+}
+
+func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(ctx context.Context, namespaceId namespace.ID, sourceCluster string) error {
+	/* TODO: 1. Lock here is to prevent multiple creation happening at same time. Current implementation
+	   actually does not help in this case(i.e. after getting the lock, each thread will still fetch from remote and
+	   try to create the namespace). Once we have mechanism to immediate refresh the cache, we
+	   can add logic to check the cache again before doing the remote call and creating namespace
+	   2. Based on which caller is invoking this method, we may not want to block the caller thread.
+	*/
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	adminClient, err := e.clientBean.GetRemoteAdminClient(sourceCluster)
+	if err != nil {
+		return err
+	}
+	resp, err := adminClient.GetNamespace(ctx, &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	hasCurrentCluster := false
+	for _, c := range resp.GetReplicationConfig().GetClusters() {
+		if e.currentCluster == c.GetClusterName() {
+			hasCurrentCluster = true
+		}
+	}
+	if !hasCurrentCluster {
+		e.metricsHandler.Counter(metrics.ReplicationOutlierNamespace.GetMetricName()).Record(1)
+		return serviceerror.NewFailedPrecondition("Namespace does not belong to current cluster")
+	}
+	task := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                 resp.GetInfo().Id,
+		Info:               resp.GetInfo(),
+		Config:             resp.GetConfig(),
+		ReplicationConfig:  resp.GetReplicationConfig(),
+		ConfigVersion:      resp.GetConfigVersion(),
+		FailoverVersion:    resp.GetFailoverVersion(),
+		FailoverHistory:    resp.GetFailoverHistory(),
+	}
+	return e.replicationTaskExecutor.Execute(ctx, task)
 }

@@ -27,7 +27,6 @@ package matching
 import (
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -179,7 +178,7 @@ func HandlerProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,

@@ -50,7 +50,7 @@ docker-compose run integration-test-mysql make integration-test-coverage
 
 ## Testing the build in Buildkite
 
-Creating a PR against the master branch will trigger the Buildkite
+Creating a PR against the `main` branch will trigger the Buildkite
 build. Members of the Temporal team can view the build pipeline here:
 [https://buildkite.com/temporal/temporal-server](https://buildkite.com/temporal/temporal-server).
 
