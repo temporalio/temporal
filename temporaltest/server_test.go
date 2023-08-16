@@ -340,31 +340,35 @@ func TestSearchAttributeRegistration(t *testing.T) {
 	if err := wfr.Get(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Wait a bit longer for the workflow to be indexed. This sleep usually isn't necessary,
+
+	// Wait a bit longer for the workflow to be indexed. This usually isn't necessary,
 	// but helps avoid test flakiness.
-	time.Sleep(10 * time.Millisecond)
-	// Confirm workflow has search attribute and shows up in custom list query
-	listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
-	workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: ts.GetDefaultNamespace(),
-		Query:     listFilter,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
-		t.Errorf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
-	} else {
-		searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
-		if !ok {
-			t.Fatal("Workflow missing test search attr")
-		}
-		var searchAttrValue string
-		if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
+	assert.Eventually(t, func() bool {
+		// Confirm workflow has search attribute and shows up in custom list query
+		listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
+		workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: ts.GetDefaultNamespace(),
+			Query:     listFilter,
+		})
+		if err != nil {
 			t.Fatal(err)
 		}
-		assert.Equal(t, "foo", searchAttrValue)
-	}
+		if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
+			t.Logf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
+			return false
+		} else {
+			searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
+			if !ok {
+				t.Fatal("Workflow missing test search attr")
+			}
+			var searchAttrValue string
+			if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, "foo", searchAttrValue)
+		}
+		return true
+	}, 30*time.Second, 100*time.Millisecond)
 }
 
 func BenchmarkRunWorkflow(b *testing.B) {

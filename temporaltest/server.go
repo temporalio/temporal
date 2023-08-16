@@ -166,9 +166,6 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		Logger:     log.NewNoopLogger(),
 		DynamicConfig: dynamicconfig.StaticClient{
 			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead: []dynamicconfig.ConstrainedValue{{Value: true}},
-			// Avoid potential race conditions in tests that describe task queues
-			// dynamicconfig.MatchingNumTaskqueueReadPartitions:  []dynamicconfig.ConstrainedValue{{Value: 1}},
-			// dynamicconfig.MatchingNumTaskqueueWritePartitions: []dynamicconfig.ConstrainedValue{{Value: 1}},
 		},
 		// Disable "accept incoming network connections?" prompt on macOS
 		FrontendIP: "127.0.0.1",
@@ -183,24 +180,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		ts.fatal(err)
 	}
 
-	// This sleep helps avoid the following panic:
-	//
-	// === RUN   TestClientWithCustomInterceptor
-	//     logger.go:50: INFO  Started Worker [Namespace temporaltest-90552 TaskQueue hello_world WorkerID 85975@COMP-KD49X2K6CH@]
-	//     logger.go:50: DEBUG ExecuteActivity [Namespace temporaltest-90552 TaskQueue hello_world WorkerID 85975@COMP-KD49X2K6CH@ WorkflowType Greet WorkflowID 2aaac089-8950-4ba3-b910-6deb3a0f2325 RunID 128c9905-6098-4e31-b16a-b9f47b247845 Attempt 1 ActivityID 8 ActivityType PickGreeting]
-	//     logger.go:50: INFO  Stopped Worker [Namespace temporaltest-90552 TaskQueue hello_world WorkerID 85975@COMP-KD49X2K6CH@]
-	// panic: runtime error: invalid memory address or nil pointer dereference
-	// [signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x2727b82]
-	//
-	// goroutine 1690307 [running]:
-	// github.com/temporalio/ringpop-go/swim.(*NodeLabels).Set(0x0?, {0x336eed7, 0xb}, {0xc06d9a2920, 0x5})
-	// /Users/jacoblegrone/go/pkg/mod/github.com/temporalio/ringpop-go@v0.0.0-20230606200434-b5c079f412d3/swim/labels.go:175 +0x82
-	// go.temporal.io/server/common/membership/ringpop.(*monitor).Start(0xc0b9c46870?)
-	// /Users/jacoblegrone/Development/github.com/temporalio/temporal/common/membership/ringpop/monitor.go:148 +0x68e
-	// created by go.temporal.io/server/service/matching.(*Service).Start
-	// /Users/jacoblegrone/Development/github.com/temporalio/temporal/service/matching/service.go:110 +0x1f5
-	// FAIL	go.temporal.io/server/temporaltest	486.783s
-	// FAIL
+	// This sleep helps avoid a panic in github.com/temporalio/ringpop-go@v0.0.0-20230606200434-b5c079f412d3/swim/labels.go:175
 	time.Sleep(100 * time.Millisecond)
 
 	return &ts
