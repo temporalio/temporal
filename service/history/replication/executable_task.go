@@ -371,13 +371,13 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NamespaceNotFound:
-		if e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
-			namespaceEntry, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
-			if err != nil {
-				e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
-				return "", false, nil
-			}
-		} else {
+		if !e.ProcessToolBox.Config.EnableReplicationEagerRefreshNamespace() {
+			return "", false, nil
+		}
+
+		namespaceEntry, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		if err != nil {
+			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil
 		}
 	default:
