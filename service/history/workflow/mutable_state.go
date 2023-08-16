@@ -303,6 +303,7 @@ type (
 		CheckSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) bool
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
+		IsDirty() bool
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)

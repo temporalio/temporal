@@ -38,7 +38,6 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -131,7 +130,6 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 
 	task.logger.Debug(fmt.Sprintf("running %v updates for current version %v", len(updates), currVer))
 	for _, cs := range updates {
-		task.logger.Debug("running update", tag.NewAnyTag("cs", cs))
 		err := task.execStmts(cs.version, cs.cqlStmts)
 		if err != nil {
 			return err
@@ -152,9 +150,20 @@ func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 	task.logger.Debug(fmt.Sprintf("---- Executing updates for version %v ----", ver))
 	for _, stmt := range stmts {
 		task.logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
-		e := task.db.Exec(stmt)
-		if e != nil {
-			return fmt.Errorf("error executing statement:%v", e)
+		err := task.db.Exec(stmt)
+		if err != nil {
+			// To make schema update idempotent, we need to handle error when retry on previous partially succeeded update attempt.
+			// There are 2 major cases that will be handled:
+			// 1) Add table or column that already exists (message contains 'already existing' for table or 'already exists' for column)
+			// 2) Drop column that is not found (message contains 'not found')
+			alreadyExists := strings.Contains(err.Error(), "already exist")
+			notFound := strings.Contains(err.Error(), "not found")
+			if alreadyExists || notFound {
+				task.logger.Warn("Duplicate update, most likely due to previous partially succeeded update attempt. Ignoring it and continue.", tag.Error(err))
+				continue
+			}
+
+			return fmt.Errorf("error executing statement: %w", err)
 		}
 	}
 	task.logger.Debug("---- Done ----")
@@ -162,24 +171,14 @@ func (task *UpdateTask) execStmts(ver string, stmts []string) error {
 }
 
 func (task *UpdateTask) updateSchemaVersion(oldVer string, cs *changeSet) error {
-	task.logger.Debug(fmt.Sprintf("updating schema version to %v", cs.version))
 	err := task.db.UpdateSchemaVersion(cs.version, cs.manifest.MinCompatibleVersion)
 	if err != nil {
 		return fmt.Errorf("failed to update schema_version table, err=%v", err.Error())
 	}
-
-	task.logger.Debug("adding entry to schema_update_history for version", tag.NewAnyTag("cs", cs))
 	err = task.db.WriteSchemaUpdateLog(oldVer, cs.manifest.CurrVersion, cs.manifest.md5, cs.manifest.Description)
 	if err != nil {
 		return fmt.Errorf("failed to add entry to schema_update_history, err=%v", err.Error())
 	}
-
-	// todo: for debugging
-	latestVer, err := task.db.ReadSchemaVersion()
-	if err != nil {
-		return fmt.Errorf("error reading current schema version: %v", err.Error())
-	}
-	task.logger.Debug(fmt.Sprintf("schema version now is %v", latestVer))
 
 	return nil
 }

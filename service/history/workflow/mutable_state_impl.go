@@ -4394,10 +4394,14 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	return setStateStatus(ms.executionState, state, status)
 }
 
+func (ms *MutableStateImpl) IsDirty() bool {
+	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0
+}
+
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
-	if ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 {
+	if ms.IsDirty() {
 		ms.logger.Error("MutableState encountered dirty transaction",
 			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
 			tag.WorkflowID(ms.executionInfo.WorkflowId),

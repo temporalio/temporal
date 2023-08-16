@@ -340,9 +340,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
 
-	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
-	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
-	s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
+	s.Equal(len(iceptor.replicationRecordedHeartbeats), 1)
 }
 
 type executionState int
@@ -383,6 +381,14 @@ func createExecutions(mockClient *adminservicemock.MockAdminServiceClient, state
 	return executions
 }
 
+type mockHeartBeatRecorder struct {
+	lastHeartBeat replicationTasksHeartbeatDetails
+}
+
+func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetails) {
+	m.lastHeartBeat = details
+}
+
 func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
@@ -393,36 +399,36 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	ctx := context.TODO()
 
 	var tests = []struct {
-		executionStates  []executionState
-		nextIndex        int
-		expectedVerified bool
-		expectedErr      error
-		expectedIndex    int
+		remoteExecutionStates []executionState
+		nextIndex             int
+		expectedVerified      bool
+		expectedErr           error
+		expectedIndex         int
 	}{
 		{
 			expectedVerified: true,
 			expectedErr:      nil,
 		},
 		{
-			executionStates:  []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:        0,
-			expectedVerified: true,
-			expectedErr:      nil,
-			expectedIndex:    4,
+			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
+			nextIndex:             0,
+			expectedVerified:      true,
+			expectedErr:           nil,
+			expectedIndex:         4,
 		},
 		{
-			executionStates:  []executionState{executionFound, executionFound, executionFound, executionFound},
-			nextIndex:        2,
-			expectedVerified: true,
-			expectedErr:      nil,
-			expectedIndex:    4,
+			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
+			nextIndex:             2,
+			expectedVerified:      true,
+			expectedErr:           nil,
+			expectedIndex:         4,
 		},
 		{
-			executionStates:  []executionState{executionFound, executionFound, executionNotfound},
-			nextIndex:        0,
-			expectedVerified: false,
-			expectedErr:      nil,
-			expectedIndex:    2,
+			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
+			nextIndex:             0,
+			expectedVerified:      false,
+			expectedErr:           nil,
+			expectedIndex:         2,
 		},
 	}
 
@@ -432,32 +438,26 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	}).Return(&completeState, nil).AnyTimes()
 
 	for _, tc := range tests {
+		var recorder mockHeartBeatRecorder
 		mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
-		request.Executions = createExecutions(mockRemoteAdminClient, tc.executionStates, tc.nextIndex)
+		request.Executions = createExecutions(mockRemoteAdminClient, tc.remoteExecutionStates, tc.nextIndex)
 		details := replicationTasksHeartbeatDetails{
 			NextIndex: tc.nextIndex,
 		}
 
-		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace)
+		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
 		s.Equal(tc.expectedVerified, verified)
 		s.Equal(tc.expectedIndex, details.NextIndex)
-		s.GreaterOrEqual(len(tc.executionStates), details.NextIndex)
-		if details.NextIndex < len(tc.executionStates) && tc.executionStates[details.NextIndex] == executionNotfound {
+		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
+		s.Equal(recorder.lastHeartBeat, details)
+		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
 			s.Equal(execution1, details.LastNotFoundWorkflowExecution)
 		}
 	}
 }
-
-//                            Now
-//                    │        │    bias │
-// ───────────────────┼────────▼─────────┼──────
-//   closeTime        │    Skip Range    │
-//      │                 deleteTime
-//      └───────────────────┘
-//         retention
 
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	bias := time.Minute
@@ -479,19 +479,12 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 		},
 		{
 			30 * time.Second,
-			true,
-		},
-		{
-			-(bias + time.Minute),
-			false,
-		},
-		{
-			bias + time.Minute,
 			false,
 		},
 	}
 
 	for _, tc := range tests {
+		var recorder mockHeartBeatRecorder
 		deleteTime := time.Now().Add(tc.deleteDiff)
 		retention := time.Hour
 		closeTime := deleteTime.Add(-retention)
@@ -528,9 +521,10 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns)
+		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns, recorder.hearbeat)
 		s.NoError(err)
 		s.Equal(tc.verified, verified)
+		s.Equal(recorder.lastHeartBeat, details)
 	}
 }
 
@@ -617,12 +611,4 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
-}
-
-func (s *activitiesSuite) Test_isCloseToCurrentTime() {
-	d := time.Minute
-	now := time.Now()
-	s.True(isCloseToCurrentTime(now, d))
-	s.False(isCloseToCurrentTime(now.Add(2*time.Minute), d))
-	s.False(isCloseToCurrentTime(now.Add(-2*time.Minute), d))
 }

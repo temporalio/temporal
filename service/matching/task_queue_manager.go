@@ -126,6 +126,8 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
+		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(params addTaskParams) error
 		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
@@ -148,8 +150,8 @@ type (
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
 		LongPollExpirationInterval() time.Duration
-		RedirectToVersionedQueueForAdd(context.Context, *taskqueuespb.TaskVersionDirective) (*taskQueueID, chan struct{}, error)
-		RedirectToVersionedQueueForPoll(*commonpb.WorkerVersionCapabilities) (*taskQueueID, error)
+		RedirectToVersionedQueueForAdd(context.Context, *taskqueuespb.TaskVersionDirective) (taskQueueManager, chan struct{}, error)
+		RedirectToVersionedQueueForPoll(context.Context, *commonpb.WorkerVersionCapabilities) (taskQueueManager, error)
 	}
 
 	// Single task queue in memory state
@@ -225,7 +227,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, e.matchingClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
+	db := newTaskQueueDB(e.taskManager, e.matchingRawClient, taskQueue.namespaceID, taskQueue, stickyInfo.kind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -244,7 +246,7 @@ func newTaskQueueManager(
 		status:               common.DaemonStatusInitialized,
 		engine:               e,
 		namespaceRegistry:    e.namespaceRegistry,
-		matchingClient:       e.matchingClient,
+		matchingClient:       e.matchingRawClient,
 		metricsHandler:       e.metricsHandler,
 		clusterMeta:          e.clusterMeta,
 		taskQueueID:          taskQueue,
@@ -278,7 +280,7 @@ func newTaskQueueManager(
 		// Forward without version set, the target will resolve the correct version set from
 		// the build id itself. TODO: check if we still need this here after tqm refactoring
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
-		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingClient)
+		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingRawClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
@@ -356,7 +358,8 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.goroGroup.Cancel()
-	c.db.Close()
+	// Set user data state on stop to wake up anyone blocked on the user data changed channel.
+	c.db.setUserDataState(userDataClosed)
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 	// This may call Stop again, but the status check above makes that a no-op.
@@ -513,6 +516,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	task.namespace = c.namespace
 	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
 	return task, nil
+}
+
+func (c *taskQueueManagerImpl) MarkAlive() {
+	c.liveness.markAlive()
 }
 
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
@@ -765,11 +772,11 @@ func (c *taskQueueManagerImpl) LongPollExpirationInterval() time.Duration {
 	return c.config.LongPollExpirationInterval()
 }
 
-func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(caps *commonpb.WorkerVersionCapabilities) (*taskQueueID, error) {
+func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(ctx context.Context, caps *commonpb.WorkerVersionCapabilities) (taskQueueManager, error) {
 	if !caps.GetUseVersioning() {
 		// Either this task queue is versioned, or there are still some workflows running on
 		// the "unversioned" set.
-		return c.taskQueueID, nil
+		return c, nil
 	}
 	// We don't need the userDataChanged channel here because polls have a timeout and the
 	// client will retry, so if we're blocked on the wrong matcher it'll just take one poll
@@ -789,20 +796,37 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(caps *commonpb.Wo
 		if unknownBuild {
 			c.recordUnknownBuildPoll(caps.BuildId)
 		}
-		return c.taskQueueID, nil
+		return c, nil
 	}
 
-	versionSet, unknownBuild, err := lookupVersionSetForPoll(data, caps)
+	primarySetId, demotedSetIds, unknownBuild, err := lookupVersionSetForPoll(data, caps)
 	if err != nil {
 		return nil, err
 	}
 	if unknownBuild {
 		c.recordUnknownBuildPoll(caps.BuildId)
 	}
-	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), nil
+	c.loadDemotedSetIds(demotedSetIds)
+
+	newId := newTaskQueueIDWithVersionSet(c.taskQueueID, primarySetId)
+	return c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
 }
 
-func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Context, directive *taskqueuespb.TaskVersionDirective) (*taskQueueID, chan struct{}, error) {
+func (c *taskQueueManagerImpl) loadDemotedSetIds(demotedSetIds []string) {
+	// If we have demoted set ids, we need to load all task queues for them because even though
+	// no new tasks will be sent to them, they might have old tasks in the db.
+	// Also mark them alive, so that their liveness will be roughly synchronized.
+	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
+	for _, demotedSetId := range demotedSetIds {
+		newId := newTaskQueueIDWithVersionSet(c.taskQueueID, demotedSetId)
+		tqm, _ := c.engine.getTaskQueueManagerNoWait(newId, c.stickyInfo, true)
+		if tqm != nil {
+			tqm.MarkAlive()
+		}
+	}
+}
+
+func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Context, directive *taskqueuespb.TaskVersionDirective) (taskQueueManager, chan struct{}, error) {
 	var buildId string
 	switch dir := directive.GetValue().(type) {
 	case *taskqueuespb.TaskVersionDirective_UseDefault:
@@ -811,7 +835,7 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 		buildId = dir.BuildId
 	default:
 		// Unversioned task, leave on unversioned queue.
-		return c.taskQueueID, nil, nil
+		return c, nil, nil
 	}
 
 	// Have to look up versioning data.
@@ -820,14 +844,21 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 		if errors.Is(err, errUserDataDisabled) {
 			// When user data disabled, send "default" tasks to unversioned queue.
 			if buildId == "" {
-				return c.taskQueueID, userDataChanged, nil
+				return c, userDataChanged, nil
 			}
 			// Send versioned sticky back to regular queue so they can go in the dlq.
 			if c.kind == enumspb.TASK_QUEUE_KIND_STICKY {
 				return nil, nil, serviceerrors.NewStickyWorkerUnavailable()
 			}
 			// Send versioned tasks to dlq.
-			return newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet), userDataChanged, nil
+			newId := newTaskQueueIDWithVersionSet(c.taskQueueID, dlqVersionSet)
+			// If we're called by QueryWorkflow, then we technically don't need to load the dlq
+			// tqm here. But it's not a big deal if we do.
+			tqm, err := c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
+			if err != nil {
+				return nil, nil, err
+			}
+			return tqm, userDataChanged, nil
 		}
 		return nil, nil, err
 	}
@@ -844,13 +875,13 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 			// Don't bother persisting the unknown build id in this case: sticky tasks have a
 			// short timeout, so it doesn't matter if they get lost.
 		}
-		return c.taskQueueID, userDataChanged, nil
+		return c, userDataChanged, nil
 	}
 
 	versionSet, unknownBuild, err := lookupVersionSetForAdd(data, buildId)
 	if err == errEmptyVersioningData { // nolint:goerr113
 		// default was requested for an unversioned queue
-		return c.taskQueueID, userDataChanged, nil
+		return c, userDataChanged, nil
 	} else if err != nil {
 		return nil, nil, err
 	}
@@ -868,7 +899,13 @@ func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Contex
 			return nil, nil, err
 		}
 	}
-	return newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet), userDataChanged, nil
+
+	newId := newTaskQueueIDWithVersionSet(c.taskQueueID, versionSet)
+	tqm, err := c.engine.getTaskQueueManager(ctx, newId, c.stickyInfo, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tqm, userDataChanged, nil
 }
 
 func (c *taskQueueManagerImpl) recordUnknownBuildPoll(buildId string) {

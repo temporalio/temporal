@@ -27,7 +27,6 @@ package shard
 import (
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -59,7 +59,7 @@ type (
 		ClusterMetadata             cluster.Metadata
 		Config                      *configs.Config
 		EngineFactory               EngineFactory
-		HistoryClient               historyservice.HistoryServiceClient
+		HistoryClient               resource.HistoryClient
 		HistoryServiceResolver      membership.ServiceResolver
 		HostInfoProvider            membership.HostInfoProvider
 		Logger                      log.Logger

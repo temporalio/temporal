@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -45,7 +46,7 @@ type (
 	ConcurrentRequestLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
-		countFn           func(ns string) int
+		quotaCalculator   quotas.ClusterAwareNamespaceSpecificQuotaCalculator
 		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
 		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
 		tokens map[string]int
@@ -63,14 +64,20 @@ var (
 
 func NewConcurrentRequestLimitInterceptor(
 	namespaceRegistry namespace.Registry,
+	memberCounter quotas.MemberCounter,
 	logger log.Logger,
-	countFn func(ns string) int,
+	perInstanceQuota func(ns string) int,
+	globalQuota func(ns string) int,
 	tokens map[string]int,
 ) *ConcurrentRequestLimitInterceptor {
 	return &ConcurrentRequestLimitInterceptor{
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
-		countFn:           countFn,
+		quotaCalculator: quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    memberCounter,
+			PerInstanceQuota: perInstanceQuota,
+			GlobalQuota:      globalQuota,
+		},
 		tokens:            tokens,
 		activeTokensCount: make(map[string]*int32),
 	}
@@ -106,7 +113,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 
 		// frontend.namespaceCount is applied per poller type temporarily to prevent
 		// one poller type to take all token waiting in the long poll.
-		if int(count) > ni.countFn(nsName.String()) {
+		if float64(count) > ni.quotaCalculator.GetQuota(nsName.String()) {
 			return nil, ErrNamespaceCountLimitServerBusy
 		}
 	}

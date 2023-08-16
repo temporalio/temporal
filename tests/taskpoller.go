@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/matching"
 )
 
 type (
@@ -75,6 +74,10 @@ type (
 		Logger                       log.Logger
 		T                            *testing.T
 	}
+)
+
+var (
+	errNoTasks = errors.New("no tasks")
 )
 
 // PollAndProcessWorkflowTask for workflow tasks
@@ -330,7 +333,7 @@ Loop:
 		return false, newTask, err
 	}
 
-	return false, nil, matching.ErrNoTasks
+	return false, nil, errNoTasks
 }
 
 // HandlePartialWorkflowTask for workflow task
@@ -474,7 +477,7 @@ retry:
 		return err
 	}
 
-	return matching.ErrNoTasks
+	return errNoTasks
 }
 
 // PollAndProcessActivityTaskWithID is similar to PollAndProcessActivityTask but using RespondActivityTask...ByID
@@ -550,7 +553,7 @@ retry:
 		return err
 	}
 
-	return matching.ErrNoTasks
+	return errNoTasks
 }
 
 func getQueryResults(queries map[string]*querypb.WorkflowQuery, queryResult *querypb.WorkflowQueryResult) map[string]*querypb.WorkflowQueryResult {

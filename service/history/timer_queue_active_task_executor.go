@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -71,14 +72,14 @@ func newTimerQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
+	matchingRawClient resource.MatchingRawClient,
 ) queues.Executor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
-			matchingClient,
+			matchingRawClient,
 			logger,
 			metricProvider,
 			config,
@@ -480,7 +481,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	_, retError = t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),

@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
@@ -113,8 +114,8 @@ type (
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
-		historyClient        historyservice.HistoryServiceClient
-		matchingClient       matchingservice.MatchingServiceClient
+		historyClient        resource.HistoryClient
+		matchingRawClient    resource.MatchingRawClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
@@ -151,9 +152,7 @@ var (
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
-	// ErrNoTasks is exported temporarily for integration test
-	ErrNoTasks    = errors.New("no tasks")
-	errPumpClosed = errors.New("task queue pump closed its channel")
+	errNoTasks = errors.New("no tasks")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -164,8 +163,8 @@ var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed im
 // NewEngine creates an instance of matching engine
 func NewEngine(
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyClient resource.HistoryClient,
+	matchingRawClient resource.MatchingRawClient,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -181,7 +180,7 @@ func NewEngine(
 		status:                    common.DaemonStatusInitialized,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
-		matchingClient:            matchingClient,
+		matchingRawClient:         matchingRawClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
@@ -266,10 +265,27 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 	stickyInfo stickyInfo,
 	create bool,
 ) (taskQueueManager, error) {
+	tqm, err := e.getTaskQueueManagerNoWait(taskQueue, stickyInfo, create)
+	if err != nil || tqm == nil {
+		return nil, err
+	}
+	if err = tqm.WaitUntilInitialized(ctx); err != nil {
+		return nil, err
+	}
+	return tqm, nil
+}
+
+// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// to get new range from DB and create one. This does not block for the task queue to be
+// initialized.
+func (e *matchingEngineImpl) getTaskQueueManagerNoWait(
+	taskQueue *taskQueueID,
+	stickyInfo stickyInfo,
+	create bool,
+) (taskQueueManager, error) {
 	e.taskQueuesLock.RLock()
 	tqm, ok := e.taskQueues[*taskQueue]
 	e.taskQueuesLock.RUnlock()
-
 	if !ok {
 		if !create {
 			return nil, nil
@@ -294,11 +310,6 @@ func (e *matchingEngineImpl) getTaskQueueManager(
 			e.updateTaskQueueGauge(tqm, 1)
 		}
 	}
-
-	if err := tqm.WaitUntilInitialized(ctx); err != nil {
-		return nil, err
-	}
-
 	return tqm, nil
 }
 
@@ -323,25 +334,21 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return false, err
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
+	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
+	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return false, err
+	} else if sticky && !stickyWorkerAvailable(baseTqm) {
+		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
+
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match or sticky worker unavailable, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		return false, err
-	}
-
-	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
-	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
-	if err != nil {
-		return false, err
-	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
-		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -377,7 +384,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
-	runID := addRequest.Execution.GetRunId()
 	taskQueueName := addRequest.TaskQueue.GetName()
 	stickyInfo := stickyInfoFromTaskQueue(addRequest.TaskQueue)
 
@@ -393,12 +399,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	// We don't need the userDataChanged channel here because:
 	// - if we sync match, we're done
 	// - if we spool to db, we'll re-resolve when it comes out of the db
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
-	if err != nil {
-		return false, err
-	}
-
-	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, addRequest.VersionDirective)
 	if err != nil {
 		return false, err
 	}
@@ -411,7 +412,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId:      namespaceID.String(),
-		RunId:            runID,
+		RunId:            addRequest.Execution.GetRunId(),
 		WorkflowId:       addRequest.Execution.GetWorkflowId(),
 		ScheduledEventId: addRequest.GetScheduledEventId(),
 		Clock:            addRequest.GetClock(),
@@ -420,7 +421,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		VersionDirective: addRequest.VersionDirective,
 	}
 
-	return tlMgr.AddTask(ctx, addTaskParams{
+	return tqm.AddTask(ctx, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -443,16 +444,15 @@ func (e *matchingEngineImpl) DispatchSpooledTask(
 	unversionedOrigTaskQueue := newTaskQueueIDWithVersionSet(origTaskQueue, "")
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
+		// If normal queue: always load the base tqm to get versioning data.
+		// If sticky queue: sticky is not versioned, so if we got here (by taskReader calling this),
+		// the queue is already loaded.
+		// So we can always use true here.
 		baseTqm, err := e.getTaskQueueManager(ctx, unversionedOrigTaskQueue, stickyInfo, true)
 		if err != nil {
 			return err
 		}
-		taskQueue, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
-		if err != nil {
-			return err
-		}
-		sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
-		tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
+		tqm, userDataChanged, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, directive)
 		if err != nil {
 			return err
 		}
@@ -494,8 +494,7 @@ pollLoop:
 		}
 		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			// TODO: Is empty poll the best reply for errPumpClosed?
-			if err == ErrNoTasks || err == errPumpClosed {
+			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
@@ -613,8 +612,7 @@ pollLoop:
 		}
 		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
-			// TODO: Is empty poll the best reply for errPumpClosed?
-			if err == ErrNoTasks || err == errPumpClosed {
+			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
@@ -681,26 +679,22 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
-	if err != nil {
-		return nil, err
-	}
-	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
-	// or fail with a relatively short timeout.
-	taskQueue, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
-	if err != nil {
-		return nil, err
-	} else if taskQueue.VersionSet() == dlqVersionSet {
-		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
-	}
-
 	sticky := stickyInfo.kind == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, !sticky)
+	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, !sticky)
 	if err != nil {
 		return nil, err
-	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+	} else if sticky && !stickyWorkerAvailable(baseTqm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
+	}
+
+	// We don't need the userDataChanged channel here because we either do this sync (local or remote)
+	// or fail with a relatively short timeout.
+	tqm, _, err := baseTqm.RedirectToVersionedQueueForAdd(ctx, queryRequest.VersionDirective)
+	if err != nil {
+		return nil, err
+	} else if tqm.QueueID().VersionSet() == dlqVersionSet {
+		return nil, serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 	}
 
 	taskID := uuid.New()
@@ -1203,16 +1197,12 @@ func (e *matchingEngineImpl) getTask(
 		return nil, err
 	}
 
-	taskQueue, err := baseTqm.RedirectToVersionedQueueForPoll(pollMetadata.workerVersionCapabilities)
+	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
 	if err != nil {
 		if errors.Is(err, errUserDataDisabled) {
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
-		return nil, err
-	}
-	tqm, err := e.getTaskQueueManager(ctx, taskQueue, stickyInfo, true)
-	if err != nil {
 		return nil, err
 	}
 
@@ -1515,4 +1505,10 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 		StateUpdateTimestamp:   &stamp,
 		BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 	}
+}
+
+// We use a very short timeout for considering a sticky worker available, since tasks can also
+// be processed on the normal queue.
+func stickyWorkerAvailable(tqm taskQueueManager) bool {
+	return tqm != nil && tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))
 }

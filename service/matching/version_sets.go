@@ -352,7 +352,7 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 }
 
 // Requires: caps is not nil
-func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, bool, error) {
+func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, []string, bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
 	// Note data may be nil here, findVersion will return -1 then.
@@ -367,14 +367,15 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 		// In the meantime (e.g. during an ungraceful failover) we can at least match tasks
 		// using the exact same build ID.
 		guessedSetId := hashBuildId(caps.BuildId)
-		return guessedSetId, true, nil
+		return guessedSetId, nil, true, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1
 	if indexInSet != lastIndex {
-		return "", false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
+		return "", nil, false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
-	return getSetID(set), false, nil
+	primarySetId, demotedSetIds := getSetIds(set)
+	return primarySetId, demotedSetIds, false, nil
 }
 
 // Requires: caps is not nil
@@ -428,7 +429,9 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 		}
 		set = data.VersionSets[setIdx]
 	}
-	return getSetID(set), false, nil
+	// Demoted set ids don't matter for add, we always write to the primary.
+	primarySetId, _ := getSetIds(set)
+	return primarySetId, false, nil
 }
 
 // For this function, buildId == "" means "use default"
@@ -453,7 +456,7 @@ func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId strin
 	return false, nil
 }
 
-// getSetID returns an arbitrary but consistent member of the set.
+// getSetIds returns an arbitrary but consistent member of the set, and the rest of the set.
 // We want Add and Poll requests for the same set to converge on a single id, so we can match
 // them, but we don't have a single id for a set in the general case: in rare cases we may have
 // multiple ids (due to failovers). We can do this by picking an arbitrary id in the set, e.g.
@@ -461,8 +464,8 @@ func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId strin
 // choice only has to be consistent within one version of the versioning data. (For correct
 // handling of spooled tasks in Add, this does need to be an actual set id, not an arbitrary
 // string.)
-func getSetID(set *persistencespb.CompatibleVersionSet) string {
-	return set.SetIds[0]
+func getSetIds(set *persistencespb.CompatibleVersionSet) (string, []string) {
+	return set.SetIds[0], set.SetIds[1:]
 }
 
 // ClearTombstones clears all tombstone build ids (with STATE_DELETED) from versioning data.

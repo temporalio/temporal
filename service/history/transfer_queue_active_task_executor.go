@@ -39,7 +39,6 @@ import (
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -85,7 +85,8 @@ func newTransferQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyRawClient resource.HistoryRawClient,
+	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
@@ -95,7 +96,8 @@ func newTransferQueueActiveTaskExecutor(
 			archivalClient,
 			logger,
 			metricProvider,
-			matchingClient,
+			historyRawClient,
+			matchingRawClient,
 			visibilityManager,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
@@ -390,7 +392,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
-		_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
+		_, err := t.historyRawClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
 			ParentExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
@@ -700,7 +702,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
-	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
+	_, err = t.historyRawClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: task.TargetNamespaceID,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.TargetWorkflowID,
@@ -1092,7 +1094,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	parentClock *clockspb.VectorClock,
 	childClock *clockspb.VectorClock,
 ) error {
-	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
+	_, err := t.historyRawClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
 		WorkflowExecution:   execution,
 		IsFirstWorkflowTask: true,
@@ -1288,7 +1290,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, request)
+	_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -1322,7 +1324,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	_, err := t.historyClient.SignalWorkflowExecution(ctx, request)
+	_, err := t.historyRawClient.SignalWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -1372,7 +1374,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 
 	request.SourceVersionStamp = sourceVersionStamp
 
-	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
+	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1553,7 +1555,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				return err
 			}
 		}
-		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+		_, err := t.historyRawClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
@@ -1583,7 +1585,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			}
 		}
 
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+		_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),

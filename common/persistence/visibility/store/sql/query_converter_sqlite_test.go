@@ -73,25 +73,25 @@ func (s *sqliteQueryConverterSuite) TestConvertKeywordListComparisonExpr() {
 		{
 			name:   "valid equal expression",
 			input:  "AliasForKeywordList01 = 'foo'",
-			output: "rowid in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01:\"foo\"')",
+			output: `rowid in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01 : ("foo")')`,
 			err:    nil,
 		},
 		{
 			name:   "valid not equal expression",
 			input:  "AliasForKeywordList01 != 'foo'",
-			output: "rowid not in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01:\"foo\"')",
+			output: `rowid not in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01 : ("foo")')`,
 			err:    nil,
 		},
 		{
 			name:   "valid in expression",
 			input:  "AliasForKeywordList01 in ('foo', 'bar')",
-			output: "rowid in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01:(\"foo\" OR \"bar\")')",
+			output: `rowid in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01 : ("foo" OR "bar")')`,
 			err:    nil,
 		},
 		{
 			name:   "valid not in expression",
 			input:  "AliasForKeywordList01 not in ('foo', 'bar')",
-			output: "rowid not in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01:(\"foo\" OR \"bar\")')",
+			output: `rowid not in (select rowid from executions_visibility_fts_keyword_list where executions_visibility_fts_keyword_list = 'KeywordList01 : ("foo" OR "bar")')`,
 			err:    nil,
 		},
 	}
@@ -130,13 +130,13 @@ func (s *sqliteQueryConverterSuite) TestConvertTextComparisonExpr() {
 		{
 			name:   "valid equal expression",
 			input:  "AliasForText01 = 'foo bar'",
-			output: "rowid in (select rowid from executions_visibility_fts_text where executions_visibility_fts_text = 'Text01:(foo OR bar)')",
+			output: `rowid in (select rowid from executions_visibility_fts_text where executions_visibility_fts_text = 'Text01 : ("foo" OR "bar")')`,
 			err:    nil,
 		},
 		{
 			name:   "valid not equal expression",
 			input:  "AliasForText01 != 'foo bar'",
-			output: "rowid not in (select rowid from executions_visibility_fts_text where executions_visibility_fts_text = 'Text01:(foo OR bar)')",
+			output: `rowid not in (select rowid from executions_visibility_fts_text where executions_visibility_fts_text = 'Text01 : ("foo" OR "bar")')`,
 			err:    nil,
 		},
 	}

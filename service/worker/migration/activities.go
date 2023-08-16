@@ -572,13 +572,11 @@ func (a *activities) canSkipWorkflowExecution(
 		return true, reasonZombieWorkflow, nil
 	}
 
-	// source and target cluster handles workflow retention separately. For a workflow which is abort to be deleted,
-	// it may be already deleted on target cluster but still exist on source, which cause verification delay.
-	// Here, we skip workflow of which retention time is close to current time to continue the verification.
+	// Skip verifying workflow which has already passed retention time.
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.Add(ns.Retention())
-		if isCloseToCurrentTime(deleteTime, request.RetentionBiasDuration) {
-			a.forceReplicationMetricsHandler.Counter(metrics.EncounterCloseToRetentionWorkflowCount.GetMetricName()).Record(1)
+		if deleteTime.Before(time.Now()) {
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.GetMetricName()).Record(1)
 			return true, reasonWorkflowCloseToRetention, nil
 		}
 	}
@@ -592,9 +590,17 @@ func (a *activities) verifyReplicationTasks(
 	details *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
+	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, []SkippedWorkflowExecution, error) {
 	start := time.Now()
+	progress := false
 	defer func() {
+		if progress {
+			// Update CheckPoint where there is a progress
+			details.CheckPoint = time.Now()
+		}
+
+		heartbeat(*details)
 		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
 	}()
 
@@ -638,13 +644,16 @@ func (a *activities) verifyReplicationTasks(
 
 			return false, skippedList, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
 		}
+
+		heartbeat(*details)
+		progress = true
 	}
 
 	return true, skippedList, nil
 }
 
 const (
-	defaultNoProgressNotRetryableTimeout = 15 * time.Minute
+	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
 )
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
@@ -684,23 +693,18 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
 	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
 	//    non-retryable error and force-replication will fail.
-
 	for {
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
-		lastIndex := details.NextIndex
-		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry)
+		verified, skippedList, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry,
+			func(d replicationTasksHeartbeatDetails) {
+				activity.RecordHeartbeat(ctx, d)
+			})
+
 		if err != nil {
 			return response, err
 		}
-
-		if lastIndex < details.NextIndex {
-			// Update CheckPoint where there is a progress
-			details.CheckPoint = time.Now()
-		}
-
-		activity.RecordHeartbeat(ctx, details)
 
 		if len(skippedList) > 0 {
 			response.SkippedWorkflowExecutions = append(response.SkippedWorkflowExecutions, skippedList...)
