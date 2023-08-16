@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tqname"
 )
 
 type (
@@ -458,7 +459,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		workflowTask.Type = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		workflowTaskScheduledEventCreated = true
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
-			taskQueue,
+			// taskQueue may come directly from RecordWorkflowTaskStarted from matching, which will
+			// contain a specific partition name. We only want to record the base name here.
+			cleanTaskQueue(taskQueue),
 			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			startTime,
@@ -1034,4 +1037,17 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	return nil
+}
+
+func cleanTaskQueue(tq *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
+	if tq == nil {
+		return tq
+	}
+	name, err := tqname.Parse(tq.Name)
+	if err != nil {
+		return tq
+	}
+	cleanTq := *tq
+	cleanTq.Name = name.BaseNameString()
+	return &cleanTq
 }

@@ -42,7 +42,7 @@ type (
 	}
 )
 
-// newTaskQueueID returns taskQueueID which uniquely identfies as task queue
+// newTaskQueueID returns taskQueueID which uniquely identifies as task queue
 func newTaskQueueID(namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
 	return newTaskQueueIDWithPartition(namespaceID, taskQueueName, taskType, -1)
 }

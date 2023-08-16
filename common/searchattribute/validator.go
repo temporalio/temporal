@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 type (
@@ -44,7 +45,7 @@ type (
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
-		indexName                         string
+		visibilityManager                 manager.VisibilityManager
 
 		// allowList allows list of values when it's not keyword list type.
 		allowList bool
@@ -58,7 +59,7 @@ func NewValidator(
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	indexName string,
+	visibilityManager manager.VisibilityManager,
 	allowList bool,
 ) *Validator {
 	return &Validator{
@@ -67,7 +68,7 @@ func NewValidator(
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
-		indexName:                         indexName,
+		visibilityManager:                 visibilityManager,
 		allowList:                         allowList,
 	}
 }
@@ -90,13 +91,17 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		)
 	}
 
-	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.indexName, false)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(
+		v.visibilityManager.GetIndexName(),
+		false,
+	)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(
 			fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err),
 		)
 	}
 
+	saMap := make(map[string]any, len(searchAttributes.GetIndexedFields()))
 	for saFieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		// user search attribute cannot be a system search attribute
 		if _, err = saTypeMap.getType(saFieldName, systemCategory); err == nil {
@@ -121,7 +126,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			)
 		}
 
-		_, err = DecodeValue(saPayload, saType, v.allowList)
+		saValue, err := DecodeValue(saPayload, saType, v.allowList)
 		if err != nil {
 			var invalidValue interface{}
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
@@ -138,8 +143,10 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				namespace,
 			)
 		}
+		saMap[saFieldName] = saValue
 	}
-	return nil
+	_, err = v.visibilityManager.ValidateCustomSearchAttributes(saMap)
+	return err
 }
 
 // ValidateSize validate search attributes are valid for writing and not exceed limits.

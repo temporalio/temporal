@@ -34,6 +34,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -56,7 +57,6 @@ type (
 	Context interface {
 		GetShardID() int32
 		GetRangeID() int64
-		IsValid() bool
 		GetOwner() string
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
@@ -118,6 +118,16 @@ type (
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
 
-		Unload()
+		UnloadForOwnershipLost()
+	}
+
+	// A ControllableContext is a Context plus other methods needed by
+	// the Controller.
+	ControllableContext interface {
+		Context
+		common.Pingable
+
+		IsValid() bool
+		FinishStop()
 	}
 )

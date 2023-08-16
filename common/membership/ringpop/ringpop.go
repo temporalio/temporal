@@ -45,7 +45,7 @@ const (
 )
 
 type (
-	// service is a wrapper around ringpop.Ringpop that implements common.Daemon
+	// service is a wrapper around ringpop.Ringpop
 	service struct {
 		status int32
 		*ringpop.Ringpop

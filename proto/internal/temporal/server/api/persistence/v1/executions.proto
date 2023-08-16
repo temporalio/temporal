@@ -62,9 +62,7 @@ message ShardInfo {
     map<string, int64> replication_dlq_ack_level = 13;
     reserved 14;
     reserved 15;
-    // Map from task category to ack levels of the corresponding queue processor
-    // Deprecated. Use queue_states instead.
-    map<int32, QueueAckLevel> queue_ack_levels = 16;
+    reserved 16;
     map<int32, QueueState> queue_states = 17;
 }
 
@@ -311,6 +309,7 @@ message ActivityInfo {
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
     google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
     bool use_compatible_version = 33;
+    temporal.api.common.v1.ActivityType activity_type = 34;
 }
 
 // timer_map column

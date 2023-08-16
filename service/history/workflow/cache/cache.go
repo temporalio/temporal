@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -78,7 +77,8 @@ type (
 		shard          shard.Context
 		logger         log.Logger
 		metricsHandler metrics.Handler
-		config         *configs.Config
+
+		nonUserContextLockTimeout time.Duration
 	}
 
 	NewCacheFn func(shard shard.Context) Cache
@@ -87,25 +87,26 @@ type (
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
 
 const (
-	cacheNotReleased            int32 = 0
-	cacheReleased               int32 = 1
-	workflowLockTimeoutTailTime       = 500 * time.Millisecond
-	nonApiContextLockTimeout          = 500 * time.Millisecond
+	cacheNotReleased int32 = 0
+	cacheReleased    int32 = 1
+)
+
+const (
+	workflowLockTimeoutTailTime = 500 * time.Millisecond
 )
 
 func NewCache(shard shard.Context) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
-	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:          shard,
-		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
-		config:         config,
+		Cache:                     cache.New(config.HistoryCacheMaxSize(), opts),
+		shard:                     shard,
+		logger:                    log.With(shard.GetLogger(), tag.ComponentHistoryCache),
+		metricsHandler:            shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
+		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 	}
 }
 
@@ -220,7 +221,7 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 	if deadline, ok := ctx.Deadline(); ok {
 		var cancel context.CancelFunc
 		if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
-			newDeadline := time.Now().Add(nonApiContextLockTimeout)
+			newDeadline := time.Now().Add(c.nonUserContextLockTimeout)
 			if newDeadline.Before(deadline) {
 				ctx, cancel = context.WithDeadline(ctx, newDeadline)
 				defer cancel()
@@ -261,9 +262,24 @@ func (c *CacheImpl) makeReleaseFunc(
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.Clear()
+					context.Unlock(lockPriority)
+					c.Release(key)
+				} else {
+					isDirty := context.IsDirty()
+					if isDirty {
+						context.Clear()
+						c.logger.Error("Cache encountered dirty mutable state transaction",
+							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
+							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
+							tag.WorkflowRunID(context.GetWorkflowKey().RunID),
+						)
+					}
+					context.Unlock(lockPriority)
+					c.Release(key)
+					if isDirty {
+						panic("Cache encountered dirty mutable state transaction")
+					}
 				}
-				context.Unlock(lockPriority)
-				c.Release(key)
 			}
 		}
 	}

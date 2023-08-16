@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -59,9 +58,8 @@ const (
 )
 
 const (
-	cacheInitialSize = 10 * 1024
-	cacheMaxSize     = 64 * 1024
-	cacheTTL         = 0 // 0 means infinity
+	cacheMaxSize = 64 * 1024
+	cacheTTL     = 0 // 0 means infinity
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
@@ -79,12 +77,10 @@ const (
 
 var (
 	cacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             cacheTTL,
+		TTL: cacheTTL,
 	}
 	readthroughNotFoundCacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             readthroughCacheTTL,
+		TTL: readthroughCacheTTL,
 	}
 )
 
@@ -133,7 +129,6 @@ type (
 
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
-		common.Daemon
 		common.Pingable
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
@@ -148,6 +143,8 @@ type (
 		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
 		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
 		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
+		Start()
+		Stop()
 	}
 
 	registry struct {
@@ -394,9 +391,11 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 					return nil
 				default:
 					r.logger.Error("Error refreshing namespace cache", tag.Error(err))
+					timer := time.NewTimer(CacheRefreshFailureRetryInterval)
 					select {
-					case <-time.After(CacheRefreshFailureRetryInterval):
+					case <-timer.C:
 					case <-ctx.Done():
+						timer.Stop()
 						return nil
 					}
 				}

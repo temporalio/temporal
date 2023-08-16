@@ -176,6 +176,7 @@ message RecordWorkflowTaskStartedResponse {
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
+    int64 version = 17;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -198,6 +199,7 @@ message RecordActivityTaskStartedResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
     temporal.server.api.clock.v1.VectorClock clock = 8;
+    int64 version = 9;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -217,6 +219,18 @@ message RespondWorkflowTaskFailedRequest {
 }
 
 message RespondWorkflowTaskFailedResponse {
+}
+
+message IsWorkflowTaskValidRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.clock.v1.VectorClock clock = 3;
+    int64 scheduled_event_id = 4;
+}
+
+message IsWorkflowTaskValidResponse {
+    // whether matching service can call history service to start the workflow task
+    bool is_valid = 1;
 }
 
 message RecordActivityTaskHeartbeatRequest {
@@ -250,6 +264,18 @@ message RespondActivityTaskCanceledRequest {
 }
 
 message RespondActivityTaskCanceledResponse {
+}
+
+message IsActivityTaskValidRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.clock.v1.VectorClock clock = 3;
+    int64 scheduled_event_id = 4;
+}
+
+message IsActivityTaskValidResponse {
+    // whether matching service can call history service to start the activity task
+    bool is_valid = 1;
 }
 
 message SignalWorkflowExecutionRequest {
@@ -351,9 +377,9 @@ message VerifyFirstWorkflowTaskScheduledResponse {
 **/
 message RecordChildExecutionCompletedRequest {
     string namespace_id = 1;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 2;
     int64 parent_initiated_id = 3;
-    temporal.api.common.v1.WorkflowExecution completed_execution = 4;
+    temporal.api.common.v1.WorkflowExecution child_execution = 4;
     temporal.api.history.v1.HistoryEvent completion_event = 5;
     temporal.server.api.clock.v1.VectorClock clock = 6;
     int64 parent_initiated_version = 7;

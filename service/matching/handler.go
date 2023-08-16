@@ -31,7 +31,6 @@ import (
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -70,8 +70,8 @@ func NewHandler(
 	logger log.Logger,
 	throttledLogger log.Logger,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
-	matchingRawClient matchingservice.MatchingServiceClient,
+	historyClient resource.HistoryClient,
+	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
@@ -90,6 +90,7 @@ func NewHandler(
 			matchingRawClient, // Use non retry client inside matching
 			config,
 			logger,
+			throttledLogger,
 			metricsHandler,
 			namespaceRegistry,
 			matchingServiceResolver,

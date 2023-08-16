@@ -34,19 +34,19 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 var (
 	// Error used to signal that a queue has no versioning data. This shouldn't escape matching.
 	errEmptyVersioningData = serviceerror.NewInternal("versioning data is empty")
-
-	// Temporary until we persist guessed set ids
-	errUnknownBuildId = serviceerror.NewFailedPrecondition("unknown build id")
 )
 
 // ToBuildIdOrderingResponse transforms the internal VersioningData representation to public representation.
@@ -214,7 +214,7 @@ func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req
 func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
-	targetSetIdx, versionInSetIdx := findVersion(data, targetedVersion)
+	targetSetIdx, versionInSetIdx := worker_versioning.FindBuildId(data, targetedVersion)
 	numExistingSets := len(data.GetVersionSets())
 
 	if req.GetAddNewBuildIdInNewDefaultSet() != "" {
@@ -237,7 +237,7 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 		makeDefaultSet(data, len(data.VersionSets)-1, &timestamp)
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
-		compatSetIdx, _ := findVersion(data, compatVer)
+		compatSetIdx, _ := worker_versioning.FindBuildId(data, compatVer)
 		if compatSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(
 				fmt.Sprintf("targeted compatible_version %v not found", compatVer))
@@ -290,7 +290,7 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted primary version %v not found", targetedVersion))
 		}
 		secondaryBuildID := mergeSets.GetSecondarySetBuildId()
-		secondarySetIdx, _ := findVersion(data, secondaryBuildID)
+		secondarySetIdx, _ := worker_versioning.FindBuildId(data, secondaryBuildID)
 		if secondarySetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted secondary version %v not found", secondaryBuildID))
 		}
@@ -326,22 +326,6 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdCompatibilit
 	return req.GetMergeSets().GetPrimarySetBuildId()
 }
 
-// Finds the version in the version sets, returning (set index, index within that set)
-// Returns -1, -1 if not found.
-func findVersion(data *persistencespb.VersioningData, buildID string) (setIndex, indexInSet int) {
-	if buildID == "" {
-		return -1, -1
-	}
-	for setIndex, set := range data.GetVersionSets() {
-		for indexInSet, version := range set.GetBuildIds() {
-			if version.Id == buildID {
-				return setIndex, indexInSet
-			}
-		}
-	}
-	return -1, -1
-}
-
 func makeDefaultSet(data *persistencespb.VersioningData, setIx int, timestamp *hlc.Clock) {
 	set := data.VersionSets[setIx]
 	set.BecameDefaultTimestamp = timestamp
@@ -368,11 +352,11 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 }
 
 // Requires: caps is not nil
-func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, error) {
+func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, []string, bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, indexInSet := findVersion(data, caps.BuildId)
+	setIdx, indexInSet := worker_versioning.FindBuildId(data, caps.BuildId)
 	if setIdx < 0 {
 		// A poller is using a build ID but we don't know about that build ID. This can happen
 		// in a replication scenario if pollers are running on the passive side before the data
@@ -382,40 +366,40 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 		// versioning data replicates, we'll redirect the poll to the correct set id.
 		// In the meantime (e.g. during an ungraceful failover) we can at least match tasks
 		// using the exact same build ID.
-		// TODO: add metric and log to make this situation visible
 		guessedSetId := hashBuildId(caps.BuildId)
-		return guessedSetId, nil
+		return guessedSetId, nil, true, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1
 	if indexInSet != lastIndex {
-		return "", serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
+		return "", nil, false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
-	return getSetID(set), nil
+	primarySetId, demotedSetIds := getSetIds(set)
+	return primarySetId, demotedSetIds, false, nil
 }
 
 // Requires: caps is not nil
-func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) error {
+func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, indexInSet := findVersion(data, caps.BuildId)
+	setIdx, indexInSet := worker_versioning.FindBuildId(data, caps.BuildId)
 	if setIdx < 0 {
-		// A poller is using a build ID but we don't know about that build ID. See comments in
+		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForPoll. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
-		return nil
+		return true, nil
 	}
 	set := data.VersionSets[setIdx]
 	lastIndex := len(set.BuildIds) - 1
 	if indexInSet != lastIndex {
-		return serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
+		return false, serviceerror.NewNewerBuildExists(set.BuildIds[lastIndex].Id)
 	}
-	return nil
+	return false, nil
 }
 
 // For this function, buildId == "" means "use default"
-func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string) (string, error) {
+func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string) (string, bool, error) {
 	var set *persistencespb.CompatibleVersionSet
 	if buildId == "" {
 		// If this is a new workflow, assign it to the latest version.
@@ -423,16 +407,14 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 		// leave it on the unversioned one. That case is handled already before we get here.)
 		setLen := len(data.GetVersionSets())
 		if setLen == 0 || data.VersionSets[setLen-1] == nil {
-			return "", errEmptyVersioningData
+			return "", false, errEmptyVersioningData
 		}
 		set = data.VersionSets[setLen-1]
 	} else {
 		// For add, any version in the compatible set maps to the set.
 		// Note data may be nil here, findVersion will return -1 then.
-		setIdx, _ := findVersion(data, buildId)
+		setIdx, _ := worker_versioning.FindBuildId(data, buildId)
 		if setIdx < 0 {
-			// TODO: persist guessed set it and then remove this
-			return "", errUnknownBuildId
 			// A workflow has a build ID set, but we don't know about that build ID. This can
 			// happen in replication scenario: the workflow itself was migrated and we failed
 			// over, but the versioning data hasn't been migrated yet. Instead of rejecting it,
@@ -440,47 +422,50 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 			// its set on the other side, then our guess is right and things will work out. If
 			// not, then we'll guess wrong, but when we get the replication event, we'll merge
 			// the sets and use both ids.
-			// TODO: add metric and log to make this situation visible
-			// guessedSetId := hashBuildId(buildId)
-			// return guessedSetId, nil
+			// Note that in the add task case, we have to persist this guessed set id before we
+			// can accept the task.
+			guessedSetId := hashBuildId(buildId)
+			return guessedSetId, true, nil
 		}
 		set = data.VersionSets[setIdx]
 	}
-	return getSetID(set), nil
+	// Demoted set ids don't matter for add, we always write to the primary.
+	primarySetId, _ := getSetIds(set)
+	return primarySetId, false, nil
 }
 
 // For this function, buildId == "" means "use default"
-func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId string) error {
+func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId string) (bool, error) {
 	if buildId == "" {
 		// This shouldn't happen.
-		return serviceerror.NewInternal("should have a build id directive on versioned sticky queue")
+		return false, serviceerror.NewInternal("should have a build id directive on versioned sticky queue")
 	}
 	// For add, any version in the compatible set maps to the set.
 	// Note data may be nil here, findVersion will return -1 then.
-	setIdx, indexInSet := findVersion(data, buildId)
+	setIdx, indexInSet := worker_versioning.FindBuildId(data, buildId)
 	if setIdx < 0 {
-		// A poller is using a build ID but we don't know about that build ID. See comments in
+		// A poller is using a build ID, but we don't know about that build ID. See comments in
 		// lookupVersionSetForAdd. If we consider it the default for its set, then we should
 		// leave it on the sticky queue here.
-		return nil
+		return true, nil
 	}
 	// If this is not the set's default anymore, we need to kick it back to the regular queue.
 	if indexInSet != len(data.VersionSets[setIdx].BuildIds)-1 {
-		return serviceerrors.NewStickyWorkerUnavailable()
+		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
-	return nil
+	return false, nil
 }
 
-// getSetID returns an arbitrary but consistent member of the set.
-// We want Add and Poll requests for the same set to converge on a single id so we can match
+// getSetIds returns an arbitrary but consistent member of the set, and the rest of the set.
+// We want Add and Poll requests for the same set to converge on a single id, so we can match
 // them, but we don't have a single id for a set in the general case: in rare cases we may have
 // multiple ids (due to failovers). We can do this by picking an arbitrary id in the set, e.g.
 // the first. If the versioning data changes in any way, we'll re-resolve the set id, so this
 // choice only has to be consistent within one version of the versioning data. (For correct
 // handling of spooled tasks in Add, this does need to be an actual set id, not an arbitrary
 // string.)
-func getSetID(set *persistencespb.CompatibleVersionSet) string {
-	return set.SetIds[0]
+func getSetIds(set *persistencespb.CompatibleVersionSet) (string, []string) {
+	return set.SetIds[0], set.SetIds[1:]
 }
 
 // ClearTombstones clears all tombstone build ids (with STATE_DELETED) from versioning data.
@@ -499,4 +484,28 @@ func ClearTombstones(versioningData *persistencespb.VersioningData) *persistence
 		return len(set.BuildIds) > 0
 	})
 	return modifiedData
+}
+
+func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData, buildId string) *persistencespb.VersioningData {
+	if foundSetId, _ := worker_versioning.FindBuildId(data, buildId); foundSetId >= 0 {
+		// it's already there
+		return data
+	}
+
+	// insert unknown build id with zero time so that if merged with any other set, the other
+	// will become the default.
+	clock = hlc.Zero(clock.ClusterId)
+
+	newData := shallowCloneVersioningData(data)
+	newData.VersionSets = slices.Insert(newData.VersionSets, 0, &persistencespb.CompatibleVersionSet{
+		SetIds: []string{hashBuildId(buildId)},
+		BuildIds: []*persistencespb.BuildId{{
+			Id:                     buildId,
+			State:                  persistencespb.STATE_ACTIVE,
+			StateUpdateTimestamp:   &clock,
+			BecameDefaultTimestamp: &clock,
+		}},
+		BecameDefaultTimestamp: &clock,
+	})
+	return newData
 }

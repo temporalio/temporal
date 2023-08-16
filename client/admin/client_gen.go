@@ -123,6 +123,16 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetNamespaceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetNamespace(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

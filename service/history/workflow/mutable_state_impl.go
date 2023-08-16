@@ -832,6 +832,23 @@ func (ms *MutableStateImpl) GetActivityByActivityID(
 	return ms.GetActivityInfo(eventID)
 }
 
+// GetActivityType gets the ActivityType from ActivityInfo if set,
+// or from the events history otherwise for backwards compatibility.
+func (ms *MutableStateImpl) GetActivityType(
+	ctx context.Context,
+	ai *persistencespb.ActivityInfo,
+) (*commonpb.ActivityType, error) {
+	if ai.GetActivityType() != nil {
+		return ai.GetActivityType(), nil
+	}
+	// For backwards compatibility in case ActivityType is not set in ActivityInfo.
+	scheduledEvent, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
+	if err != nil {
+		return nil, err
+	}
+	return scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType, nil
+}
+
 // GetChildExecutionInfo gives details about a child execution that is currently in progress.
 func (ms *MutableStateImpl) GetChildExecutionInfo(
 	initiatedEventID int64,
@@ -1664,7 +1681,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// - using versioning
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	if command.UseCompatibleVersion {
-		sourceVersionStamp = common.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
+		sourceVersionStamp = worker_versioning.StampIfUsingVersioning(previousExecutionInfo.WorkerVersionStamp)
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
@@ -1902,7 +1919,7 @@ func (ms *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 	if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
+		if _, err := ms.addBuildIdsWithNoVisibilityTask([]string{worker_versioning.VersionedBuildIdSearchAttribute(event.SourceVersionStamp.BuildId)}, limit); err != nil {
 			return err
 		}
 	}
@@ -2107,8 +2124,10 @@ func (ms *MutableStateImpl) trackBuildIdFromCompletion(
 	if len(toAdd) == 0 {
 		return nil
 	}
-	if err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
+	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
 		return err
+	} else if !changed {
+		return nil
 	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
@@ -2121,17 +2140,16 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	saPayload, found := searchAttributes[searchattribute.BuildIds]
 	if !found {
 		return []string{}, nil
-	} else {
-		decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		if err != nil {
-			return nil, err
-		}
-		searchAttributeValues, ok := decoded.([]string)
-		if !ok {
-			return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
-		}
-		return searchAttributeValues, nil
 	}
+	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	if err != nil {
+		return nil, err
+	}
+	searchAttributeValues, ok := decoded.([]string)
+	if !ok {
+		return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
+	}
+	return searchAttributeValues, nil
 }
 
 // Takes a list of loaded build IDs from a search attribute and adds new build IDs to it. Returns a potentially modified
@@ -2185,16 +2203,16 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) error {
+func (ms *MutableStateImpl) addBuildIdsWithNoVisibilityTask(buildIds []string, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
-		return err
+		return false, err
 	}
 	modifiedBuildIds, added := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, buildIds)
 	if !added {
-		return nil
+		return false, nil
 	}
-	return ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
+	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -2350,6 +2368,7 @@ func (ms *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 		UseCompatibleVersion:    attributes.UseCompatibleVersion,
+		ActivityType:            attributes.GetActivityType(),
 	}
 	if ai.HasRetryPolicy {
 		ai.RetryInitialInterval = attributes.RetryPolicy.GetInitialInterval()
@@ -4375,9 +4394,24 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	return setStateStatus(ms.executionState, state, status)
 }
 
+func (ms *MutableStateImpl) IsDirty() bool {
+	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0
+}
+
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
+	if ms.IsDirty() {
+		ms.logger.Error("MutableState encountered dirty transaction",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.Value(ms.hBuilder),
+		)
+		ms.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
+		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
+	}
+
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
 		return false, err
@@ -4597,6 +4631,8 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 	); err != nil {
 		return err
 	}
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
 
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
@@ -5075,6 +5111,29 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	default:
 		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
+}
+
+func (ms *MutableStateImpl) closeTransactionCollapseUpsertVisibilityTasks() {
+	// check if we have >= 2 tasks that are identical upsert visibility tasks
+	// note that VisibilityTimestamp and TaskID are not assigned yet
+	visTasks := ms.InsertTasks[tasks.CategoryVisibility]
+	if len(visTasks) < 2 {
+		return
+	}
+	var task0 *tasks.UpsertExecutionVisibilityTask
+	for i, task := range visTasks {
+		task, ok := task.(*tasks.UpsertExecutionVisibilityTask)
+		if !ok {
+			return
+		}
+		if i == 0 {
+			task0 = task
+		} else if *task != *task0 {
+			return
+		}
+	}
+	// collapse to one
+	ms.InsertTasks[tasks.CategoryVisibility] = visTasks[:1]
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {

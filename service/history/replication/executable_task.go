@@ -172,7 +172,7 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	}
 	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(
 		1,
-		metrics.OperationTag(metrics.SyncActivityTaskScope),
+		metrics.OperationTag(e.metricsTag),
 		metrics.NamespaceTag(namespaceName),
 	)
 }
@@ -316,7 +316,13 @@ func (e *ExecutableTaskImpl) Resend(
 			),
 		)
 	default:
-		e.Logger.Error("error resend history for history event", tag.Error(resendErr))
+		e.Logger.Error("error resend history for history event",
+			tag.WorkflowNamespaceID(retryErr.NamespaceId),
+			tag.WorkflowID(retryErr.WorkflowId),
+			tag.WorkflowRunID(retryErr.RunId),
+			tag.Value(retryErr),
+			tag.Error(retryErr),
+		)
 		return resendErr
 	}
 }

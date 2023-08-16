@@ -72,13 +72,9 @@ func NewTestContext(
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := resourceTest.GetHostInfoProvider()
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	if shardInfo.QueueAckLevels == nil {
-		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
-	}
 	if shardInfo.QueueStates == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
-	shardInfo = loadShardInfoCompatibilityCheckWithoutReplication(shardInfo)
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		owner:               shardInfo.GetOwner(),
@@ -135,9 +131,9 @@ func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistorySe
 	s.historyClient = client
 }
 
-// StopForTest calls private method finishStop(). In general only the controller
+// StopForTest calls FinishStop(). In general only the controller
 // should call that, but integration tests need to do it also to clean up any
 // background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
-	s.finishStop()
+	s.FinishStop()
 }

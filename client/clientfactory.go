@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination clientFactory_mock.go
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_factory_mock.go
 
 package client
 
@@ -125,13 +125,14 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return nil, err
 	}
 
-	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
-		return historyservice.NewHistoryServiceClient(connection), nil
-	}
-	clientCache := common.NewClientCache(keyResolver, clientProvider)
-	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
+	client := history.NewClient(
+		cf.dynConfig,
+		resolver,
+		cf.logger,
+		cf.numberOfHistoryShards,
+		cf.rpcFactory,
+		timeout,
+	)
 	if cf.metricsHandler != nil {
 		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}

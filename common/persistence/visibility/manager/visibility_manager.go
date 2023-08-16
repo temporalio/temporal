@@ -25,7 +25,7 @@
 package manager
 
 // -aux_files is required here due to Closeable interface being in another file.
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../../dataInterfaces.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
 
 import (
 	"context"
@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -47,6 +48,7 @@ type (
 		GetStoreNames() []string
 		HasStoreName(stName string) bool
 		GetIndexName() string
+		ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error)
 
 		// Write APIs.
 		RecordWorkflowExecutionStarted(ctx context.Context, request *RecordWorkflowExecutionStartedRequest) error
@@ -144,7 +146,8 @@ type (
 
 	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
 	CountWorkflowExecutionsResponse struct {
-		Count int64
+		Count  int64 // sum of counts in Groups
+		Groups []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup
 	}
 
 	// ListWorkflowExecutionsByTypeRequest is used to list executions of

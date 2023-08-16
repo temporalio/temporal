@@ -56,18 +56,17 @@ const (
 type (
 	// TaskFetcherFactory is a group of fetchers, one per source DC.
 	TaskFetcherFactory interface {
-		common.Daemon
-
 		GetOrCreateFetcher(clusterName string) taskFetcher
+		Start()
+		Stop()
 	}
 
 	// taskFetcher is responsible for fetching replication messages from remote DC.
 	taskFetcher interface {
-		common.Daemon
-
 		getSourceCluster() string
 		getRequestChan() chan<- *replicationTaskRequest
 		getRateLimiter() quotas.RateLimiter
+		Stop()
 	}
 
 	// taskFetcherFactoryImpl is a group of fetchers, one per source DC.

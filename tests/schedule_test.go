@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -812,4 +813,86 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+}
+
+func (s *scheduleIntegrationSuite) TestNextTimeCache() {
+	sid := "sched-test-next-time-cache"
+	wid := "sched-test-next-time-cache-wf"
+	wt := "sched-test-next-time-cache-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(1 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	var runs atomic.Int32
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			runs.Add(1)
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err := s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+
+	// wait for at least 13 runs
+	const count = 13
+	s.Eventually(func() bool { return runs.Load() >= count }, (count+5)*time.Second, 500*time.Millisecond)
+
+	// there should be only four side effects for 13 runs, and only two mentioning "Next"
+	// (cache refills)
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	var sideEffects, nextTimeSideEffects int
+	for _, e := range events {
+		if marker := e.GetMarkerRecordedEventAttributes(); marker.GetMarkerName() == "SideEffect" {
+			sideEffects++
+			if p, ok := marker.Details["data"]; ok && strings.Contains(payloads.ToString(p), `"Next"`) {
+				nextTimeSideEffects++
+			}
+		}
+	}
+
+	const (
+		// These match the ones in the scheduler workflow, but they're not exported.
+		// Change these if those change.
+		FutureActionCountForList = 5
+		NextTimeCacheV2Size      = 14
+
+		// Calculate expected results
+		expectedCacheSize = NextTimeCacheV2Size - FutureActionCountForList + 1
+		expectedRefills   = (count + expectedCacheSize - 1) / expectedCacheSize
+		uuidCacheRefills  = (count + 9) / 10
+	)
+	s.Equal(expectedRefills+uuidCacheRefills, sideEffects)
+	s.Equal(expectedRefills, nextTimeSideEffects)
+
+	// cleanup
+	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Identity:   "test",
+	})
+	s.NoError(err)
 }

@@ -170,6 +170,21 @@ func (c *retryableClient) GetDLQReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetNamespaceResponse, error) {
+	var resp *adminservice.GetNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

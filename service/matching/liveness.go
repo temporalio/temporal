@@ -28,36 +28,36 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jonboulle/clockwork"
+	"go.temporal.io/server/common/clock"
 )
 
 type (
 	liveness struct {
-		clock  clockwork.Clock
-		ttl    func() time.Duration
-		onIdle func()
-		timer  atomic.Value
+		timeSource clock.TimeSource
+		ttl        func() time.Duration
+		onIdle     func()
+		timer      atomic.Value
 	}
 
 	timerWrapper struct {
-		clockwork.Timer
+		clock.Timer
 	}
 )
 
 func newLiveness(
-	clock clockwork.Clock,
+	timeSource clock.TimeSource,
 	ttl func() time.Duration,
 	onIdle func(),
 ) *liveness {
 	return &liveness{
-		clock:  clock,
-		ttl:    ttl,
-		onIdle: onIdle,
+		timeSource: timeSource,
+		ttl:        ttl,
+		onIdle:     onIdle,
 	}
 }
 
 func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.clock.AfterFunc(l.ttl(), l.onIdle)})
+	l.timer.Store(timerWrapper{l.timeSource.AfterFunc(l.ttl(), l.onIdle)})
 }
 
 func (l *liveness) Stop() {

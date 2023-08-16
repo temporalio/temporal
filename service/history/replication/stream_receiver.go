@@ -44,9 +44,9 @@ import (
 
 type (
 	StreamReceiver interface {
-		common.Daemon
 		IsValid() bool
 		Key() ClusterShardKeyPair
+		Stop()
 	}
 	StreamReceiverImpl struct {
 		ProcessToolBox

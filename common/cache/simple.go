@@ -102,7 +102,7 @@ func NewSimple(opts *SimpleOptions) Cache {
 	}
 	return &simple{
 		iterateList: list.New(),
-		accessMap:   make(map[interface{}]*list.Element, opts.InitialCapacity),
+		accessMap:   make(map[interface{}]*list.Element),
 		rmFunc:      opts.RemovedFunc,
 	}
 }

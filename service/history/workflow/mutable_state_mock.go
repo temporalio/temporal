@@ -1061,6 +1061,21 @@ func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
+// GetActivityType mocks base method.
+func (m *MockMutableState) GetActivityType(arg0 context.Context, arg1 *v112.ActivityInfo) (*v10.ActivityType, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActivityType", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ActivityType)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActivityType indicates an expected call of GetActivityType.
+func (mr *MockMutableStateMockRecorder) GetActivityType(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityType", reflect.TypeOf((*MockMutableState)(nil).GetActivityType), arg0, arg1)
+}
+
 // GetApproximatePersistedSize mocks base method.
 func (m *MockMutableState) GetApproximatePersistedSize() int {
 	m.ctrl.T.Helper()
@@ -1793,6 +1808,20 @@ func (m *MockMutableState) IsCurrentWorkflowGuaranteed() bool {
 func (mr *MockMutableStateMockRecorder) IsCurrentWorkflowGuaranteed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCurrentWorkflowGuaranteed", reflect.TypeOf((*MockMutableState)(nil).IsCurrentWorkflowGuaranteed))
+}
+
+// IsDirty mocks base method.
+func (m *MockMutableState) IsDirty() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDirty")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDirty indicates an expected call of IsDirty.
+func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockMutableState)(nil).IsDirty))
 }
 
 // IsResourceDuplicated mocks base method.

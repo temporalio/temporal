@@ -113,7 +113,7 @@ func newForwarder(
 	return fwdr
 }
 
-// ForwardTask forwards an activity or workflow task to the parent task queue partition if it exist
+// ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
 	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		return errTaskQueueKind
@@ -131,15 +131,12 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 
 	var expirationDuration time.Duration
 	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
-	if expirationTime.IsZero() {
-		// noop
-	} else {
+	if !expirationTime.IsZero() {
 		expirationDuration = time.Until(expirationTime)
 		if expirationDuration <= 0 {
 			return nil
 		}
 	}
-
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -178,7 +175,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	return fwdr.handleErr(err)
 }
 
-// ForwardQueryTask forwards a query task to parent task queue partition, if it exist
+// ForwardQueryTask forwards a query task to parent task queue partition, if it exists
 func (fwdr *Forwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,

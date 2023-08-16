@@ -31,14 +31,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -55,6 +58,7 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter                    = "~"
+	scrollKeepAliveInterval      = "1m"
 	pointInTimeKeepAliveInterval = "1m"
 )
 
@@ -72,7 +76,12 @@ type (
 	}
 
 	visibilityPageToken struct {
-		SearchAfter   []interface{}
+		SearchAfter []interface{}
+
+		// For ScanWorkflowExecutions API.
+		// For ES<7.10.0 and "oss" flavor.
+		ScrollID string
+		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
 	}
 
@@ -87,6 +96,10 @@ var _ store.VisibilityStore = (*visibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
+
+	minTime         = time.Unix(0, 0).UTC()
+	maxTime         = time.Unix(0, math.MaxInt64).UTC()
+	maxStringLength = 32766
 
 	// Default sorter uses the sorting order defined in the index template.
 	// It is indirectly built so buildPaginationQuery can have access to
@@ -155,6 +168,44 @@ func (s *visibilityStore) GetName() string {
 
 func (s *visibilityStore) GetIndexName() string {
 	return s.index
+}
+
+func (s *visibilityStore) ValidateCustomSearchAttributes(
+	searchAttributes map[string]any,
+) (map[string]any, error) {
+	validatedSearchAttributes := make(map[string]any, len(searchAttributes))
+	var invalidValueErrs []error
+	for saName, saValue := range searchAttributes {
+		var err error
+		switch value := saValue.(type) {
+		case time.Time:
+			err = validateDatetime(value)
+		case []time.Time:
+			for _, item := range value {
+				if err = validateDatetime(item); err != nil {
+					break
+				}
+			}
+		case string:
+			err = validateString(value)
+		case []string:
+			for _, item := range value {
+				if err = validateString(item); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			invalidValueErrs = append(invalidValueErrs, err)
+			continue
+		}
+		validatedSearchAttributes[saName] = saValue
+	}
+	var retError error
+	if len(invalidValueErrs) > 0 {
+		retError = store.NewVisibilityStoreInvalidValuesError(invalidValueErrs)
+	}
+	return validatedSearchAttributes, retError
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
@@ -479,6 +530,55 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
+	// Point in time is only supported in Elasticsearch 7.10+ in default flavor.
+	if s.esClient.IsPointInTimeSupported(ctx) {
+		return s.scanWorkflowExecutionsWithPit(ctx, request)
+	}
+	return s.scanWorkflowExecutionsWithScroll(ctx, request)
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithScroll(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	var (
+		searchResult *elastic.SearchResult
+		scrollErr    error
+	)
+
+	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(request.NextPageToken) == 0 {
+		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
+	} else if p.ScrollID != "" {
+		searchResult, scrollErr = s.esClient.Scroll(ctx, p.ScrollID, scrollKeepAliveInterval)
+	} else {
+		return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
+	}
+
+	if scrollErr != nil && scrollErr != io.EOF {
+		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", scrollErr)
+	}
+
+	// Both io.IOF and empty hits list indicate that this is a last page.
+	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
+		scrollErr == io.EOF {
+		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
+		if err != nil {
+			return nil, convertElasticsearchClientError("Unable to close scroll", err)
+		}
+	}
+
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize)
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithPit(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	p, err := s.buildSearchParametersV2(request, s.getScanFieldSorter)
 	if err != nil {
 		return nil, err
@@ -491,6 +591,8 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 			return nil, convertElasticsearchClientError("Unable to create point in time", err)
 		}
 		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
+	} else if p.PointInTime == nil {
+		return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
 	}
 
 	searchResult, err := s.esClient.Search(ctx, p)
@@ -518,6 +620,10 @@ func (s *visibilityStore) CountWorkflowExecutions(
 		return nil, err
 	}
 
+	if len(queryParams.GroupBy) > 0 {
+		return s.countGroupByWorkflowExecutions(ctx, queryParams)
+	}
+
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
 		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
@@ -525,6 +631,49 @@ func (s *visibilityStore) CountWorkflowExecutions(
 
 	response := &manager.CountWorkflowExecutionsResponse{Count: count}
 	return response, nil
+}
+
+func (s *visibilityStore) countGroupByWorkflowExecutions(
+	ctx context.Context,
+	queryParams *query.QueryParams,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	groupByFields := queryParams.GroupBy
+
+	// Elasticsearch aggregation is nested. so need to loop backwards to build it.
+	// Example: when grouping by (field1, field2), the object looks like
+	// {
+	//   "aggs": {
+	//     "field1": {
+	//       "terms": {
+	//         "field": "field1"
+	//       },
+	//       "aggs": {
+	//         "field2": {
+	//           "terms": {
+	//             "field": "field2"
+	//           }
+	//         }
+	//       }
+	//     }
+	//   }
+	// }
+	termsAgg := elastic.NewTermsAggregation().Field(groupByFields[len(groupByFields)-1])
+	for i := len(groupByFields) - 2; i >= 0; i-- {
+		termsAgg = elastic.NewTermsAggregation().
+			Field(groupByFields[i]).
+			SubAggregation(groupByFields[i+1], termsAgg)
+	}
+	esResponse, err := s.esClient.CountGroupBy(
+		ctx,
+		s.index,
+		queryParams.Query,
+		groupByFields[0],
+		termsAgg,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s.parseCountGroupByResponse(esResponse, groupByFields)
 }
 
 func (s *visibilityStore) GetWorkflowExecution(
@@ -630,6 +779,10 @@ func (s *visibilityStore) buildSearchParametersV2(
 		Query:    queryParams.Query,
 	}
 
+	if len(queryParams.GroupBy) > 0 {
+		return nil, serviceerror.NewInvalidArgument("GROUP BY clause is not supported")
+	}
+
 	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
 	// ORDER BY clause can be slow if there is a large number of documents and
 	// using a field that was not indexed by ES. Since slow queries can block
@@ -667,7 +820,14 @@ func (s *visibilityStore) processPageToken(
 	pageToken *visibilityPageToken,
 	namespaceName namespace.Name,
 ) error {
-	if pageToken == nil || len(pageToken.SearchAfter) == 0 {
+	if pageToken == nil {
+		return nil
+	}
+	if pageToken.ScrollID != "" {
+		params.ScrollID = pageToken.ScrollID
+		return nil
+	}
+	if len(pageToken.SearchAfter) == 0 {
 		return nil
 	}
 	if pageToken.PointInTimeID != "" {
@@ -805,9 +965,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 		lastHitSort = hit.Sort
 	}
 
-	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
+	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter:   lastHitSort,
+			ScrollID:      searchResult.ScrollId,
 			PointInTimeID: searchResult.PitId,
 		})
 		if err != nil {
@@ -874,6 +1035,14 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 	if err != nil {
 		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.GetMetricName()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
+	}
+	// This is to prevent existing tasks to fail indefinitely.
+	// If it's only invalid values error, then silently continue without them.
+	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
+	if err != nil {
+		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+			return nil, err
+		}
 	}
 	for saName, saValue := range searchAttributes {
 		if saValue == nil {
@@ -1005,6 +1174,93 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	}
 
 	return record, nil
+}
+
+// Elasticsearch aggregation groups are returned as nested object.
+// This function flattens the response into rows.
+//
+//nolint:revive // cognitive complexity 27 (> max enabled 25)
+func (s *visibilityStore) parseCountGroupByResponse(
+	searchResult *elastic.SearchResult,
+	groupByFields []string,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	response := &manager.CountWorkflowExecutionsResponse{}
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("Unable to read search attribute types: %v", err),
+		)
+	}
+	groupByTypes := make([]enumspb.IndexedValueType, len(groupByFields))
+	for i, saName := range groupByFields {
+		tp, err := typeMap.GetType(saName)
+		if err != nil {
+			return nil, err
+		}
+		groupByTypes[i] = tp
+	}
+
+	parseJsonNumber := func(val any) (int64, error) {
+		numberVal, isNumber := val.(json.Number)
+		if !isNumber {
+			return 0, fmt.Errorf("%w: expected json.Number, got %T", errUnexpectedJSONFieldType, val)
+		}
+		return numberVal.Int64()
+	}
+
+	var parseInternal func(map[string]any, []*commonpb.Payload) error
+	parseInternal = func(aggs map[string]any, bucketValues []*commonpb.Payload) error {
+		if len(bucketValues) == len(groupByFields) {
+			cnt, err := parseJsonNumber(aggs["doc_count"])
+			if err != nil {
+				return fmt.Errorf("Unable to parse 'doc_count' field: %w", err)
+			}
+			groupValues := make([]*commonpb.Payload, len(groupByFields))
+			for i := range bucketValues {
+				groupValues[i] = bucketValues[i]
+			}
+			response.Groups = append(
+				response.Groups,
+				&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					GroupValues: groupValues,
+					Count:       cnt,
+				},
+			)
+			response.Count += cnt
+			return nil
+		}
+
+		index := len(bucketValues)
+		fieldName := groupByFields[index]
+		buckets := aggs[fieldName].(map[string]any)["buckets"].([]any)
+		for i := range buckets {
+			bucket := buckets[i].(map[string]any)
+			value, err := finishParseJSONValue(bucket["key"], groupByTypes[index])
+			if err != nil {
+				return fmt.Errorf("Failed to parse value %v: %w", bucket["key"], err)
+			}
+			payload, err := searchattribute.EncodeValue(value, groupByTypes[index])
+			if err != nil {
+				return fmt.Errorf("Failed to encode value %v: %w", value, err)
+			}
+			err = parseInternal(bucket, append(bucketValues, payload))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	var bucketsJson map[string]any
+	dec := json.NewDecoder(bytes.NewReader(searchResult.Aggregations[groupByFields[0]]))
+	dec.UseNumber()
+	if err := dec.Decode(&bucketsJson); err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to unmarshal json response: %v", err))
+	}
+	if err := parseInternal(map[string]any{groupByFields[0]: bucketsJson}, nil); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 // finishParseJSONValue finishes JSON parsing after json.Decode.
@@ -1254,4 +1510,26 @@ func parsePageTokenValue(
 			fieldName,
 		))
 	}
+}
+
+func validateDatetime(value time.Time) error {
+	if value.Before(minTime) || value.After(maxTime) {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf("Date not supported in Elasticsearch: %v", value),
+		)
+	}
+	return nil
+}
+
+func validateString(value string) error {
+	if len(value) > maxStringLength {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"Strings with more than %d bytes are not supported in Elasticsearch (got %s)",
+				maxStringLength,
+				value,
+			),
+		)
+	}
+	return nil
 }

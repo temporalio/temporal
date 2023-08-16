@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination raw_task_converter_mock.go
+
 package replication
 
 import (
@@ -42,36 +44,80 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-func convertTask(
-	ctx context.Context,
-	task tasks.Task,
-	shardID int32,
-	workflowCache wcache.Cache,
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-) (*replicationspb.ReplicationTask, error) {
-	switch task := task.(type) {
-	case *tasks.SyncActivityTask:
-		return convertActivityStateReplicationTask(ctx, task, workflowCache)
-	case *tasks.SyncWorkflowStateTask:
-		return convertWorkflowStateReplicationTask(ctx, task, workflowCache)
-	case *tasks.HistoryReplicationTask:
-		return convertHistoryReplicationTask(
-			ctx,
-			task,
-			shardID,
-			workflowCache,
-			executionManager,
-			logger,
-		)
-	default:
-		return nil, errUnknownReplicationTask
+type (
+	SourceTaskConverterImpl struct {
+		historyEngine           shard.Engine
+		namespaceCache          namespace.Registry
+		clientClusterShardCount int32
+		clientClusterName       string
+		clientShardKey          ClusterShardKey
 	}
+	SourceTaskConverter interface {
+		Convert(task tasks.Task) (*replicationspb.ReplicationTask, error)
+	}
+	SourceTaskConverterProvider func(
+		historyEngine shard.Engine,
+		shardContext shard.Context,
+		clientClusterShardCount int32,
+		clientClusterName string,
+		clientShardKey ClusterShardKey,
+	) SourceTaskConverter
+)
+
+func NewSourceTaskConverter(
+	historyEngine shard.Engine,
+	namespaceCache namespace.Registry,
+	clientClusterShardCount int32,
+	clientClusterName string,
+	clientShardKey ClusterShardKey,
+) *SourceTaskConverterImpl {
+	return &SourceTaskConverterImpl{
+		historyEngine:           historyEngine,
+		namespaceCache:          namespaceCache,
+		clientClusterShardCount: clientClusterShardCount,
+		clientClusterName:       clientClusterName,
+		clientShardKey:          clientShardKey,
+	}
+}
+
+func (c *SourceTaskConverterImpl) Convert(
+	task tasks.Task,
+) (*replicationspb.ReplicationTask, error) {
+	if namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
+		namespace.ID(task.GetNamespaceID()),
+	); err == nil {
+		shouldProcessTask := false
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if c.clientClusterName == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+		if !shouldProcessTask {
+			return nil, nil
+		}
+	}
+	// if there is error, then blindly send the task, better safe than sorry
+
+	clientShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), c.clientClusterShardCount)
+	if clientShardID != c.clientShardKey.ShardID {
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
+	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+	return replicationTask, nil
 }
 
 func convertActivityStateReplicationTask(
@@ -125,7 +171,7 @@ func convertActivityStateReplicationTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						BaseExecutionInfo:  copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
+						BaseExecutionInfo:  persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
@@ -168,6 +214,7 @@ func convertHistoryReplicationTask(
 	taskInfo *tasks.HistoryReplicationTask,
 	shardID int32,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) (*replicationspb.ReplicationTask, error) {
@@ -179,6 +226,7 @@ func convertHistoryReplicationTask(
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		workflowCache,
+		eventBlobCache,
 		executionManager,
 		logger,
 	)
@@ -198,6 +246,7 @@ func convertHistoryReplicationTask(
 			common.FirstEventID,
 			common.FirstEventID+1,
 			workflowCache,
+			eventBlobCache,
 			executionManager,
 			logger,
 		)
@@ -266,9 +315,20 @@ func getVersionHistoryAndEvents(
 	firstEventID int64,
 	nextEventID int64,
 	workflowCache wcache.Cache,
+	eventBlobCache persistence.XDCCache,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) ([]*historyspb.VersionHistoryItem, *commonpb.DataBlob, *workflowspb.BaseExecutionInfo, error) {
+	if eventBlobCache != nil {
+		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
+			workflowKey,
+			firstEventID,
+			nextEventID,
+			eventVersion,
+		)); ok {
+			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlob, xdcCacheValue.BaseWorkflowInfo, nil
+		}
+	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
 		ctx,
 		workflowKey,
@@ -313,7 +373,7 @@ func getBranchToken(
 	ms, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		return getVersionHistoryItems(ms, eventID, eventVersion)
+		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil, nil, nil
 	default:
@@ -329,7 +389,6 @@ func getEventsBlob(
 	nextEventID int64,
 	executionManager persistence.ExecutionManager,
 ) (*commonpb.DataBlob, error) {
-
 	var eventBatchBlobs []*commonpb.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
@@ -362,31 +421,6 @@ func getEventsBlob(
 	return eventBatchBlobs[0], nil
 }
 
-func getVersionHistoryItems(
-	mutableState workflow.MutableState,
-	eventID int64,
-	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
-	baseWorkflowInfo := copyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo())
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			version,
-		),
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), baseWorkflowInfo, nil
-}
-
 func convertGetHistoryError(
 	workflowKey definition.WorkflowKey,
 	logger log.Logger,
@@ -411,18 +445,5 @@ func convertGetHistoryError(
 		return nil
 	default:
 		return err
-	}
-}
-
-func copyBaseWorkflowInfo(
-	baseWorkflowInfo *workflowspb.BaseExecutionInfo,
-) *workflowspb.BaseExecutionInfo {
-	if baseWorkflowInfo == nil {
-		return nil
-	}
-	return &workflowspb.BaseExecutionInfo{
-		RunId:                            baseWorkflowInfo.RunId,
-		LowestCommonAncestorEventId:      baseWorkflowInfo.LowestCommonAncestorEventId,
-		LowestCommonAncestorEventVersion: baseWorkflowInfo.LowestCommonAncestorEventVersion,
 	}
 }

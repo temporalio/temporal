@@ -42,6 +42,7 @@ type Config struct {
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
 
 	RPS                                   dynamicconfig.IntPropertyFn
+	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                      dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
@@ -57,28 +58,33 @@ type Config struct {
 	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog       dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS       dynamicconfig.IntPropertyFn
-	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
+	EmitShardLagLog            dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS            dynamicconfig.IntPropertyFn
+	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
-	HistoryCacheInitialSize dynamicconfig.IntPropertyFn
-	HistoryCacheMaxSize     dynamicconfig.IntPropertyFn
-	HistoryCacheTTL         dynamicconfig.DurationPropertyFn
+	HistoryCacheInitialSize               dynamicconfig.IntPropertyFn
+	HistoryCacheMaxSize                   dynamicconfig.IntPropertyFn
+	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
+	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
-	EventsCacheInitialSize dynamicconfig.IntPropertyFn
-	EventsCacheMaxSize     dynamicconfig.IntPropertyFn
-	EventsCacheTTL         dynamicconfig.DurationPropertyFn
+	EventsCacheMaxSizeBytes dynamicconfig.IntPropertyFn
+	EventsCacheTTL          dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
-	RangeSizeBits           uint
-	AcquireShardInterval    dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency dynamicconfig.IntPropertyFn
+	RangeSizeBits                uint
+	AcquireShardInterval         dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
+	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+
+	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
 	// the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
@@ -181,7 +187,6 @@ type Config struct {
 	NumArchiveSystemWorkflows dynamicconfig.IntPropertyFn
 	ArchiveRequestRPS         dynamicconfig.IntPropertyFn
 	ArchiveSignalTimeout      dynamicconfig.DurationPropertyFn
-	DurableArchivalEnabled    dynamicconfig.BoolPropertyFn
 
 	// Size limit related settings
 	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -326,6 +331,7 @@ func NewConfig(
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		MaxIDLengthLimit:                      dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
@@ -334,6 +340,7 @@ func NewConfig(
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0*time.Second),
+		StartupMembershipJoinDelay:            dc.GetDurationProperty(dynamicconfig.HistoryStartupMembershipJoinDelay, 0*time.Second),
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		ContinueAsNewMinInterval:              dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.ContinueAsNewMinInterval, time.Second),
@@ -345,16 +352,23 @@ func NewConfig(
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
 
-		EmitShardLagLog:                      dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
-		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
-		HistoryCacheMaxSize:                  dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
-		HistoryCacheTTL:                      dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
-		EventsCacheInitialSize:               dc.GetIntProperty(dynamicconfig.EventsCacheInitialSize, 128),
-		EventsCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.EventsCacheMaxSize, 512),
-		EventsCacheTTL:                       dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
-		RangeSizeBits:                        20, // 20 bits for sequencer, 2^20 sequence number for any range
-		AcquireShardInterval:                 dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
-		AcquireShardConcurrency:              dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
+		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
+		HistoryCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
+		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
+		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
+
+		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
+		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
+
+		RangeSizeBits:                20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:         dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
+		AcquireShardConcurrency:      dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		ShardLingerOwnershipCheckQPS: dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
+		ShardLingerTimeLimit:         dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
+
+		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
+
 		StandbyClusterDelay:                  dc.GetDurationProperty(dynamicconfig.StandbyClusterDelay, 5*time.Minute),
 		StandbyTaskMissingEventsResendDelay:  dc.GetDurationPropertyFilteredByTaskType(dynamicconfig.StandbyTaskMissingEventsResendDelay, 10*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationPropertyFilteredByTaskType(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 15*time.Minute),
@@ -445,7 +459,6 @@ func NewConfig(
 		NumArchiveSystemWorkflows: dc.GetIntProperty(dynamicconfig.NumArchiveSystemWorkflows, 1000),
 		ArchiveRequestRPS:         dc.GetIntProperty(dynamicconfig.ArchiveRequestRPS, 300), // should be much smaller than frontend RPS
 		ArchiveSignalTimeout:      dc.GetDurationProperty(dynamicconfig.ArchiveSignalTimeout, 300*time.Millisecond),
-		DurableArchivalEnabled:    dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, true),
 
 		BlobSizeLimitError:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),

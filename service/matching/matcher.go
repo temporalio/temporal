@@ -45,10 +45,10 @@ type TaskMatcher struct {
 
 	// synchronous task channel to match producer/consumer
 	taskC chan *internalTask
-	// synchronous task channel to match query task - the reason to have
-	// separate channel for this is because there are cases when consumers
-	// are interested in queryTasks but not others. Example is when namespace is
-	// not active in a cluster
+	// synchronous task channel to match query task - the reason to have a
+	// separate channel for this is that there are cases where consumers
+	// are interested in queryTasks but not others. One example is when a
+	// namespace is not active in a cluster.
 	queryTaskC chan *internalTask
 
 	// dynamicRate is the dynamic rate & burst for rate limiter
@@ -75,9 +75,8 @@ var (
 	errInterrupted = errors.New("interrupted offer")
 )
 
-// newTaskMatcher returns an task matcher instance. The returned instance can be
-// used by task producers and consumers to find a match. Both sync matches and non-sync
-// matches should use this implementation
+// newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
+// find a match. Both sync matches and non-sync matches should use this implementation
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler) *TaskMatcher {
 	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -298,13 +297,13 @@ forLoop:
 
 // Poll blocks until a task is found or context deadline is exceeded
 // On success, the returned task could be a query task or a regular task
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, false)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, true)
 }
@@ -364,7 +363,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	default:
 	}
 
@@ -383,11 +382,11 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	default:
 	}
 
-	// 3. forwarding (and all other clauses repeated again)
+	// 3. forwarding (and all other clauses repeated)
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
@@ -410,7 +409,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)

@@ -65,6 +65,10 @@ type (
 		metricsHandler metrics.Handler
 		shardID        int32
 	}
+
+	historyEventCacheItemImpl struct {
+		event *historypb.HistoryEvent
+	}
 )
 
 var (
@@ -75,7 +79,6 @@ var _ Cache = (*CacheImpl)(nil)
 
 func NewEventsCache(
 	shardID int32,
-	initialCount int,
 	maxCount int,
 	ttl time.Duration,
 	eventsMgr persistence.ExecutionManager,
@@ -84,7 +87,6 @@ func NewEventsCache(
 	metricsHandler metrics.Handler,
 ) *CacheImpl {
 	opts := &cache.Options{}
-	opts.InitialCapacity = initialCount
 	opts.TTL = ttl
 
 	return &CacheImpl{
@@ -120,9 +122,9 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 
 	// Test hook for disabling cache
 	if !e.disabled {
-		event, cacheHit := e.Cache.Get(key).(*historypb.HistoryEvent)
+		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
 		if cacheHit {
-			return event, nil
+			return eventItem.event, nil
 		}
 	}
 
@@ -141,7 +143,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 
 	// If invalid, return event anyway, but don't store in cache
 	if validKey {
-		e.Put(key, event)
+		e.put(key, event)
 	}
 	return event, nil
 }
@@ -155,7 +157,7 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	if !e.validateKey(key) {
 		return
 	}
-	e.Put(key, event)
+	e.put(key, event)
 }
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
@@ -209,4 +211,22 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	}
 
 	return nil, errEventNotFoundInBatch
+}
+
+func (e *CacheImpl) put(key EventKey, event *historypb.HistoryEvent) interface{} {
+	return e.Put(key, newHistoryEventCacheItem(event))
+}
+
+var _ cache.SizeGetter = (*historyEventCacheItemImpl)(nil)
+
+func newHistoryEventCacheItem(
+	event *historypb.HistoryEvent,
+) *historyEventCacheItemImpl {
+	return &historyEventCacheItemImpl{
+		event: event,
+	}
+}
+
+func (h *historyEventCacheItemImpl) CacheSize() int {
+	return h.event.Size()
 }
