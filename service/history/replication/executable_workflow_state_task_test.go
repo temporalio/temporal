@@ -130,6 +130,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
+	s.executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
 }
 
 func (s *executableWorkflowStateTaskSuite) TearDownTest() {

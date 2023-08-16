@@ -357,7 +357,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 
 	nsResponse := &adminservice.GetNamespaceResponse{
 		Info: &namespacepb.NamespaceInfo{
-			Id:    namespace.NewID().String(),
+			Id:    namespaceId.String(),
 			Name:  "another random namespace name",
 			State: enumspb.NAMESPACE_STATE_DELETED,
 			Data:  make(map[string]string)},
@@ -368,6 +368,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 				{ClusterName: "not_current_cluster_1"},
 			},
 		},
+		IsGlobalNamespace: true,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
@@ -376,8 +377,9 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Succes
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
-	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
+	s.Equal(namespaceId, ns.ID())
 }
 
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceNotBelongsToCurrentCluster() {
@@ -396,6 +398,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 				{ClusterName: "not_current_cluster_2"},
 			},
 		},
+		IsGlobalNamespace: true,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
@@ -424,6 +427,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 				{ClusterName: "not_current_cluster_2"},
 			},
 		},
+		IsGlobalNamespace: true,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{
@@ -436,4 +440,26 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Execut
 	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Error(err)
 	s.Equal(expectedError, err)
+}
+
+func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_NamespaceIsNotGlobalNamespace() {
+	namespaceId := namespace.ID("abc")
+
+	nsResponse := &adminservice.GetNamespaceResponse{
+		Info: &namespacepb.NamespaceInfo{
+			Id:    namespace.NewID().String(),
+			Name:  "another random namespace name",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+			Data:  make(map[string]string)},
+		IsGlobalNamespace: false,
+	}
+	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
+		Attributes: &adminservice.GetNamespaceRequest_Id{
+			Id: namespaceId.String(),
+		},
+	}).Return(nsResponse, nil).Times(1)
+
+	_, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
+	s.Error(err)
+	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }

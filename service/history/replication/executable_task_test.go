@@ -37,6 +37,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -68,6 +71,7 @@ type (
 		logger                  log.Logger
 		sourceCluster           string
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		config                  *configs.Config
 
 		task *ExecutableTaskImpl
 	}
@@ -97,11 +101,13 @@ func (s *executableTaskSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.sourceCluster = "some cluster"
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
+	s.config = tests.NewDynamicConfig()
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
 	s.task = NewExecutableTask(
 		ProcessToolBox{
+			Config:                  s.config,
 			ClusterMetadata:         s.clusterMetadata,
 			ClientBean:              s.clientBean,
 			ShardController:         s.shardController,
@@ -414,4 +420,52 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 
 	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Error(err)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteSuccess() {
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespaceID,
+				Name: namespaceName,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+		},
+	})
+	//enable feature flag
+	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
+
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).AnyTimes()
+	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
+		namespaceEntry, nil)
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.True(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteFailed() {
+	namespaceID := uuid.NewString()
+
+	//Enable feature flag
+	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).AnyTimes()
+	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
+		nil, errors.New("some error"))
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.Nil(err)
+	s.False(toProcess)
 }
