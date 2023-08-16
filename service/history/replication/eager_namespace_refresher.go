@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
@@ -162,6 +163,9 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	if err != nil {
 		return nil, err
 	}
+	if !resp.GetIsGlobalNamespace() {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Not a global namespace: %v", namespaceId))
+	}
 	hasCurrentCluster := false
 	for _, c := range resp.GetReplicationConfig().GetClusters() {
 		if e.currentCluster == c.GetClusterName() {
@@ -186,6 +190,6 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 	if err != nil {
 		return nil, err
 	}
-	namespaceEntry := &namespace.Namespace{}
+	namespaceEntry := namespace.FromAdminClientApiResponse(resp)
 	return namespaceEntry, err
 }
