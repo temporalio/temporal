@@ -704,7 +704,7 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      workflowExecution.RunId,
-	}); err != nil {
+	}, request.BranchToken); err != nil {
 		return nil, h.convertError(err)
 	}
 	return &historyservice.RebuildMutableStateResponse{}, nil

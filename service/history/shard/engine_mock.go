@@ -451,17 +451,17 @@ func (mr *MockEngineMockRecorder) ReapplyEvents(ctx, namespaceUUID, workflowID, 
 }
 
 // RebuildMutableState mocks base method.
-func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution common.WorkflowExecution) error {
+func (m *MockEngine) RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution common.WorkflowExecution, branchToken []byte) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RebuildMutableState", ctx, namespaceUUID, execution)
+	ret := m.ctrl.Call(m, "RebuildMutableState", ctx, namespaceUUID, execution, branchToken)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RebuildMutableState indicates an expected call of RebuildMutableState.
-func (mr *MockEngineMockRecorder) RebuildMutableState(ctx, namespaceUUID, execution interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) RebuildMutableState(ctx, namespaceUUID, execution, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockEngine)(nil).RebuildMutableState), ctx, namespaceUUID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockEngine)(nil).RebuildMutableState), ctx, namespaceUUID, execution, branchToken)
 }
 
 // RecordActivityTaskHeartbeat mocks base method.
