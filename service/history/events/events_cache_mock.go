@@ -86,6 +86,21 @@ func (mr *MockCacheMockRecorder) GetEvent(ctx, key, firstEventID, branchToken in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), ctx, key, firstEventID, branchToken)
 }
 
+// GetEventReverse mocks base method.
+func (m *MockCache) GetEventReverse(ctx context.Context, key EventKey, lastBatchFirstTxnId int64, branchToken []byte) (*v1.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventReverse", ctx, key, lastBatchFirstTxnId, branchToken)
+	ret0, _ := ret[0].(*v1.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetEventReverse indicates an expected call of GetEventReverse.
+func (mr *MockCacheMockRecorder) GetEventReverse(ctx, key, lastBatchFirstTxnId, branchToken interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventReverse", reflect.TypeOf((*MockCache)(nil).GetEventReverse), ctx, key, lastBatchFirstTxnId, branchToken)
+}
+
 // PutEvent mocks base method.
 func (m *MockCache) PutEvent(key EventKey, event *v1.HistoryEvent) {
 	m.ctrl.T.Helper()
