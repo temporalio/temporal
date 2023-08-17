@@ -1031,7 +1031,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := ms.hBuilder.NextEventID() - 1
-	lastBatchFirstEventID := ms.executionInfo.LastFirstEventId
+	lastBatchFirstTxnID := ms.executionInfo.LastFirstEventTxnId
 
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completionEventID)
 	if err != nil {
@@ -1047,7 +1047,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 			EventID:     completionEventID,
 			Version:     version,
 		},
-		lastBatchFirstEventID,
+		lastBatchFirstTxnID,
 		currentBranchToken,
 	)
 	if err != nil {
