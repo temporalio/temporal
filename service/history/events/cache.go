@@ -53,6 +53,7 @@ type (
 
 	Cache interface {
 		GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		GetEventReverse(ctx context.Context, key EventKey, lastBatchFirstTxnId int64, branchToken []byte) (*historypb.HistoryEvent, error)
 		PutEvent(key EventKey, event *historypb.HistoryEvent)
 		DeleteEvent(key EventKey)
 	}
@@ -148,6 +149,42 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 	return event, nil
 }
 
+func (e *CacheImpl) GetEventReverse(ctx context.Context, key EventKey, lastBatchFirstTxnId int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
+	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+
+	validKey := e.validateKey(key)
+
+	// Test hook for disabling cache
+	if !e.disabled {
+		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
+		if cacheHit {
+			return eventItem.event, nil
+		}
+	}
+
+	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
+	event, err := e.getHistoryEventFromStoreReverse(ctx, key, lastBatchFirstTxnId, branchToken)
+	if err != nil {
+		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		e.logger.Error("Cache unable to retrieve event from store",
+			tag.Error(err),
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID),
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
+			tag.WorkflowEventID(key.EventID))
+		return nil, err
+	}
+
+	// If invalid, return event anyway, but don't store in cache
+	if validKey {
+		e.put(key, event)
+	}
+	return event, nil
+}
+
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
@@ -189,6 +226,49 @@ func (e *CacheImpl) getHistoryEventFromStore(
 		PageSize:      1,
 		NextPageToken: nil,
 		ShardID:       e.shardID,
+	})
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID.String()), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
+		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		return nil, err
+	default:
+		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		return nil, err
+	}
+
+	// find history event from batch and return back single event to caller
+	for _, e := range response.HistoryEvents {
+		if e.EventId == key.EventID && e.Version == key.Version {
+			return e, nil
+		}
+	}
+
+	return nil, errEventNotFoundInBatch
+}
+
+func (e *CacheImpl) getHistoryEventFromStoreReverse(
+	ctx context.Context,
+	key EventKey,
+	lastBatchFirstTxnId int64,
+	branchToken []byte,
+) (*historypb.HistoryEvent, error) {
+
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
+	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+
+	response, err := e.eventsMgr.ReadHistoryBranchReverse(ctx, &persistence.ReadHistoryBranchReverseRequest{
+		ShardID:                e.shardID,
+		BranchToken:            branchToken,
+		MaxEventID:             key.EventID + 1,
+		PageSize:               1,
+		LastFirstTransactionID: lastBatchFirstTxnId,
+		NextPageToken:          nil,
 	})
 	switch err.(type) {
 	case nil:

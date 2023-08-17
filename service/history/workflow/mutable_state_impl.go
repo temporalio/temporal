@@ -1031,14 +1031,14 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := ms.hBuilder.NextEventID() - 1
-	firstEventID := ms.executionInfo.CompletionEventBatchId
+	lastBatchFirstEventID := ms.executionInfo.LastFirstEventId
 
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completionEventID)
 	if err != nil {
 		return nil, err
 	}
 
-	event, err := ms.eventsCache.GetEvent(
+	event, err := ms.eventsCache.GetEventReverse(
 		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
@@ -1047,7 +1047,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 			EventID:     completionEventID,
 			Version:     version,
 		},
-		firstEventID,
+		lastBatchFirstEventID,
 		currentBranchToken,
 	)
 	if err != nil {
