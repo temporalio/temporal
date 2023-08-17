@@ -26,12 +26,15 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 
@@ -200,12 +203,18 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
-	// there are total 5 events
+	// there are total 11 events
 	//  1. WorkflowExecutionStarted
 	//  2. WorkflowTaskScheduled
 	//  3. WorkflowTaskStarted
 	//  4. WorkflowTaskCompleted
 	//  5. MarkerRecord
+	//  6. TimerStarted
+	//  7. TImerFire
+	//  8. WorkflowTaskScheduled
+	//  9. WorkflowTaskStarted
+	//  10. WorkflowTaskCompleted
+	//  11. TimerStarted
 
 	syncLock.Lock()
 	defer syncLock.Unlock()
@@ -217,6 +226,22 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 		},
 	})
 	s.NoError(err)
+
+	histResp1, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	})
+	s.NoError(err)
+	fmt.Println("#######")
+	prettyPrint := func(input interface{}) string {
+		binary, _ := json.MarshalIndent(input, "", "  ")
+		return string(binary)
+	}
+	fmt.Printf("%v\n", prettyPrint(histResp1))
+	fmt.Println("#######")
 
 	_, err = s.adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
 		Namespace: s.namespace,
@@ -235,6 +260,19 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 		},
 	})
 	s.NoError(err)
+
+	histResp2, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	})
+	s.NoError(err)
+	fmt.Println("#######")
+	fmt.Printf("%v\n", prettyPrint(histResp2))
+	fmt.Println("#######")
+
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.Equal(response1.DatabaseMutableState.ExecutionState, response2.DatabaseMutableState.ExecutionState)
