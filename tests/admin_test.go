@@ -151,14 +151,14 @@ func (s *clientIntegrationSuite) TestAdminBackfillMutableState() {
 	s.NoError(err)
 	newBranchToken := newCurrentVersionHistory.BranchToken
 
-	// state transition count is not accurate in this case, due to
-	//  1. activity heartbeat
-	//  2. buffered events
-	// s.Equal(responseBase.DatabaseMutableState.ExecutionInfo.StateTransitionCount, responseNew.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.NotEqual(baseBranchToken, newBranchToken)
 	baseCurrentVersionHistory.BranchToken = nil
 	newCurrentVersionHistory.BranchToken = nil
 	s.Equal(responseBase.DatabaseMutableState.ExecutionInfo.VersionHistories, responseNew.DatabaseMutableState.ExecutionInfo.VersionHistories)
+	// state transition count is not accurate in this case, due to
+	//  1. activity heartbeat
+	//  2. buffered events
+	// s.Equal(responseBase.DatabaseMutableState.ExecutionInfo.StateTransitionCount, responseNew.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	responseBase.DatabaseMutableState.ExecutionState.CreateRequestId = ""
 	responseBase.DatabaseMutableState.ExecutionState.RunId = ""
 	responseNew.DatabaseMutableState.ExecutionState.CreateRequestId = ""
@@ -235,7 +235,7 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
+	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.Equal(response1.DatabaseMutableState.ExecutionState, response2.DatabaseMutableState.ExecutionState)
 }
