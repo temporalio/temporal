@@ -159,24 +159,26 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 
 	executionState := mutableState.GetExecutionState()
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		startEvent, err := mutableState.GetStartEvent(ctx)
-		if err != nil {
-			return err
-		}
+		return nil
+	}
 
-		if err := taskGenerator.GenerateWorkflowStartTasks(
+	startEvent, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := taskGenerator.GenerateWorkflowStartTasks(
+		startEvent,
+	); err != nil {
+		return err
+	}
+
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+	if !mutableState.HadOrHasWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
+		if err := taskGenerator.GenerateDelayedWorkflowTasks(
 			startEvent,
 		); err != nil {
 			return err
-		}
-
-		startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-		if !mutableState.HadOrHasWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
-			if err := taskGenerator.GenerateDelayedWorkflowTasks(
-				startEvent,
-			); err != nil {
-				return err
-			}
 		}
 	}
 
