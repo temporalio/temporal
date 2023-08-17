@@ -157,11 +157,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	taskGenerator TaskGenerator,
 ) error {
 
-	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return nil
-	}
-
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
 		return err
