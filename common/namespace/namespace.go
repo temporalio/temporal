@@ -29,12 +29,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/server/api/adminservice/v1"
+
 	"golang.org/x/exp/maps"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
@@ -115,7 +116,7 @@ func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Na
 		State:       response.GetInfo().GetState(),
 		Description: response.GetInfo().GetDescription(),
 		Owner:       response.GetInfo().GetOwnerEmail(),
-		Data:        response.GetInfo().Data,
+		Data:        response.GetInfo().GetData(),
 	}
 	config := &persistencespb.NamespaceConfig{
 		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
@@ -128,7 +129,7 @@ func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Na
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
 		State:             response.GetReplicationConfig().GetState(),
-		Clusters:          ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().Clusters),
+		Clusters:          ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
 		FailoverHistory:   convertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
 	}
 	return &Namespace{

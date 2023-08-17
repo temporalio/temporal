@@ -141,7 +141,8 @@ func (e *eagerNamespaceRefresherImpl) UpdateNamespaceFailoverVersion(namespaceId
 }
 
 func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
-	ctx context.Context, namespaceId namespace.ID,
+	ctx context.Context,
+	namespaceId namespace.ID,
 	sourceCluster string) (*namespace.Namespace, error) {
 	/* TODO: 1. Lock here is to prevent multiple creation happening at same time. Current implementation
 	   actually does not help in this case(i.e. after getting the lock, each thread will still fetch from remote and

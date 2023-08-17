@@ -393,7 +393,7 @@ FilterLoop:
 			break FilterLoop
 		}
 	}
-	return string(namespaceEntry.Name()), shouldProcessTask, nil
+	return namespaceEntry.Name().String(), shouldProcessTask, nil
 }
 
 func newTaskContext(

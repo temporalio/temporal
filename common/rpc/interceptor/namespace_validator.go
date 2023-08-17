@@ -236,7 +236,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 		}
 		return nil, nil
 	case *adminservice.GetNamespaceRequest:
-		//special case for Admin.GetNamespace API which accept either Namespace ID or Namespace name as input
+		// special case for Admin.GetNamespace API which accept either Namespace ID or Namespace name as input
 		if request.GetId() == "" && namespaceName.IsEmpty() {
 			return nil, errNamespaceNotSet
 		}
