@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/matching"
 )
 
 func (s *integrationSuite) TestStartWorkflowExecution() {
@@ -646,11 +645,11 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 			history := historyResponse.History
 			common.PrettyPrint(history.Events)
 		}
-		s.True(err == nil || err == matching.ErrNoTasks, "%v", err)
+		s.True(err == nil || err == errNoTasks, err)
 		if !dropWorkflowTask {
 			s.Logger.Info("Calling PollAndProcessActivityTask", tag.Counter(i))
 			err = poller.PollAndProcessActivityTask(i%4 == 0)
-			s.True(err == nil || err == matching.ErrNoTasks)
+			s.True(err == nil || err == errNoTasks)
 		}
 	}
 

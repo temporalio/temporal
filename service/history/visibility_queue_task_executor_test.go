@@ -82,7 +82,7 @@ type (
 		version                     int64
 		now                         time.Time
 		timeSource                  *clock.EventTimeSource
-		visibilityQueueTaskExecutor *visibilityQueueTaskExecutor
+		visibilityQueueTaskExecutor queues.Executor
 
 		enableCloseWorkflowCleanup bool
 	}
@@ -121,7 +121,6 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),

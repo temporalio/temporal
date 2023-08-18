@@ -58,8 +58,8 @@ type (
 		ClientBean        client.Bean
 		ArchivalClient    archiver.Client
 		SdkClientFactory  sdk.ClientFactory
-		MatchingClient    resource.MatchingClient
-		HistoryClient     historyservice.HistoryServiceClient
+		HistoryRawClient  resource.HistoryRawClient
+		MatchingRawClient resource.MatchingRawClient
 		VisibilityManager manager.VisibilityManager
 	}
 
@@ -127,7 +127,8 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		f.MetricsHandler,
 		f.Config,
-		f.MatchingClient,
+		f.HistoryRawClient,
+		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
 
@@ -152,17 +153,21 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		f.MetricsHandler,
 		currentClusterName,
-		f.MatchingClient,
+		f.HistoryRawClient,
+		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
 	)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
+	}
 
 	return queues.NewImmediateQueue(
 		shard,

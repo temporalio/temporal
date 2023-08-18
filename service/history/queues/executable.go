@@ -71,6 +71,10 @@ type (
 		// active/standby queue processing logic
 		Execute(context.Context, Executable) (tags []metrics.Tag, isActive bool, err error)
 	}
+
+	ExecutorWrapper interface {
+		Wrap(delegate Executor) Executor
+	}
 )
 
 var (
@@ -116,15 +120,15 @@ type (
 		logger            log.Logger
 		metricsHandler    metrics.Handler
 
-		readerID                     int64
-		loadTime                     time.Time
-		scheduledTime                time.Time
-		scheduleLatency              time.Duration
-		attemptNoUserLatency         time.Duration
-		inMemoryNoUserLatency        time.Duration
-		lastActiveness               bool
-		systemResourceExhaustedCount int
-		taggedMetricsHandler         metrics.Handler
+		readerID               int64
+		loadTime               time.Time
+		scheduledTime          time.Time
+		scheduleLatency        time.Duration
+		attemptNoUserLatency   time.Duration
+		inMemoryNoUserLatency  time.Duration
+		lastActiveness         bool
+		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		taggedMetricsHandler   metrics.Handler
 	}
 )
 
@@ -248,8 +252,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	defer func() {
-		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) {
-			// if err is due to workflow busy, do not take any latency related to this attempt into account
+		if !errors.Is(retErr, consts.ErrResourceExhaustedBusyWorkflow) &&
+			!errors.Is(retErr, consts.ErrResourceExhaustedAPSLimit) {
+			// if err is due to workflow busy or APS limit, do not take any latency related to this attempt into account
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}
 
@@ -268,14 +273,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
 		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			e.systemResourceExhaustedCount++
+			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
+				err = consts.ErrResourceExhaustedAPSLimit
+			}
+			e.resourceExhaustedCount++
 			e.taggedMetricsHandler.Counter(metrics.TaskThrottledCounter.GetMetricName()).Record(1)
 			return err
 		}
 
 		err = consts.ErrResourceExhaustedBusyWorkflow
 	}
-	e.systemResourceExhaustedCount = 0
+	e.resourceExhaustedCount = 0
 
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return nil
@@ -416,7 +424,8 @@ func (e *executableImpl) Nack(err error) {
 	if !submitted {
 		backoffDuration := e.backoffDuration(err, e.Attempt())
 		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
-		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+		if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
+			!errors.Is(err, consts.ErrResourceExhaustedAPSLimit) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 	}
@@ -476,7 +485,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
 		common.IsResourceExhausted(err) &&
-		e.systemResourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
+		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
 		return false
 	}
 
@@ -518,7 +527,7 @@ func (e *executableImpl) backoffDuration(
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = util.Max(
 			backoffDuration,
-			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.systemResourceExhaustedCount),
+			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount),
 		)
 	}
 

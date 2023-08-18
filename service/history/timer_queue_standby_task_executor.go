@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -66,7 +67,7 @@ func newTimerQueueStandbyTaskExecutor(
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	matchingClient matchingservice.MatchingServiceClient,
+	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	clusterName string,
@@ -77,7 +78,7 @@ func newTimerQueueStandbyTaskExecutor(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
-			matchingClient,
+			matchingRawClient,
 			logger,
 			metricProvider,
 			config,
@@ -566,7 +567,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityScheduleToStartTimeout := &pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
-	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,

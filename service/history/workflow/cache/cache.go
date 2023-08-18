@@ -98,7 +98,6 @@ const (
 func NewCache(shard shard.Context) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
-	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
@@ -263,9 +262,24 @@ func (c *CacheImpl) makeReleaseFunc(
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.Clear()
+					context.Unlock(lockPriority)
+					c.Release(key)
+				} else {
+					isDirty := context.IsDirty()
+					if isDirty {
+						context.Clear()
+						c.logger.Error("Cache encountered dirty mutable state transaction",
+							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
+							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
+							tag.WorkflowRunID(context.GetWorkflowKey().RunID),
+						)
+					}
+					context.Unlock(lockPriority)
+					c.Release(key)
+					if isDirty {
+						panic("Cache encountered dirty mutable state transaction")
+					}
 				}
-				context.Unlock(lockPriority)
-				c.Release(key)
 			}
 		}
 	}

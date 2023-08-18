@@ -644,6 +644,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -718,6 +720,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -793,6 +797,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
 
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
@@ -885,6 +890,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
+
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 

@@ -70,7 +70,7 @@ func newVisibilityQueueTaskExecutor(
 	metricProvider metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-) *visibilityQueueTaskExecutor {
+) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
 		cache:          workflowCache,

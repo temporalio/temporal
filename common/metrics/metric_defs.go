@@ -114,6 +114,8 @@ const (
 	AdminClientGetReplicationMessagesScope = "AdminClientGetReplicationMessages"
 	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetNamespaceReplicationMessagesScope = "AdminClientGetNamespaceReplicationMessages"
+	// AdminClientGetNamespaceScope tracks RPC calls to admin service
+	AdminClientGetNamespaceScope = "AdminClientGetNamespace"
 	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQReplicationMessagesScope = "AdminClientGetDLQReplicationMessages"
 	// AdminClientReapplyEventsScope tracks RPC calls to admin service
@@ -1246,47 +1248,86 @@ var (
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.
-	ArchivalTaskInvalidURI                               = NewCounterDef("archival_task_invalid_uri")
-	ArchiverClientSendSignalCount                        = NewCounterDef("archiver_client_sent_signal")
-	ArchiverClientSendSignalFailureCount                 = NewCounterDef("archiver_client_send_signal_error")
-	ArchiverClientHistoryRequestCount                    = NewCounterDef("archiver_client_history_request")
-	ArchiverClientHistoryInlineArchiveAttemptCount       = NewCounterDef("archiver_client_history_inline_archive_attempt")
-	ArchiverClientHistoryInlineArchiveFailureCount       = NewCounterDef("archiver_client_history_inline_archive_failure")
-	ArchiverClientVisibilityRequestCount                 = NewCounterDef("archiver_client_visibility_request")
-	ArchiverClientVisibilityInlineArchiveAttemptCount    = NewCounterDef("archiver_client_visibility_inline_archive_attempt")
-	ArchiverClientVisibilityInlineArchiveFailureCount    = NewCounterDef("archiver_client_visibility_inline_archive_failure")
-	ArchiverArchiveLatency                               = NewTimerDef("archiver_archive_latency")
-	ArchiverArchiveTargetLatency                         = NewTimerDef("archiver_archive_target_latency")
-	ShardContextClosedCounter                            = NewCounterDef("shard_closed_count")
-	ShardContextCreatedCounter                           = NewCounterDef("sharditem_created_count")
-	ShardContextRemovedCounter                           = NewCounterDef("sharditem_removed_count")
-	ShardContextAcquisitionLatency                       = NewTimerDef("sharditem_acquisition_latency")
-	ShardInfoImmediateQueueLagHistogram                  = NewDimensionlessHistogramDef("shardinfo_immediate_queue_lag")
-	ShardInfoScheduledQueueLagTimer                      = NewTimerDef("shardinfo_scheduled_queue_lag")
-	SyncShardFromRemoteCounter                           = NewCounterDef("syncshard_remote_count")
-	SyncShardFromRemoteFailure                           = NewCounterDef("syncshard_remote_failed")
-	TaskRequests                                         = NewCounterDef("task_requests")
-	TaskLoadLatency                                      = NewTimerDef("task_latency_load")       // latency from task generation to task loading (persistence scheduleToStart)
-	TaskScheduleLatency                                  = NewTimerDef("task_latency_schedule")   // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
-	TaskProcessingLatency                                = NewTimerDef("task_latency_processing") // latency for processing task one time
-	TaskLatency                                          = NewTimerDef("task_latency")            // task in-memory latency across multiple attempts
-	TaskQueueLatency                                     = NewTimerDef("task_latency_queue")      // task e2e latency
-	TaskAttempt                                          = NewDimensionlessHistogramDef("task_attempt")
-	TaskFailures                                         = NewCounterDef("task_errors")
-	TaskDiscarded                                        = NewCounterDef("task_errors_discarded")
-	TaskSkipped                                          = NewCounterDef("task_skipped")
-	TaskVersionMisMatch                                  = NewCounterDef("task_errors_version_mismatch")
-	TasksDependencyTaskNotCompleted                      = NewCounterDef("task_dependency_task_not_completed")
-	TaskStandbyRetryCounter                              = NewCounterDef("task_errors_standby_retry_counter")
-	TaskWorkflowBusyCounter                              = NewCounterDef("task_errors_workflow_busy")
-	TaskNotActiveCounter                                 = NewCounterDef("task_errors_not_active_counter")
-	TaskNamespaceHandoverCounter                         = NewCounterDef("task_errors_namespace_handover")
-	TaskThrottledCounter                                 = NewCounterDef("task_errors_throttled")
-	TaskCorruptionCounter                                = NewCounterDef("task_errors_corruption")
-	TaskScheduleToStartLatency                           = NewTimerDef("task_schedule_to_start_latency")
-	TaskBatchCompleteCounter                             = NewCounterDef("task_batch_complete_counter")
-	TaskReschedulerPendingTasks                          = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
-	PendingTasksCounter                                  = NewDimensionlessHistogramDef("pending_tasks")
+	ArchivalTaskInvalidURI                            = NewCounterDef("archival_task_invalid_uri")
+	ArchiverClientSendSignalCount                     = NewCounterDef("archiver_client_sent_signal")
+	ArchiverClientSendSignalFailureCount              = NewCounterDef("archiver_client_send_signal_error")
+	ArchiverClientHistoryRequestCount                 = NewCounterDef("archiver_client_history_request")
+	ArchiverClientHistoryInlineArchiveAttemptCount    = NewCounterDef("archiver_client_history_inline_archive_attempt")
+	ArchiverClientHistoryInlineArchiveFailureCount    = NewCounterDef("archiver_client_history_inline_archive_failure")
+	ArchiverClientVisibilityRequestCount              = NewCounterDef("archiver_client_visibility_request")
+	ArchiverClientVisibilityInlineArchiveAttemptCount = NewCounterDef("archiver_client_visibility_inline_archive_attempt")
+	ArchiverClientVisibilityInlineArchiveFailureCount = NewCounterDef("archiver_client_visibility_inline_archive_failure")
+	ArchiverArchiveLatency                            = NewTimerDef("archiver_archive_latency")
+	ArchiverArchiveTargetLatency                      = NewTimerDef("archiver_archive_target_latency")
+	ShardContextClosedCounter                         = NewCounterDef("shard_closed_count")
+	ShardContextCreatedCounter                        = NewCounterDef("sharditem_created_count")
+	ShardContextRemovedCounter                        = NewCounterDef("sharditem_removed_count")
+	ShardContextAcquisitionLatency                    = NewTimerDef("sharditem_acquisition_latency")
+	ShardInfoImmediateQueueLagHistogram               = NewDimensionlessHistogramDef(
+		"shardinfo_immediate_queue_lag",
+		WithDescription("A histogram across history shards for the difference between the smallest taskID of pending history tasks and the last generated history task ID."),
+	)
+	ShardInfoScheduledQueueLagTimer = NewTimerDef(
+		"shardinfo_scheduled_queue_lag",
+		WithDescription("A histogram across history shards for the difference between the earliest scheduled time of pending history tasks and current time."),
+	)
+	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
+	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
+	TaskRequests               = NewCounterDef(
+		"task_requests",
+		WithDescription("The number of history tasks processed."),
+	)
+	TaskLoadLatency = NewTimerDef(
+		"task_latency_load",
+		WithDescription("Latency from history task generation to loading into memory (persistence schedule to start latency)."),
+	)
+	TaskScheduleLatency = NewTimerDef(
+		"task_latency_schedule",
+		WithDescription("Latency from history task loading to start processing (in-memory schedule to start latency)."),
+	)
+	TaskProcessingLatency = NewTimerDef(
+		"task_latency_processing",
+		WithDescription("Latency for processing a history task one time."),
+	)
+	TaskLatency = NewTimerDef(
+		"task_latency",
+		WithDescription("Latency for procsssing and completing a history task. This latency is across all attempts but excludes any latencies related to workflow lock or user qutoa limit."),
+	)
+	TaskQueueLatency = NewTimerDef(
+		"task_latency_queue",
+		WithDescription("End-to-end latency for processing and completing a history task, from task generation to completion."),
+	)
+	TaskAttempt = NewDimensionlessHistogramDef(
+		"task_attempt",
+		WithDescription("The number of attempts took to complete a history task."),
+	)
+	TaskFailures = NewCounterDef(
+		"task_errors",
+		WithDescription("The number of unexpected history task processing errors."),
+	)
+	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
+	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
+	TasksDependencyTaskNotCompleted = NewCounterDef("task_dependency_task_not_completed")
+	TaskStandbyRetryCounter         = NewCounterDef("task_errors_standby_retry_counter")
+	TaskWorkflowBusyCounter         = NewCounterDef(
+		"task_errors_workflow_busy",
+		WithDescription("The number of history task processing errors caused by failing to acquire workflow lock within the configured timeout (history.cacheNonUserContextLockTimeout)."),
+	)
+	TaskNotActiveCounter         = NewCounterDef("task_errors_not_active_counter")
+	TaskNamespaceHandoverCounter = NewCounterDef("task_errors_namespace_handover")
+	TaskThrottledCounter         = NewCounterDef(
+		"task_errors_throttled",
+		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
+	)
+	TaskCorruptionCounter       = NewCounterDef("task_errors_corruption")
+	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
+	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
+	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
+	PendingTasksCounter         = NewDimensionlessHistogramDef(
+		"pending_tasks",
+		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
+	)
 	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
 	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
@@ -1408,6 +1449,7 @@ var (
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
+	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1568,22 +1610,45 @@ var (
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	ScheduleMissedCatchupWindow                       = NewCounterDef("schedule_missed_catchup_window")
-	ScheduleRateLimited                               = NewCounterDef("schedule_rate_limited")
-	ScheduleBufferOverruns                            = NewCounterDef("schedule_buffer_overruns")
-	ScheduleActionSuccess                             = NewCounterDef("schedule_action_success")
-	ScheduleActionErrors                              = NewCounterDef("schedule_action_errors")
-	ScheduleCancelWorkflowErrors                      = NewCounterDef("schedule_cancel_workflow_errors")
-	ScheduleTerminateWorkflowErrors                   = NewCounterDef("schedule_terminate_workflow_errors")
+	ScheduleMissedCatchupWindow                       = NewCounterDef(
+		"schedule_missed_catchup_window",
+		WithDescription("The number of times a schedule missed an action due to the configured catchup window"),
+	)
+	ScheduleRateLimited = NewCounterDef(
+		"schedule_rate_limited",
+		WithDescription("The number of times a schedule action was delayed by more than 1s due to rate limiting"),
+	)
+	ScheduleBufferOverruns = NewCounterDef(
+		"schedule_buffer_overruns",
+		WithDescription("The number of schedule actions that were dropped due to the action buffer being full"),
+	)
+	ScheduleActionSuccess = NewCounterDef(
+		"schedule_action_success",
+		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+	)
+	ScheduleActionErrors = NewCounterDef(
+		"schedule_action_errors",
+		WithDescription("The number of schedule actions that failed to start"),
+	)
+	ScheduleCancelWorkflowErrors = NewCounterDef(
+		"schedule_cancel_workflow_errors",
+		WithDescription("The number of times a schedule got an error trying to cancel a previous run"),
+	)
+	ScheduleTerminateWorkflowErrors = NewCounterDef(
+		"schedule_terminate_workflow_errors",
+		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
 
 	// Force replication
-	EncounterZombieWorkflowCount      = NewCounterDef("encounter_zombie_workflow_count")
-	GenerateReplicationTasksLatency   = NewTimerDef("generate_replication_tasks_latency")
-	VerifyReplicationTaskSuccess      = NewCounterDef("verify_replication_task_success")
-	VerifyReplicationTaskNotFound     = NewCounterDef("verify_replication_task_not_found")
-	VerifyReplicationTaskFailed       = NewCounterDef("verify_replication_task_failed")
-	VerifyReplicationTasksLatency     = NewTimerDef("verify_replication_tasks_latency")
-	VerifyDescribeMutableStateLatency = NewTimerDef("verify_describe_mutable_state_latency")
+	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
+	EncounterNotFoundWorkflowCount      = NewCounterDef("encounter_not_found_workflow_count")
+	EncounterPassRetentionWorkflowCount = NewCounterDef("encounter_pass_retention_workflow_count")
+	GenerateReplicationTasksLatency     = NewTimerDef("generate_replication_tasks_latency")
+	VerifyReplicationTaskSuccess        = NewCounterDef("verify_replication_task_success")
+	VerifyReplicationTaskNotFound       = NewCounterDef("verify_replication_task_not_found")
+	VerifyReplicationTaskFailed         = NewCounterDef("verify_replication_task_failed")
+	VerifyReplicationTasksLatency       = NewTimerDef("verify_replication_tasks_latency")
+	VerifyDescribeMutableStateLatency   = NewTimerDef("verify_describe_mutable_state_latency")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

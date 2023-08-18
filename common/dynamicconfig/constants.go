@@ -252,8 +252,20 @@ const (
 	FrontendMaxNamespaceRPSPerInstance = "frontend.namespaceRPS"
 	// FrontendMaxNamespaceBurstPerInstance is workflow namespace burst limit
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
-	// FrontendMaxNamespaceCountPerInstance limits concurrent task queue polls per namespace per instance
-	FrontendMaxNamespaceCountPerInstance = "frontend.namespaceCount"
+	// FrontendMaxConcurrentLongRunningRequestsPerInstance limits concurrent long-running requests per-instance,
+	// per-API. Example requests include long-poll requests, and `Query` requests (which need to wait for WFTs). The
+	// limit is applied individually to each API method. This value is ignored if
+	// FrontendGlobalMaxConcurrentLongRunningRequests is greater than zero. Warning: setting this to zero will cause all
+	// long-running requests to fail. The name `frontend.namespaceCount` is kept for backwards compatibility with
+	// existing deployments even though it is a bit of a misnomer. This does not limit the number of namespaces; it is a
+	// per-_namespace_ limit on the _count_ of long-running requests. Requests are only throttled when the limit is
+	// exceeded, not when it is only reached.
+	FrontendMaxConcurrentLongRunningRequestsPerInstance = "frontend.namespaceCount"
+	// FrontendGlobalMaxConcurrentLongRunningRequests limits concurrent long-running requests across all frontend
+	// instances in the cluster, for a given namespace, per-API method. If this is set to 0 (the default), then it is
+	// ignored. The name `frontend.globalNamespaceCount` is kept for consistency with the per-instance limit name,
+	// `frontend.namespaceCount`.
+	FrontendGlobalMaxConcurrentLongRunningRequests = "frontend.globalNamespaceCount"
 	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"
@@ -493,8 +505,6 @@ const (
 	HistoryShutdownDrainDuration = "history.shutdownDrainDuration"
 	// XDCCacheMaxSizeBytes is max size of events cache in bytes
 	XDCCacheMaxSizeBytes = "history.xdcCacheMaxSizeBytes"
-	// EventsCacheInitialSizeBytes is initial size of events cache in bytes
-	EventsCacheInitialSizeBytes = "history.eventsCacheInitialSizeBytes"
 	// EventsCacheMaxSizeBytes is max size of events cache in bytes
 	EventsCacheMaxSizeBytes = "history.eventsCacheMaxSizeBytes"
 	// EventsCacheTTL is TTL of events cache

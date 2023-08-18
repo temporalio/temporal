@@ -29,7 +29,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -58,10 +57,6 @@ import (
 )
 
 const (
-	defaultRemoteCallTimeout = 30 * time.Second
-)
-
-const (
 	LockPriorityHigh LockPriority = 0
 	LockPriorityLow  LockPriority = 1
 )
@@ -78,6 +73,8 @@ type (
 
 		Lock(ctx context.Context, lockPriority LockPriority) error
 		Unlock(lockPriority LockPriority)
+
+		IsDirty() bool
 
 		ReapplyEvents(
 			ctx context.Context,
@@ -204,6 +201,13 @@ func (c *ContextImpl) Unlock(
 	default:
 		panic(fmt.Sprintf("unknown lock priority: %v", lockPriority))
 	}
+}
+
+func (c *ContextImpl) IsDirty() bool {
+	if c.MutableState == nil {
+		return false
+	}
+	return c.MutableState.IsDirty()
 }
 
 func (c *ContextImpl) Clear() {

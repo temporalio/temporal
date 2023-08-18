@@ -468,7 +468,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordChildExecutionCompletedResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetWorkflowExecution().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetParentExecution().GetWorkflowId())
 	var response *historyservice.RecordChildExecutionCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

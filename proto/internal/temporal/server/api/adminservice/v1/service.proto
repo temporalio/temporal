@@ -142,5 +142,8 @@ service AdminService {
 
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
+
+    rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse) {
+    }
 }
 

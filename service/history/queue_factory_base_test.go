@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -175,8 +174,8 @@ type compileTimeDependencies struct {
 	client.Bean
 	archiver.Client
 	sdk.ClientFactory
-	resource.MatchingClient
-	historyservice.HistoryServiceClient
+	resource.MatchingRawClient
+	resource.HistoryRawClient
 	manager.VisibilityManager
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher

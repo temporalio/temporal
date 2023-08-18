@@ -48,6 +48,11 @@ type (
 		clientType      reflect.Type
 		clientGenerator func(io.Writer, service)
 	}
+
+	fieldWithPath struct {
+		field *reflect.StructField
+		path  string
+	}
 )
 
 var (
@@ -109,6 +114,20 @@ var (
 		"metricsClient.matching.PollWorkflowTaskQueue": true,
 		"metricsClient.matching.QueryWorkflow":         true,
 	}
+	// Fields to ignore when looking for the routing fields in a request object.
+	ignoreField = map[string]bool{
+		// this is the workflow that sent a signal
+		"SignalWorkflowExecutionRequest.ExternalWorkflowExecution": true,
+		// this is the workflow that sent a cancel request
+		"RequestCancelWorkflowExecutionRequest.ExternalWorkflowExecution": true,
+		// this is the workflow that sent a terminate
+		"TerminateWorkflowExecutionRequest.ExternalWorkflowExecution": true,
+		// this is the parent for starting a child workflow
+		"StartWorkflowExecutionRequest.ParentExecutionInfo": true,
+		// these get routed to the parent
+		"RecordChildExecutionCompletedRequest.ChildExecution":          true,
+		"VerifyChildExecutionCompletionRecordedRequest.ChildExecution": true,
+	}
 )
 
 func panicIfErr(err error) {
@@ -124,95 +143,117 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 	}))
 }
 
-func pathToField(t reflect.Type, name string, path string, maxDepth int) string {
-	p, _ := findNestedField(t, name, path, maxDepth)
-	return p
-}
-
-func findNestedField(t reflect.Type, name string, path string, maxDepth int) (string, *reflect.StructField) {
+func findNestedField(t reflect.Type, name string, path string, maxDepth int) []fieldWithPath {
 	if t.Kind() != reflect.Struct || maxDepth <= 0 {
-		return "", nil
+		return nil
 	}
+	var out []fieldWithPath
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		if ignoreField[t.Name()+"."+f.Name] {
+			continue
+		}
 		if f.Name == name {
-			return path + ".Get" + name + "()", &f
+			out = append(out, fieldWithPath{field: &f, path: path + ".Get" + name + "()"})
 		}
 		ft := f.Type
 		if ft.Kind() == reflect.Pointer {
-			if path, try := findNestedField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1); try != nil {
-				return path, try
-			}
+			out = append(out, findNestedField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1)...)
 		}
 	}
-	return "", nil
+	return out
+}
+
+func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
+	fields := findNestedField(t, name, path, maxDepth)
+	if len(fields) == 0 {
+		panic(fmt.Sprintf("Couldn't find %s in %s", name, t))
+	} else if len(fields) > 1 {
+		panic(fmt.Sprintf("Found more than one %s in %s (%v)", name, t, fields))
+	}
+	return fields[0]
 }
 
 func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
-	if path := pathToField(t, "ShardId", "request", 1); path != "" {
-		return fmt.Sprintf("shardID := %s", path)
+
+	shardIdField := findNestedField(t, "ShardId", "request", 1)
+	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)
+	taskTokenField := findNestedField(t, "TaskToken", "request", 2)
+	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
+
+	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
+	if found < 1 {
+		panic(fmt.Sprintf("Found no routing fields in %s", t))
+	} else if found > 1 {
+		panic(fmt.Sprintf("Found more than one routing field in %s (%v, %v, %v, %v)",
+			t, shardIdField, workflowIdField, taskTokenField, taskInfosField))
 	}
-	if path := pathToField(t, "WorkflowId", "request", 4); path != "" {
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", path)
-	}
-	if path := pathToField(t, "TaskToken", "request", 2); path != "" {
+
+	switch {
+	case len(shardIdField) == 1:
+		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
+	case len(workflowIdField) == 1:
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
+	case len(taskTokenField) == 1:
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, err
 	}
 	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
-`, path)
-	}
-	// slice needs a tiny bit of extra handling for namespace
-	if path := pathToField(t, "TaskInfos", "request", 1); path != "" {
+`, taskTokenField[0].path)
+	case len(taskInfosField) == 1:
+		p := taskInfosField[0].path
+		// slice needs a tiny bit of extra handling for namespace
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	if len(%s) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
-	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path, path)
+	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
+	default:
+		panic("not reached")
 	}
-	panic("I don't know how to get a client from a " + t.String())
 }
 
 func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	nsIDPath := pathToField(t, "NamespaceId", "request", 1)
-	tqPath, tqField := findNestedField(t, "TaskQueue", "request", 2)
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	var tq, tqt fieldWithPath
 
-	var tqtPath string
 	switch t.Name() {
 	case "GetBuildIdTaskQueueMappingRequest":
 		// Pick a random node for this request, it's not associated with a specific task queue.
-		tqPath = "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%d\", rand.Int())}"
-		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
+		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: fmt.Sprintf(\"not-applicable-%d\", rand.Int())}"}
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 	case "UpdateTaskQueueUserDataRequest",
 		"ReplicateTaskQueueUserDataRequest":
 		// Always route these requests to the same matching node by namespace.
-		tqPath = "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"
-		tqtPath = "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
+		tq = fieldWithPath{path: "&taskqueuepb.TaskQueue{Name: \"not-applicable\"}"}
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_UNSPECIFIED"}
 	case "GetWorkerBuildIdCompatibilityRequest",
 		"UpdateWorkerBuildIdCompatibilityRequest",
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
 		"ApplyTaskQueueUserDataReplicationEventRequest":
-		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
+		tq = findOneNestedField(t, "TaskQueue", "request", 2)
+		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 	default:
-		tqtPath = pathToField(t, "TaskQueueType", "request", 2)
+		tq = findOneNestedField(t, "TaskQueue", "request", 2)
+		tqt = findOneNestedField(t, "TaskQueueType", "request", 2)
 	}
 
-	if nsIDPath != "" && tqPath != "" && tqField != nil && tqtPath != "" {
-		// Some task queue fields are full messages, some are just strings
-		isTaskQueueMessage := tqField.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
-		if !isTaskQueueMessage {
-			tqPath = fmt.Sprintf("&taskqueuepb.TaskQueue{Name: %s}", tqPath)
+	if nsID.path != "" && tq.path != "" && tqt.path != "" {
+		if tq.field != nil {
+			// Some task queue fields are full messages, some are just strings
+			isTaskQueueMessage := tq.field.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
+			if !isTaskQueueMessage {
+				tq.path = fmt.Sprintf("&taskqueuepb.TaskQueue{Name: %s}", tq.path)
+			}
 		}
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsID.path, tq.path, tqt.path)
 	}
 
 	panic("I don't know how to get a client from a " + t.String())
