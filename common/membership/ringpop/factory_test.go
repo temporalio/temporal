@@ -198,12 +198,12 @@ func (s *RingpopSuite) TestRingpopServerTLS() {
 	s.NoError(runRingpopTLSTest(&s.Suite, s.serverTLSFactoryA, s.serverTLSFactoryB))
 }
 
-func (s *RingpopSuite) TestRingpopInvalidTLS() {
-	s.Error(runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
+func (s *RingpopSuite) TestRingpopIPv6TLS() {
+	s.NoError(runRingpopTLSTest(&s.Suite, s.serverIPv6TLSFactoryA, s.serverIPv6TLSFactoryB))
 }
 
-func (s *RingpopSuite) TestRingpopIPv6TLS() {
-	s.Error(runRingpopTLSTest(&s.Suite, s.serverIPv6TLSFactoryA, s.serverIPv6TLSFactoryB))
+func (s *RingpopSuite) TestRingpopInvalidTLS() {
+	s.Error(runRingpopTLSTest(&s.Suite, s.insecureFactory, s.serverTLSFactoryB))
 }
 
 func runRingpopTLSTest(s *suite.Suite, serverA *factory, serverB *factory) error {
