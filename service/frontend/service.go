@@ -28,15 +28,11 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,6 +45,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
 
 // Config represents configuration for frontend service
@@ -288,6 +288,7 @@ type Service struct {
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
+	httpAPIServer     *HTTPAPIServer
 
 	logger                         log.Logger
 	grpcListener                   net.Listener
@@ -300,6 +301,7 @@ func NewService(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -315,6 +317,7 @@ func NewService(
 		config:                         serviceConfig,
 		server:                         server,
 		healthServer:                   healthServer,
+		httpAPIServer:                  httpAPIServer,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
 		operatorHandler:                operatorHandler,
@@ -355,6 +358,14 @@ func (s *Service) Start() {
 		}
 	}()
 
+	if s.httpAPIServer != nil {
+		go func() {
+			if err := s.httpAPIServer.Serve(); err != nil {
+				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
+			}
+		}()
+	}
+
 	go s.membershipMonitor.Start()
 }
 
@@ -383,12 +394,26 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	s.logger.Info("ShutdownHandler: Draining traffic")
-	t := time.AfterFunc(requestDrainTime, func() {
-		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
-		s.server.Stop()
-	})
-	s.server.GracefulStop()
-	t.Stop()
+	// Gracefully stop gRPC server and HTTP API server concurrently
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.AfterFunc(requestDrainTime, func() {
+			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+			s.server.Stop()
+		})
+		s.server.GracefulStop()
+		t.Stop()
+	}()
+	if s.httpAPIServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.httpAPIServer.GracefulStop(requestDrainTime)
+		}()
+	}
+	wg.Wait()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)
