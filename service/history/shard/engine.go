@@ -83,6 +83,7 @@ type (
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) (*historyservice.PurgeDLQMessagesResponse, error)
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
+		BackfillWorkflowExecution(ctx context.Context, request *historyservice.BackfillWorkflowExecutionRequest) (*historyservice.BackfillWorkflowExecutionResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
 		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)

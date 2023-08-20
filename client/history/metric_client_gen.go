@@ -35,6 +35,20 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+func (c *metricClient) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.BackfillWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.HistoryClientBackfillWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.BackfillWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,

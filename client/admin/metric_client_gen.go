@@ -63,6 +63,20 @@ func (c *metricClient) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *metricClient) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.BackfillWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.AdminClientBackfillWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.BackfillWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

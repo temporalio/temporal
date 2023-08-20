@@ -32,6 +32,11 @@ service AdminService {
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
     }
 
+    // BackfillWorkflowExecution attempts to backfill workflow according to persisted history events.
+    // NOTE: this is experimental API
+    rpc BackfillWorkflowExecution (BackfillWorkflowExecutionRequest) returns (BackfillWorkflowExecutionResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }

@@ -709,6 +709,38 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	return &historyservice.RebuildMutableStateResponse{}, nil
 }
 
+// BackfillWorkflowExecution attempts to workflow execution according to persisted history events
+func (h *Handler) BackfillWorkflowExecution(ctx context.Context, request *historyservice.BackfillWorkflowExecutionRequest) (_ *historyservice.BackfillWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.BackfillWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return resp, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)

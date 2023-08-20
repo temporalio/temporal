@@ -35,6 +35,21 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
+func (c *retryableClient) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.BackfillWorkflowExecutionResponse, error) {
+	var resp *historyservice.BackfillWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.BackfillWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,

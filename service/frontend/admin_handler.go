@@ -638,7 +638,10 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	}, nil
 }
 
-func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *adminservice.RebuildMutableStateRequest) (_ *adminservice.RebuildMutableStateResponse, retError error) {
+func (adh *AdminHandler) RebuildMutableState(
+	ctx context.Context,
+	request *adminservice.RebuildMutableStateRequest,
+) (_ *adminservice.RebuildMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	if request == nil {
@@ -661,6 +664,40 @@ func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *admin
 		return nil, err
 	}
 	return &adminservice.RebuildMutableStateResponse{}, nil
+}
+
+func (adh *AdminHandler) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.BackfillWorkflowExecutionRequest,
+) (_ *adminservice.BackfillWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.historyClient.BackfillWorkflowExecution(ctx, &historyservice.BackfillWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		Execution:      request.Execution,
+		HistoryBatches: request.HistoryBatches,
+		VersionHistory: request.VersionHistory,
+		Token:          request.Token,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.BackfillWorkflowExecutionResponse{
+		Token: resp.Token,
+	}, nil
 }
 
 // DescribeMutableState returns information about the specified workflow execution.

@@ -65,6 +65,21 @@ func (c *retryableClient) AddSearchAttributes(
 	return resp, err
 }
 
+func (c *retryableClient) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.BackfillWorkflowExecutionResponse, error) {
+	var resp *adminservice.BackfillWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.BackfillWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

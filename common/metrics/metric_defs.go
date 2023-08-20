@@ -80,6 +80,8 @@ const (
 const (
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope = "AdminClientAddSearchAttributes"
+	// AdminClientBackfillWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientBackfillWorkflowExecutionScope = "AdminClientBackfillWorkflowExecution"
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
 	AdminClientRemoveSearchAttributesScope = "AdminClientRemoveSearchAttributes"
 	// AdminClientGetSearchAttributesScope tracks RPC calls to admin service
@@ -344,6 +346,8 @@ const (
 	HistoryClientGetReplicationStatusScope = "HistoryClientGetReplicationStatus"
 	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowVisibilityRecordScope = "HistoryClientDeleteWorkflowVisibilityRecord"
+	// HistoryClientBackfillWorkflowExecutionScope tracks RPC calls to history service
+	HistoryClientBackfillWorkflowExecutionScope = "HistoryClientBackfillWorkflowExecution"
 	// HistoryClientCloseShardScope tracks RPC calls to history service
 	HistoryClientCloseShardScope = "HistoryClientCloseShard"
 	// HistoryClientDescribeMutableStateScope tracks RPC calls to history service

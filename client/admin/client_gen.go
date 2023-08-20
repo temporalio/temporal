@@ -53,6 +53,16 @@ func (c *clientImpl) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *clientImpl) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.BackfillWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.BackfillWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

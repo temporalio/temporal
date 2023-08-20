@@ -37,6 +37,7 @@ const (
 
 var (
 	APIToPriority = map[string]int{
+		"BackfillWorkflowExecution":              1,
 		"CloseShard":                             1,
 		"GetShard":                               1,
 		"DeleteWorkflowExecution":                1,

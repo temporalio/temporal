@@ -650,6 +650,18 @@ message RebuildMutableStateRequest {
 message RebuildMutableStateResponse {
 }
 
+message BackfillWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    repeated temporal.api.common.v1.DataBlob history_batches = 3;
+    temporal.server.api.history.v1.VersionHistory version_history = 4;
+    bytes token = 5;
+}
+
+message BackfillWorkflowExecutionResponse {
+    bytes token = 1;
+}
+
 message DeleteWorkflowVisibilityRecordRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;

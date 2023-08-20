@@ -101,6 +101,26 @@ func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttributes), varargs...)
 }
 
+// BackfillWorkflowExecution mocks base method.
+func (m *MockAdminServiceClient) BackfillWorkflowExecution(ctx context.Context, in *adminservice.BackfillWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.BackfillWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "BackfillWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.BackfillWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BackfillWorkflowExecution indicates an expected call of BackfillWorkflowExecution.
+func (mr *MockAdminServiceClientMockRecorder) BackfillWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).BackfillWorkflowExecution), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockAdminServiceClient) CloseShard(ctx context.Context, in *adminservice.CloseShardRequest, opts ...grpc.CallOption) (*adminservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -829,6 +849,21 @@ func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 
 func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttributes), arg0, arg1)
+}
+
+// BackfillWorkflowExecution mocks base method.
+func (m *MockAdminServiceServer) BackfillWorkflowExecution(arg0 context.Context, arg1 *adminservice.BackfillWorkflowExecutionRequest) (*adminservice.BackfillWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BackfillWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.BackfillWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BackfillWorkflowExecution indicates an expected call of BackfillWorkflowExecution.
+func (mr *MockAdminServiceServerMockRecorder) BackfillWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).BackfillWorkflowExecution), arg0, arg1)
 }
 
 // CloseShard mocks base method.

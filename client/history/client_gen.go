@@ -34,6 +34,26 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *clientImpl) BackfillWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.BackfillWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.BackfillWorkflowExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	var response *historyservice.BackfillWorkflowExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.BackfillWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
