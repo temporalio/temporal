@@ -32,6 +32,11 @@ service AdminService {
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
     }
 
+    // ImportWorkflowExecution attempts to import workflow according to persisted history events.
+    // NOTE: this is experimental API
+    rpc ImportWorkflowExecution (ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }
