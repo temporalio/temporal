@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -104,9 +105,10 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		return nil
 	}
 
-	ctx, cancel := newTaskContext(e.NamespaceID)
-	defer cancel()
-	namespaceName, apply, nsError := e.GetNamespaceInfo(ctx, e.NamespaceID)
+	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemPreemptableCallerInfo,
+	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -117,6 +119,8 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		)
 		return nil
 	}
+	ctx, cancel := newTaskContext(namespaceName)
+	defer cancel()
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
@@ -137,7 +141,10 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(context.Background(), e.NamespaceID)
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}

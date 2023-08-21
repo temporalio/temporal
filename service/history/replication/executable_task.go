@@ -397,12 +397,12 @@ FilterLoop:
 }
 
 func newTaskContext(
-	namespaceId string,
+	namespaceName string,
 ) (context.Context, context.CancelFunc) {
 	ctx := headers.SetCallerInfo(
 		context.Background(),
 		headers.SystemPreemptableCallerInfo,
 	)
-	ctx = headers.SetCallerName(ctx, namespaceId)
+	ctx = headers.SetCallerName(ctx, namespaceName)
 	return context.WithTimeout(ctx, applyReplicationTimeout)
 }
