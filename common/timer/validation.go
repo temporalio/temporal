@@ -25,22 +25,30 @@
 package timer
 
 import (
+	"errors"
 	"time"
 
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
-	minAllowedTimer = 0 * time.Hour
 	maxAllowedTimer = 100 * 365 * 24 * time.Hour
 )
 
-func ValidateTimer(delay *time.Duration) bool {
+func ValidateAndCapTimer(delay *time.Duration) error {
 	duration := timestamp.DurationValue(delay)
+	if duration < 0 {
+		return errors.New("negative timer duration")
+	}
+
 	// unix nano (max int64) is 2262-04-11T23:47:16.854775807Z
 	// allowing 100 years timer is safe until 2162
-	if duration < minAllowedTimer || duration > maxAllowedTimer {
-		return false
+	//
+	// NOTE: we choose to cap the timer instead of returning error so that
+	// existing workflows implementation using higher than allowed timer
+	// can continue to run.
+	if duration > maxAllowedTimer {
+		*delay = maxAllowedTimer
 	}
-	return true
+	return nil
 }

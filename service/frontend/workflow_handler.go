@@ -4692,15 +4692,15 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if !timer.ValidateTimer(request.GetWorkflowExecutionTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if !timer.ValidateTimer(request.GetWorkflowRunTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if !timer.ValidateTimer(request.GetWorkflowTaskTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4710,15 +4710,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if !timer.ValidateTimer(request.GetWorkflowExecutionTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if !timer.ValidateTimer(request.GetWorkflowRunTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if !timer.ValidateTimer(request.GetWorkflowTaskTimeout()) {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4733,7 +4733,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if !timer.ValidateTimer(startDelay) {
+	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
 		return errInvalidWorkflowStartDelaySeconds
 	}
 
