@@ -61,7 +61,7 @@ import (
 )
 
 type (
-	historyReplicatorSuite struct {
+	workflowReplicatorSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -78,16 +78,16 @@ type (
 		runID      string
 		now        time.Time
 
-		historyReplicator *HistoryReplicatorImpl
+		workflowStateReplicator *WorkflowStateReplicatorImpl
 	}
 )
 
-func TestHistoryReplicatorSuite(t *testing.T) {
-	s := new(historyReplicatorSuite)
+func TestWorkflowReplicatorSuite(t *testing.T) {
+	s := new(workflowReplicatorSuite)
 	suite.Run(t, s)
 }
 
-func (s *historyReplicatorSuite) SetupTest() {
+func (s *workflowReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -113,21 +113,21 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.runID = uuid.New()
 	s.now = time.Now().UTC()
-	s.historyReplicator = NewHistoryReplicator(
+	s.workflowStateReplicator = NewWorkflowStateReplicator(
 		s.mockShard,
 		s.mockWorkflowCache,
 		eventReapplier,
-		s.logger,
 		serialization.NewSerializer(),
+		s.logger,
 	)
 }
 
-func (s *historyReplicatorSuite) TearDownTest() {
+func (s *workflowReplicatorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
+func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
@@ -215,11 +215,11 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
-	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
+	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
 
-func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
+func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
@@ -380,12 +380,12 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
-	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
+	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
 
-func (s *historyReplicatorSuite) Test_ApplyWorkflowState_NoClosedWorkflow_Error() {
-	err := s.historyReplicator.ApplyWorkflowState(context.Background(), &historyservice.ReplicateWorkflowStateRequest{
+func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_NoClosedWorkflow_Error() {
+	err := s.workflowStateReplicator.SyncWorkflowState(context.Background(), &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				WorkflowId: s.workflowID,
@@ -402,7 +402,7 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_NoClosedWorkflow_Error(
 	s.ErrorAs(err, &internalErr)
 }
 
-func (s *historyReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() {
+func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() {
 	namespaceID := uuid.New()
 	branchInfo := &persistencespb.HistoryBranch{
 		TreeId:    uuid.New(),
@@ -471,7 +471,7 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend() 
 			},
 		},
 	})
-	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
+	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	var expectedErr *serviceerrors.RetryReplication
 	s.ErrorAs(err, &expectedErr)
 	s.Equal(namespaceID, expectedErr.NamespaceId)

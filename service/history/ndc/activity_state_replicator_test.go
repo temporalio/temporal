@@ -57,7 +57,7 @@ import (
 )
 
 type (
-	activityReplicatorSuite struct {
+	activityReplicatorStateSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -74,24 +74,24 @@ type (
 		workflowCache *wcache.CacheImpl
 		logger        log.Logger
 
-		nDCActivityReplicator *ActivityReplicatorImpl
+		nDCActivityStateReplicator *ActivityStateReplicatorImpl
 	}
 )
 
-func TestActivityReplicatorSuite(t *testing.T) {
-	s := new(activityReplicatorSuite)
+func TestActivityStateReplicatorSuite(t *testing.T) {
+	s := new(activityReplicatorStateSuite)
 	suite.Run(t, s)
 }
 
-func (s *activityReplicatorSuite) SetupSuite() {
+func (s *activityReplicatorStateSuite) SetupSuite() {
 
 }
 
-func (s *activityReplicatorSuite) TearDownSuite() {
+func (s *activityReplicatorStateSuite) TearDownSuite() {
 
 }
 
-func (s *activityReplicatorSuite) SetupTest() {
+func (s *activityReplicatorStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -121,19 +121,19 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.nDCActivityReplicator = NewActivityReplicator(
+	s.nDCActivityStateReplicator = NewActivityStateReplicator(
 		s.mockShard,
 		s.workflowCache,
 		s.logger,
 	)
 }
 
-func (s *activityReplicatorSuite) TearDownTest() {
+func (s *activityReplicatorStateSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {
+func (s *activityReplicatorStateSuite) TestRefreshTask_DiffCluster() {
 	version := int64(99)
 	attempt := int32(1)
 	localActivityInfo := &persistencespb.ActivityInfo{
@@ -143,7 +143,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, localActivityInfo.Version).Return(false)
 
-	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
+	apply := s.nDCActivityStateReplicator.testRefreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
@@ -151,7 +151,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_DiffAttempt() {
+func (s *activityReplicatorStateSuite) TestRefreshTask_SameCluster_DiffAttempt() {
 	version := int64(99)
 	attempt := int32(1)
 	localActivityInfo := &persistencespb.ActivityInfo{
@@ -161,7 +161,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_DiffAttempt() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
+	apply := s.nDCActivityStateReplicator.testRefreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
@@ -169,7 +169,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_DiffAttempt() {
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_SameAttempt() {
+func (s *activityReplicatorStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
 	version := int64(99)
 	attempt := int32(1)
 	localActivityInfo := &persistencespb.ActivityInfo{
@@ -179,7 +179,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_SameAttempt() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
+	apply := s.nDCActivityStateReplicator.testRefreshActivityTimerTaskMask(
 		version,
 		attempt,
 		localActivityInfo,
@@ -187,7 +187,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_SameAttempt() {
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_LocalVersionLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_LocalVersionLarger() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -196,7 +196,7 @@ func (s *activityReplicatorSuite) TestActivity_LocalVersionLarger() {
 		Attempt: attempt,
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -205,7 +205,7 @@ func (s *activityReplicatorSuite) TestActivity_LocalVersionLarger() {
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_IncomingVersionLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -214,7 +214,7 @@ func (s *activityReplicatorSuite) TestActivity_IncomingVersionLarger() {
 		Attempt: attempt,
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -223,7 +223,7 @@ func (s *activityReplicatorSuite) TestActivity_IncomingVersionLarger() {
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_SameVersion_LocalAttemptLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -232,7 +232,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_LocalAttemptLarger() 
 		Attempt: attempt + 1,
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -241,7 +241,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_LocalAttemptLarger() 
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_SameVersion_IncomingAttemptLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -250,7 +250,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_IncomingAttemptLarger
 		Attempt: attempt - 1,
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -259,7 +259,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_IncomingAttemptLarger
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_LocalHeartbeatLater() {
+func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_LocalHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -269,7 +269,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_LocalHear
 		LastHeartbeatUpdateTime: timestamp.TimePtr(lastHeartbeatTime.Add(time.Second)),
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -278,7 +278,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_LocalHear
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_IncomingHeartbeatLater() {
+func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_IncomingHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
 	lastHeartbeatTime := time.Now()
@@ -288,7 +288,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_IncomingH
 		LastHeartbeatUpdateTime: timestamp.TimePtr(lastHeartbeatTime.Add(-time.Second)),
 	}
 
-	apply := s.nDCActivityReplicator.testActivity(
+	apply := s.nDCActivityStateReplicator.testActivity(
 		version,
 		attempt,
 		lastHeartbeatTime,
@@ -297,7 +297,7 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_IncomingH
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestVersionHistory_LocalIsSuperSet() {
+func (s *activityReplicatorStateSuite) TestVersionHistory_LocalIsSuperSet() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -333,7 +333,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_LocalIsSuperSet() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
 
-	apply, err := s.nDCActivityReplicator.testVersionHistory(
+	apply, err := s.nDCActivityStateReplicator.testVersionHistory(
 		namespaceID,
 		workflowID,
 		runID,
@@ -345,7 +345,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_LocalIsSuperSet() {
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_NoResend() {
+func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_NoResend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -381,7 +381,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_NoResend
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
 
-	apply, err := s.nDCActivityReplicator.testVersionHistory(
+	apply, err := s.nDCActivityStateReplicator.testVersionHistory(
 		namespaceID,
 		workflowID,
 		runID,
@@ -393,7 +393,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_NoResend
 	s.True(apply)
 }
 
-func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_Resend() {
+func (s *activityReplicatorStateSuite) TestVersionHistory_IncomingIsSuperSet_Resend() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -429,7 +429,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_Resend()
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
 
-	apply, err := s.nDCActivityReplicator.testVersionHistory(
+	apply, err := s.nDCActivityStateReplicator.testVersionHistory(
 		namespaceID,
 		workflowID,
 		runID,
@@ -450,7 +450,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_Resend()
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestVersionHistory_Diverge_LocalLarger() {
+func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_LocalLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -494,7 +494,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_LocalLarger() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
 
-	apply, err := s.nDCActivityReplicator.testVersionHistory(
+	apply, err := s.nDCActivityStateReplicator.testVersionHistory(
 		namespaceID,
 		workflowID,
 		runID,
@@ -506,7 +506,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_LocalLarger() {
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
+func (s *activityReplicatorStateSuite) TestVersionHistory_Diverge_IncomingLarger() {
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -550,7 +550,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
 
-	apply, err := s.nDCActivityReplicator.testVersionHistory(
+	apply, err := s.nDCActivityStateReplicator.testVersionHistory(
 		namespaceID,
 		workflowID,
 		runID,
@@ -571,7 +571,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
 	s.False(apply)
 }
 
-func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
+func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowNotFound() {
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
@@ -604,11 +604,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		), nil,
 	).AnyTimes()
 
-	err := s.nDCActivityReplicator.SyncActivity(context.Background(), request)
+	err := s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
 	s.Nil(err)
 }
 
-func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
+func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
@@ -680,11 +680,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 		), nil,
 	).AnyTimes()
 
-	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
+	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
 	s.Nil(err)
 }
 
-func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
+func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
@@ -757,11 +757,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 		), nil,
 	).AnyTimes()
 
-	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
+	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
 	s.Nil(err)
 }
 
-func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
+func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
@@ -850,11 +850,11 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 		), nil,
 	).AnyTimes()
 
-	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
+	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
 	s.Nil(err)
 }
 
-func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
+func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
@@ -944,6 +944,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 		), nil,
 	).AnyTimes()
 
-	err = s.nDCActivityReplicator.SyncActivity(context.Background(), request)
+	err = s.nDCActivityStateReplicator.SyncActivityState(context.Background(), request)
 	s.Nil(err)
 }
