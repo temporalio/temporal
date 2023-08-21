@@ -287,7 +287,7 @@ func NewMutableState(
 	return s
 }
 
-func newMutableStateFromDB(
+func NewMutableStateFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -402,7 +402,7 @@ func NewSanitizedMutableState(
 	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
 
-	mutableState, err := newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	mutableState, err := NewMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
 	if err != nil {
 		return nil, err
 	}
