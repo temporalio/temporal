@@ -25,7 +25,11 @@
 package ndc
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"sync"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
@@ -37,8 +41,10 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 )
@@ -55,9 +61,12 @@ type (
 	}
 
 	HistoryBackfillerImpl struct {
-		shard             shard.Context
+		shard.Context
 		historyReplicator HistoryReplicator
 		logger            log.Logger
+
+		sync.Mutex
+		workflowCache map[definition.WorkflowKey]workflow.MutableState
 	}
 )
 
@@ -68,12 +77,12 @@ func NewHistoryBackfiller(
 	logger log.Logger,
 ) *HistoryBackfillerImpl {
 	backfiller := &HistoryBackfillerImpl{
-		shard:             shard,
+		Context:           shard,
 		historyReplicator: nil,
 		logger:            logger,
 	}
 	historyReplicator := NewHistoryReplicator(
-		shard,
+		backfiller,
 		backfiller,
 		eventsReapplier,
 		eventSerializer,
@@ -90,6 +99,13 @@ func (r *HistoryBackfillerImpl) BackfillWorkflow(
 	events [][]*historypb.HistoryEvent,
 	token []byte,
 ) ([]byte, error) {
+	mutableState, err := r.deserializeBackfillToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.addToCache(workflowKey, mutableState); err != nil {
+		return nil, err
+	}
 	panic("i++")
 }
 
@@ -122,6 +138,31 @@ func (r *HistoryBackfillerImpl) deserializeBackfillToken(
 	return mutableState, nil
 }
 
+func (r *HistoryBackfillerImpl) addToCache(
+	workflowKey definition.WorkflowKey,
+	mutableState workflow.MutableState,
+) error {
+	r.Lock()
+	defer r.Unlock()
+	if _, ok := r.workflowCache[workflowKey]; ok {
+		return serviceerror.NewUnimplemented(
+			"HistoryBackfiller does not support concurrent backfill of workflow executions",
+		)
+	}
+	r.workflowCache[workflowKey] = mutableState
+	return nil
+}
+
+func (r *HistoryBackfillerImpl) removeFromCache(
+	workflowKey definition.WorkflowKey,
+) {
+	r.Lock()
+	defer r.Unlock()
+	delete(r.workflowCache, workflowKey)
+}
+
+// GetOrCreateCurrentWorkflowExecution override corresponding function defined cache.Cache
+// so half backfilled workflow will not pollute workflow cache
 func (r *HistoryBackfillerImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -133,15 +174,171 @@ func (r *HistoryBackfillerImpl) GetOrCreateCurrentWorkflowExecution(
 	)
 }
 
+// GetOrCreateWorkflowExecution override corresponding function defined cache.Cache
+// so half backfilled workflow will not pollute workflow cache
 func (r *HistoryBackfillerImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, cache.ReleaseCacheFunc, error) {
-	return workflow.NewContext(
-		r.shard,
+	wfContext := workflow.NewContext(
+		r, // use self to override get workflow & creation workflow
 		definition.NewWorkflowKey(namespaceID.String(), execution.WorkflowId, execution.RunId),
 		r.logger,
-	), func(err error) {}, nil
+	)
+	mutableState, ok := r.workflowCache[definition.NewWorkflowKey(
+		namespaceID.String(),
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+	)]
+	if !ok {
+		return nil, nil, serviceerror.NewInternal(
+			"HistoryBackfiller does not have target mutable state in cache",
+		)
+	}
+	wfContext.MutableState = mutableState
+	return wfContext, func(err error) {}, nil
+}
+
+// GetCurrentExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) GetCurrentExecution(
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
+) (*persistence.GetCurrentExecutionResponse, error) {
+	return nil, serviceerror.NewInternal(
+		"HistoryBackfiller GetCurrentExecution should not be invoked",
+	)
+}
+
+// GetWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) GetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+	workflowKey := definition.NewWorkflowKey(
+		request.NamespaceID,
+		request.WorkflowID,
+		request.RunID,
+	)
+	r.Lock()
+	defer r.Unlock()
+	if _, ok := r.workflowCache[workflowKey]; !ok {
+		return nil, serviceerror.NewInternal(
+			"HistoryBackfiller GetWorkflowExecution encountered workflow key mismatch",
+		)
+	}
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("workflow %v not found", workflowKey))
+}
+
+// CreateWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+	branchToken := request.NewWorkflowEvents[0].BranchToken
+	for i := 1; i < len(request.NewWorkflowEvents); i++ {
+		if !bytes.Equal(branchToken, request.NewWorkflowEvents[i].BranchToken) {
+			return nil, serviceerror.NewInternal(
+				"HistoryBackfiller CreateWorkflowExecution encountered branch token mismatch",
+			)
+		}
+	}
+	for i, events := range request.NewWorkflowEvents {
+		req := &persistence.AppendHistoryNodesRequest{
+			ShardID:           r.GetShardID(),
+			IsNewBranch:       i == 0,
+			Info:              persistence.BuildHistoryGarbageCleanupInfo(events.NamespaceID, events.WorkflowID, events.RunID),
+			BranchToken:       branchToken,
+			Events:            events.Events,
+			PrevTransactionID: events.PrevTxnID,
+			TransactionID:     events.TxnID,
+		}
+		if _, err := r.AppendHistoryEvents(
+			ctx,
+			req,
+			namespace.ID(events.NamespaceID),
+			commonpb.WorkflowExecution{WorkflowId: events.WorkflowID, RunId: events.RunID},
+		); err != nil {
+			return nil, err
+		}
+	}
+	return &persistence.CreateWorkflowExecutionResponse{}, nil
+}
+
+// UpdateWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) UpdateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	branchToken := request.NewWorkflowEvents[0].BranchToken
+	for i := 1; i < len(request.NewWorkflowEvents); i++ {
+		if !bytes.Equal(branchToken, request.NewWorkflowEvents[i].BranchToken) {
+			return nil, serviceerror.NewInternal(
+				"HistoryBackfiller UpdateWorkflowExecution encountered branch token mismatch",
+			)
+		}
+	}
+	for _, events := range request.NewWorkflowEvents {
+		req := &persistence.AppendHistoryNodesRequest{
+			ShardID:           r.GetShardID(),
+			IsNewBranch:       false,
+			Info:              "",
+			BranchToken:       branchToken,
+			Events:            events.Events,
+			PrevTransactionID: events.PrevTxnID,
+			TransactionID:     events.TxnID,
+		}
+		if _, err := r.AppendHistoryEvents(
+			ctx,
+			req,
+			namespace.ID(events.NamespaceID),
+			commonpb.WorkflowExecution{WorkflowId: events.WorkflowID, RunId: events.RunID},
+		); err != nil {
+			return nil, err
+		}
+	}
+	return &persistence.UpdateWorkflowExecutionResponse{}, nil
+}
+
+// ConflictResolveWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) ConflictResolveWorkflowExecution(
+	ctx context.Context,
+	request *persistence.ConflictResolveWorkflowExecutionRequest,
+) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	return nil, serviceerror.NewInternal(
+		"HistoryBackfiller ConflictResolveWorkflowExecution should not be invoked",
+	)
+}
+
+// SetWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) SetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.SetWorkflowExecutionRequest,
+) (*persistence.SetWorkflowExecutionResponse, error) {
+	return nil, serviceerror.NewInternal(
+		"HistoryBackfiller SetWorkflowExecution should not be invoked",
+	)
+}
+
+// DeleteWorkflowExecution override corresponding function defined shard.Context
+// so half backfilled workflow will not be pollute database
+func (r *HistoryBackfillerImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	branchToken []byte,
+	startTime *time.Time,
+	closeTime *time.Time,
+	closeExecutionVisibilityTaskID int64,
+	stage *tasks.DeleteWorkflowExecutionStage,
+) error {
+	return serviceerror.NewInternal(
+		"HistoryBackfiller DeleteWorkflowExecution should not be invoked",
+	)
 }
