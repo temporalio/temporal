@@ -636,7 +636,7 @@ func (a *activities) verifySingleReplicationTask(
 
 	case *serviceerror.NotFound:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
-		// Calling canSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
+		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, &we, ns)
 
@@ -697,8 +697,10 @@ func (a *activities) verifyReplicationTasks(
 		return true, nil
 	}
 
-	// Look ahead because replication is by shard
+	// Look ahead and see if there is any new workflow being replicated on target cluster. If yes, then consider it is a progress.
+	// This is to avoid verifyReplicationTasks from failing due to LastNotFoundWorkflowExecution being slow.
 	for idx := details.NextIndex + 1; idx < len(request.Executions); idx++ {
+		// Cache results don't count for progress.
 		if _, ok := cachedResults[idx]; ok {
 			continue
 		}
