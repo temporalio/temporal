@@ -205,11 +205,8 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 		Execution:   &execution2,
 	}).Return(&completeState, nil).Times(2)
 
-	r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+	_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 	s.NoError(err)
-	var response verifyReplicationTasksResponse
-	s.NoError(r.Get(&response))
-	s.Empty(response.SkippedWorkflowExecutions)
 
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
@@ -254,7 +251,6 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 	for _, t := range testcases {
 		env, iceptor := s.initEnv()
 
-		// Call DescribeMutableState for enough times to trigger trySkipWorkflowExecution
 		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 			Namespace: mockedNamespace,
 			Execution: &execution1,
@@ -265,17 +261,12 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 			Execution:   &execution1,
 		}).Return(t.resp, t.err).Times(1)
 
-		r, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
+		_, err := env.ExecuteActivity(s.a.VerifyReplicationTasks, &request)
 		s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 		lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 		if t.expectedErr == nil {
 			s.NoError(err)
 			s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
-
-			var response verifyReplicationTasksResponse
-			s.NoError(r.Get(&response))
-			s.Equal(request.Executions[0], response.SkippedWorkflowExecutions[0].WorkflowExecution)
-			s.Equal(t.expectedReason, response.SkippedWorkflowExecutions[0].Reason)
 		} else {
 			s.ErrorContains(err, "mock error")
 			s.Equal(0, lastHeartBeat.NextIndex)
@@ -343,6 +334,50 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	s.Equal(len(iceptor.replicationRecordedHeartbeats), 1)
 }
 
+func (s *activitiesSuite) Test_verifySingleReplicationTask() {
+	request := verifyReplicationTasksRequest{
+		Namespace:             mockedNamespace,
+		NamespaceID:           mockedNamespaceID,
+		TargetClusterEndpoint: remoteRpcAddress,
+		Executions:            []commonpb.WorkflowExecution{execution1, execution2},
+	}
+	ctx := context.TODO()
+
+	cachedResults := make(map[int]verifyResult)
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
+		Namespace: mockedNamespace,
+		Execution: &execution1,
+	}).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
+	result, err := s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 0)
+	s.NoError(err)
+	s.True(result.isVerified())
+	s.Equal(result, cachedResults[0])
+
+	// Second call should hit cache therefore no mock is needed.
+	result, err = s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 0)
+	s.NoError(err)
+	s.True(result.isVerified())
+
+	// Test not verified workflow
+	mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
+		Namespace: mockedNamespace,
+		Execution: &execution2,
+	}).Return(&adminservice.DescribeMutableStateResponse{}, serviceerror.NewNotFound("")).Times(1)
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: mockedNamespaceID,
+		Execution:   &execution2,
+	}).Return(&completeState, nil).AnyTimes()
+
+	result, err = s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 1)
+	s.NoError(err)
+	s.False(result.isVerified())
+	_, ok := cachedResults[1]
+	s.False(ok)
+}
+
 type executionState int
 
 const (
@@ -403,7 +438,8 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		nextIndex             int
 		expectedVerified      bool
 		expectedErr           error
-		expectedIndex         int
+		expectedNextIndex     int
+		expectedVerifiedIndex int
 	}{
 		{
 			expectedVerified: true,
@@ -414,21 +450,32 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			nextIndex:             0,
 			expectedVerified:      true,
 			expectedErr:           nil,
-			expectedIndex:         4,
+			expectedNextIndex:     4,
+			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
 			nextIndex:             2,
 			expectedVerified:      true,
 			expectedErr:           nil,
-			expectedIndex:         4,
+			expectedNextIndex:     4,
+			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
 			nextIndex:             0,
 			expectedVerified:      false,
 			expectedErr:           nil,
-			expectedIndex:         2,
+			expectedNextIndex:     2,
+			expectedVerifiedIndex: 1,
+		},
+		{
+			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound, executionFound, executionNotfound},
+			nextIndex:             0,
+			expectedVerified:      false,
+			expectedErr:           nil,
+			expectedNextIndex:     2,
+			expectedVerifiedIndex: 3,
 		},
 	}
 
@@ -437,26 +484,82 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		Execution:   &execution1,
 	}).Return(&completeState, nil).AnyTimes()
 
+	checkPointTime := time.Now()
 	for _, tc := range tests {
 		var recorder mockHeartBeatRecorder
 		mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 		request.Executions = createExecutions(mockRemoteAdminClient, tc.remoteExecutionStates, tc.nextIndex)
 		details := replicationTasksHeartbeatDetails{
-			NextIndex: tc.nextIndex,
+			NextIndex:  tc.nextIndex,
+			CheckPoint: checkPointTime,
 		}
 
-		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
+		cachedResults := make(map[int]verifyResult)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
 		s.Equal(tc.expectedVerified, verified)
-		s.Equal(tc.expectedIndex, details.NextIndex)
+		s.Equal(tc.expectedNextIndex, details.NextIndex)
+		s.Equal(tc.expectedVerifiedIndex, details.LastVerifiedIndex)
 		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
 		s.Equal(recorder.lastHeartBeat, details)
 		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
 			s.Equal(execution1, details.LastNotFoundWorkflowExecution)
 		}
+
+		if len(request.Executions) > 0 {
+			// Except for empty Executions, all should set new CheckPoint to indicate making progress.
+			s.True(checkPointTime.Before(details.CheckPoint))
+		}
 	}
+}
+
+func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
+	var recorder mockHeartBeatRecorder
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+
+	request := verifyReplicationTasksRequest{
+		Namespace:             mockedNamespace,
+		NamespaceID:           mockedNamespaceID,
+		TargetClusterEndpoint: remoteRpcAddress,
+		Executions:            createExecutions(mockRemoteAdminClient, []executionState{executionFound, executionFound, executionNotfound, executionFound}, 0),
+	}
+
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: mockedNamespaceID,
+		Execution:   &execution1,
+	}).Return(&completeState, nil).AnyTimes()
+
+	checkPointTime := time.Now()
+	details := replicationTasksHeartbeatDetails{
+		NextIndex:  0,
+		CheckPoint: checkPointTime,
+	}
+
+	ctx := context.TODO()
+	cachedResults := make(map[int]verifyResult)
+	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
+	s.NoError(err)
+	s.False(verified)
+	// Verify has made progress.
+	s.True(checkPointTime.Before(details.CheckPoint))
+	s.Equal(3, details.LastVerifiedIndex)
+
+	prevCheckPoint := details.CheckPoint
+
+	// Mock for one more NotFound call
+	mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
+		Namespace: mockedNamespace,
+		Execution: &execution1,
+	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
+
+	// All results should be either NotFound or cached and no progress should be made.
+	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
+	s.NoError(err)
+	s.False(verified)
+	s.Equal(prevCheckPoint, details.CheckPoint)
+	s.Equal(3, details.LastVerifiedIndex)
 }
 
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
@@ -521,7 +624,8 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		verified, _, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns, recorder.hearbeat)
+		cachedResults := make(map[int]verifyResult)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns, cachedResults, recorder.hearbeat)
 		s.NoError(err)
 		s.Equal(tc.verified, verified)
 		s.Equal(recorder.lastHeartBeat, details)
