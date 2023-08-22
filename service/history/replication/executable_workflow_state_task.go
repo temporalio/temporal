@@ -25,9 +25,11 @@
 package replication
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -49,9 +51,6 @@ type (
 		definition.WorkflowKey
 		ExecutableTask
 		req *historyservice.ReplicateWorkflowStateRequest
-
-		// variables to be perhaps removed (not essential to logic)
-		sourceClusterName string
 	}
 )
 
@@ -80,14 +79,13 @@ func NewExecutableWorkflowStateTask(
 			metrics.SyncWorkflowStateTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
+			sourceClusterName,
 		),
 		req: &historyservice.ReplicateWorkflowStateRequest{
 			NamespaceId:   namespaceID,
 			WorkflowState: task.GetWorkflowState(),
 			RemoteCluster: sourceClusterName,
 		},
-
-		sourceClusterName: sourceClusterName,
 	}
 }
 
@@ -100,7 +98,10 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		return nil
 	}
 
-	namespaceName, apply, err := e.GetNamespaceInfo(e.NamespaceID)
+	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemPreemptableCallerInfo,
+	), e.NamespaceID)
 	if err != nil {
 		return err
 	} else if !apply {
@@ -133,7 +134,10 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
@@ -142,7 +146,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 
 		if resendErr := e.Resend(
 			ctx,
-			e.sourceClusterName,
+			e.ExecutableTask.SourceClusterName(),
 			retryErr,
 		); resendErr != nil {
 			return err
@@ -172,7 +176,7 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
-		SourceClusterName: e.sourceClusterName,
+		SourceClusterName: e.ExecutableTask.SourceClusterName(),
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,

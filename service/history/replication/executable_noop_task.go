@@ -48,6 +48,7 @@ func NewExecutableNoopTask(
 	processToolBox ProcessToolBox,
 	taskID int64,
 	taskCreationTime time.Time,
+	sourceClusterName string,
 ) *ExecutableNoopTask {
 	return &ExecutableNoopTask{
 		ExecutableTask: NewExecutableTask(
@@ -56,6 +57,7 @@ func NewExecutableNoopTask(
 			metrics.NoopTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
+			sourceClusterName,
 		),
 	}
 }
