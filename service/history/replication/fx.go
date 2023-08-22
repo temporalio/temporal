@@ -27,6 +27,8 @@ package replication
 import (
 	"context"
 
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"

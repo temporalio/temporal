@@ -25,11 +25,8 @@
 package tdbg
 
 import (
-<<<<<<< HEAD
-=======
 	"encoding/base64"
 	"encoding/hex"
->>>>>>> 8b35f5278 (Improve RebuildMutableState API)
 	"errors"
 	"fmt"
 	"os"
