@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	shardLingerMaxTimeLimit = 5 * time.Second
+	shardLingerMaxTimeLimit = 1 * time.Minute
 )
 
 var (
