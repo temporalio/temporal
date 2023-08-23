@@ -114,7 +114,7 @@ and then run the server:
 make start
 ```
 
-Now you can create default namespace with `tctl`:
+Now you can create default namespace with Temporal CLI:
 ```bash
 temporal operator namespace create default
 ```
