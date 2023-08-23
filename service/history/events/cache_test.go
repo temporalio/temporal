@@ -319,3 +319,62 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
+
+func (s *eventsCacheSuite) TestEventsCacheGetEventReverse_Success() {
+	namespaceID := namespace.ID("events-cache-get-event-reverse-success-namespace")
+	workflowID := "events-cache-get-event-reverse-success-workflow-id"
+	runID := "events-cache-get-event-reverse-success-run-id"
+	event1 := &historypb.HistoryEvent{
+		EventId:    11,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
+	}
+	event2 := &historypb.HistoryEvent{
+		EventId:    12,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+	}
+	event3 := &historypb.HistoryEvent{
+		EventId:    13,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+	}
+	event4 := &historypb.HistoryEvent{
+		EventId:    14,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+	}
+	event5 := &historypb.HistoryEvent{
+		EventId:    15,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+	}
+	event6 := &historypb.HistoryEvent{
+		EventId:    16,
+		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
+	}
+
+	shardID := int32(10)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchReverse(gomock.Any(), &persistence.ReadHistoryBranchReverseRequest{
+		BranchToken:            []byte("store_token"),
+		LastFirstTransactionID: int64(1),
+		MaxEventID:             event6.GetEventId() + 1,
+		PageSize:               1,
+		NextPageToken:          nil,
+		ShardID:                shardID,
+	}).Return(&persistence.ReadHistoryBranchReverseResponse{
+		HistoryEvents: []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
+		NextPageToken: nil,
+	}, nil)
+
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		event2)
+	actualEvent, err := s.cache.GetEventReverse(
+		context.Background(),
+		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
+		int64(1), []byte("store_token"))
+	s.Nil(err)
+	s.Equal(event6, actualEvent)
+}
