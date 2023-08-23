@@ -214,7 +214,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		},
 	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEventReverse(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
