@@ -109,8 +109,9 @@ type (
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
-		nDCReplicator              ndc.HistoryReplicator
-		nDCActivityReplicator      ndc.ActivityReplicator
+		nDCHistoryReplicator       ndc.HistoryReplicator
+		nDCActivityStateReplicator ndc.ActivityStateReplicator
+		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
@@ -207,16 +208,23 @@ func NewEngineWithShardContext(
 			executionManager,
 			logger,
 		)
-		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
+		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			logger,
 			eventSerializer,
+			logger,
 		)
-		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
+		historyEngImpl.nDCActivityStateReplicator = ndc.NewActivityStateReplicator(
 			shard,
 			workflowCache,
+			logger,
+		)
+		historyEngImpl.nDCWorkflowStateReplicator = ndc.NewWorkflowStateReplicator(
+			shard,
+			workflowCache,
+			historyEngImpl.eventsReapplier,
+			eventSerializer,
 			logger,
 		)
 	}
@@ -613,8 +621,14 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	ctx context.Context,
 	replicateRequest *historyservice.ReplicateEventsV2Request,
 ) error {
+	return e.nDCHistoryReplicator.ApplyEvents(ctx, replicateRequest)
+}
 
-	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
+func (e *historyEngineImpl) SyncActivity(
+	ctx context.Context,
+	request *historyservice.SyncActivityRequest,
+) (retError error) {
+	return e.nDCActivityStateReplicator.SyncActivityState(ctx, request)
 }
 
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
@@ -622,8 +636,7 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
 	request *historyservice.ReplicateWorkflowStateRequest,
 ) error {
-
-	return e.nDCReplicator.ApplyWorkflowState(ctx, request)
+	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
 func (e *historyEngineImpl) SyncShardStatus(
@@ -643,14 +656,6 @@ func (e *historyEngineImpl) SyncShardStatus(
 		processor.NotifyNewTasks([]tasks.Task{})
 	}
 	return nil
-}
-
-func (e *historyEngineImpl) SyncActivity(
-	ctx context.Context,
-	request *historyservice.SyncActivityRequest,
-) (retError error) {
-
-	return e.nDCActivityReplicator.SyncActivity(ctx, request)
 }
 
 // ResetWorkflowExecution terminates current workflow (if running) and replay & create new workflow

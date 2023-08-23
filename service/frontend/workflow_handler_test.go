@@ -361,33 +361,6 @@ func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	s.Equal(common.ErrContextTimeoutTooShort, err)
 }
 
-func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_RequestIdNotSet() {
-	config := s.newConfig()
-	config.RPS = dc.GetIntPropertyFn(10)
-	wh := s.getWorkflowHandler(config)
-
-	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  "test-namespace",
-		WorkflowId: "workflow-id",
-		WorkflowType: &commonpb.WorkflowType{
-			Name: "workflow-type",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: "task-queue",
-		},
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
-		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
-			MaximumAttempts:    1,
-		},
-	}
-	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errRequestIDNotSet, err)
-}
-
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)

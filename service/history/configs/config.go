@@ -249,6 +249,7 @@ type Config struct {
 	ReplicationStreamSyncStatusDuration      dynamicconfig.DurationPropertyFn
 	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
 	ReplicationProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
+	EnableReplicationEagerRefreshNamespace   dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -439,6 +440,7 @@ func NewConfig(
 		ReplicationStreamSyncStatusDuration:      dc.GetDurationProperty(dynamicconfig.ReplicationStreamSyncStatusDuration, 1*time.Second),
 		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
+		EnableReplicationEagerRefreshNamespace:   dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
 
 		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),

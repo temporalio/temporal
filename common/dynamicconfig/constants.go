@@ -827,6 +827,8 @@ const (
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
+	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
+	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 
 	// keys for worker
 

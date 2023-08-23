@@ -638,6 +638,9 @@ func (a *activities) verifyReplicationTasks(
 				Reason:            reason,
 			})
 
+		case *serviceerror.NamespaceNotFound:
+			return false, skippedList, temporal.NewNonRetryableApplicationError("remoteClient.DescribeMutableState call failed", "NamespaceNotFound", err)
+
 		default:
 			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
 				Counter(metrics.VerifyReplicationTaskFailed.GetMetricName()).Record(1)
