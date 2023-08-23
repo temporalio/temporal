@@ -35,10 +35,14 @@ const (
 	maxAllowedTimer = 100 * 365 * 24 * time.Hour
 )
 
+var (
+	errNegativeDuration = errors.New("negative timer duration")
+)
+
 func ValidateAndCapTimer(delay *time.Duration) error {
 	duration := timestamp.DurationValue(delay)
 	if duration < 0 {
-		return errors.New("negative timer duration")
+		return errNegativeDuration
 	}
 
 	// unix nano (max int64) is 2262-04-11T23:47:16.854775807Z
