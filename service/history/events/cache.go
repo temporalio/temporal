@@ -114,75 +114,11 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 }
 
 func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
-	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
-
-	validKey := e.validateKey(key)
-
-	// Test hook for disabling cache
-	if !e.disabled {
-		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
-		if cacheHit {
-			return eventItem.event, nil
-		}
-	}
-
-	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
-	event, err := e.getHistoryEventFromStore(ctx, key, firstEventID, branchToken)
-	if err != nil {
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
-		e.logger.Error("Cache unable to retrieve event from store",
-			tag.Error(err),
-			tag.WorkflowID(key.WorkflowID),
-			tag.WorkflowRunID(key.RunID),
-			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowEventID(key.EventID))
-		return nil, err
-	}
-
-	// If invalid, return event anyway, but don't store in cache
-	if validKey {
-		e.put(key, event)
-	}
-	return event, nil
+	return e.getEvent(ctx, key, &firstEventID, nil, branchToken)
 }
 
 func (e *CacheImpl) GetEventReverse(ctx context.Context, key EventKey, lastBatchFirstTxnId int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
-	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
-
-	validKey := e.validateKey(key)
-
-	// Test hook for disabling cache
-	if !e.disabled {
-		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
-		if cacheHit {
-			return eventItem.event, nil
-		}
-	}
-
-	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
-	event, err := e.getHistoryEventFromStoreReverse(ctx, key, lastBatchFirstTxnId, branchToken)
-	if err != nil {
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
-		e.logger.Error("Cache unable to retrieve event from store",
-			tag.Error(err),
-			tag.WorkflowID(key.WorkflowID),
-			tag.WorkflowRunID(key.RunID),
-			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowEventID(key.EventID))
-		return nil, err
-	}
-
-	// If invalid, return event anyway, but don't store in cache
-	if validKey {
-		e.put(key, event)
-	}
-	return event, nil
+	return e.getEvent(ctx, key, nil, &lastBatchFirstTxnId, branchToken)
 }
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
@@ -205,6 +141,54 @@ func (e *CacheImpl) DeleteEvent(key EventKey) {
 
 	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
+}
+
+func (e *CacheImpl) getEvent(
+	ctx context.Context,
+	key EventKey,
+	firstEventID *int64,
+	lastBatchFirstTxnId *int64,
+	branchToken []byte,
+) (*historypb.HistoryEvent, error) {
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
+	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+
+	validKey := e.validateKey(key)
+
+	// Test hook for disabling cache
+	if !e.disabled {
+		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
+		if cacheHit {
+			return eventItem.event, nil
+		}
+	}
+
+	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
+	var event *historypb.HistoryEvent
+	var err error
+	if firstEventID != nil {
+		event, err = e.getHistoryEventFromStore(ctx, key, *firstEventID, branchToken)
+	} else if lastBatchFirstTxnId != nil {
+		event, err = e.getHistoryEventFromStoreReverse(ctx, key, *lastBatchFirstTxnId, branchToken)
+	}
+	if err != nil {
+		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		e.logger.Error("Cache unable to retrieve event from store",
+			tag.Error(err),
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID),
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
+			tag.WorkflowEventID(key.EventID))
+		return nil, err
+	}
+
+	// If invalid, return event anyway, but don't store in cache
+	if validKey {
+		e.put(key, event)
+	}
+	return event, nil
 }
 
 func (e *CacheImpl) getHistoryEventFromStore(
