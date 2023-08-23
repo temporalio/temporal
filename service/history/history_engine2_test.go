@@ -1985,7 +1985,8 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 		common.FirstEventID,
 		gomock.Any(),
 	).Return(startEvent, nil).AnyTimes()
-	s.mockEventsCache.EXPECT().GetEvent(
+	_, lastid := ms.GetLastFirstEventIDTxnID()
+	s.mockEventsCache.EXPECT().GetEventReverse(
 		gomock.Any(),
 		events.EventKey{
 			NamespaceID: tests.NamespaceID,
@@ -1994,7 +1995,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			EventID:     timeoutEvent.GetEventId(),
 			Version:     startVersion,
 		},
-		timeoutEvent.GetEventId(),
+		lastid,
 		gomock.Any(),
 	).Return(startEvent, nil).AnyTimes()
 
