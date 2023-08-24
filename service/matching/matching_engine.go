@@ -849,8 +849,6 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId()
 	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
 		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
-	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 	}
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
