@@ -188,13 +188,13 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 	executionState := mutableState.GetExecutionState()
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		closeEvent, err := mutableState.GetCompletionEvent(ctx)
+		closeEventTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return err
 		}
 
 		return taskGenerator.GenerateWorkflowCloseTasks(
-			closeEvent,
+			closeEventTime,
 			false,
 		)
 	}
