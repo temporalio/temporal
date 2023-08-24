@@ -531,7 +531,7 @@ func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData,
 
 func CleanUpDemotedSetId(data *persistencespb.VersioningData, demotedSetId string) *persistencespb.VersioningData {
 	for setIdx, set := range data.GetVersionSets() {
-		if slices.Contains(set.SetIds, demotedSetId) {
+		if len(set.SetIds) > 1 && slices.Contains(set.SetIds[1:], demotedSetId) {
 			newSet := shallowCloneVersionSet(set)
 			newSet.SetIds = util.FilterSlice(set.SetIds, func(setId string) bool {
 				return setId != demotedSetId
