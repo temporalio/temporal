@@ -211,7 +211,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 	s.Equal(len(request.Executions), lastHeartBeat.NextIndex)
-	s.Equal(execution2, lastHeartBeat.LastNotFoundWorkflowExecution)
+	s.Equal(execution2, lastHeartBeat.LastNotVerifiedWorkflowExecution)
 }
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
@@ -272,7 +272,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 			s.Equal(0, lastHeartBeat.NextIndex)
 		}
 
-		s.Equal(emptyExecutions, lastHeartBeat.LastNotFoundWorkflowExecution)
+		s.Equal(emptyExecutions, lastHeartBeat.LastNotVerifiedWorkflowExecution)
 		s.True(lastHeartBeat.CheckPoint.After(start))
 	}
 }
@@ -310,7 +310,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	s.Greater(len(iceptor.replicationRecordedHeartbeats), 0)
 	lastHeartBeat := iceptor.replicationRecordedHeartbeats[len(iceptor.replicationRecordedHeartbeats)-1]
 	s.Equal(0, lastHeartBeat.NextIndex)
-	s.Equal(execution1, lastHeartBeat.LastNotFoundWorkflowExecution)
+	s.Equal(execution1, lastHeartBeat.LastNotVerifiedWorkflowExecution)
 }
 
 func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
@@ -505,7 +505,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
 		s.Equal(recorder.lastHeartBeat, details)
 		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
-			s.Equal(execution1, details.LastNotFoundWorkflowExecution)
+			s.Equal(execution1, details.LastNotVerifiedWorkflowExecution)
 		}
 
 		if len(request.Executions) > 0 {

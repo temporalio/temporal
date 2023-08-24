@@ -61,10 +61,10 @@ type (
 	}
 
 	replicationTasksHeartbeatDetails struct {
-		NextIndex                     int
-		CheckPoint                    time.Time
-		LastNotFoundWorkflowExecution commonpb.WorkflowExecution
-		LastVerifiedIndex             int
+		NextIndex                        int
+		CheckPoint                       time.Time
+		LastNotVerifiedWorkflowExecution commonpb.WorkflowExecution
+		LastVerifiedIndex                int
 	}
 
 	verifyStatus int
@@ -683,7 +683,7 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		if !r.isVerified() {
-			details.LastNotFoundWorkflowExecution = request.Executions[details.NextIndex]
+			details.LastNotVerifiedWorkflowExecution = request.Executions[details.NextIndex]
 			break
 		}
 
@@ -786,7 +786,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 			return response, temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
 					diff.Minutes(),
-					details.LastNotFoundWorkflowExecution, details.CheckPoint),
+					details.LastNotVerifiedWorkflowExecution, details.CheckPoint),
 				"", nil)
 		}
 	}
