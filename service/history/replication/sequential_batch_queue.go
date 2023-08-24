@@ -97,9 +97,9 @@ func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 		return
 	}
 
-	// case 2: lastTask is a containerTask, try to combine, if success, put the task into individual task queue and return
-	lt, lastTaskIsContainer := q.lastTask.(*batchedTask)
-	if lastTaskIsContainer {
+	// case 2: lastTask is a batchedTask, try to combine, if success, put the task into individual task queue and return
+	lt, lastTaskIsBatchedTask := q.lastTask.(*batchedTask)
+	if lastTaskIsBatchedTask {
 		err := lt.addTask(t)
 		if err == nil {
 			q.individualTaskQueue = append(q.individualTaskQueue, t)
@@ -107,9 +107,9 @@ func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 		}
 	}
 
-	// case 3: failed to combine: If the incoming task will be the last task, create new container
+	// case 3: failed to combine: If the incoming task will be the last task, create new batchedTask
 	if SequentialTaskQueueCompareLess(q.lastTask, task) {
-		task = q.createContainerTask(t)
+		task = q.createBatchedTask(t)
 		q.individualTaskQueue = append(q.individualTaskQueue, t)
 	}
 
@@ -121,7 +121,7 @@ func (q *SequentialBatchableTaskQueue) Remove() (task TrackableExecutableTask) {
 	q.Lock()
 	defer q.Unlock()
 	defer func() {
-		if _, isContainer := task.(*batchedTask); !isContainer {
+		if _, isBatchedTask := task.(*batchedTask); !isBatchedTask {
 			q.size--
 		}
 	}()
@@ -193,7 +193,7 @@ func (q *SequentialBatchableTaskQueue) updateLastTask(task TrackableExecutableTa
 	}
 }
 
-func (q *SequentialBatchableTaskQueue) createContainerTask(task BatchableTask) *batchedTask {
+func (q *SequentialBatchableTaskQueue) createBatchedTask(task BatchableTask) *batchedTask {
 	return &batchedTask{
 		batchedTask:     task,
 		individualTasks: append([]BatchableTask{}, task),
