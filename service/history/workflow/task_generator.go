@@ -203,7 +203,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				delay = retention
 			}
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
-			archiveTime := closedTime.Add(delay)
+			archiveTime := timestamp.TimeValue(closedTime).Add(delay)
 
 			// This flag is only untrue for old server versions which were using the archival workflow instead of the
 			// archival queue.
