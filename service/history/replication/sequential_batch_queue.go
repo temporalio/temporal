@@ -47,7 +47,7 @@ type (
 	}
 )
 
-func NewSequentialCombinableTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+func NewSequentialBatchableTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialBatchableTaskQueue{
 		id: task.QueueID(),
 
@@ -81,23 +81,23 @@ func (q *SequentialBatchableTaskQueue) Peek() TrackableExecutableTask {
 	}
 }
 
-// Add will try to combine input task with the last task in the queue. Since most likely incoming task
-// are ordered by task ID, so we only try to combine incoming task with last task in the queue.
+// Add will try to batch input task with the last task in the queue. Since most likely incoming task
+// are ordered by task ID, so we only try to batch incoming task with last task in the queue.
 func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 	q.Lock()
 	defer q.Unlock()
 
 	q.size++
-	// case 1: input task is not combinable: simply add task into the queue
-	t, isCombinable := task.(BatchableTask)
+	// case 1: input task is not batchable: simply add task into the queue
+	t, isBatchable := task.(BatchableTask)
 
-	if !isCombinable {
+	if !isBatchable {
 		q.mainQueue.Add(task)
 		q.updateLastTask(task)
 		return
 	}
 
-	// case 2: lastTask is a batchedTask, try to combine, if success, put the task into individual task queue and return
+	// case 2: lastTask is a batchedTask, try to addTask, if success, put the task into individual task queue and return
 	lt, lastTaskIsBatchedTask := q.lastTask.(*batchedTask)
 	if lastTaskIsBatchedTask {
 		err := lt.addTask(t)
@@ -107,7 +107,7 @@ func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 		}
 	}
 
-	// case 3: failed to combine: If the incoming task will be the last task, create new batchedTask
+	// case 3: failed to addTask: If the incoming task will be the last task, create new batchedTask
 	if SequentialTaskQueueCompareLess(q.lastTask, task) {
 		task = q.createBatchedTask(t)
 		q.individualTaskQueue = append(q.individualTaskQueue, t)
