@@ -25,6 +25,8 @@
 package service
 
 import (
+	"sync/atomic"
+
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -32,14 +34,19 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/util"
 )
 
 type (
+	PersistenceLazyLoadedServiceResolver *atomic.Value // value type is membership.ServiceResolver
+
 	PersistenceRateLimitingParams struct {
 		fx.Out
 
@@ -64,6 +71,23 @@ type (
 	}
 )
 
+var PersistenceLazyLoadedServiceResolverModule = fx.Options(
+	fx.Provide(func() PersistenceLazyLoadedServiceResolver {
+		return &atomic.Value{}
+	}),
+	fx.Invoke(initPersistenceLazyLoadedServiceResolver),
+)
+
+func initPersistenceLazyLoadedServiceResolver(
+	serviceName primitives.ServiceName,
+	logger log.SnTaggedLogger,
+	serviceResolver membership.ServiceResolver,
+	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
+) {
+	(*lazyLoadedServiceResolver).Store(serviceResolver)
+	logger.Info("Initialized service resolver for persistence rate limiting", tag.Service(serviceName))
+}
+
 func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
@@ -72,9 +96,14 @@ func NewPersistenceRateLimitingParams(
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
+	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
-		PersistenceMaxQps:                  PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceMaxQps: PersistenceMaxQpsFn(
+			maxQps,
+			globalMaxQps,
+			lazyLoadedServiceResolver,
+		),
 		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
@@ -86,19 +115,29 @@ func NewPersistenceRateLimitingParams(
 func PersistenceMaxQpsFn(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
+	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 ) persistenceClient.PersistenceMaxQps {
 	return func() int {
-		// if globalMaxQps() > 0 {
-		// 	// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
-		// 	// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
-		// 	// as it will cause circular dependency.
-		// 	// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
-		// 	// if err == nil && ringSize > 0 {
-		// 	// 	avgQuota := common.MaxInt(globalMaxQps()/ringSize, 1)
-		// 	// 	return common.MinInt(avgQuota, maxQps())
-		// 	// }
-		// }
-		return maxQps()
+		// TODO: create lazy loaded version of ClusterAwareQuotaCalculator and
+		// ClusterAwareNamespaceSpecificQuotaCalculator
+		instanceLimit := maxQps()
+
+		value := (*lazyLoadedServiceResolver).Load()
+		if value == nil {
+			return instanceLimit
+		}
+
+		memberCount := value.(membership.ServiceResolver).MemberCount()
+		if memberCount <= 0 {
+			return instanceLimit
+		}
+
+		globalRps := globalMaxQps()
+		if globalRps <= 0 {
+			return instanceLimit
+		}
+
+		return util.Min(instanceLimit, globalRps/memberCount)
 	}
 }
 
