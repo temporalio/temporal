@@ -25,7 +25,6 @@
 package ndc
 
 import (
-	"context"
 	"reflect"
 	"runtime"
 	"testing"
@@ -40,7 +39,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -52,7 +50,6 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockNamespaceCache  *namespace.MockRegistry
 		mockContext         *workflow.MockContext
 		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -72,7 +69,6 @@ func (s *workflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.mockContext = workflow.NewMockContext(s.controller)
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
@@ -101,8 +97,6 @@ func (s *workflowSuite) TestGetMethods() {
 	}).AnyTimes()
 
 	nDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
@@ -181,8 +175,6 @@ func (s *workflowSuite) TestHappensAfter_SameVersion_LatrgerTaskID() {
 
 func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	nDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
@@ -192,8 +184,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingMockContext := workflow.NewMockContext(s.controller)
 	incomingMockMutableState := workflow.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,
@@ -246,8 +236,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		RunId: s.runID,
 	}).AnyTimes()
 	nDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
@@ -260,8 +248,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	incomingMockContext := workflow.NewMockContext(s.controller)
 	incomingMockMutableState := workflow.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,
@@ -334,8 +320,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		}).AnyTimes()
 
 	nDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		s.mockContext,
 		s.mockMutableState,
@@ -348,8 +332,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	incomingMockContext := workflow.NewMockContext(s.controller)
 	incomingMockMutableState := workflow.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
-		context.Background(),
-		s.mockNamespaceCache,
 		s.mockClusterMetadata,
 		incomingMockContext,
 		incomingMockMutableState,

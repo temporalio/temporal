@@ -1427,8 +1427,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		resetRunID,
 		uuid.New(),
 		ndc.NewWorkflow(
-			resetWorkflowCtx,
-			t.registry,
 			t.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,

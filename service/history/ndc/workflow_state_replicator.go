@@ -245,8 +245,6 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	return r.transactionMgr.createWorkflow(
 		ctx,
 		NewWorkflow(
-			ctx,
-			r.namespaceRegistry,
 			r.clusterMetadata,
 			wfCtx,
 			mutableState,
