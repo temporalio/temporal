@@ -448,9 +448,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
 			&historyservice.GetWorkflowExecutionHistoryRequest{
-				NamespaceId:            namespaceID.String(),
-				Request:                request,
-				SendRawWorkflowHistory: wh.config.SendRawWorkflowHistory(request.GetNamespace()),
+				NamespaceId: namespaceID.String(),
+				Request:     request,
 			})
 		if err != nil {
 			return nil, err

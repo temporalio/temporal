@@ -5421,7 +5421,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 			SkipArchival:           true,
 		},
-		SendRawWorkflowHistory: false,
 	}
 
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
@@ -5547,6 +5546,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		BranchToken: branchToken,
 	})
 	s.NoError(err)
+	s.config.SendRawWorkflowHistory = func(string) bool { return true }
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -5557,7 +5557,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
 			SkipArchival:           true,
 		},
-		SendRawWorkflowHistory: true,
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
