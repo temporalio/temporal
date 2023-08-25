@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -135,6 +136,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 	}
 )
@@ -193,6 +195,7 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
@@ -818,7 +821,7 @@ func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 ) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
-	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
+	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.versionChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 
 func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(

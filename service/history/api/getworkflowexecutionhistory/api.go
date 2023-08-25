@@ -33,10 +33,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
@@ -49,6 +51,7 @@ func Invoke(
 	ctx context.Context,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	versionChecker headers.VersionChecker,
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 	persistenceVisibilityMgr manager.VisibilityManager,
@@ -293,7 +296,8 @@ func Invoke(
 	//
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// Revisit this once we have an SDK deprecation policy.
-	if isCloseEventOnly && !request.FollowsNextRunId && len(history.Events) > 0 {
+	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
+	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
 		lastEvent := history.Events[len(history.Events)-1]
 		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
 		if err != nil {

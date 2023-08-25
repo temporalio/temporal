@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -232,6 +233,7 @@ func (s *engineSuite) SetupTest() {
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
 		throttledLogger:            log.NewNoopLogger(),
 		persistenceVisibilityMgr:   s.mockVisibilityMgr,
+		versionChecker:             headers.NewDefaultVersionChecker(),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -5420,7 +5422,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 			SkipArchival:           true,
 		},
 		SendRawWorkflowHistory: false,
-		FollowsNextRunId:       true,
 	}
 
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
@@ -5507,7 +5508,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
 	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
-	req.FollowsNextRunId = false
 	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
@@ -5558,7 +5558,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 			SkipArchival:           true,
 		},
 		SendRawWorkflowHistory: true,
-		FollowsNextRunId:       true,
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
@@ -5591,7 +5590,8 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 		Size:              1,
 	}, nil).Times(1)
 
-	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	ctx := headers.SetVersionsForTests(context.Background(), "1.10.1", headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
 	s.Empty(resp.Response.History.Events)

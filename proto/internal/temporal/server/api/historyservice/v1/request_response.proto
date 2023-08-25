@@ -697,7 +697,6 @@ message GetWorkflowExecutionHistoryRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest request = 2;
     bool send_raw_workflow_history = 3;
-    bool follows_next_run_id = 4;
 }
 
 message GetWorkflowExecutionHistoryResponse {

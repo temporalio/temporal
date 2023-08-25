@@ -451,7 +451,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				NamespaceId:            namespaceID.String(),
 				Request:                request,
 				SendRawWorkflowHistory: wh.config.SendRawWorkflowHistory(request.GetNamespace()),
-				FollowsNextRunId:       wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID),
 			})
 		if err != nil {
 			return nil, err
