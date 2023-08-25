@@ -58,9 +58,8 @@ const (
 )
 
 const (
-	cacheInitialSize = 10 * 1024
-	cacheMaxSize     = 64 * 1024
-	cacheTTL         = 0 // 0 means infinity
+	cacheMaxSize = 64 * 1024
+	cacheTTL     = 0 // 0 means infinity
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
@@ -78,12 +77,10 @@ const (
 
 var (
 	cacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             cacheTTL,
+		TTL: cacheTTL,
 	}
 	readthroughNotFoundCacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             readthroughCacheTTL,
+		TTL: readthroughCacheTTL,
 	}
 )
 
@@ -132,7 +129,6 @@ type (
 
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
-		common.Daemon
 		common.Pingable
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
@@ -144,6 +140,11 @@ type (
 		// State, ReplicationState, ActiveCluster, or isGlobalNamespace config changed.
 		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
 		UnregisterStateChangeCallback(key any)
+		// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
+		// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
+		GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error)
+		Start()
+		Stop()
 	}
 
 	registry struct {
@@ -172,6 +173,9 @@ type (
 		// readthroughNotFoundCache stores namespaces that missed the above caches
 		// AND was not found when reading through to the persistence layer
 		readthroughNotFoundCache cache.Cache
+
+		// Temporary solution to force read search attributes from persistence
+		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -181,6 +185,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
+	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
@@ -196,6 +201,8 @@ func NewRegistry(
 		refreshInterval:          refreshInterval,
 		stateChangeCallbacks:     make(map[any]StateChangeCallbackFn),
 		readthroughNotFoundCache: cache.New(cacheMaxSize, &readthroughNotFoundCacheOpts),
+
+		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 	}
 	return reg
 }
@@ -335,6 +342,24 @@ func (r *registry) GetNamespaceName(
 	return ns.Name(), nil
 }
 
+// GetCustomSearchAttributesMapper is a temporary solution to be able to get search attributes
+// with from persistence if forceSearchAttributesCacheRefreshOnRead is true.
+func (r *registry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error) {
+	var ns *Namespace
+	var err error
+	if r.forceSearchAttributesCacheRefreshOnRead() {
+		r.readthroughLock.Lock()
+		defer r.readthroughLock.Unlock()
+		ns, err = r.getNamespaceByNamePersistence(name)
+	} else {
+		ns, err = r.GetNamespace(name)
+	}
+	if err != nil {
+		return CustomSearchAttributesMapper{}, err
+	}
+	return ns.CustomSearchAttributesMapper(), nil
+}
+
 func (r *registry) refreshLoop(ctx context.Context) error {
 	// Put timer events on our channel so we can select on just one below.
 	go func() {
@@ -366,9 +391,11 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 					return nil
 				default:
 					r.logger.Error("Error refreshing namespace cache", tag.Error(err))
+					timer := time.NewTimer(CacheRefreshFailureRetryInterval)
 					select {
-					case <-time.After(CacheRefreshFailureRetryInterval):
+					case <-timer.C:
 					case <-ctx.Done():
+						timer.Stop()
 						return nil
 					}
 				}

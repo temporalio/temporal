@@ -244,7 +244,16 @@ func startTaskProcessor(
 			case BatchTypeSignal:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
-						return sdkClient.SignalWorkflow(ctx, workflowID, runID, batchParams.SignalParams.SignalName, batchParams.SignalParams.Input)
+						_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							SignalName: batchParams.SignalParams.SignalName,
+							Input:      batchParams.SignalParams.Input,
+						})
+						return err
 					})
 			case BatchTypeDelete:
 				err = processTask(ctx, limiter, task,
@@ -275,7 +284,7 @@ func startTaskProcessor(
 							Reason:                    batchParams.Reason,
 							WorkflowTaskFinishEventId: eventId,
 							RequestId:                 uuid.New(),
-							ResetReapplyType:          batchParams.ResetParams.ResetReapplytType,
+							ResetReapplyType:          batchParams.ResetParams.ResetReapplyType,
 						})
 						return err
 					})

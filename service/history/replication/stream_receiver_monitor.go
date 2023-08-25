@@ -36,12 +36,14 @@ import (
 )
 
 const (
-	streamReceiverMonitorInterval = 5 * time.Second
+	streamReceiverMonitorInterval = 2 * time.Second
 )
 
 type (
 	StreamReceiverMonitor interface {
-		common.Daemon
+		RegisterInboundStream(streamSender StreamSender)
+		Start()
+		Stop()
 	}
 	StreamReceiverMonitorImpl struct {
 		ProcessToolBox
@@ -51,7 +53,8 @@ type (
 		shutdownOnce channel.ShutdownOnce
 
 		sync.Mutex
-		streams map[ClusterShardKeyPair]*StreamReceiver
+		inboundStreams  map[ClusterShardKeyPair]StreamSender
+		outboundStreams map[ClusterShardKeyPair]StreamReceiver
 	}
 )
 
@@ -66,7 +69,8 @@ func NewStreamReceiverMonitor(
 		status:       streamStatusInitialized,
 		shutdownOnce: channel.NewShutdownOnce(),
 
-		streams: make(map[ClusterShardKeyPair]*StreamReceiver),
+		inboundStreams:  make(map[ClusterShardKeyPair]StreamSender),
+		outboundStreams: make(map[ClusterShardKeyPair]StreamReceiver),
 	}
 }
 
@@ -102,11 +106,26 @@ func (m *StreamReceiverMonitorImpl) Stop() {
 	m.shutdownOnce.Shutdown()
 	m.Lock()
 	defer m.Unlock()
-	for serverKey, stream := range m.streams {
+	for serverKey, stream := range m.outboundStreams {
 		stream.Stop()
-		delete(m.streams, serverKey)
+		delete(m.outboundStreams, serverKey)
 	}
 	m.Logger.Info("StreamReceiverMonitor stopped.")
+}
+
+func (m *StreamReceiverMonitorImpl) RegisterInboundStream(
+	streamSender StreamSender,
+) {
+	streamKey := streamSender.Key()
+
+	m.Lock()
+	defer m.Unlock()
+
+	if staleSender, ok := m.inboundStreams[streamKey]; ok {
+		staleSender.Stop()
+		delete(m.inboundStreams, streamKey)
+	}
+	m.inboundStreams[streamKey] = streamSender
 }
 
 func (m *StreamReceiverMonitorImpl) eventLoop() {
@@ -122,27 +141,71 @@ func (m *StreamReceiverMonitorImpl) eventLoop() {
 		}
 	})
 	defer m.ClusterMetadata.UnRegisterMetadataChangeCallback(m)
-	m.reconcileStreams()
+	m.reconcileOutboundStreams()
 
 Loop:
 	for !m.shutdownOnce.IsShutdown() {
 		select {
 		case <-clusterMetadataChangeChan:
-			m.reconcileStreams()
+			m.reconcileInboundStreams()
+			m.reconcileOutboundStreams()
 		case <-ticker.C:
-			m.reconcileStreams()
+			m.reconcileInboundStreams()
+			m.reconcileOutboundStreams()
 		case <-m.shutdownOnce.Channel():
 			break Loop
 		}
 	}
 }
 
-func (m *StreamReceiverMonitorImpl) reconcileStreams() {
-	streamKeys := m.generateStreamKeys()
-	m.doReconcileStreams(streamKeys)
+func (m *StreamReceiverMonitorImpl) reconcileInboundStreams() {
+	streamKeys := m.generateInboundStreamKeys()
+	m.doReconcileInboundStreams(streamKeys)
 }
 
-func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair]struct{} {
+func (m *StreamReceiverMonitorImpl) reconcileOutboundStreams() {
+	streamKeys := m.generateOutboundStreamKeys()
+	m.doReconcileOutboundStreams(streamKeys)
+}
+
+func (m *StreamReceiverMonitorImpl) generateInboundStreamKeys() map[ClusterShardKeyPair]struct{} {
+	allClusterInfo := m.ClusterMetadata.GetAllClusterInfo()
+
+	clientClusterIDs := make(map[int32]struct{})
+	serverClusterID := int32(m.ClusterMetadata.GetClusterID())
+	clusterIDToShardCount := make(map[int32]int32)
+	for _, clusterInfo := range allClusterInfo {
+		clusterIDToShardCount[int32(clusterInfo.InitialFailoverVersion)] = clusterInfo.ShardCount
+
+		if !clusterInfo.Enabled || int32(clusterInfo.InitialFailoverVersion) == serverClusterID {
+			continue
+		}
+		clientClusterIDs[int32(clusterInfo.InitialFailoverVersion)] = struct{}{}
+	}
+	streamKeys := make(map[ClusterShardKeyPair]struct{})
+	for _, shardID := range m.ShardController.ShardIDs() {
+		for clientClusterID := range clientClusterIDs {
+			serverShardID := shardID
+			for _, clientShardID := range common.MapShardID(
+				clusterIDToShardCount[serverClusterID],
+				clusterIDToShardCount[clientClusterID],
+				serverShardID,
+			) {
+				m.Logger.Debug(fmt.Sprintf(
+					"inbound cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					clientClusterID, clientShardID, serverClusterID, serverShardID,
+				))
+				streamKeys[ClusterShardKeyPair{
+					Client: NewClusterShardKey(clientClusterID, clientShardID),
+					Server: NewClusterShardKey(serverClusterID, serverShardID),
+				}] = struct{}{}
+			}
+		}
+	}
+	return streamKeys
+}
+
+func (m *StreamReceiverMonitorImpl) generateOutboundStreamKeys() map[ClusterShardKeyPair]struct{} {
 	allClusterInfo := m.ClusterMetadata.GetAllClusterInfo()
 
 	clientClusterID := int32(m.ClusterMetadata.GetClusterID())
@@ -166,7 +229,7 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 				clientShardID,
 			) {
 				m.Logger.Debug(fmt.Sprintf(
-					"cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					"outbound cluster shard ID %v/%v -> cluster shard ID %v/%v",
 					clientClusterID, clientShardID, serverClusterID, serverShardID,
 				))
 				streamKeys[ClusterShardKeyPair{
@@ -179,7 +242,7 @@ func (m *StreamReceiverMonitorImpl) generateStreamKeys() map[ClusterShardKeyPair
 	return streamKeys
 }
 
-func (m *StreamReceiverMonitorImpl) doReconcileStreams(
+func (m *StreamReceiverMonitorImpl) doReconcileInboundStreams(
 	streamKeys map[ClusterShardKeyPair]struct{},
 ) {
 	m.Lock()
@@ -188,25 +251,44 @@ func (m *StreamReceiverMonitorImpl) doReconcileStreams(
 		return
 	}
 
-	for streamKey, stream := range m.streams {
+	for streamKey, stream := range m.inboundStreams {
 		if !stream.IsValid() {
 			stream.Stop()
-			delete(m.streams, streamKey)
-		}
-		if _, ok := streamKeys[streamKey]; !ok {
+			delete(m.inboundStreams, streamKey)
+		} else if _, ok := streamKeys[streamKey]; !ok {
 			stream.Stop()
-			delete(m.streams, streamKey)
+			delete(m.inboundStreams, streamKey)
+		}
+	}
+}
+
+func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
+	streamKeys map[ClusterShardKeyPair]struct{},
+) {
+	m.Lock()
+	defer m.Unlock()
+	if m.shutdownOnce.IsShutdown() {
+		return
+	}
+
+	for streamKey, stream := range m.outboundStreams {
+		if !stream.IsValid() {
+			stream.Stop()
+			delete(m.outboundStreams, streamKey)
+		} else if _, ok := streamKeys[streamKey]; !ok {
+			stream.Stop()
+			delete(m.outboundStreams, streamKey)
 		}
 	}
 	for streamKey := range streamKeys {
-		if _, ok := m.streams[streamKey]; !ok {
+		if _, ok := m.outboundStreams[streamKey]; !ok {
 			stream := NewStreamReceiver(
 				m.ProcessToolBox,
 				streamKey.Client,
 				streamKey.Server,
 			)
 			stream.Start()
-			m.streams[streamKey] = stream
+			m.outboundStreams[streamKey] = stream
 		}
 	}
 }

@@ -57,7 +57,7 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 20m
+TEST_TIMEOUT := 30m
 
 
 PROTO_ROOT := proto
@@ -70,9 +70,7 @@ ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
-MAIN_BRANCH	   = master
-MERGE_BASE     ?= $(shell git merge-base $(MAIN_BRANCH) HEAD)
-MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
+MAIN_BRANCH    := main
 
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
@@ -117,7 +115,7 @@ update-goimports:
 
 update-linters:
 	@printf $(COLOR) "Install/update linters..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -136,6 +134,10 @@ update-proto-linters:
 update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
 	@go install github.com/temporalio/tctl/cmd/tctl@latest
+
+update-cli:
+	@printf $(COLOR) "Install/update cli..."
+	curl -sSf https://temporal.download/cli.sh | sh
 
 update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
@@ -166,7 +168,7 @@ protoc: $(PROTO_OUT)
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
 		protoc --fatal_warnings $(PROTO_IMPORTS) \
-		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
+		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
 			$(PROTO_DIR)*.proto \
 	$(NEWLINE))
 
@@ -234,6 +236,8 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
+goimports: MERGE_BASE ?= $(shell git merge-base $(MAIN_BRANCH) HEAD)
+goimports: MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
 	@printf "Merge base: $(MERGE_BASE)\n"

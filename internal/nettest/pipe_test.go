@@ -34,7 +34,7 @@ import (
 func TestPipe_Accept(t *testing.T) {
 	t.Parallel()
 
-	listener := NewPipe()
+	pipe := NewPipe()
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -43,7 +43,7 @@ func TestPipe_Accept(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		c, err := listener.Accept(nil)
+		c, err := pipe.Accept(nil)
 		assert.NoError(t, err)
 
 		defer func() {
@@ -51,7 +51,7 @@ func TestPipe_Accept(t *testing.T) {
 		}()
 	}()
 
-	c, err := listener.Connect(nil)
+	c, err := pipe.Connect(nil)
 	assert.NoError(t, err)
 
 	defer func() {
@@ -62,19 +62,19 @@ func TestPipe_Accept(t *testing.T) {
 func TestPipe_ClientCanceled(t *testing.T) {
 	t.Parallel()
 
-	listener := NewPipe()
+	pipe := NewPipe()
 	done := make(chan struct{})
 	close(done) // hi efe
-	_, err := listener.Connect(done)
+	_, err := pipe.Connect(done)
 	assert.ErrorIs(t, err, ErrCanceled)
 }
 
 func TestPipe_ServerCanceled(t *testing.T) {
 	t.Parallel()
 
-	listener := NewPipe()
+	pipe := NewPipe()
 	done := make(chan struct{})
 	close(done)
-	_, err := listener.Accept(done)
+	_, err := pipe.Accept(done)
 	assert.ErrorIs(t, err, ErrCanceled)
 }

@@ -26,8 +26,6 @@ package ndc
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -35,17 +33,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
 
-	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -120,16 +113,11 @@ type (
 			events [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
 		) error
-		ApplyWorkflowState(
-			ctx context.Context,
-			request *historyservice.ReplicateWorkflowStateRequest,
-		) error
 	}
 
 	HistoryReplicatorImpl struct {
 		shard             shard.Context
 		clusterMetadata   cluster.Metadata
-		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
 		metricsHandler    metrics.Handler
 		namespaceRegistry namespace.Registry
@@ -157,15 +145,14 @@ func NewHistoryReplicator(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
-	logger log.Logger,
 	eventSerializer serialization.Serializer,
+	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
 	transactionMgr := newTransactionMgr(shard, workflowCache, eventsReapplier, logger)
 	replicator := &HistoryReplicatorImpl{
 		shard:             shard,
 		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
 		historySerializer: eventSerializer,
 		metricsHandler:    shard.GetMetricsHandler(),
 		namespaceRegistry: shard.GetNamespaceRegistry(),
@@ -267,126 +254,6 @@ func (r *HistoryReplicatorImpl) ApplyEventBlobs(
 	}
 
 	return r.doApplyEvents(ctx, task)
-}
-
-func (r *HistoryReplicatorImpl) ApplyWorkflowState(
-	ctx context.Context,
-	request *historyservice.ReplicateWorkflowStateRequest,
-) (retError error) {
-	executionInfo := request.GetWorkflowState().GetExecutionInfo()
-	executionState := request.GetWorkflowState().GetExecutionState()
-	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
-	wid := executionInfo.GetWorkflowId()
-	rid := executionState.GetRunId()
-	if executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
-	}
-
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
-		workflow.LockPriorityLow,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			releaseFn(errPanic)
-			panic(rec)
-		} else {
-			releaseFn(retError)
-		}
-	}()
-
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-	lastEventItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-	if err != nil {
-		return err
-	}
-
-	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
-
-	branchInfo, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().ParseHistoryBranchInfo(
-		currentVersionHistory.GetBranchToken(),
-	)
-	if err != nil {
-		return err
-	}
-	newHistoryBranchToken, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
-		request.NamespaceId,
-		branchInfo.GetTreeId(),
-		&branchInfo.BranchId,
-		branchInfo.Ancestors,
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	lastEventTime, lastFirstTxnID, err := r.backfillHistory(
-		ctx,
-		request.GetRemoteCluster(),
-		namespaceID,
-		wid,
-		rid,
-		lastEventItem.GetEventId(),
-		lastEventItem.GetVersion(),
-		newHistoryBranchToken,
-	)
-	if err != nil {
-		return err
-	}
-
-	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	mutableState, err := workflow.NewSanitizedMutableState(
-		r.shard,
-		r.shard.GetEventsCache(),
-		r.logger,
-		ns,
-		request.GetWorkflowState(),
-		lastFirstTxnID,
-		lastEventItem.GetVersion(),
-	)
-	if err != nil {
-		return err
-	}
-
-	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
-	if err != nil {
-		return err
-	}
-
-	taskRefresh := workflow.NewTaskRefresher(r.shard, r.shard.GetConfig(), r.namespaceRegistry, r.logger)
-	err = taskRefresh.RefreshTasks(ctx, mutableState)
-	if err != nil {
-		return err
-	}
-	return r.transactionMgr.createWorkflow(
-		ctx,
-		timestamp.TimeValue(lastEventTime),
-		NewWorkflow(
-			ctx,
-			r.namespaceRegistry,
-			r.clusterMetadata,
-			wfCtx,
-			mutableState,
-			releaseFn,
-		),
-	)
 }
 
 func (r *HistoryReplicatorImpl) doApplyEvents(
@@ -499,7 +366,6 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 
 	err = r.transactionMgr.createWorkflow(
 		ctx,
-		task.getEventTime(),
 		NewWorkflow(
 			ctx,
 			r.namespaceRegistry,
@@ -637,7 +503,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 	err = r.transactionMgr.updateWorkflow(
 		ctx,
-		task.getEventTime(),
 		isRebuilt,
 		targetWorkflow,
 		newWorkflow,
@@ -702,7 +567,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 		return err
 	}
 
-	transactionID, err := r.shard.GenerateTaskID()
+	transactionIDs, err := r.shard.GenerateTaskIDs(len(task.getEvents()))
 	if err != nil {
 		return err
 	}
@@ -715,7 +580,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
 			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
-			TxnID:       transactionID,
+			TxnID:       transactionIDs[i],
 			Events:      events,
 		}
 	}
@@ -883,7 +748,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	err = r.transactionMgr.createWorkflow(
 		ctx,
-		task.getEventTime(),
 		targetWorkflow,
 	)
 	if err != nil {
@@ -908,210 +772,4 @@ func (r *HistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
-}
-
-func (r *HistoryReplicatorImpl) backfillHistory(
-	ctx context.Context,
-	remoteClusterName string,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	lastEventID int64,
-	lastEventVersion int64,
-	branchToken []byte,
-) (*time.Time, int64, error) {
-
-	// Get the last batch node id to check if the history data is already in DB.
-	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
-		ctx,
-		branchToken,
-		lastEventID,
-	))
-	var lastBatchNodeID int64
-	for localHistoryIterator.HasNext() {
-		localHistoryBatch, err := localHistoryIterator.Next()
-		switch err.(type) {
-		case nil:
-			if len(localHistoryBatch.GetEvents()) > 0 {
-				lastBatchNodeID = localHistoryBatch.GetEvents()[0].GetEventId()
-			}
-		case *serviceerror.NotFound:
-		default:
-			return nil, common.EmptyEventTaskID, err
-		}
-	}
-
-	remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
-		ctx,
-		remoteClusterName,
-		namespaceID,
-		workflowID,
-		runID,
-		lastEventID,
-		lastEventVersion),
-	)
-	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
-	historyBranch, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken)
-	if err != nil {
-		return nil, common.EmptyEventTaskID, err
-	}
-
-	prevTxnID := common.EmptyEventTaskID
-	var lastHistoryBatch *commonpb.DataBlob
-	var prevBranchID string
-	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
-	sortedAncestorsIdx := 0
-	var ancestors []*persistencespb.HistoryBranchRange
-
-BackfillLoop:
-	for remoteHistoryIterator.HasNext() {
-		historyBlob, err := remoteHistoryIterator.Next()
-		if err != nil {
-			return nil, common.EmptyEventTaskID, err
-		}
-
-		if historyBlob.nodeID <= lastBatchNodeID {
-			// The history batch already in DB.
-			continue BackfillLoop
-		}
-
-		branchID := historyBranch.GetBranchId()
-		if sortedAncestorsIdx < len(sortedAncestors) {
-			currentAncestor := sortedAncestors[sortedAncestorsIdx]
-			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-				// update ancestor
-				ancestors = append(ancestors, currentAncestor)
-				sortedAncestorsIdx++
-			}
-			if sortedAncestorsIdx < len(sortedAncestors) {
-				// use ancestor branch id
-				currentAncestor = sortedAncestors[sortedAncestorsIdx]
-				branchID = currentAncestor.GetBranchId()
-				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-					return nil, common.EmptyEventTaskID, serviceerror.NewInternal(
-						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
-							historyBlob.nodeID,
-							currentAncestor.GetBeginNodeId(),
-							currentAncestor.GetEndNodeId()),
-					)
-				}
-			}
-		}
-
-		filteredHistoryBranch, err := historyBranchUtil.UpdateHistoryBranchInfo(
-			branchToken,
-			&persistencespb.HistoryBranch{
-				TreeId:    historyBranch.GetTreeId(),
-				BranchId:  branchID,
-				Ancestors: ancestors,
-			},
-		)
-		if err != nil {
-			return nil, common.EmptyEventTaskID, err
-		}
-		txnID, err := r.shard.GenerateTaskID()
-		if err != nil {
-			return nil, common.EmptyEventTaskID, err
-		}
-		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shard.GetShardID(),
-			IsNewBranch:       prevBranchID != branchID,
-			BranchToken:       filteredHistoryBranch,
-			History:           historyBlob.rawHistory,
-			PrevTransactionID: prevTxnID,
-			TransactionID:     txnID,
-			NodeID:            historyBlob.nodeID,
-			Info: persistence.BuildHistoryGarbageCleanupInfo(
-				namespaceID.String(),
-				workflowID,
-				runID,
-			),
-		})
-		if err != nil {
-			return nil, common.EmptyEventTaskID, err
-		}
-		prevTxnID = txnID
-		prevBranchID = branchID
-		lastHistoryBatch = historyBlob.rawHistory
-	}
-
-	var lastEventTime *time.Time
-	events, _ := r.historySerializer.DeserializeEvents(lastHistoryBatch)
-	if len(events) > 0 {
-		lastEventTime = events[len(events)-1].EventTime
-	}
-	return lastEventTime, prevTxnID, nil
-}
-
-func sortAncestors(ans []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {
-	if len(ans) > 0 {
-		// sort ans based onf EndNodeID so that we can set BeginNodeID
-		sort.Slice(ans, func(i, j int) bool { return ans[i].GetEndNodeId() < ans[j].GetEndNodeId() })
-		ans[0].BeginNodeId = int64(1)
-		for i := 1; i < len(ans); i++ {
-			ans[i].BeginNodeId = ans[i-1].GetEndNodeId()
-		}
-	}
-	return ans
-}
-
-func (r *HistoryReplicatorImpl) getHistoryFromRemotePaginationFn(
-	ctx context.Context,
-	remoteClusterName string,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	endEventID int64,
-	endEventVersion int64,
-) collection.PaginationFn[*rawHistoryData] {
-
-	return func(paginationToken []byte) ([]*rawHistoryData, []byte, error) {
-
-		adminClient, err := r.shard.GetRemoteAdminClient(remoteClusterName)
-		if err != nil {
-			return nil, nil, err
-		}
-		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			NamespaceId:     namespaceID.String(),
-			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-			EndEventId:      endEventID + 1,
-			EndEventVersion: endEventVersion,
-			MaximumPageSize: 1000,
-			NextPageToken:   paginationToken,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-
-		batches := make([]*rawHistoryData, 0, len(response.GetHistoryBatches()))
-		for idx, blob := range response.GetHistoryBatches() {
-			batches = append(batches, &rawHistoryData{
-				rawHistory: blob,
-				nodeID:     response.GetHistoryNodeIds()[idx],
-			})
-		}
-		return batches, response.NextPageToken, nil
-	}
-}
-
-func (r *HistoryReplicatorImpl) getHistoryFromLocalPaginationFn(
-	ctx context.Context,
-	branchToken []byte,
-	lastEventID int64,
-) collection.PaginationFn[*historypb.History] {
-
-	return func(paginationToken []byte) ([]*historypb.History, []byte, error) {
-		response, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
-			ShardID:       r.shard.GetShardID(),
-			BranchToken:   branchToken,
-			MinEventID:    common.FirstEventID,
-			MaxEventID:    lastEventID + 1,
-			PageSize:      100,
-			NextPageToken: paginationToken,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		return slices.Clone(response.History), response.NextPageToken, nil
-	}
 }

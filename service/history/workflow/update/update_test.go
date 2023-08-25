@@ -36,9 +36,15 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
+)
+
+const (
+	testAcceptedEventID   int64 = 1234
+	testSequencingEventID int64 = 2203
 )
 
 func successOutcome(t *testing.T, s string) *updatepb.Outcome {
@@ -55,31 +61,37 @@ type mockEventStore struct {
 	effect.Controller
 	AddWorkflowExecutionUpdateAcceptedEventFunc func(
 		updateID string,
-		acpt *updatepb.Acceptance,
+		acceptedRequestMessageId string,
+		acceptedRequestSequencingEventId int64,
+		acceptedRequest *updatepb.Request,
 	) (*historypb.HistoryEvent, error)
 
 	AddWorkflowExecutionUpdateCompletedEventFunc func(
+		acceptedEventID int64,
 		resp *updatepb.Response,
 	) (*historypb.HistoryEvent, error)
 }
 
 func (m mockEventStore) AddWorkflowExecutionUpdateAcceptedEvent(
 	updateID string,
-	acpt *updatepb.Acceptance,
+	acceptedRequestMessageId string,
+	acceptedRequestSequencingEventId int64,
+	acceptedRequest *updatepb.Request,
 ) (*historypb.HistoryEvent, error) {
 	if m.AddWorkflowExecutionUpdateAcceptedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, acpt)
+		return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
 	}
-	return nil, nil
+	return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 }
 
 func (m mockEventStore) AddWorkflowExecutionUpdateCompletedEvent(
+	acceptedEventID int64,
 	resp *updatepb.Response,
 ) (*historypb.HistoryEvent, error) {
 	if m.AddWorkflowExecutionUpdateCompletedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateCompletedEventFunc(resp)
+		return m.AddWorkflowExecutionUpdateCompletedEventFunc(acceptedEventID, resp)
 	}
-	return nil, nil
+	return &historypb.HistoryEvent{}, nil
 }
 
 func TestNilMessage(t *testing.T) {
@@ -112,29 +124,36 @@ func TestRequestAcceptComplete(t *testing.T) {
 		invalidArg *serviceerror.InvalidArgument
 		meta       = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
 		req        = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt       = updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: "x"}
+		acpt       = updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208}
 		resp       = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
 
 		completedEventData updatepb.Response
 		acceptedEventData  = struct {
-			updateID string
-			acpt     updatepb.Acceptance
+			updateID                         string
+			acceptedRequestMessageId         string
+			acceptedRequestSequencingEventId int64
+			acceptedRequest                  *updatepb.Request
 		}{}
 		store = mockEventStore{
 			Controller: &effects,
 			AddWorkflowExecutionUpdateAcceptedEventFunc: func(
 				updateID string,
-				acpt *updatepb.Acceptance,
+				acceptedRequestMessageId string,
+				acceptedRequestSequencingEventId int64,
+				acceptedRequest *updatepb.Request,
 			) (*historypb.HistoryEvent, error) {
 				acceptedEventData.updateID = updateID
-				acceptedEventData.acpt = *acpt
-				return nil, nil
+				acceptedEventData.acceptedRequestMessageId = acceptedRequestMessageId
+				acceptedEventData.acceptedRequestSequencingEventId = acceptedRequestSequencingEventId
+				acceptedEventData.acceptedRequest = acceptedRequest
+				return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 			},
 			AddWorkflowExecutionUpdateCompletedEventFunc: func(
+				acceptedEventID int64,
 				res *updatepb.Response,
 			) (*historypb.HistoryEvent, error) {
 				completedEventData = *res
-				return nil, nil
+				return &historypb.HistoryEvent{}, nil
 			},
 		}
 		upd = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
@@ -207,7 +226,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 	})
 
 	require.Equal(t, meta.UpdateId, acceptedEventData.updateID)
-	require.Equal(t, acpt, acceptedEventData.acpt)
+	require.Equal(t, acpt.AcceptedRequestSequencingEventId, acceptedEventData.acceptedRequestSequencingEventId)
 	require.Equal(t, resp, completedEventData)
 }
 
@@ -315,24 +334,26 @@ func TestMessageOutput(t *testing.T) {
 			Meta:  &updatepb.Meta{UpdateId: updateID},
 			Input: &updatepb.Input{Name: t.Name()},
 		}
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 
 	t.Run("before request received", func(t *testing.T) {
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs, sequencingID)
 		require.Empty(t, msgs)
 	})
 	t.Run("requested", func(t *testing.T) {
 		require.NoError(t, upd.OnMessage(ctx, &req, store))
 		effects.Apply(ctx)
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs, sequencingID)
 		require.Len(t, msgs, 1)
+		require.Equal(t, msgs[0].GetEventId(), testSequencingEventID)
 	})
 	t.Run("after requested", func(t *testing.T) {
-		upd := update.NewAccepted(updateID)
+		upd := update.NewAccepted(updateID, testAcceptedEventID)
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs)
+		upd.ReadOutgoingMessages(&msgs, sequencingID)
 		require.Empty(t, msgs)
 	})
 }
@@ -341,7 +362,7 @@ func TestRejectAfterAcceptFails(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	updateID := t.Name() + "-update-id"
-	upd := update.NewAccepted(updateID)
+	upd := update.NewAccepted(updateID, testAcceptedEventID)
 	err := upd.OnMessage(ctx, &updatepb.Rejection{}, eventStoreUnused)
 	var invalidArg *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArg)
@@ -380,13 +401,14 @@ func TestDuplicateRequestNoError(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	updateID := t.Name() + "-update-id"
-	upd := update.NewAccepted(updateID)
+	sequencingID := &protocolpb.Message_EventId{EventId: testSequencingEventID}
+	upd := update.NewAccepted(updateID, testAcceptedEventID)
 	err := upd.OnMessage(ctx, &updatepb.Request{}, eventStoreUnused)
 	require.NoError(t, err,
 		"a second request message should be ignored, not cause an error")
 
 	msgs := make([]*protocolpb.Message, 0)
-	upd.ReadOutgoingMessages(&msgs)
+	upd.ReadOutgoingMessages(&msgs, sequencingID)
 	require.Empty(t, msgs)
 }
 
@@ -410,9 +432,9 @@ func TestMessageValidation(t *testing.T) {
 		}
 		err := upd.OnMessage(ctx, &validReq, store)
 		require.NoError(t, err)
-		err = upd.OnMessage(ctx, &updatepb.Acceptance{}, store)
+		err = upd.OnMessage(ctx, nil, store)
 		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "invalid")
+		require.ErrorContains(t, err, "received nil message")
 	})
 	t.Run("invalid rejection msg", func(t *testing.T) {
 		upd := update.New(updateID)
@@ -425,12 +447,12 @@ func TestMessageValidation(t *testing.T) {
 		}
 		err := upd.OnMessage(ctx, &validReq, store)
 		require.NoError(t, err)
-		err = upd.OnMessage(ctx, &updatepb.Rejection{}, store)
+		err = upd.OnMessage(ctx, nil, store)
 		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "invalid")
+		require.ErrorContains(t, err, "received nil message")
 	})
 	t.Run("invalid response msg", func(t *testing.T) {
-		upd := update.NewAccepted("")
+		upd := update.NewAccepted("", testAcceptedEventID)
 		err := upd.OnMessage(
 			ctx,
 			&updatepb.Response{},
@@ -495,8 +517,12 @@ func TestRollbackCompletion(t *testing.T) {
 		effects   = effect.Buffer{}
 		store     = mockEventStore{Controller: &effects}
 		updateID  = t.Name() + "-update-id"
-		upd       = update.NewAccepted(updateID, update.ObserveCompletion(&completed))
-		resp      = updatepb.Response{
+		upd       = update.NewAccepted(
+			updateID,
+			testAcceptedEventID,
+			update.ObserveCompletion(&completed),
+		)
+		resp = updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: updateID},
 			Outcome: successOutcome(t, "success!"),
 		}
@@ -560,4 +586,54 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	outcome, ok := retVal.(*updatepb.Outcome)
 	require.Truef(t, ok, "WaitAccepted returned an unexpected type: %T", retVal)
 	require.Equal(t, rej.Failure, outcome.GetFailure())
+}
+
+func TestAcceptEventIDInCompletedEvent(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx      = context.Background()
+		effects  = effect.Buffer{}
+		store    = mockEventStore{Controller: &effects}
+		updateID = t.Name() + "-update-id"
+		upd      = update.New(updateID)
+		req      = updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "not_empty"},
+		}
+		acpt = updatepb.Acceptance{
+			AcceptedRequestMessageId: "not empty",
+			AcceptedRequest:          &req,
+		}
+		resp = updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: updateID},
+			Outcome: successOutcome(t, "success!"),
+		}
+		wantAcceptedEventID int64 = 8675309
+	)
+
+	var gotAcceptedEventID int64
+	store.AddWorkflowExecutionUpdateAcceptedEventFunc = func(
+		updateID string,
+		acceptedRequestMessageId string,
+		acceptedRequestSequencingEventId int64,
+		acceptedRequest *updatepb.Request,
+	) (*historypb.HistoryEvent, error) {
+		t.Log("creating accepted event with the desired event ID")
+		return &historypb.HistoryEvent{EventId: wantAcceptedEventID}, nil
+	}
+	store.AddWorkflowExecutionUpdateCompletedEventFunc = func(
+		acceptedEventID int64,
+		resp *updatepb.Response,
+	) (*historypb.HistoryEvent, error) {
+		t.Log("capturing acceptedEventID written in completed event")
+		gotAcceptedEventID = acceptedEventID
+		return &historypb.HistoryEvent{}, nil
+	}
+
+	require.NoError(t, upd.OnMessage(ctx, &req, store))
+	effects.Apply(ctx)
+	require.NoError(t, upd.OnMessage(ctx, &acpt, store))
+	require.NoError(t, upd.OnMessage(ctx, &resp, store))
+	effects.Apply(ctx)
+	require.Equal(t, wantAcceptedEventID, gotAcceptedEventID)
 }

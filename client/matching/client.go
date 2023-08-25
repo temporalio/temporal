@@ -45,10 +45,10 @@ import (
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
 
 const (
-	// DefaultTimeout is the default timeout used to make calls
+	// DefaultTimeout is the max timeout for regular calls
 	DefaultTimeout = time.Minute * debug.TimeoutMultiplier
-	// DefaultLongPollTimeout is the long poll default timeout used to make calls
-	DefaultLongPollTimeout = time.Minute * 2 * debug.TimeoutMultiplier
+	// DefaultLongPollTimeout is the max timeout for long poll calls
+	DefaultLongPollTimeout = time.Minute * 5 * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {

@@ -34,7 +34,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -55,15 +55,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
-		executableTask     *MockExecutableTask
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		executableTask          *MockExecutableTask
+		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
@@ -96,6 +97,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.replicationTask = &replicationspb.SyncWorkflowStateTaskAttributes{
 		WorkflowState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
@@ -112,13 +114,14 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
@@ -127,6 +130,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
+	s.executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
 }
 
 func (s *executableWorkflowStateTaskSuite) TearDownTest() {
@@ -135,7 +139,7 @@ func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -165,7 +169,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -176,21 +180,56 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		"", false, err,
 	).AnyTimes()
 
 	s.Equal(err, s.task.Execute())
 }
 
-func (s *executableWorkflowStateTaskSuite) TestHandleErr() {
-	err := errors.New("OwO")
-	s.Equal(err, s.task.HandleErr(err))
+func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+	shardContext := shard.NewMockContext(s.controller)
+	engine := shard.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.task.NamespaceID),
+		s.task.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	err := serviceerrors.NewRetryReplication(
+		"",
+		s.task.NamespaceID,
+		s.task.WorkflowID,
+		s.task.RunID,
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+	)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
+	engine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
+	s.NoError(s.task.HandleErr(err))
+}
 
-	err = serviceerror.NewNotFound("")
-	s.Equal(nil, s.task.HandleErr(err))
+func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+	err := serviceerrors.NewRetryReplication(
+		"",
+		s.task.NamespaceID,
+		s.task.WorkflowID,
+		s.task.RunID,
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+		rand.Int63(),
+	)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
 
-	err = serviceerror.NewUnavailable("")
 	s.Equal(err, s.task.HandleErr(err))
 }
 

@@ -27,6 +27,8 @@ package replication
 import (
 	"context"
 
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -38,15 +40,18 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 )
 
 var Module = fx.Options(
 	fx.Provide(ReplicationTaskFetcherFactoryProvider),
+	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
 	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
+	fx.Provide(EagerNamespaceRefresherProvider),
 )
 
 func ReplicationTaskFetcherFactoryProvider(
@@ -61,6 +66,40 @@ func ReplicationTaskFetcherFactoryProvider(
 		clusterMetadata,
 		clientBean,
 	)
+}
+
+func EagerNamespaceRefresherProvider(
+	metadataManager persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	clientBean client.Bean,
+	clusterMetadata cluster.Metadata,
+	metricsHandler metrics.Handler,
+) EagerNamespaceRefresher {
+	return NewEagerNamespaceRefresher(
+		metadataManager,
+		namespaceRegistry,
+		logger,
+		clientBean,
+		namespace.NewReplicationTaskExecutor(
+			clusterMetadata.GetCurrentClusterName(),
+			metadataManager,
+			logger,
+		),
+		clusterMetadata.GetCurrentClusterName(),
+		metricsHandler,
+	)
+}
+
+func ReplicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConverter {
+		return NewSourceTaskConverter(
+			historyEngine,
+			shardContext.GetNamespaceRegistry(),
+			clientClusterShardCount,
+			clientClusterName,
+			clientShardKey)
+	}
 }
 
 func ReplicationTaskExecutorProvider() TaskExecutorProvider {

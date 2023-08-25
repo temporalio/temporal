@@ -288,6 +288,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
 	).Return(queuedRequestHistogram)
 	queuedRequestHistogram.EXPECT().Record(int64(0))
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
@@ -337,6 +338,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricUnit(),
 	).Return(queuedRequestHistogram)
 	queuedRequestHistogram.EXPECT().Record(int64(0))
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
@@ -595,6 +597,7 @@ func (s *processorSuite) Test_End2End() {
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitStartLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.esProcessor.bulkBeforeAction(0, bulkIndexRequests)
 
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorCommitLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.esProcessor.bulkAfterAction(0, bulkIndexRequests, bulkIndexResponse, nil)

@@ -38,12 +38,13 @@ import (
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -76,7 +77,8 @@ type (
 		shard          shard.Context
 		logger         log.Logger
 		metricsHandler metrics.Handler
-		config         *configs.Config
+
+		nonUserContextLockTimeout time.Duration
 	}
 
 	NewCacheFn func(shard shard.Context) Cache
@@ -89,19 +91,22 @@ const (
 	cacheReleased    int32 = 1
 )
 
+const (
+	workflowLockTimeoutTailTime = 500 * time.Millisecond
+)
+
 func NewCache(shard shard.Context) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
-	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:          shard,
-		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
-		config:         config,
+		Cache:                     cache.New(config.HistoryCacheMaxSize(), opts),
+		shard:                     shard,
+		logger:                    log.With(shard.GetLogger(), tag.ComponentHistoryCache),
+		metricsHandler:            shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
+		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 	}
 }
 
@@ -198,14 +203,44 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
 
-	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
-		// ctx is done before lock can be acquired
-		c.Release(key)
+	if err := c.lockWorkflowExecution(ctx, workflowCtx, key, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
 	}
+
 	return workflowCtx, releaseFunc, nil
+}
+
+func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
+	workflowCtx workflow.Context,
+	key definition.WorkflowKey,
+	lockPriority workflow.LockPriority) error {
+
+	// skip if there is no deadline
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		if headers.GetCallerInfo(ctx).CallerType != headers.CallerTypeAPI {
+			newDeadline := time.Now().Add(c.nonUserContextLockTimeout)
+			if newDeadline.Before(deadline) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		} else {
+			newDeadline := deadline.Add(-workflowLockTimeoutTailTime)
+			if newDeadline.After(time.Now()) {
+				ctx, cancel = context.WithDeadline(ctx, newDeadline)
+				defer cancel()
+			}
+		}
+	}
+
+	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
+		// ctx is done before lock can be acquired
+		c.Release(key)
+		return consts.ErrResourceExhaustedBusyWorkflow
+	}
+	return nil
 }
 
 func (c *CacheImpl) makeReleaseFunc(
@@ -227,9 +262,24 @@ func (c *CacheImpl) makeReleaseFunc(
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.Clear()
+					context.Unlock(lockPriority)
+					c.Release(key)
+				} else {
+					isDirty := context.IsDirty()
+					if isDirty {
+						context.Clear()
+						c.logger.Error("Cache encountered dirty mutable state transaction",
+							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
+							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
+							tag.WorkflowRunID(context.GetWorkflowKey().RunID),
+						)
+					}
+					context.Unlock(lockPriority)
+					c.Release(key)
+					if isDirty {
+						panic("Cache encountered dirty mutable state transaction")
+					}
 				}
-				context.Unlock(lockPriority)
-				c.Release(key)
 			}
 		}
 	}

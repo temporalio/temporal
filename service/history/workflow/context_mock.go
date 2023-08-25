@@ -102,20 +102,6 @@ func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, createMode, prev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), ctx, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
 }
 
-// GetHistorySize mocks base method.
-func (m *MockContext) GetHistorySize() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistorySize")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetHistorySize indicates an expected call of GetHistorySize.
-func (mr *MockContextMockRecorder) GetHistorySize() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistorySize", reflect.TypeOf((*MockContext)(nil).GetHistorySize))
-}
-
 // GetWorkflowKey mocks base method.
 func (m *MockContext) GetWorkflowKey() definition.WorkflowKey {
 	m.ctrl.T.Helper()
@@ -128,6 +114,20 @@ func (m *MockContext) GetWorkflowKey() definition.WorkflowKey {
 func (mr *MockContextMockRecorder) GetWorkflowKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockContext)(nil).GetWorkflowKey))
+}
+
+// IsDirty mocks base method.
+func (m *MockContext) IsDirty() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDirty")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDirty indicates an expected call of IsDirty.
+func (mr *MockContextMockRecorder) IsDirty() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockContext)(nil).IsDirty))
 }
 
 // LoadExecutionStats mocks base method.
@@ -206,18 +206,6 @@ func (m *MockContext) ReapplyEvents(ctx context.Context, eventBatches []*persist
 func (mr *MockContextMockRecorder) ReapplyEvents(ctx, eventBatches interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockContext)(nil).ReapplyEvents), ctx, eventBatches)
-}
-
-// SetHistorySize mocks base method.
-func (m *MockContext) SetHistorySize(size int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHistorySize", size)
-}
-
-// SetHistorySize indicates an expected call of SetHistorySize.
-func (mr *MockContextMockRecorder) SetHistorySize(size interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistorySize", reflect.TypeOf((*MockContext)(nil).SetHistorySize), size)
 }
 
 // SetWorkflowExecution mocks base method.

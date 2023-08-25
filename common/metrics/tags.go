@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common/primitives"
 )
@@ -55,6 +56,8 @@ const (
 	actionType     = "action_type"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+	// See server.api.enums.v1.ReplicationTaskType
+	replicationTaskType = "replicationTaskType"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -247,6 +250,11 @@ func VisibilityTypeTag(value string) Tag {
 	return &tagImpl{key: visibilityTypeTagName, value: value}
 }
 
+// VersionedTag represents whether a loaded task queue manager represents a specific version set.
+func VersionedTag(versioned bool) Tag {
+	return &tagImpl{key: versionedTagName, value: strconv.FormatBool(versioned)}
+}
+
 func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
 }
@@ -301,4 +309,9 @@ type ReasonString string
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
 	return &tagImpl{key: reason, value: string(value)}
+}
+
+// ReplicationTaskTypeTag returns a new replication task type tag.
+func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
+	return &tagImpl{key: replicationTaskType, value: value.String()}
 }

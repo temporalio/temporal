@@ -76,6 +76,9 @@ type (
 	InstanceID           string
 	ServiceNames         map[primitives.ServiceName]struct{}
 
+	HistoryRawClient historyservice.HistoryServiceClient
+	HistoryClient    historyservice.HistoryServiceClient
+
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
 
@@ -114,10 +117,10 @@ var Module = fx.Options(
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
+	fx.Provide(HistoryRawClientProvider),
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
-	membership.HostInfoProviderModule,
 	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
@@ -210,6 +213,7 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false),
 		metricsHandler,
 		logger,
 	)
@@ -305,20 +309,22 @@ func RegisterBootstrapContainer(
 	)
 }
 
-func HistoryClientProvider(clientBean client.Bean) historyservice.HistoryServiceClient {
-	historyRawClient := clientBean.GetHistoryClient()
-	historyClient := history.NewRetryableClient(
+func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
+	return clientBean.GetHistoryClient()
+}
+
+func HistoryClientProvider(historyRawClient HistoryRawClient) HistoryClient {
+	return history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
-	return historyClient
 }
 
-func MatchingRawClientProvider(clientBean client.Bean, namespaceRegistry namespace.Registry) (
-	MatchingRawClient,
-	error,
-) {
+func MatchingRawClientProvider(
+	clientBean client.Bean,
+	namespaceRegistry namespace.Registry,
+) (MatchingRawClient, error) {
 	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 }
 

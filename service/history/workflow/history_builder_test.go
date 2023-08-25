@@ -41,6 +41,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -458,13 +459,14 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 		Failure: testFailure,
 	}
-	event := s.historyBuilder.AddFailWorkflowEvent(
+	event, batchID := s.historyBuilder.AddFailWorkflowEvent(
 		workflowTaskCompletionEventID,
 		retryState,
 		attributes,
 		"",
 	)
 	s.Equal(event, s.flush())
+	s.Equal(batchID, event.EventId)
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
@@ -676,6 +678,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		startedEventID,
 		testIdentity,
 		checksum,
+		&commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 		sdkMetadata,
 		meteringMeta,
 	)
@@ -692,6 +695,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 				StartedEventId:   startedEventID,
 				Identity:         testIdentity,
 				BinaryChecksum:   checksum,
+				WorkerVersion:    &commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 				SdkMetadata:      sdkMetadata,
 				MeteringMetadata: meteringMeta,
 			},

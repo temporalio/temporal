@@ -35,6 +35,20 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+func (c *metricClient) ApplyTaskQueueUserDataReplicationEvent(
+	ctx context.Context,
+	request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientApplyTaskQueueUserDataReplicationEventScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ApplyTaskQueueUserDataReplicationEvent(ctx, request, opts...)
+}
+
 func (c *metricClient) CancelOutstandingPoll(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
@@ -63,18 +77,46 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
-func (c *metricClient) GetTaskQueueMetadata(
+func (c *metricClient) ForceUnloadTaskQueue(
 	ctx context.Context,
-	request *matchingservice.GetTaskQueueMetadataRequest,
+	request *matchingservice.ForceUnloadTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetTaskQueueMetadataScope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientForceUnloadTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	return c.client.GetTaskQueueMetadata(ctx, request, opts...)
+	return c.client.ForceUnloadTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) GetBuildIdTaskQueueMapping(
+	ctx context.Context,
+	request *matchingservice.GetBuildIdTaskQueueMappingRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetBuildIdTaskQueueMappingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetBuildIdTaskQueueMappingScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
+}
+
+func (c *metricClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientGetTaskQueueUserDataScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkerBuildIdCompatibility(
@@ -91,20 +133,6 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *metricClient) InvalidateTaskQueueMetadata(
-	ctx context.Context,
-	request *matchingservice.InvalidateTaskQueueMetadataRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientInvalidateTaskQueueMetadataScope)
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.InvalidateTaskQueueMetadata(ctx, request, opts...)
-}
-
 func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -119,6 +147,20 @@ func (c *metricClient) ListTaskQueuePartitions(
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *metricClient) ReplicateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.ReplicateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ReplicateTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientReplicateTaskQueueUserDataScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ReplicateTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *metricClient) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
@@ -131,6 +173,20 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	}()
 
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *matchingservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateTaskQueueUserDataScope)
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkerBuildIdCompatibility(

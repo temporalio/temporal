@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -55,7 +57,6 @@ const (
 
 type (
 	Metadata interface {
-		common.Daemon
 		common.Pingable
 
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
@@ -81,6 +82,8 @@ type (
 		GetFailoverVersionIncrement() int64
 		RegisterMetadataChangeCallback(callbackId any, cb CallbackFn)
 		UnRegisterMetadataChangeCallback(callbackId any)
+		Start()
+		Stop()
 	}
 
 	CallbackFn func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation)
@@ -97,6 +100,8 @@ type (
 		CurrentClusterName string `yaml:"currentClusterName"`
 		// ClusterInformation contains all cluster names to corresponding information about that cluster
 		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+		// Tag contains customized tag about the current cluster
+		Tags map[string]string `yaml:"tags"`
 	}
 
 	// ClusterInformation contains the information about each cluster which participated in cross DC
@@ -106,8 +111,9 @@ type (
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
 		// Cluster ID allows to explicitly set the ID of the cluster. Optional.
-		ClusterID  string `yaml:"-"`
-		ShardCount int32  `yaml:"-"` // Ignore this field when loading config.
+		ClusterID  string            `yaml:"-"`
+		ShardCount int32             `yaml:"-"` // Ignore this field when loading config.
+		Tags       map[string]string `yaml:"-"` // Ignore this field. Use cluster.Config.Tags for customized tags.
 		// private field to track cluster information updates
 		version int64
 	}
@@ -429,9 +435,12 @@ func (m *metadataImpl) refreshLoop(ctx context.Context) error {
 		case <-timer.C:
 			for err := m.refreshClusterMetadata(ctx); err != nil; err = m.refreshClusterMetadata(ctx) {
 				m.logger.Error("Error refreshing remote cluster metadata", tag.Error(err))
+				refreshTimer := time.NewTimer(m.refreshDuration() / 2)
+
 				select {
-				case <-time.After(m.refreshDuration() / 2):
+				case <-refreshTimer.C:
 				case <-ctx.Done():
+					refreshTimer.Stop()
 					return nil
 				}
 			}
@@ -459,12 +468,14 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
 				ShardCount:             newClusterInfo.ShardCount,
+				Tags:                   newClusterInfo.Tags,
 				version:                newClusterInfo.version,
 			}
 		} else if newClusterInfo.version > oldClusterInfo.version {
 			if newClusterInfo.Enabled == oldClusterInfo.Enabled &&
 				newClusterInfo.RPCAddress == oldClusterInfo.RPCAddress &&
-				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion {
+				newClusterInfo.InitialFailoverVersion == oldClusterInfo.InitialFailoverVersion &&
+				maps.Equal(newClusterInfo.Tags, oldClusterInfo.Tags) {
 				// key cluster info does not change
 				continue
 			}
@@ -474,6 +485,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
 				RPCAddress:             oldClusterInfo.RPCAddress,
 				ShardCount:             oldClusterInfo.ShardCount,
+				Tags:                   oldClusterInfo.Tags,
 				version:                oldClusterInfo.version,
 			}
 			newEntries[clusterName] = &ClusterInformation{
@@ -481,6 +493,7 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
 				RPCAddress:             newClusterInfo.RPCAddress,
 				ShardCount:             newClusterInfo.ShardCount,
+				Tags:                   newClusterInfo.Tags,
 				version:                newClusterInfo.version,
 			}
 		}
@@ -585,6 +598,7 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 			InitialFailoverVersion: getClusterResp.GetInitialFailoverVersion(),
 			RPCAddress:             getClusterResp.GetClusterAddress(),
 			ShardCount:             getClusterResp.GetHistoryShardCount(),
+			Tags:                   getClusterResp.GetTags(),
 			version:                getClusterResp.Version,
 		}
 	}

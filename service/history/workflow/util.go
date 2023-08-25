@@ -30,6 +30,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -46,9 +47,10 @@ func failWorkflowTask(
 	mutableState MutableState,
 	workflowTask *WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
-) error {
+) (*historypb.HistoryEvent, error) {
 
-	if _, err := mutableState.AddWorkflowTaskFailedEvent(
+	// IMPORTANT: wtFailedEvent can be nil under some circumstances. Specifically, if WT is transient.
+	wtFailedEvent, err := mutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		workflowTaskFailureCause,
 		nil,
@@ -57,12 +59,13 @@ func failWorkflowTask(
 		"",
 		"",
 		0,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	mutableState.FlushBufferedEvents()
-	return nil
+	return wtFailedEvent, nil
 }
 
 func ScheduleWorkflowTask(
@@ -83,18 +86,23 @@ func ScheduleWorkflowTask(
 func RetryWorkflow(
 	ctx context.Context,
 	mutableState MutableState,
-	eventBatchFirstEventID int64,
 	parentNamespace namespace.Name,
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (MutableState, error) {
 
+	// Check TerminateWorkflow comment bellow.
+	eventBatchFirstEventID := mutableState.GetNextEventID()
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
+		wtFailedEvent, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, err
+		}
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
@@ -113,18 +121,23 @@ func RetryWorkflow(
 
 func TimeoutWorkflow(
 	mutableState MutableState,
-	eventBatchFirstEventID int64,
 	retryState enumspb.RetryState,
 	continuedRunID string,
 ) error {
 
+	// Check TerminateWorkflow comment bellow.
+	eventBatchFirstEventID := mutableState.GetNextEventID()
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
+		wtFailedEvent, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
@@ -138,20 +151,32 @@ func TimeoutWorkflow(
 
 func TerminateWorkflow(
 	mutableState MutableState,
-	eventBatchFirstEventID int64,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
 	deleteAfterTerminate bool,
 ) error {
 
+	// Terminate workflow is written as a separate batch and might result in more than one event
+	// if there is started WT which needs to be failed before.
+	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
+	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
+	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
+	// WTFailed event wasn't created (because there were no WT or WT was transient),
+	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
+	eventBatchFirstEventID := mutableState.GetNextEventID()
+
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		if err := failWorkflowTask(
+		wtFailedEvent, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		if wtFailedEvent != nil {
+			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 

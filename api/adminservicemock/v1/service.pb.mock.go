@@ -241,6 +241,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetDLQReplicationMessages(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetDLQReplicationMessages), varargs...)
 }
 
+// GetNamespace mocks base method.
+func (m *MockAdminServiceClient) GetNamespace(ctx context.Context, in *adminservice.GetNamespaceRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetNamespace", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespace indicates an expected call of GetNamespace.
+func (mr *MockAdminServiceClientMockRecorder) GetNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).GetNamespace), varargs...)
+}
+
 // GetNamespaceReplicationMessages mocks base method.
 func (m *MockAdminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *adminservice.GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -914,6 +934,21 @@ func (m *MockAdminServiceServer) GetDLQReplicationMessages(arg0 context.Context,
 func (mr *MockAdminServiceServerMockRecorder) GetDLQReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetDLQReplicationMessages), arg0, arg1)
+}
+
+// GetNamespace mocks base method.
+func (m *MockAdminServiceServer) GetNamespace(arg0 context.Context, arg1 *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespace", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespace indicates an expected call of GetNamespace.
+func (mr *MockAdminServiceServerMockRecorder) GetNamespace(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).GetNamespace), arg0, arg1)
 }
 
 // GetNamespaceReplicationMessages mocks base method.

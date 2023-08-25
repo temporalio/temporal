@@ -25,7 +25,7 @@
 package matching
 
 import (
-	"bytes"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -42,7 +42,7 @@ type (
 	}
 )
 
-// newTaskQueueID returns taskQueueID which uniquely identfies as task queue
+// newTaskQueueID returns taskQueueID which uniquely identifies as task queue
 func newTaskQueueID(namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
 	return newTaskQueueIDWithPartition(namespaceID, taskQueueName, taskType, -1)
 }
@@ -64,26 +64,24 @@ func newTaskQueueIDWithPartition(
 	}, nil
 }
 
-// To be used in a later versioning PR:
-// func newTaskQueueIDWithVersionSet(id *taskQueueID, versionSet string) *taskQueueID {
-// 	return &taskQueueID{
-// 		Name:        id.Name.WithVersionSet(versionSet),
-// 		namespaceID: id.namespaceID,
-// 		taskType:    id.taskType,
-// 	}
-// }
+func newTaskQueueIDWithVersionSet(id *taskQueueID, versionSet string) *taskQueueID {
+	return &taskQueueID{
+		Name:        id.Name.WithVersionSet(versionSet),
+		namespaceID: id.namespaceID,
+		taskType:    id.taskType,
+	}
+}
+
+func (tid *taskQueueID) OwnsUserData() bool {
+	return tid.IsRoot() && tid.VersionSet() == "" && tid.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW
+}
 
 func (tid *taskQueueID) String() string {
-	var b bytes.Buffer
-	b.WriteString("[")
-	b.WriteString("name=")
-	b.WriteString(tid.FullName())
-	b.WriteString("type=")
-	if tid.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-		b.WriteString("activity")
-	} else {
-		b.WriteString("workflow")
-	}
-	b.WriteString("]")
-	return b.String()
+	return fmt.Sprintf("TaskQueue(name:%q part:%d vset:%s type:%s nsid:%.5s…)",
+		tid.BaseNameString(),
+		tid.Partition(),
+		tid.VersionSet(),
+		tid.taskType,
+		tid.namespaceID.String(),
+	)
 }

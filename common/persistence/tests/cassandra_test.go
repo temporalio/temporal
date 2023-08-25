@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"

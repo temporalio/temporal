@@ -44,6 +44,11 @@ const (
 	defaultFirstPhaseMaximumAttempts = 3
 )
 
+var (
+	// DisabledRetryPolicy is a retry policy that never retries
+	DisabledRetryPolicy RetryPolicy = &disabledRetryPolicyImpl{}
+)
+
 type (
 	// RetryPolicy is the API which needs to be implemented by various retry policy implementations
 	RetryPolicy interface {
@@ -79,6 +84,8 @@ type (
 		firstPolicy  RetryPolicy
 		secondPolicy RetryPolicy
 	}
+
+	disabledRetryPolicyImpl struct{}
 
 	systemClock struct{}
 
@@ -155,7 +162,8 @@ func (p *ExponentialRetryPolicy) WithMaximumAttempts(maximumAttempts int) *Expon
 // ComputeNextDelay returns the next delay interval.  This is used by Retrier to delay calling the operation again
 func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int) time.Duration {
 	// Check to see if we ran out of maximum number of attempts
-	if p.maximumAttempts != noMaximumAttempts && numAttempts > p.maximumAttempts {
+	// NOTE: if maxAttempts is X, return done when numAttempts == X, otherwise there will be attempt X+1
+	if p.maximumAttempts != noMaximumAttempts && numAttempts >= p.maximumAttempts {
 		return done
 	}
 
@@ -202,6 +210,10 @@ func (tp *TwoPhaseRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAt
 		nextInterval = tp.secondPolicy.ComputeNextDelay(elapsedTime, numAttempts-defaultFirstPhaseMaximumAttempts)
 	}
 	return nextInterval
+}
+
+func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int) time.Duration {
+	return done
 }
 
 // Now returns the current time using the system clock

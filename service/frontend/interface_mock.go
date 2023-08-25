@@ -284,6 +284,21 @@ func (mr *MockHandlerMockRecorder) GetWorkerBuildIdCompatibility(arg0, arg1 inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockHandler)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
 }
 
+// GetWorkerTaskReachability mocks base method.
+func (m *MockHandler) GetWorkerTaskReachability(arg0 context.Context, arg1 *v10.GetWorkerTaskReachabilityRequest) (*v10.GetWorkerTaskReachabilityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerTaskReachability", arg0, arg1)
+	ret0, _ := ret[0].(*v10.GetWorkerTaskReachabilityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerTaskReachability indicates an expected call of GetWorkerTaskReachability.
+func (mr *MockHandlerMockRecorder) GetWorkerTaskReachability(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerTaskReachability", reflect.TypeOf((*MockHandler)(nil).GetWorkerTaskReachability), arg0, arg1)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockHandler) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *v10.GetWorkflowExecutionHistoryRequest) (*v10.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -1064,28 +1079,4 @@ func (m *MockOperatorHandler) RemoveSearchAttributes(arg0 context.Context, arg1 
 func (mr *MockOperatorHandlerMockRecorder) RemoveSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).RemoveSearchAttributes), arg0, arg1)
-}
-
-// Start mocks base method.
-func (m *MockOperatorHandler) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockOperatorHandlerMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockOperatorHandler)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockOperatorHandler) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockOperatorHandlerMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockOperatorHandler)(nil).Stop))
 }

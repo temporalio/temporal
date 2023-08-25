@@ -30,25 +30,29 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
+	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 type (
 	initParams struct {
 		fx.In
-		PersistenceConfig *config.Persistence
-		ExecutionManager  persistence.ExecutionManager
-		NamespaceRegistry namespace.Registry
-		HistoryClient     historyservice.HistoryServiceClient
-		FrontendClient    workflowservice.WorkflowServiceClient
-		Logger            log.Logger
-		MetricsHandler    metrics.Handler
+		PersistenceConfig         *config.Persistence
+		ExecutionManager          persistence.ExecutionManager
+		NamespaceRegistry         namespace.Registry
+		HistoryClient             resource.HistoryClient
+		FrontendClient            workflowservice.WorkflowServiceClient
+		ClientFactory             serverClient.Factory
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		TaskManager               persistence.TaskManager
+		Logger                    log.Logger
+		MetricsHandler            metrics.Handler
 	}
 
 	fxResult struct {
@@ -77,6 +81,7 @@ func NewResult(params initParams) fxResult {
 func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	worker.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 	worker.RegisterActivity(wc.activities())
 }
 
@@ -87,12 +92,16 @@ func (wc *replicationWorkerComponent) DedicatedWorkerOptions() *workercommon.Ded
 
 func (wc *replicationWorkerComponent) activities() *activities {
 	return &activities{
-		historyShardCount: wc.PersistenceConfig.NumHistoryShards,
-		executionManager:  wc.ExecutionManager,
-		namespaceRegistry: wc.NamespaceRegistry,
-		historyClient:     wc.HistoryClient,
-		frontendClient:    wc.FrontendClient,
-		logger:            wc.Logger,
-		metricsHandler:    wc.MetricsHandler,
+		historyShardCount:              wc.PersistenceConfig.NumHistoryShards,
+		executionManager:               wc.ExecutionManager,
+		namespaceRegistry:              wc.NamespaceRegistry,
+		historyClient:                  wc.HistoryClient,
+		frontendClient:                 wc.FrontendClient,
+		clientFactory:                  wc.ClientFactory,
+		namespaceReplicationQueue:      wc.NamespaceReplicationQueue,
+		taskManager:                    wc.TaskManager,
+		logger:                         wc.Logger,
+		metricsHandler:                 wc.MetricsHandler,
+		forceReplicationMetricsHandler: wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 	}
 }

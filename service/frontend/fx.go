@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"context"
 	"fmt"
 	"net"
 
@@ -34,7 +33,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -60,6 +58,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -89,12 +88,13 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
+	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -103,6 +103,7 @@ func NewServiceProvider(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -112,11 +113,13 @@ func NewServiceProvider(
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
 		serviceConfig,
 		server,
 		healthServer,
+		httpAPIServer,
 		handler,
 		adminHandler,
 		operatorHandler,
@@ -126,7 +129,15 @@ func NewServiceProvider(
 		grpcListener,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		membershipMonitor,
 	)
+}
+
+// GrpcServerOptions are the options to build the frontend gRPC server along
+// with the interceptors that are already set in the options.
+type GrpcServerOptions struct {
+	Options           []grpc.ServerOption
+	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
 func GrpcServerOptionsProvider(
@@ -136,7 +147,7 @@ func GrpcServerOptionsProvider(
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
-	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
+	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
@@ -150,7 +161,7 @@ func GrpcServerOptionsProvider(
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-) []grpc.ServerOption {
+) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
@@ -209,13 +220,14 @@ func GrpcServerOptionsProvider(
 		telemetryInterceptor.StreamIntercept,
 	}
 
-	return append(
+	grpcServerOptions = append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
 
 func ConfigProvider(
@@ -286,13 +298,24 @@ func TelemetryInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
+	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
+	rateFn := quotas.ClusterAwareQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.RPS,
+		GlobalQuota:      serviceConfig.GlobalRPS,
+	}.GetQuota
+	namespaceReplicationInducingRateFn := func() float64 {
+		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
+	}
+
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
 			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
 	)
@@ -304,42 +327,45 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
-	var globalNamespaceRPS, globalNamespaceVisibilityRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
 	case primitives.FrontendService:
 		globalNamespaceRPS = serviceConfig.GlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.GlobalNamespaceNamespaceReplicationInducingAPIsRPS
 	case primitives.InternalFrontendService:
 		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
+		// Internal frontend has no special limit for this set of APIs
+		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 	default:
 		panic("invalid service name")
 	}
 
-	rateFn := func(namespace string) float64 {
-		return namespaceRPS(
-			serviceConfig.MaxNamespaceRPSPerInstance,
-			globalNamespaceRPS,
-			frontendServiceResolver,
-			namespace,
-		)
-	}
-
-	visibilityRateFn := func(namespace string) float64 {
-		return namespaceRPS(
-			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-			globalNamespaceVisibilityRPS,
-			frontendServiceResolver,
-			namespace,
-		)
-	}
+	rateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
+		GlobalQuota:      globalNamespaceRPS,
+	}.GetQuota
+	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+		GlobalQuota:      globalNamespaceVisibilityRPS,
+	}.GetQuota
+	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		MemberCounter:    frontendServiceResolver,
+		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
+	}.GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				serviceConfig.OperatorRPSRatio,
 			)
 		},
 	)
@@ -349,12 +375,15 @@ func NamespaceRateLimitInterceptorProvider(
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
+	serviceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
-) *interceptor.NamespaceCountLimitInterceptor {
-	return interceptor.NewNamespaceCountLimitInterceptor(
+) *interceptor.ConcurrentRequestLimitInterceptor {
+	return interceptor.NewConcurrentRequestLimitInterceptor(
 		namespaceRegistry,
+		serviceResolver,
 		logger,
-		serviceConfig.MaxNamespaceCountPerInstance,
+		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
@@ -389,6 +418,8 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
 
@@ -411,6 +442,7 @@ func VisibilityManagerProvider(
 		searchAttributesMapperProvider,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
@@ -452,9 +484,10 @@ func AdminHandlerProvider(
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
+	hostInfoProvider membership.HostInfoProvider,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
@@ -483,6 +516,7 @@ func AdminHandlerProvider(
 		historyClient,
 		sdkClientFactory,
 		membershipMonitor,
+		hostInfoProvider,
 		archiverProvider,
 		metricsHandler,
 		namespaceRegistry,
@@ -507,7 +541,7 @@ func OperatorHandlerProvider(
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
@@ -542,7 +576,7 @@ func HandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
@@ -581,26 +615,42 @@ func HandlerProvider(
 	return wfHandler
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
+// HTTPAPIServerProvider provides an HTTP API server if enabled or nil
+// otherwise.
+func HTTPAPIServerProvider(
+	cfg *config.Config,
+	serviceName primitives.ServiceName,
+	serviceConfig *Config,
+	grpcListener net.Listener,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	handler Handler,
+	grpcServerOptions GrpcServerOptions,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+) (*HTTPAPIServer, error) {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return nil, nil
+	}
+	// If HTTP API port is 0, it is disabled
+	rpcConfig := cfg.Services[string(serviceName)].RPC
+	if rpcConfig.HTTPPort == 0 {
+		return nil, nil
+	}
+	return NewHTTPAPIServer(
+		serviceConfig,
+		rpcConfig,
+		grpcListener,
+		tlsConfigProvider,
+		handler,
+		grpcServerOptions.UnaryInterceptors,
+		metricsHandler,
+		namespaceRegistry,
+		logger,
 	)
+}
+
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

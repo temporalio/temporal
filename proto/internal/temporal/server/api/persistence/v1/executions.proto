@@ -40,6 +40,7 @@ import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
+import "temporal/server/api/update/v1/message.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 // shard column
@@ -61,9 +62,7 @@ message ShardInfo {
     map<string, int64> replication_dlq_ack_level = 13;
     reserved 14;
     reserved 15;
-    // Map from task category to ack levels of the corresponding queue processor
-    // Deprecated. Use queue_states instead.
-    map<int32, QueueAckLevel> queue_ack_levels = 16;
+    reserved 16;
     map<int32, QueueState> queue_states = 17;
 }
 
@@ -128,6 +127,7 @@ message WorkflowExecutionInfo {
     int64 user_timer_count = 73;
     int64 request_cancel_external_count = 74;
     int64 signal_external_count = 75;
+    int64 update_count = 77;
     reserved 47;
     reserved 48;
     reserved 49;
@@ -155,6 +155,12 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
     bool close_visibility_task_completed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
+    // If using build-id based versioning: version stamp of the last worker to process a
+    // workflow taks for this workflow.
+    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
+
+    // index of update IDs and pointers to associated history events.
+    map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
 }
 
 message ExecutionStats {
@@ -302,6 +308,8 @@ message ActivityInfo {
     int64 scheduled_event_id = 30;
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
     google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
+    bool use_compatible_version = 33;
+    temporal.api.common.v1.ActivityType activity_type = 34;
 }
 
 // timer_map column
@@ -359,11 +367,3 @@ message Checksum {
     bytes value = 3;
 }
 
-message UpdateInfo {
-    oneof value {
-        // update has been accepted and this is the pointer to the accepted event
-        temporal.server.api.history.v1.HistoryEventPointer acceptance_pointer = 1;
-        // update has been completed and this is the pointer to the completion event
-        temporal.server.api.history.v1.HistoryEventPointer completed_pointer = 2;
-    }
-}

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
@@ -796,6 +797,92 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
  10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
+}
+
+func (s *integrationSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
+	id := "integration-signal-workflow-workflow-close-attempted-test"
+	wt := "integration-signal-workflow-workflow-close-attempted-test-type"
+	tl := "integration-signal-workflow-workflow-close-attempted-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(3 * time.Second),
+		Identity:            identity,
+	})
+	s.NoError(err)
+
+	attemptCount := 1
+	wtHandler := func(
+		execution *commonpb.WorkflowExecution,
+		wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64,
+		history *historypb.History,
+	) ([]*commandpb.Command, error) {
+		if attemptCount == 1 {
+			_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we.RunId,
+				},
+				SignalName: "buffered-signal",
+				Identity:   identity,
+				RequestId:  uuid.New(),
+			})
+			s.NoError(err)
+		}
+
+		if attemptCount == 2 {
+			ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(time.Second)
+			_, err := s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we.RunId,
+				},
+				SignalName: "rejected-signal",
+				Identity:   identity,
+				RequestId:  uuid.New(),
+			})
+			s.Error(err)
+			s.Error(consts.ErrWorkflowClosing, err)
+		}
+
+		attemptCount++
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.Error(err)
+
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
 }
 
 func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {

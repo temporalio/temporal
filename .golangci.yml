@@ -5,10 +5,11 @@ linters:
     - goerr113
     - errcheck
     - goimports
-    - paralleltest
+    # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - vet
+    - forbidigo
 run:
   skip-dirs:
     - ^api
@@ -17,6 +18,10 @@ run:
 linters-settings:
   govet:
     fieldalignment: 0
+  forbidigo:
+    forbid:
+      - p: ^time\.After$
+        msg: "time.After may leak resources. Use time.NewTimer instead."
   revive:
     severity: error
     confidence: 0.8
@@ -25,11 +30,15 @@ linters-settings:
       # Disabled rules
       - name: add-constant
         disabled: true
+      - name: argument-limit
+        disabled: true
       - name: bare-return
         disabled: true
       - name: banned-characters
         disabled: true
       - name: bool-literal-in-expr
+        disabled: true
+      - name: confusing-naming
         disabled: true
       - name: empty-lines
         disabled: true
@@ -59,19 +68,18 @@ linters-settings:
         disabled: true
       - name: unexported-naming
         disabled: true
+      - name: unexported-return
+        disabled: true
+      - name: unused-parameter
+        disabled: true
       - name: unused-receiver
         disabled: true
       - name: use-any
         disabled: true
       - name: var-naming
         disabled: true
-      - name: unused-parameter
-        disabled: true
 
       # Rule tuning
-      - name: argument-limit
-        arguments:
-          - 10
       - name: cognitive-complexity
         arguments:
           - 25
@@ -80,10 +88,12 @@ linters-settings:
           - 15
       - name: function-result-limit
         arguments:
-          - 3
+          - 4
       - name: unhandled-error
         arguments:
-          - "fmt.Printf"
+          - "fmt.*"
+          - "bytes.Buffer.*"
+          - "strings.Builder.*"
 issues:
   # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
   exclude-rules:
@@ -91,3 +101,6 @@ issues:
       text: "(cyclomatic|cognitive)"
       linters:
         - revive
+    - path: _test\.go
+      linters:
+        - goerr113

@@ -56,7 +56,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -76,7 +75,6 @@ type testConfig struct {
 }
 
 type testParams struct {
-	DurableArchivalEnabled               bool
 	DeleteAfterClose                     bool
 	CloseEventTime                       time.Time
 	Retention                            time.Duration
@@ -96,17 +94,8 @@ type testParams struct {
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 	for _, c := range []testConfig{
 		{
-			Name: "delete after retention",
-			ConfigFn: func(p *testParams) {
-				p.ExpectCloseExecutionVisibilityTask = true
-				p.ExpectDeleteHistoryEventTask = true
-			},
-		},
-		{
 			Name: "use archival queue",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
-
 				p.ExpectCloseExecutionVisibilityTask = true
 				p.ExpectArchiveExecutionTask = true
 			},
@@ -114,14 +103,12 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "delete after close ignores durable execution flag",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.DeleteAfterClose = true
 			},
 		},
 		{
 			Name: "delay is zero",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.CloseEventTime = time.Unix(0, 0)
 				p.Retention = 24 * time.Hour
 				p.ArchivalProcessorArchiveDelay = 0
@@ -134,7 +121,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "delay exceeds retention",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.CloseEventTime = time.Unix(0, 0)
 				p.Retention = 24 * time.Hour
 				p.ArchivalProcessorArchiveDelay = 48*time.Hour + time.Second
@@ -147,7 +133,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "delay is less than retention",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.CloseEventTime = time.Unix(0, 0)
 				p.Retention = 24 * time.Hour
 				p.ArchivalProcessorArchiveDelay = 12 * time.Hour
@@ -160,7 +145,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "history archival disabled",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.HistoryArchivalEnabledInCluster = false
 				p.HistoryArchivalEnabledInNamespace = false
 
@@ -171,7 +155,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "visibility archival disabled",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.VisibilityArchivalEnabledForCluster = false
 				p.VisibilityArchivalEnabledInNamespace = false
 
@@ -182,7 +165,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "archival disabled in cluster",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.HistoryArchivalEnabledInCluster = false
 				p.VisibilityArchivalEnabledForCluster = false
 
@@ -194,7 +176,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 		{
 			Name: "archival disabled in namespace",
 			ConfigFn: func(p *testParams) {
-				p.DurableArchivalEnabled = true
 				p.HistoryArchivalEnabledInNamespace = false
 				p.VisibilityArchivalEnabledInNamespace = false
 
@@ -210,7 +191,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			mockLogger := log.NewMockLogger(ctrl)
 			p := testParams{
-				DurableArchivalEnabled:               false,
 				DeleteAfterClose:                     false,
 				CloseEventTime:                       now,
 				Retention:                            time.Hour * 24 * 7,
@@ -270,9 +250,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			mutableState.EXPECT().GetCurrentBranchToken().Return(nil, nil).AnyTimes()
 			retentionTimerDelay := time.Second
 			cfg := &configs.Config{
-				DurableArchivalEnabled: func() bool {
-					return p.DurableArchivalEnabled
-				},
 				RetentionTimerJitterDuration: func() time.Duration {
 					return retentionTimerDelay
 				},
@@ -299,12 +276,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}).AnyTimes()
 
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
-			err := taskGenerator.GenerateWorkflowCloseTasks(&historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
-				},
-				EventTime: timestamp.TimePtr(p.CloseEventTime),
-			}, p.DeleteAfterClose)
+			err := taskGenerator.GenerateWorkflowCloseTasks(timestamp.TimePtr(p.CloseEventTime), p.DeleteAfterClose)
 			require.NoError(t, err)
 
 			var (

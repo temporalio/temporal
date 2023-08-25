@@ -76,9 +76,6 @@ type (
 		ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error)
 
-		UpdateInfoToBlob(rec *persistencespb.UpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.UpdateInfo, error)
-
 		ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error)
 
@@ -96,6 +93,9 @@ type (
 
 		TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error)
+
+		TaskQueueUserDataToBlob(info *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error)
 
 		ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error)
@@ -342,15 +342,6 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 		shardInfo.ReplicationDlqAckLevel = make(map[string]int64)
 	}
 
-	if shardInfo.GetQueueAckLevels() == nil {
-		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
-	}
-	for _, queueAckLevel := range shardInfo.QueueAckLevels {
-		if queueAckLevel.ClusterAckLevel == nil {
-			queueAckLevel.ClusterAckLevel = make(map[string]int64)
-		}
-	}
-
 	if shardInfo.GetQueueStates() == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
@@ -383,15 +374,6 @@ func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeI
 
 func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	result := &persistencespb.HistoryTreeInfo{}
-	return result, ProtoDecodeBlob(data, result)
-}
-
-func (t *serializerImpl) UpdateInfoToBlob(rec *persistencespb.UpdateInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return ProtoEncodeBlob(rec, encodingType)
-}
-
-func (t *serializerImpl) UpdateInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.UpdateInfo, error) {
-	result := &persistencespb.UpdateInfo{}
 	return result, ProtoDecodeBlob(data, result)
 }
 
@@ -482,6 +464,15 @@ func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo,
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
+func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueUserData, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(data, encodingType)
+}
+
+func (t *serializerImpl) TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error) {
+	result := &persistencespb.TaskQueueUserData{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

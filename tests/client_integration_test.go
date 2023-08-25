@@ -34,12 +34,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -1513,4 +1515,130 @@ func (s *clientIntegrationSuite) assertHistory(wid, rid string, expected []enums
 	}
 
 	s.Equal(expected, events)
+}
+
+func (s *clientIntegrationSuite) TestBatchSignal() {
+
+	type myData struct {
+		Stuff  string
+		Things []int
+	}
+
+	workflowFn := func(ctx workflow.Context) (myData, error) {
+		var receivedData myData
+		workflow.GetSignalChannel(ctx, "my-signal").Receive(ctx, &receivedData)
+		return receivedData, nil
+	}
+	s.worker.RegisterWorkflow(workflowFn)
+
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+		ID:                       uuid.New(),
+		TaskQueue:                s.taskQueue,
+		WorkflowExecutionTimeout: 10 * time.Second,
+	}, workflowFn)
+	s.NoError(err)
+
+	input1 := myData{
+		Stuff:  "here's some data",
+		Things: []int{7, 8, 9},
+	}
+	inputPayloads, err := converter.GetDefaultDataConverter().ToPayloads(input1)
+	s.NoError(err)
+
+	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.namespace,
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batch.BatchOperationSignal{
+				Signal: "my-signal",
+				Input:  inputPayloads,
+			},
+		},
+		Executions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: workflowRun.GetID(),
+				RunId:      workflowRun.GetRunID(),
+			},
+		},
+		JobId:  uuid.New(),
+		Reason: "test",
+	})
+	s.NoError(err)
+
+	var returnedData myData
+	err = workflowRun.Get(context.Background(), &returnedData)
+	s.NoError(err)
+
+	s.Equal(input1, returnedData)
+}
+
+func (s *clientIntegrationSuite) TestBatchReset() {
+
+	var count int32
+
+	activityFn := func(ctx context.Context) (int32, error) {
+		val := atomic.LoadInt32(&count)
+		if val == 0 {
+			return 0, temporal.NewApplicationError("some random error", "", false, nil)
+		}
+		return val, nil
+	}
+	workflowFn := func(ctx workflow.Context) (int, error) {
+		ao := workflow.ActivityOptions{
+			ScheduleToStartTimeout: 20 * time.Second,
+			StartToCloseTimeout:    40 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		var result int
+		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, &result)
+		if err != nil {
+			return 0, err
+		}
+		return result, nil
+	}
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFn)
+
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+		ID:                       uuid.New(),
+		TaskQueue:                s.taskQueue,
+		WorkflowExecutionTimeout: 10 * time.Second,
+	}, workflowFn)
+	s.NoError(err)
+
+	// make sure it failed the first time
+	var result int
+	err = workflowRun.Get(context.Background(), &result)
+	s.Error(err)
+
+	atomic.AddInt32(&count, 1)
+
+	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.namespace,
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batch.BatchOperationReset{
+				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
+			},
+		},
+		Executions: []*commonpb.WorkflowExecution{
+			{
+				WorkflowId: workflowRun.GetID(),
+				RunId:      workflowRun.GetRunID(),
+			},
+		},
+		JobId:  uuid.New(),
+		Reason: "test",
+	})
+	s.NoError(err)
+
+	// wait for signal to be processed
+	time.Sleep(5 * time.Second)
+
+	// get the latest run
+	workflowRun = s.sdkClient.GetWorkflow(context.Background(), workflowRun.GetID(), "")
+
+	err = workflowRun.Get(context.Background(), &result)
+	s.NoError(err)
+
+	s.Equal(1, result)
 }

@@ -34,6 +34,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	updatepb "go.temporal.io/api/update/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
 )
@@ -52,12 +53,15 @@ type (
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID string,
-			accpt *updatepb.Acceptance,
+			acceptedRequestMessageId string,
+			acceptedRequestSequencingEventId int64,
+			acceptedRequest *updatepb.Request,
 		) (*historypb.HistoryEvent, error)
 
 		// AddWorkflowExecutionUpdateCompletedEvent writes an update completed
 		// event. The data may not be durable when this function returns.
 		AddWorkflowExecutionUpdateCompletedEvent(
+			acceptedEventID int64,
 			resp *updatepb.Response,
 		) (*historypb.HistoryEvent, error)
 	}
@@ -75,7 +79,8 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *protocolpb.Message // nil when not in stateRequested
+		request         *types.Any // of type *updatepb.Request, nil when not in stateRequested
+		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
 
@@ -116,10 +121,11 @@ func withInstrumentation(i *instrumentation) updateOpt {
 	}
 }
 
-func newAccepted(id string, opts ...updateOpt) *Update {
+func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateAccepted,
+		acceptedEventID: acceptedEventID,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
@@ -185,7 +191,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 // *updatepb.Rejection, *updatepb.Acceptance, or a *protocolpb.Message whose
 // Body field contains an instance from the same list. Writes to the EventStore
 // occur synchronously but externally observable effects on this Update (e.g.
-// emmitting an Outcome or an Accepted) are registered with the EventStore to be
+// emitting an Outcome or an Accepted) are registered with the EventStore to be
 // applied after the durable updates are committed. If the EventStore rolls
 // back its effects, this state machine does the same.
 func (u *Update) OnMessage(
@@ -217,15 +223,28 @@ func (u *Update) OnMessage(
 	}
 }
 
-// ReadOutgoingMessages loads any oubound messages from this Update state
+// ReadOutgoingMessages loads any outbound messages from this Update state
 // machine into the output slice provided.
-func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message) {
+func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId) {
 	if u.state != stateRequested {
 		// Update only sends messages to the workflow when it is in
 		// stateRequested
 		return
 	}
-	*out = append(*out, u.request)
+
+	reqMessage := &protocolpb.Message{
+		ProtocolInstanceId: u.id,
+		Id:                 u.outgoingMessageID(),
+		SequencingId:       sequencingID,
+		Body:               u.request,
+	}
+
+	*out = append(*out, reqMessage)
+}
+
+// outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
+func (u *Update) outgoingMessageID() string {
+	return u.id + "/request"
 }
 
 // onRequestMsg works if the Update is in any state but if the state is anything
@@ -245,15 +264,12 @@ func (u *Update) onRequestMsg(
 		return err
 	}
 	u.instrumentation.CountRequestMsg()
-	body, err := types.MarshalAny(req)
+	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
+	reqAny, err := types.MarshalAny(req)
 	if err != nil {
-		return invalidArgf("could not marshal request: %v", err)
+		return invalidArgf("unable to marshal request: %v", err)
 	}
-	u.request = &protocolpb.Message{
-		ProtocolInstanceId: u.id,
-		Id:                 u.id + "/request",
-		Body:               body,
-	}
+	u.request = reqAny
 	u.setState(stateProvisionallyRequested)
 	eventStore.OnAfterCommit(func(context.Context) { u.setState(stateRequested) })
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateAdmitted) })
@@ -272,20 +288,35 @@ func (u *Update) onAcceptanceMsg(
 	if err := u.checkState(acpt, stateRequested); err != nil {
 		return err
 	}
-	if err := validateAcceptanceMsg(u.id, acpt); err != nil {
+	if err := validateAcceptanceMsg(acpt); err != nil {
 		return err
 	}
 	u.instrumentation.CountAcceptanceMsg()
-	if _, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(u.id, acpt); err != nil {
+
+	acceptedRequest := &updatepb.Request{}
+	if err := types.UnmarshalAny(u.request, acceptedRequest); err != nil {
+		return internalErrorf("unable to unmarshal original request: %v", err)
+	}
+
+	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
+		u.id,
+		u.outgoingMessageID(),
+		acpt.AcceptedRequestSequencingEventId, // Only AcceptedRequestSequencingEventId from Acceptance message is used.
+		acceptedRequest)
+	if err != nil {
 		return err
 	}
+	u.acceptedEventID = event.EventId
 	u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		u.request = nil
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 	})
-	eventStore.OnAfterRollback(func(context.Context) { u.setState(stateRequested) })
+	eventStore.OnAfterRollback(func(context.Context) {
+		u.acceptedEventID = common.EmptyEventID
+		u.setState(stateRequested)
+	})
 	return nil
 }
 
@@ -302,7 +333,7 @@ func (u *Update) onRejectionMsg(
 	if err := u.checkState(rej, stateRequested); err != nil {
 		return err
 	}
-	if err := validateRejectionMsg(u.id, rej); err != nil {
+	if err := validateRejectionMsg(rej); err != nil {
 		return err
 	}
 	u.instrumentation.CountRejectionMsg()
@@ -337,7 +368,7 @@ func (u *Update) onResponseMsg(
 	if err := validateResponseMsg(u.id, res); err != nil {
 		return err
 	}
-	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(res); err != nil {
+	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(u.acceptedEventID, res); err != nil {
 		return err
 	}
 	u.instrumentation.CountResponseMsg()
@@ -368,6 +399,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	if u.state.Matches(allowed) {
 		return nil
 	}
+	u.instrumentation.CountInvalidStateTransition()
 	return invalidArgf("invalid state transition attempted: "+
 		"received %T message while in state %q", msg, u.state)
 }

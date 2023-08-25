@@ -65,7 +65,6 @@ func ApplyWorkflowIDReusePolicy(
 
 				return UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 					mutableState,
-					mutableState.GetNextEventID(),
 					"TerminateIfRunning WorkflowIdReusePolicy Policy",
 					payloads.EncodeString(
 						fmt.Sprintf("terminated by new runID: %s", runID),

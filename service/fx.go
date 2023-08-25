@@ -47,6 +47,20 @@ type (
 		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
 		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
+		OperatorRPSRatio                   persistenceClient.OperatorRPSRatio
+		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
+	}
+
+	GrpcServerOptionsParams struct {
+		fx.In
+
+		Logger                 log.Logger
+		RpcFactory             common.RPCFactory
+		RetryableInterceptor   *interceptor.RetryableInterceptor
+		TelemetryInterceptor   *interceptor.TelemetryInterceptor
+		RateLimitInterceptor   *interceptor.RateLimitInterceptor
+		TracingInterceptor     telemetry.ServerTraceInterceptor
+		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
 	}
 )
 
@@ -56,12 +70,16 @@ func NewPersistenceRateLimitingParams(
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
 		PersistenceMaxQps:                  PersistenceMaxQpsFn(maxQps, globalMaxQps),
 		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
+		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
+		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
 	}
 }
 
@@ -85,32 +103,34 @@ func PersistenceMaxQpsFn(
 }
 
 func GrpcServerOptionsProvider(
-	logger log.Logger,
-	rpcFactory common.RPCFactory,
-	retryableInterceptor *interceptor.RetryableInterceptor,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	tracingInterceptor telemetry.ServerTraceInterceptor,
+	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
 
-	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
+	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
+		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
 	return append(
 		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			grpc.UnaryServerInterceptor(tracingInterceptor),
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			telemetryInterceptor.UnaryIntercept,
-			rateLimitInterceptor.Intercept,
-			retryableInterceptor.Intercept,
-		),
-		grpc.ChainStreamInterceptor(
-			telemetryInterceptor.StreamIntercept,
-		),
+		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
+		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
 	)
+}
+
+func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
+	interceptors := []grpc.UnaryServerInterceptor{
+		rpc.ServiceErrorInterceptor,
+		grpc.UnaryServerInterceptor(params.TracingInterceptor),
+		metrics.NewServerMetricsContextInjectorInterceptor(),
+		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
+		params.TelemetryInterceptor.UnaryIntercept,
+	}
+
+	interceptors = append(interceptors, params.AdditionalInterceptors...)
+
+	return append(
+		interceptors,
+		params.RateLimitInterceptor.Intercept,
+		params.RetryableInterceptor.Intercept)
 }

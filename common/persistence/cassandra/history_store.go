@@ -85,39 +85,49 @@ func NewHistoryStore(
 	}
 }
 
-func (h *HistoryStore) InsertHistoryTree(
-	ctx context.Context,
-	request *p.InternalInsertHistoryTreeRequest,
-) error {
-	query := h.Session.Query(v2templateInsertTree,
-		request.BranchInfo.TreeId,
-		request.BranchInfo.BranchId,
-		request.TreeInfo.Data,
-		request.TreeInfo.EncodingType.String(),
-	).WithContext(ctx)
-	if err := query.Exec(); err != nil {
-		return convertTimeoutError(gocql.ConvertError("InsertHistoryTree", err))
-	}
-	return nil
-
-}
-
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *HistoryStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
-	query := h.Session.Query(v2templateUpsertHistoryNode,
-		request.BranchInfo.TreeId,
-		request.BranchInfo.BranchId,
-		request.Node.NodeID,
-		request.Node.PrevTransactionID,
-		request.Node.TransactionID,
-		request.Node.Events.Data,
-		request.Node.Events.EncodingType.String(),
-	).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	branchInfo := request.BranchInfo
+	node := request.Node
+
+	if !request.IsNewBranch {
+		query := h.Session.Query(v2templateUpsertHistoryNode,
+			branchInfo.TreeId,
+			branchInfo.BranchId,
+			node.NodeID,
+			node.PrevTransactionID,
+			node.TransactionID,
+			node.Events.Data,
+			node.Events.EncodingType.String(),
+		).WithContext(ctx)
+		if err := query.Exec(); err != nil {
+			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
+		}
+		return nil
+	}
+
+	treeInfoDataBlob := request.TreeInfo
+	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch.Query(v2templateInsertTree,
+		branchInfo.TreeId,
+		branchInfo.BranchId,
+		treeInfoDataBlob.Data,
+		treeInfoDataBlob.EncodingType.String(),
+	)
+	batch.Query(v2templateUpsertHistoryNode,
+		branchInfo.TreeId,
+		branchInfo.BranchId,
+		node.NodeID,
+		node.PrevTransactionID,
+		node.TransactionID,
+		node.Events.Data,
+		node.Events.EncodingType.String(),
+	)
+	if err := h.Session.ExecuteBatch(batch); err != nil {
 		return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 	}
 	return nil

@@ -655,16 +655,6 @@ func (e *FaultInjectionExecutionStore) IsReplicationDLQEmpty(
 	return e.baseExecutionStore.IsReplicationDLQEmpty(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) InsertHistoryTree(
-	ctx context.Context,
-	request *persistence.InternalInsertHistoryTreeRequest,
-) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.InsertHistoryTree(ctx, request)
-}
-
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.InternalAppendHistoryNodesRequest,
@@ -1042,6 +1032,41 @@ func (t *FaultInjectionTaskStore) CompleteTasksLessThan(
 		return 0, err
 	}
 	return t.baseTaskStore.CompleteTasksLessThan(ctx, request)
+}
+
+func (t *FaultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.InternalGetTaskQueueUserDataResponse, error) {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return t.baseTaskStore.GetTaskQueueUserData(ctx, request)
+}
+
+func (t *FaultInjectionTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *persistence.InternalUpdateTaskQueueUserDataRequest) error {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return t.baseTaskStore.UpdateTaskQueueUserData(ctx, request)
+}
+
+func (t *FaultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.InternalListTaskQueueUserDataEntriesResponse, error) {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return t.baseTaskStore.ListTaskQueueUserDataEntries(ctx, request)
+}
+
+func (t *FaultInjectionTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *persistence.GetTaskQueuesByBuildIdRequest) ([]string, error) {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return t.baseTaskStore.GetTaskQueuesByBuildId(ctx, request)
+}
+
+func (t *FaultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *persistence.CountTaskQueuesByBuildIdRequest) (int, error) {
+	if err := t.ErrorGenerator.Generate(); err != nil {
+		return 0, err
+	}
+	return t.baseTaskStore.CountTaskQueuesByBuildId(ctx, request)
 }
 
 func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {

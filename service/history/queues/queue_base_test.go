@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -117,19 +118,11 @@ func (s *queueBaseSuite) TearDownTest() {
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
-	ackLevel := int64(1024)
-	rangeID := int64(10)
-
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
 			ShardId: 0,
-			RangeId: rangeID,
-			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-				tasks.CategoryIDTransfer: {
-					AckLevel: ackLevel,
-				},
-			},
+			RangeId: int64(10),
 		},
 		s.config,
 	)
@@ -150,7 +143,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 	)
 
 	s.Len(base.readerGroup.Readers(), 0)
-	s.Equal(ackLevel+1, base.nonReadableScope.Range.InclusiveMin.TaskID)
+	s.Equal(int64(1), base.nonReadableScope.Range.InclusiveMin.TaskID)
 }
 
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
@@ -326,11 +319,6 @@ func (s *queueBaseSuite) TestStartStop() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 10,
-			QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-				tasks.CategoryIDTransfer: {
-					AckLevel: 1024,
-				},
-			},
 		},
 		s.config,
 	)
@@ -433,7 +421,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	s.True(base.nonReadableScope.Range.Equals(NewRange(scopes[0].Range.ExclusiveMax, tasks.MaximumKey)))
 }
 
-func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
+func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion() {
 	scopeMinKey := tasks.MaximumKey
 	readerScopes := map[int64][]Scope{}
 	readerIDs := []int64{DefaultReaderId, 2, 3}
@@ -504,6 +492,75 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks() {
 				return nil
 			},
 		).Times(1),
+		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *persistence.UpdateShardRequest) error {
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				return nil
+			},
+		).Times(1),
+	)
+
+	base.checkpoint()
+
+	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+}
+
+func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
+	// task range completion should be skipped when there's no task to delete
+	scopeMinKey := tasks.MinimumKey
+	readerScopes := map[int64][]Scope{
+		DefaultReaderId: {
+			{
+				Range:     NewRange(scopeMinKey, tasks.NewKey(time.Now(), rand.Int63())),
+				Predicate: predicates.Universal[tasks.Task](),
+			},
+		},
+	}
+	queueState := &queueState{
+		readerScopes:                 readerScopes,
+		exclusiveReaderHighWatermark: tasks.MaximumKey,
+	}
+	persistenceState := ToPersistenceQueueState(queueState)
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				tasks.CategoryIDTimer: persistenceState,
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockShard.Resource.ExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), gomock.Any()).Return(nil).Times(len(readerScopes))
+
+	base := newQueueBase(
+		mockShard,
+		tasks.CategoryTimer,
+		nil,
+		s.mockScheduler,
+		s.mockRescheduler,
+		NewNoopPriorityAssigner(),
+		nil,
+		s.options,
+		s.rateLimiter,
+		NoopReaderCompletionFn,
+		s.logger,
+		s.metricsHandler,
+	)
+	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
+
+	// set to a smaller value so that delete will be triggered
+	currentLowWatermark := tasks.MinimumKey
+	base.exclusiveDeletionHighWatermark = currentLowWatermark
+
+	gomock.InOrder(
+		mockShard.Resource.ExecutionMgr.EXPECT().UpdateHistoryTaskReaderProgress(gomock.Any(), gomock.Any()).Times(len(readerScopes)),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
 				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])

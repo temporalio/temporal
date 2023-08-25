@@ -31,19 +31,62 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
+
+type (
+	SkippedWorkflowExecution struct {
+		WorkflowExecution commonpb.WorkflowExecution
+		Reason            string
+	}
+
+	replicationTasksHeartbeatDetails struct {
+		NextIndex                        int
+		CheckPoint                       time.Time
+		LastNotVerifiedWorkflowExecution commonpb.WorkflowExecution
+		LastVerifiedIndex                int
+	}
+
+	verifyStatus int
+	verifyResult struct {
+		status verifyStatus
+		reason string
+	}
+)
+
+const (
+	reasonZombieWorkflow           = "Zombie workflow"
+	reasonWorkflowNotFound         = "Workflow not found"
+	reasonWorkflowCloseToRetention = "Workflow close to retention"
+
+	notVerified verifyStatus = 0
+	verified    verifyStatus = 1
+	skipped     verifyStatus = 2
+)
+
+func (r verifyResult) isVerified() bool {
+	return r.status == verified || r.status == skipped
+}
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
 // However, activity background context is per-worker, which means once set, all activities processed by the
@@ -252,12 +295,16 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
+func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLimiter quotas.RateLimiter, wKey definition.WorkflowKey) error {
+	if err := rateLimiter.WaitN(ctx, 1); err != nil {
+		return err
+	}
+
 	// will generate replication task
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 
-	_, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: wKey.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wKey.WorkflowID,
@@ -265,11 +312,18 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 		},
 	})
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-		// ignore NotFound error
-		return nil
+	if err != nil {
+		return err
 	}
-	return err
+
+	stateTransitionCount := resp.StateTransitionCount
+	for stateTransitionCount > 0 {
+		token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
+		stateTransitionCount -= int64(token)
+		_ = rateLimiter.ReserveN(time.Now(), token)
+	}
+
+	return nil
 }
 
 func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRequest) error {
@@ -350,6 +404,11 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	ctx = a.setCallerInfoForGenReplicationTask(ctx, namespace.ID(request.NamespaceID))
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
+	start := time.Now()
+	defer func() {
+		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+	}()
+
 	startIndex := 0
 	if activity.HasHeartbeatDetails(ctx) {
 		var finishedIndex int
@@ -359,15 +418,14 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	for i := startIndex; i < len(request.Executions); i++ {
-		if err := rateLimiter.Wait(ctx); err != nil {
-			return err
-		}
 		we := request.Executions[i]
-		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
-		if err != nil {
-			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
-			return err
+		if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId)); err != nil {
+			if !isNotFoundServiceError(err) {
+				a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
+				return err
+			}
 		}
+
 		activity.RecordHeartbeat(ctx, i)
 	}
 
@@ -378,7 +436,6 @@ func (a *activities) setCallerInfoForGenReplicationTask(
 	ctx context.Context,
 	namespaceID namespace.ID,
 ) context.Context {
-
 	nsName, err := a.namespaceRegistry.GetNamespaceName(namespaceID)
 	if err != nil {
 		a.logger.Error("Failed to get namespace name when generating replication task",
@@ -388,4 +445,349 @@ func (a *activities) setCallerInfoForGenReplicationTask(
 		nsName = namespace.EmptyName
 	}
 	return headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(nsName.String()))
+}
+
+type seedReplicationQueueWithUserDataEntriesHeartbeatDetails struct {
+	NextPageToken []byte
+	IndexInPage   int
+}
+
+func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	if len(params.Namespace) == 0 {
+		return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
+	}
+	if params.PageSize == 0 {
+		params.PageSize = defaultPageSizeForTaskQueueUserDataReplication
+	}
+	if params.RPS == 0 {
+		params.RPS = defaultRPSForTaskQueueUserDataReplication
+	}
+
+	describeResponse, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: params.Namespace,
+	})
+	if err != nil {
+		return err
+	}
+
+	rateLimiter := quotas.NewRateLimiter(params.RPS, int(math.Ceil(params.RPS)))
+	heartbeatDetails := seedReplicationQueueWithUserDataEntriesHeartbeatDetails{}
+
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &heartbeatDetails); err != nil {
+			return temporal.NewNonRetryableApplicationError("failed to load previous heartbeat details", "TypeError", err)
+		}
+	}
+
+	for {
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
+
+		request := &persistence.ListTaskQueueUserDataEntriesRequest{
+			NamespaceID:   describeResponse.GetNamespaceInfo().Id,
+			NextPageToken: heartbeatDetails.NextPageToken,
+			PageSize:      params.PageSize,
+		}
+		response, err := a.taskManager.ListTaskQueueUserDataEntries(ctx, request)
+		if err != nil {
+			a.logger.Error("List task queue user data failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
+			return err
+		}
+		for idx, entry := range response.Entries {
+			if heartbeatDetails.IndexInPage > idx {
+				continue
+			}
+			heartbeatDetails.IndexInPage = idx
+			activity.RecordHeartbeat(ctx, heartbeatDetails)
+			err = a.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
+				TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+				Attributes: &replicationspb.ReplicationTask_TaskQueueUserDataAttributes{
+					TaskQueueUserDataAttributes: &replicationspb.TaskQueueUserDataAttributes{
+						NamespaceId:   request.NamespaceID,
+						TaskQueueName: entry.TaskQueue,
+						UserData:      entry.UserData.GetData(),
+					},
+				},
+			})
+			if err != nil {
+				a.logger.Error("Inserting into namespace replication queue failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.Error(err))
+				return err
+			}
+		}
+		if len(response.NextPageToken) == 0 {
+			return nil
+		}
+		heartbeatDetails.NextPageToken = response.NextPageToken
+		heartbeatDetails.IndexInPage = 0
+		activity.RecordHeartbeat(ctx, heartbeatDetails)
+	}
+}
+
+func isNotFoundServiceError(err error) bool {
+	_, ok := err.(*serviceerror.NotFound)
+	return ok
+}
+
+func isCloseToCurrentTime(t time.Time, duration time.Duration) bool {
+	currentTime := time.Now()
+	diff := currentTime.Sub(t)
+
+	// check both before and after current time in case:
+	//   - workflow deletion time has passed (slow delete)
+	//   - workflow is abort to be deleted (target may run with a faster clock)
+	if diff < -duration || diff > duration {
+		return false
+	}
+
+	return true
+}
+
+func (a *activities) checkSkipWorkflowExecution(
+	ctx context.Context,
+	request *verifyReplicationTasksRequest,
+	we *commonpb.WorkflowExecution,
+	ns *namespace.Namespace,
+) (verifyResult, error) {
+	namespaceID := request.NamespaceID
+	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId)}
+	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: namespaceID,
+		Execution:   we,
+	})
+
+	if err != nil {
+		if isNotFoundServiceError(err) {
+			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
+			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterNotFoundWorkflowCount.GetMetricName()).Record(1)
+			return verifyResult{
+				status: skipped,
+				reason: reasonWorkflowNotFound,
+			}, nil
+		}
+
+		return verifyResult{
+			status: notVerified,
+		}, err
+	}
+
+	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
+	// it is skipped to avoid such workflow being processed on the target cluster.
+	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		a.forceReplicationMetricsHandler.Counter(metrics.EncounterZombieWorkflowCount.GetMetricName()).Record(1)
+		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
+		return verifyResult{
+			status: skipped,
+			reason: reasonZombieWorkflow,
+		}, nil
+	}
+
+	// Skip verifying workflow which has already passed retention time.
+	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
+		deleteTime := closeTime.Add(ns.Retention())
+		if deleteTime.Before(time.Now()) {
+			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.GetMetricName()).Record(1)
+			return verifyResult{
+				status: skipped,
+				reason: reasonWorkflowCloseToRetention,
+			}, nil
+		}
+	}
+
+	return verifyResult{
+		status: notVerified,
+	}, nil
+}
+
+func (a *activities) verifySingleReplicationTask(
+	ctx context.Context,
+	request *verifyReplicationTasksRequest,
+	remoteClient adminservice.AdminServiceClient,
+	ns *namespace.Namespace,
+	cachedResults map[int]verifyResult,
+	idx int,
+) (result verifyResult, rerr error) {
+	if r, ok := cachedResults[idx]; ok {
+		return r, nil
+	}
+
+	defer func() {
+		if result.isVerified() {
+			cachedResults[idx] = result
+		}
+	}()
+
+	we := request.Executions[idx]
+	s := time.Now()
+	// Check if execution exists on remote cluster
+	_, err := remoteClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: request.Namespace,
+		Execution: &we,
+	})
+	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.GetMetricName()).Record(time.Since(s))
+
+	switch err.(type) {
+	case nil:
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.GetMetricName()).Record(1)
+		return verifyResult{
+			status: verified,
+		}, nil
+
+	case *serviceerror.NotFound:
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
+		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
+		// A better solution is to only check the existence for workflow which is close to retention period.
+		return a.checkSkipWorkflowExecution(ctx, request, &we, ns)
+
+	case *serviceerror.NamespaceNotFound:
+		return verifyResult{
+			status: notVerified,
+		}, temporal.NewNonRetryableApplicationError("remoteClient.DescribeMutableState call failed", "NamespaceNotFound", err)
+
+	default:
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+			Counter(metrics.VerifyReplicationTaskFailed.GetMetricName()).Record(1)
+
+		return verifyResult{
+			status: notVerified,
+		}, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
+	}
+}
+
+func (a *activities) verifyReplicationTasks(
+	ctx context.Context,
+	request *verifyReplicationTasksRequest,
+	details *replicationTasksHeartbeatDetails,
+	remoteClient adminservice.AdminServiceClient,
+	ns *namespace.Namespace,
+	cachedResults map[int]verifyResult,
+	heartbeat func(details replicationTasksHeartbeatDetails),
+) (bool, error) {
+	start := time.Now()
+	progress := false
+	defer func() {
+		if progress {
+			// Update CheckPoint where there is a progress
+			details.CheckPoint = time.Now()
+		}
+
+		heartbeat(*details)
+		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.GetMetricName()).Record(time.Since(start))
+	}()
+
+	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, cachedResults, details.NextIndex)
+		if err != nil {
+			return false, err
+		}
+
+		if !r.isVerified() {
+			details.LastNotVerifiedWorkflowExecution = request.Executions[details.NextIndex]
+			break
+		}
+
+		details.LastVerifiedIndex = details.NextIndex
+		heartbeat(*details)
+		progress = true
+	}
+
+	if details.NextIndex >= len(request.Executions) {
+		// Done with verification.
+		return true, nil
+	}
+
+	// Look ahead and see if there is any new workflow being replicated on target cluster. If yes, then consider it is a progress.
+	// This is to avoid verifyReplicationTasks from failing due to LastNotFoundWorkflowExecution being slow.
+	for idx := details.NextIndex + 1; idx < len(request.Executions); idx++ {
+		// Cache results don't count for progress.
+		if _, ok := cachedResults[idx]; ok {
+			continue
+		}
+
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, cachedResults, idx)
+		if err != nil {
+			return false, err
+		}
+
+		if r.isVerified() {
+			details.LastVerifiedIndex = idx
+			progress = true
+		}
+
+		heartbeat(*details)
+	}
+
+	return false, nil
+}
+
+const (
+	defaultNoProgressNotRetryableTimeout = 30 * time.Minute
+)
+
+func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
+	ctx = headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(request.Namespace))
+	remoteClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
+		request.TargetClusterEndpoint,
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+
+	var response verifyReplicationTasksResponse
+	var details replicationTasksHeartbeatDetails
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {
+			return response, err
+		}
+	} else {
+		details.NextIndex = 0
+		details.CheckPoint = time.Now()
+		activity.RecordHeartbeat(ctx, details)
+	}
+
+	nsEntry, err := a.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
+	if err != nil {
+		return response, err
+	}
+
+	cachedResults := make(map[int]verifyResult)
+
+	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
+	//  1. replication lag
+	//  2. Zombie workflow execution
+	//  3. workflow execution was deleted (due to retention) after replication task was created
+	//  4. workflow execution was not applied succesfully on target cluster (i.e, bug)
+	//
+	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
+	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
+	// being verified. If no progress is made for long enough, then
+	//  - more than checkSkipThreshold, it checks if outstanding workflow execution can be skipped locally (#2 and #3)
+	//  - more than NonRetryableTimeout, it means potentially #4. The activity returns
+	//    non-retryable error and force-replication will fail.
+	for {
+		// Since replication has a lag, sleep first.
+		time.Sleep(request.VerifyInterval)
+
+		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry, cachedResults,
+			func(d replicationTasksHeartbeatDetails) {
+				activity.RecordHeartbeat(ctx, d)
+			})
+		if err != nil {
+			return response, err
+		}
+
+		if verified == true {
+			return response, nil
+		}
+
+		diff := time.Now().Sub(details.CheckPoint)
+		if diff > defaultNoProgressNotRetryableTimeout {
+			// Potentially encountered a missing execution, return non-retryable error
+			return response, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
+					diff.Minutes(),
+					details.LastNotVerifiedWorkflowExecution, details.CheckPoint),
+				"", nil)
+		}
+	}
 }

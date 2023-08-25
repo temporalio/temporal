@@ -43,6 +43,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
 
 type scannerTestSuite struct {
@@ -71,12 +72,17 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		WFTypeName:    historyScannerWFTypeName,
 		TaskQueueName: historyScannerTaskQueueName,
 	}
+	buildIdScavenger := expectedScanner{
+		WFTypeName:    build_ids.BuildIdScavangerWorkflowName,
+		TaskQueueName: build_ids.BuildIdScavengerTaskQueueName,
+	}
 
 	type testCase struct {
 		Name                     string
 		ExecutionsScannerEnabled bool
 		TaskQueueScannerEnabled  bool
 		HistoryScannerEnabled    bool
+		BuildIdScavengerEnabled  bool
 		DefaultStore             string
 		ExpectedScanners         []expectedScanner
 	}
@@ -87,6 +93,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{},
 		},
@@ -95,6 +102,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{},
 		},
@@ -103,6 +111,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    true,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner},
 		},
@@ -111,6 +120,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    true,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner},
 		},
@@ -119,6 +129,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{}, // TODO: enable task queue scanner for NoSQL?
 		},
@@ -127,6 +138,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{taskQueueScanner},
 		},
@@ -135,6 +147,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{executionScanner},
 		},
@@ -143,16 +156,36 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{executionScanner},
+		},
+		{
+			Name:                     "BuildIdScavengerNoSQL",
+			ExecutionsScannerEnabled: false,
+			TaskQueueScannerEnabled:  false,
+			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  true,
+			DefaultStore:             config.StoreTypeNoSQL,
+			ExpectedScanners:         []expectedScanner{buildIdScavenger},
+		},
+		{
+			Name:                     "BuildIdScavengerSQL",
+			ExecutionsScannerEnabled: false,
+			TaskQueueScannerEnabled:  false,
+			HistoryScannerEnabled:    false,
+			BuildIdScavengerEnabled:  true,
+			DefaultStore:             config.StoreTypeSQL,
+			ExpectedScanners:         []expectedScanner{buildIdScavenger},
 		},
 		{
 			Name:                     "AllScannersSQL",
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    true,
+			BuildIdScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeSQL,
-			ExpectedScanners:         []expectedScanner{historyScanner, taskQueueScanner, executionScanner},
+			ExpectedScanners:         []expectedScanner{historyScanner, taskQueueScanner, executionScanner, buildIdScavenger},
 		},
 	} {
 		s.Run(c.Name, func() {
@@ -169,6 +202,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
+					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
 					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
 					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
 					Persistence: &config.Persistence{
@@ -184,10 +218,15 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockSdkClientFactory,
 				metrics.NoopMetricsHandler,
 				p.NewMockExecutionManager(ctrl),
+				// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+				nil,
+				nil,
 				p.NewMockTaskManager(ctrl),
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
 				mockAdminClient,
+				nil,
 				mockNamespaceRegistry,
+				"active-cluster",
 			)
 			var wg sync.WaitGroup
 			for _, sc := range c.ExpectedScanners {
@@ -243,6 +282,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
 			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
 			Persistence: &config.Persistence{
 				DefaultStore: config.StoreTypeNoSQL,
 				DataStores: map[string]config.DataStore{
@@ -253,10 +293,15 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockSdkClientFactory,
 		metrics.NoopMetricsHandler,
 		p.NewMockExecutionManager(ctrl),
+		// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+		nil,
+		nil,
 		p.NewMockTaskManager(ctrl),
 		historyservicemock.NewMockHistoryServiceClient(ctrl),
 		mockAdminClient,
+		nil,
 		mockNamespaceRegistry,
+		"active-cluster",
 	)
 	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()

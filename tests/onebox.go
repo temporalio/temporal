@@ -26,9 +26,11 @@ package tests
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -44,6 +46,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -56,6 +59,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -65,6 +69,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
@@ -97,6 +102,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		matchingClient                   matchingservice.MatchingServiceClient
 		dcClient                         *dcClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
@@ -119,16 +125,24 @@ type (
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		spanExporters                    []otelsdktrace.SpanExporter
+		tlsConfigProvider                *encryption.FixedTLSConfigProvider
+		captureMetricsHandler            *metricstest.CaptureHandler
+
+		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock sync.RWMutex // Must be used for above callbacks
 	}
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards       int32
-		NumHistoryHosts        int
-		HistoryCountLimitError int
-		HistoryCountLimitWarn  int
-		BlobSizeLimitError     int
-		BlobSizeLimitWarn      int
+		NumHistoryShards           int32
+		NumHistoryHosts            int
+		HistoryCountLimitError     int
+		HistoryCountLimitWarn      int
+		BlobSizeLimitError         int
+		BlobSizeLimitWarn          int
+		MutableStateSizeLimitError int
+		MutableStateSizeLimitWarn  int
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -154,6 +168,8 @@ type (
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
+		TLSConfigProvider                *encryption.FixedTLSConfigProvider
+		CaptureMetricsHandler            *metricstest.CaptureHandler
 	}
 
 	listenHostPort string
@@ -186,6 +202,8 @@ func newTemporal(params *TemporalParams) *temporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
+		tlsConfigProvider:                params.TLSConfigProvider,
+		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
 	}
 	impl.overrideHistoryDynamicConfig(testDCClient)
@@ -273,6 +291,21 @@ func (c *temporalImpl) FrontendGRPCAddress() string {
 	}
 }
 
+func (c *temporalImpl) FrontendHTTPAddress() string {
+	host, port := c.FrontendHTTPHostPort()
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
+	if host, port, err := net.SplitHostPort(c.FrontendGRPCAddress()); err != nil {
+		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
+	} else if portNum, err := strconv.Atoi(port); err != nil {
+		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
+	} else {
+		return host, portNum + 10
+	}
+}
+
 func (c *temporalImpl) HistoryServiceAddress() []string {
 	var hosts []string
 	var startPort int
@@ -343,6 +376,12 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
+func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+	// Note that this matching client does not do routing. But it doesn't matter since we have
+	// only one matching node in testing.
+	return c.matchingClient
+}
+
 func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, startWG *sync.WaitGroup) {
 	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
@@ -357,33 +396,35 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		}
 	}
 
-	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	var rpcFactory common.RPCFactory
 	feApp := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 		),
+		fx.Provide(c.frontendConfigProvider),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
-		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(serviceName, hosts)
+			return newSimpleMonitor(hosts)
+		}),
+		fx.Provide(func() membership.HostInfoProvider {
+			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
-		fx.Provide(func() authorization.Authorizer { return nil }),
-		fx.Provide(func() authorization.ClaimMapper { return nil }),
+		fx.Provide(func() authorization.Authorizer { return c }),
+		fx.Provide(func() authorization.ClaimMapper { return c }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
@@ -397,6 +438,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(c.GetTLSConfigProvider),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		frontend.Module,
@@ -451,23 +493,24 @@ func (c *temporalImpl) startHistory(
 			}
 		}
 
-		stoppedCh := make(chan struct{})
 		var historyService *history.Service
 		var clientBean client.Bean
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
-				stoppedCh,
 				persistenceConfig,
 				serviceName,
 			),
-			fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.ThrottledLogger { return c.logger }),
-			fx.Provide(newRPCFactoryImpl),
+			fx.Provide(c.newRPCFactory),
 			fx.Provide(func() membership.Monitor {
-				return newSimpleMonitor(serviceName, hosts)
+				return newSimpleMonitor(hosts)
+			}),
+			fx.Provide(func() membership.HostInfoProvider {
+				return newSimpleHostInfoProvider(serviceName, hosts)
 			}),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -485,6 +528,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
+			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
@@ -536,25 +580,33 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
+		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
+	}
+	if c.esConfig != nil {
+		esDataStoreName := "es-visibility"
+		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			Elasticsearch: c.esConfig,
+		}
 	}
 
-	stoppedCh := make(chan struct{})
 	var matchingService *matching.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
-		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(serviceName, hosts)
+			return newSimpleMonitor(hosts)
+		}),
+		fx.Provide(func() membership.HostInfoProvider {
+			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -565,6 +617,9 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+		fx.Provide(func() *esclient.Config { return c.esConfig }),
+		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Supply(c.spanExporters),
@@ -584,6 +639,12 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			}
 		}
 	}
+
+	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
+	if err != nil {
+		c.logger.Fatal("Failed to create connection for matching", tag.Error(err))
+	}
+	c.matchingClient = matchingservice.NewMatchingServiceClient(matchingConnection)
 	c.matchingApp = app
 	c.matchingService = matchingService
 	c.matchingNamespaceRegistry = namespaceRegistry
@@ -622,23 +683,24 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 
-	stoppedCh := make(chan struct{})
 	var workerService *worker.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
-			stoppedCh,
 			persistenceConfig,
 			serviceName,
 		),
-		fx.Provide(func() metrics.Handler { return metrics.NoopMetricsHandler }),
+		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
-		fx.Provide(newRPCFactoryImpl),
+		fx.Provide(c.newRPCFactory),
 		fx.Provide(func() membership.Monitor {
-			return newSimpleMonitor(serviceName, hosts)
+			return newSimpleMonitor(hosts)
+		}),
+		fx.Provide(func() membership.HostInfoProvider {
+			return newSimpleHostInfoProvider(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -654,6 +716,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
+		fx.Provide(c.GetTLSConfigProvider),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		worker.Module,
@@ -689,6 +752,37 @@ func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
 	return c.executionManager
 }
 
+func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
+	// If we just return this directly, the interface will be non-nil but the
+	// pointer will be nil
+	if c.tlsConfigProvider != nil {
+		return c.tlsConfigProvider
+	}
+	return nil
+}
+
+func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
+	if c.captureMetricsHandler != nil {
+		return c.captureMetricsHandler
+	}
+	return metrics.NoopMetricsHandler
+}
+
+func (c *temporalImpl) frontendConfigProvider() *config.Config {
+	// Set HTTP port and a test HTTP forwarded header
+	_, httpPort := c.FrontendHTTPHostPort()
+	return &config.Config{
+		Services: map[string]config.Service{
+			string(primitives.FrontendService): {
+				RPC: config.RPC{
+					HTTPPort:                       httpPort,
+					HTTPAdditionalForwardedHeaders: []string{"this-header-forwarded"},
+				},
+			},
+		},
+	}
+}
+
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
@@ -707,10 +801,86 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
 	}
+	if c.historyConfig.MutableStateSizeLimitError != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+	}
+	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
+		client.OverrideValue(dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
+	}
 
 	// For DeleteWorkflowExecution tests
 	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+}
+
+func (c *temporalImpl) newRPCFactory(
+	sn primitives.ServiceName,
+	grpcHostPort listenHostPort,
+	logger log.Logger,
+	grpcResolver membership.GRPCResolver,
+	tlsConfigProvider encryption.TLSConfigProvider,
+) (common.RPCFactory, error) {
+	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
+	if err != nil {
+		return nil, fmt.Errorf("failed parsing host:port: %w", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port: %w", err)
+	}
+	var frontendTLSConfig *tls.Config
+	if tlsConfigProvider != nil {
+		if frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig(); err != nil {
+			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+		}
+	}
+	return rpc.NewFactory(
+		&config.RPC{BindOnIP: host, GRPCPort: port},
+		sn,
+		logger,
+		tlsConfigProvider,
+		grpcResolver.MakeURL(primitives.FrontendService),
+		frontendTLSConfig,
+		nil,
+	), nil
+}
+
+func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	c.callbackLock.Lock()
+	c.onGetClaims = fn
+	c.callbackLock.Unlock()
+}
+
+func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	c.callbackLock.RLock()
+	onGetClaims := c.onGetClaims
+	c.callbackLock.RUnlock()
+	if onGetClaims != nil {
+		return onGetClaims(authInfo)
+	}
+	return &authorization.Claims{System: authorization.RoleAdmin}, nil
+}
+
+func (c *temporalImpl) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	c.callbackLock.Lock()
+	c.onAuthorize = fn
+	c.callbackLock.Unlock()
+}
+
+func (c *temporalImpl) Authorize(
+	ctx context.Context,
+	caller *authorization.Claims,
+	target *authorization.CallTarget,
+) (authorization.Result, error) {
+	c.callbackLock.RLock()
+	onAuthorize := c.onAuthorize
+	c.callbackLock.RUnlock()
+	if onAuthorize != nil {
+		return onAuthorize(ctx, caller, target)
+	}
+	return authorization.Result{Decision: authorization.DecisionAllow}, nil
 }
 
 // copyPersistenceConfig makes a deepcopy of persistence config.
@@ -740,85 +910,25 @@ func sdkClientFactoryProvider(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	tlsConfigProvider encryption.TLSConfigProvider,
 ) sdk.ClientFactory {
+	var tlsConfig *tls.Config
+	if tlsConfigProvider != nil {
+		var err error
+		if tlsConfig, err = tlsConfigProvider.GetFrontendClientConfig(); err != nil {
+			panic(err)
+		}
+	}
 	return sdk.NewClientFactory(
 		resolver.MakeURL(primitives.FrontendService),
-		nil,
+		tlsConfig,
 		metricsHandler,
 		logger,
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
 	)
 }
 
-type rpcFactoryImpl struct {
-	serviceName  primitives.ServiceName
-	grpcHostPort string
-	logger       log.Logger
-	frontendURL  string
-
-	sync.RWMutex
-	listener net.Listener
-}
-
-func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
-	return nil, nil
-}
-
-func (c *rpcFactoryImpl) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error) {
-	return nil, nil
-}
-
-func (c *rpcFactoryImpl) CreateRemoteFrontendGRPCConnection(hostName string) *grpc.ClientConn {
-	return c.CreateGRPCConnection(hostName)
-}
-
-func (c *rpcFactoryImpl) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
-	return c.CreateGRPCConnection(c.frontendURL)
-}
-
-func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
-	return c.CreateGRPCConnection(hostName)
-}
-
-func newRPCFactoryImpl(sn primitives.ServiceName, grpcHostPort listenHostPort, logger log.Logger, resolver membership.GRPCResolver) common.RPCFactory {
-	return &rpcFactoryImpl{
-		serviceName:  sn,
-		grpcHostPort: string(grpcHostPort),
-		logger:       logger,
-		frontendURL:  resolver.MakeURL(primitives.FrontendService),
-	}
-}
-
-func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
-	c.RLock()
-	if c.listener != nil {
-		c.RUnlock()
-		return c.listener
-	}
-	c.RUnlock()
-
-	c.Lock()
-	defer c.Unlock()
-
-	if c.listener == nil {
-		var err error
-		c.listener, err = net.Listen("tcp", c.grpcHostPort)
-		if err != nil {
-			c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-		}
-
-		c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
-	}
-
-	return c.listener
-}
-
-// CreateGRPCConnection creates connection for gRPC calls
-func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := rpc.Dial(hostName, nil, c.logger)
-	if err != nil {
-		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
-	}
-
-	return connection
+func newSimpleHostInfoProvider(serviceName primitives.ServiceName, hosts map[primitives.ServiceName][]string) membership.HostInfoProvider {
+	hostInfo := membership.NewHostInfoFromAddress(hosts[serviceName][0])
+	return membership.NewHostInfoProvider(hostInfo)
 }

@@ -37,7 +37,8 @@ import "temporal/api/protocol/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
@@ -110,6 +111,9 @@ message AddWorkflowTaskRequest {
     string forwarded_source = 6;
     temporal.server.api.enums.v1.TaskSource source = 7;
     temporal.server.api.clock.v1.VectorClock clock = 9;
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message AddWorkflowTaskResponse {
@@ -127,6 +131,9 @@ message AddActivityTaskRequest {
     string forwarded_source = 7;
     temporal.server.api.enums.v1.TaskSource source = 8;
     temporal.server.api.clock.v1.VectorClock clock = 9;
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message AddActivityTaskResponse {
@@ -137,6 +144,9 @@ message QueryWorkflowRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
     string forwarded_source = 4;
+    // How this task should be directed by matching. (Missing means the default
+    // for TaskVersionDirective, which is unversioned.)
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
 }
 
 message QueryWorkflowResponse {
@@ -190,8 +200,27 @@ message ListTaskQueuePartitionsResponse {
 // (-- api-linter: core::0134::request-resource-required=disabled
 //     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibilityRequest RPC doesn't follow Google API format. --)
 message UpdateWorkerBuildIdCompatibilityRequest {
+    // Apply request from public API.
+    message ApplyPublicRequest {
+        temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 1;
+    }
+
+    // Remove build ids (internal only)
+    message RemoveBuildIds {
+        // The last known user data version, used to prevent concurrent updates.
+        int64 known_user_data_version = 1;
+        // List of build ids to remove.
+        repeated string build_ids = 2;
+    }
+
     string namespace_id = 1;
-    temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest request = 2;
+    string task_queue = 2;
+
+    oneof operation {
+        ApplyPublicRequest apply_public_request = 3;
+        RemoveBuildIds remove_build_ids = 4;
+        string persist_unknown_build_id = 5;
+    }
 }
 message UpdateWorkerBuildIdCompatibilityResponse {}
 
@@ -203,32 +232,83 @@ message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
 
-message InvalidateTaskQueueMetadataRequest {
+message GetTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    // The task queue to fetch data from. The task queue is always considered as a normal
+    // queue, since sticky queues have no user data.
+    string task_queue = 2;
+    // Normally task queue type should always be TASK_QUEUE_TYPE_WORKFLOW here, but querying
+    // activity task queues is useful for testing.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
+    // The value of the last known user data version.
+    // If the requester has no data, it should set this to 0.
+    // This value must not be set to a negative number (note that our linter suggests avoiding uint64).
+    int64 last_known_user_data_version = 3;
+    // If set and last_known_user_data_version is the current version, block until new data is
+    // available (or timeout).
+    bool wait_new_data = 4;
+}
+message GetTaskQueueUserDataResponse {
+    // Whether this task queue has any stored user data
+    bool task_queue_has_user_data = 1;
+    // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+    // than the version cached in the root partition.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
+}
+
+message ApplyTaskQueueUserDataReplicationEventRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message ApplyTaskQueueUserDataReplicationEventResponse {
+}
+
+message GetBuildIdTaskQueueMappingRequest {
+    string namespace_id = 1;
+    string build_id = 2;
+}
+
+message GetBuildIdTaskQueueMappingResponse {
+    repeated string task_queues = 1;
+}
+
+message ForceUnloadTaskQueueRequest {
     string namespace_id = 1;
     string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-    // The task queue versioning data should be invalidated and replaced with this data, if set.
-    temporal.server.api.persistence.v1.VersioningData versioning_data = 4;
 }
-message InvalidateTaskQueueMetadataResponse {}
 
-message GetTaskQueueMetadataRequest {
+message ForceUnloadTaskQueueResponse {
+    bool was_loaded = 1;
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserDataRequest RPC doesn't follow Google API format. --)
+message UpdateTaskQueueUserDataRequest {
     string namespace_id = 1;
-    // The task queue to fetch data from. Is always considered as a workflow queue, since root
-    // workflow queues own the metadata.
     string task_queue = 2;
-    // If set nonempty, the requester wants the latest versioning data. The value must be the hash
-    // (using farm hash Fingerprint64) of the latest versioning data. If the requester has no data,
-    // it can use any invalid value (ex: [0]).
-    // If the data is up to date, no value will be returned.
-    bytes want_versioning_data_curhash = 3;
+    // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
+    // than the version cached in the root partition.
+    temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 3;
+    // List of added build ids
+    repeated string build_ids_added = 4;
+    // List of removed build ids
+    repeated string build_ids_removed = 5;
 }
-message GetTaskQueueMetadataResponse {
-    oneof versioning_data_resp {
-        // The latest versioning data, if the request's hash did not match. May be null if no
-        // versioning data exists.
-        temporal.server.api.persistence.v1.VersioningData versioning_data = 1;
-        // If the request's hash matched, this variant is set (and will be true).
-        bool matched_req_hash = 2;
-    }
+
+message UpdateTaskQueueUserDataResponse {
 }
+
+message ReplicateTaskQueueUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message ReplicateTaskQueueUserDataResponse {
+}
+

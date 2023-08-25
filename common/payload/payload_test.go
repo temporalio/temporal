@@ -38,56 +38,56 @@ type testStruct struct {
 }
 
 func TestToString(t *testing.T) {
-	assert := assert.New(t)
+	s := assert.New(t)
 	var result string
 
 	p := EncodeString("str")
 	result = ToString(p)
-	assert.Equal(`"str"`, result)
+	s.Equal(`"str"`, result)
 
 	p, err := Encode(10)
-	assert.NoError(err)
+	s.NoError(err)
 	result = ToString(p)
-	assert.Equal("10", result)
+	s.Equal("10", result)
 
 	p, err = Encode([]byte{41, 42, 43})
-	assert.NoError(err)
+	s.NoError(err)
 	result = ToString(p)
-	assert.Equal("KSor", result)
+	s.Equal("KSor", result)
 
 	p, err = Encode(&testStruct{
 		Int:    10,
 		String: "str",
 		Bytes:  []byte{51, 52, 53},
 	})
-	assert.NoError(err)
+	s.NoError(err)
 	result = ToString(p)
-	assert.Equal(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
+	s.Equal(`{"Int":10,"String":"str","Bytes":"MzQ1"}`, result)
 
 	p, err = Encode(nil)
-	assert.NoError(err)
+	s.NoError(err)
 	result = ToString(p)
-	assert.Equal("nil", result)
+	s.Equal("nil", result)
 
 	result = ToString(nil)
-	assert.Equal("", result)
+	s.Equal("", result)
 }
 
 func TestMergeMapOfPayload(t *testing.T) {
-	assert := assert.New(t)
+	s := assert.New(t)
 
 	var currentMap map[string]*commonpb.Payload
 	var newMap map[string]*commonpb.Payload
 	resultMap := MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(newMap, resultMap)
+	s.Equal(newMap, resultMap)
 
 	newMap = make(map[string]*commonpb.Payload)
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(newMap, resultMap)
+	s.Equal(newMap, resultMap)
 
 	newMap = map[string]*commonpb.Payload{"key": EncodeString("val")}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(newMap, resultMap)
+	s.Equal(newMap, resultMap)
 
 	newMap = map[string]*commonpb.Payload{
 		"key":        EncodeString("val"),
@@ -95,11 +95,11 @@ func TestMergeMapOfPayload(t *testing.T) {
 		"emptyArray": emptySlicePayload,
 	}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(map[string]*commonpb.Payload{"key": EncodeString("val")}, resultMap)
+	s.Equal(map[string]*commonpb.Payload{"key": EncodeString("val")}, resultMap)
 
 	currentMap = map[string]*commonpb.Payload{"number": EncodeString("1")}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(
+	s.Equal(
 		map[string]*commonpb.Payload{"number": EncodeString("1"), "key": EncodeString("val")},
 		resultMap,
 	)
@@ -107,10 +107,35 @@ func TestMergeMapOfPayload(t *testing.T) {
 	newValue, _ := Encode(nil)
 	newMap = map[string]*commonpb.Payload{"number": newValue}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(0, len(resultMap))
+	s.Equal(0, len(resultMap))
 
 	newValue, _ = Encode([]int{})
+	newValue.Metadata["key"] = []byte("foo")
 	newMap = map[string]*commonpb.Payload{"number": newValue}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(0, len(resultMap))
+	s.Equal(0, len(resultMap))
+}
+
+func TestIsEqual(t *testing.T) {
+	s := assert.New(t)
+
+	a, _ := Encode(nil)
+	b, _ := Encode(nil)
+	s.True(isEqual(a, b))
+
+	a, _ = Encode([]string{})
+	b, _ = Encode([]string{})
+	s.True(isEqual(a, b))
+
+	a.Metadata["key"] = []byte("foo")
+	b.Metadata["key"] = []byte("bar")
+	s.True(isEqual(a, b))
+
+	a, _ = Encode(nil)
+	b, _ = Encode([]string{})
+	s.False(isEqual(a, b))
+
+	a, _ = Encode([]string{})
+	b, _ = Encode("foo")
+	s.False(isEqual(a, b))
 }

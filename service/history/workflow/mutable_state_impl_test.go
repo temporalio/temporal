@@ -49,6 +49,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -58,9 +59,13 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -457,14 +462,25 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
+	name, err := tqname.FromBaseName("tq")
+	s.NoError(err)
+
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{},
+		&taskqueuepb.TaskQueue{Name: name.WithPartition(5).FullName()},
 		"random identity",
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
+
+	mutation, err := s.mutableState.hBuilder.Finish(true)
+	s.NoError(err)
+	s.Equal(1, len(mutation.DBEventsBatches))
+	s.Equal(2, len(mutation.DBEventsBatches[0]))
+	attrs := mutation.DBEventsBatches[0][0].GetWorkflowTaskScheduledEventAttributes()
+	s.NotNil(attrs)
+	s.Equal("tq", attrs.TaskQueue.Name)
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {
@@ -808,6 +824,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 }
 
 func (s *mutableStateSuite) TestUpdateInfos() {
+	ctx := context.Background()
 	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
@@ -830,12 +847,10 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
 		_, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
 			updateID,
-			&updatepb.Acceptance{
-				AcceptedRequestMessageId:         fmt.Sprintf("%s-%d", acceptedMsgID, i),
-				AcceptedRequestSequencingEventId: 1,
-				AcceptedRequest: &updatepb.Request{
-					Meta: &updatepb.Meta{UpdateId: updateID},
-				},
+			fmt.Sprintf("%s-%d", acceptedMsgID, i),
+			1,
+			&updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: updateID},
 			},
 		)
 		s.Require().NoError(err)
@@ -845,6 +860,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		Value: &updatepb.Outcome_Success{Success: testPayloads},
 	}
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		1234,
 		&updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: completedUpdateID},
 			Outcome: completedOutcome,
@@ -852,19 +868,33 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	)
 	s.Require().NoError(err)
 
-	// should now have one completed update and two accepted in MS
-	s.Require().Len(cacheStore, 3)
+	s.Require().Len(cacheStore, 3, "expected 1 completed update + 2 accepted in cache")
 
-	outcome, err := s.mutableState.GetUpdateOutcome(context.TODO(), completedUpdateID)
+	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedUpdateID)
 	s.Require().NoError(err)
 	s.Require().Equal(completedOutcome, outcome)
 
-	_, err = s.mutableState.GetUpdateOutcome(context.TODO(), "not_an_update_id")
+	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Require().Error(err)
 	s.Require().IsType((*serviceerror.NotFound)(nil), err)
 
-	incompletes := s.mutableState.GetAcceptedWorkflowExecutionUpdateIDs(context.TODO())
-	s.Require().Len(incompletes, 2)
+	numCompleted := 0
+	numAccepted := 0
+	s.mutableState.VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		if comp := updInfo.GetCompletion(); comp != nil {
+			numCompleted++
+		}
+		if updInfo.GetAcceptance() != nil {
+			numAccepted++
+		}
+	})
+	s.Require().Equal(numCompleted, 1, "expected 1 completed")
+	s.Require().Equal(numAccepted, 2, "expected 2 accepted")
+
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
+	s.Require().NoError(err)
+	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 3,
+		"expected 1 completed update + 2 accepted in mutation")
 }
 
 func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
@@ -954,6 +984,9 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(1234, &updatepb.Response{})
+	s.NoError(err)
+
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
 		"signalName",
 		&commonpb.Payloads{},
@@ -980,6 +1013,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.Equal(int64(1), mutation.ExecutionInfo.RequestCancelExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalExternalCount)
 	s.Equal(int64(1), mutation.ExecutionInfo.SignalCount)
+	s.Equal(int64(1), mutation.ExecutionInfo.UpdateCount)
 }
 
 func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
@@ -1101,4 +1135,122 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.True(ok)
 	s.LessOrEqual(activityInfo.RetryLastFailure.Size(), failureSizeErrorLimit)
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
+}
+
+func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
+	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
+	}
+	versionedSearchAttribute := func(buildIds ...string) []string {
+		attrs := []string{}
+		for _, buildId := range buildIds {
+			attrs = append(attrs, worker_versioning.VersionedBuildIdSearchAttribute(buildId))
+		}
+		return attrs
+	}
+	unversioned := func(buildId string) *commonpb.WorkerVersionStamp {
+		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: false}
+	}
+	unversionedSearchAttribute := func(buildIds ...string) []string {
+		// assumed limit is 2
+		attrs := []string{worker_versioning.UnversionedSearchAttribute, worker_versioning.UnversionedBuildIdSearchAttribute(buildIds[len(buildIds)-1])}
+		return attrs
+	}
+
+	type testCase struct {
+		name            string
+		searchAttribute func(buildIds ...string) []string
+		stamp           func(buildId string) *commonpb.WorkerVersionStamp
+	}
+	matrix := []testCase{
+		{name: "unversioned", searchAttribute: unversionedSearchAttribute, stamp: unversioned},
+		{name: "versioned", searchAttribute: versionedSearchAttribute, stamp: versioned},
+	}
+	for _, c := range matrix {
+		s.T().Run(c.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			var err error
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			// Max 0
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 0, MaxSearchAttributeValueSize: 0})
+			s.NoError(err)
+			s.Equal([]string{}, s.getBuildIdsFromMutableState())
+			s.Equal([]string{}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			// Add the same build ID
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.1"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.2"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.1", "0.2"}, s.getResetPointsBinaryChecksumsFromMutableState())
+
+			// Limit applies
+			err = s.mutableState.trackBuildIdFromCompletion(c.stamp("0.3"), 4, WorkflowTaskCompletionLimits{MaxResetPoints: 2, MaxSearchAttributeValueSize: 40})
+			s.NoError(err)
+			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
+			s.Equal([]string{"0.2", "0.3"}, s.getResetPointsBinaryChecksumsFromMutableState())
+		})
+	}
+}
+
+func (s *mutableStateSuite) getBuildIdsFromMutableState() []string {
+	searchAttributes := s.mutableState.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return []string{}
+	}
+
+	payload, found := searchAttributes[searchattribute.BuildIds]
+	if !found {
+		return []string{}
+	}
+	decoded, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	s.NoError(err)
+	buildIDs, ok := decoded.([]string)
+	s.True(ok)
+	return buildIDs
+}
+
+func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []string {
+	resetPoints := s.mutableState.executionInfo.GetAutoResetPoints().GetPoints()
+	binaryChecksums := make([]string, len(resetPoints))
+	for i, point := range resetPoints {
+		binaryChecksums[i] = point.GetBinaryChecksum()
+	}
+	return binaryChecksums
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_CollapseUpsert() {
+	ms := s.mutableState
+
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	s.Equal(3, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(1, len(ms.InsertTasks[tasks.CategoryVisibility]))
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_DontCollapseOthers() {
+	ms := s.mutableState
+
+	// it doesn't make any sense to have two start tasks, but just for testing logic
+	startEvent := &historypb.HistoryEvent{Version: 1}
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
 }

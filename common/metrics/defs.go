@@ -27,23 +27,14 @@ package metrics
 
 // types used/defined by the package
 type (
-	// MetricName is the name of the metric
-	MetricName string
-
-	// MetricType is the type of the metric
-	MetricType int
-
 	MetricUnit string
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricType MetricType // metric type
-		metricName MetricName // metric name
-		unit       MetricUnit
+		name        string
+		description string
+		unit        MetricUnit
 	}
-
-	// ServiceIdx is an index that uniquely identifies the service
-	ServiceIdx int
 )
 
 // MetricUnit supported values
@@ -54,52 +45,30 @@ const (
 	Bytes         = "By"
 )
 
-// MetricTypes which are supported
-const (
-	Counter MetricType = iota
-	Timer
-	Gauge
-	Histogram
-)
-
-// Empty returns true if the metricName is an empty string
-func (mn MetricName) Empty() bool {
-	return mn == ""
-}
-
-// String returns string representation of this metric name
-func (mn MetricName) String() string {
-	return string(mn)
-}
-
-func (md metricDefinition) GetMetricType() MetricType {
-	return md.metricType
-}
-
 func (md metricDefinition) GetMetricName() string {
-	return md.metricName.String()
+	return md.name
 }
 
 func (md metricDefinition) GetMetricUnit() MetricUnit {
 	return md.unit
 }
 
-func NewTimerDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
+func NewTimerDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Milliseconds))...)
 }
 
-func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
+func NewBytesHistogramDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Bytes))...)
 }
 
-func NewDimensionlessHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Dimensionless}
+func NewDimensionlessHistogramDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, append(opts, WithUnit(Dimensionless))...)
 }
 
-func NewCounterDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Counter}
+func NewCounterDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, opts...)
 }
 
-func NewGaugeDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
+func NewGaugeDef(name string, opts ...Option) metricDefinition {
+	return globalRegistry.register(name, opts...)
 }

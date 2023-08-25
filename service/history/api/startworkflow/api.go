@@ -33,10 +33,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
-	tokenspb "go.temporal.io/server/api/token/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
+
+	"go.temporal.io/server/common/tasktoken"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -536,14 +536,18 @@ func (s *Starter) generateResponse(
 	if err != nil {
 		return nil, err
 	}
-	taskToken := &tokenspb.Task{
-		NamespaceId:      s.namespace.ID().String(),
-		WorkflowId:       workflowID,
-		RunId:            runID,
-		ScheduledEventId: workflowTaskInfo.ScheduledEventID,
-		Attempt:          workflowTaskInfo.Attempt,
-		Clock:            clock,
-	}
+
+	taskToken := tasktoken.NewWorkflowTaskToken(
+		s.namespace.ID().String(),
+		workflowID,
+		runID,
+		workflowTaskInfo.ScheduledEventID,
+		workflowTaskInfo.StartedEventID,
+		workflowTaskInfo.StartedTime,
+		workflowTaskInfo.Attempt,
+		clock,
+		workflowTaskInfo.Version,
+	)
 	serializedToken, err := tokenSerializer.Serialize(taskToken)
 	if err != nil {
 		return nil, err

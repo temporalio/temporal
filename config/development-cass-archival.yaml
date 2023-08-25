@@ -35,6 +35,7 @@ services:
       grpcPort: 7233
       membershipPort: 6933
       bindOnLocalHost: true
+      httpPort: 7243
 
   matching:
     rpc:
@@ -68,7 +69,6 @@ clusterMetadata:
 
 dcRedirectionPolicy:
   policy: "noop"
-  toDC: ""
 
 archival:
   history:

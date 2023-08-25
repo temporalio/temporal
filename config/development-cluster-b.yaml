@@ -92,7 +92,6 @@ clusterMetadata:
 
 dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
-  toDC: ""
 
 archival:
   history:

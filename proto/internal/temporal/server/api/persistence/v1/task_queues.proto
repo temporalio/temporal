@@ -1,0 +1,100 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "temporal/server/api/clock/v1/message.proto";
+
+// BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
+message BuildId {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ACTIVE = 1;
+        STATE_DELETED = 2;
+    };
+
+    string id = 1;
+    State state = 2;
+    // HLC timestamp representing when the state was updated or the when build ID was originally inserted.
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
+    // HLC timestamp representing when this build id was last made default in its version set.
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
+}
+
+// An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
+message CompatibleVersionSet {
+    // Set IDs are used internally by matching.
+    // A set typically has one set ID and extra care is taken to enforce this.
+    // In some situations, including:
+    // - Replication race between task queue user data and history events
+    // - Replication split-brain + later merge
+    // - Delayed user data propagation between partitions
+    // - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
+    //   versioning data
+    // we have to guess the set id for a build id. If that happens, and then the build id is
+    // discovered to be in a different set, then the sets will be merged and both (or more)
+    // build ids will be preserved, so that we don't lose tasks.
+    // The first set id is considered the "primary", and the others are "demoted". Once a build
+    // id is demoted, it cannot be made the primary again.
+    repeated string set_ids = 1;
+    // All the compatible versions, unordered except for the last element, which is considered the set "default".
+    repeated BuildId build_ids = 2;
+    // HLC timestamp representing when this set was last made the default for the queue.
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
+}
+
+// Holds all the data related to worker versioning for a task queue.
+// Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable.
+message VersioningData {
+    // All the incompatible version sets, unordered except for the last element, which is considered the set "default".
+    repeated CompatibleVersionSet version_sets = 1;
+}
+
+// Container for all persistent user provided data for a task queue.
+// Task queue as a named concept here is close to how users interpret them, rather than relating to some specific type
+// (workflow vs activity, etc) and thus, as a consequence, any data that applies to a specific type (say, activity rate
+// limiting) should be defined as such within this structure.
+// This data must all fit in a single DB column and is kept cached in-memory, take extra care to ensure data added here
+// has reasonable size limits imposed on it.
+message TaskQueueUserData {
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue.
+    // Updated whenever user data is directly updated due to a user action but not when applying replication events.
+    // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+    // timestamps.
+    temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
+    VersioningData versioning_data = 2;
+
+    // For future use: description, rate limits, manual partition control, etc...
+}
+
+// Simple wrapper that includes a TaskQueueUserData and its storage version.
+message VersionedTaskQueueUserData {
+    TaskQueueUserData data = 1;
+    int64 version = 2;
+}

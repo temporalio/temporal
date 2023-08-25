@@ -50,10 +50,7 @@ type (
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-			// TODO: remove closeEvent parameter
-			// when deprecating the backward compatible logic
-			// for getting close time from close event.
-			closeEvent *historypb.HistoryEvent,
+			closedTime *time.Time,
 			deleteAfterClose bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
@@ -102,7 +99,7 @@ type (
 		GenerateHistoryReplicationTasks(
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateMigrationTasks() (tasks.Task, error)
+		GenerateMigrationTasks() (tasks.Task, int64, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -154,7 +151,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
-	closeEvent *historypb.HistoryEvent,
+	closedTime *time.Time,
 	deleteAfterClose bool,
 ) error {
 
@@ -206,10 +203,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				delay = retention
 			}
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
-			archiveTime := closeEvent.GetEventTime().Add(delay)
+			archiveTime := timestamp.TimeValue(closedTime).Add(delay)
 
-			// We can skip visibility archival in the close execution task if we are using the durable archival flow.
-			// The visibility archival will be handled by the archival queue.
+			// This flag is only untrue for old server versions which were using the archival workflow instead of the
+			// archival queue.
 			closeExecutionTask.CanSkipVisibilityArchival = true
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
@@ -219,7 +216,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			}
 			closeTasks = append(closeTasks, task)
 		} else {
-			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
+			closeTime := timestamp.TimeValue(closedTime)
 			if err := r.GenerateDeleteHistoryEventTask(closeTime, false); err != nil {
 				return err
 			}
@@ -614,15 +611,15 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
+func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
@@ -630,7 +627,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: r.mutableState.GetWorkflowKey(),
 			Version:     lastItem.GetVersion(),
-		}, nil
+		}, 1, nil
 	} else {
 		return &tasks.HistoryReplicationTask{
 			// TaskID, VisibilityTimestamp is set by shard
@@ -638,7 +635,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
 			FirstEventID: executionInfo.LastFirstEventId,
 			NextEventID:  lastItem.GetEventId() + 1,
 			Version:      lastItem.GetVersion(),
-		}, nil
+		}, executionInfo.StateTransitionCount, nil
 	}
 }
 
@@ -670,9 +667,6 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 // itself is also enabled.
 // For both history and visibility, we check that archival is enabled for both the cluster and the namespace.
 func (r *TaskGeneratorImpl) archivalQueueEnabled() bool {
-	if !r.config.DurableArchivalEnabled() {
-		return false
-	}
 	namespaceEntry := r.mutableState.GetNamespaceEntry()
 	return r.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||

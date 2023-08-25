@@ -332,6 +332,11 @@ func WorkflowHistorySizeBytes(historySizeBytes int) ZapTag {
 	return NewInt("wf-history-size-bytes", historySizeBytes)
 }
 
+// WorkflowMutableStateSize returns tag for MutableStateSize
+func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
+	return NewInt("wf-mutable-state-size", mutableStateSize)
+}
+
 // WorkflowEventCount returns tag for EventCount
 func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
@@ -470,6 +475,11 @@ func Counter(c int) ZapTag {
 // RequestCount returns tag for RequestCount
 func RequestCount(c int) ZapTag {
 	return NewInt("request-count", c)
+}
+
+// RPS returns tag for requests per second
+func RPS(c int64) ZapTag {
+	return NewInt64("rps", c)
 }
 
 // Number returns tag for Number
@@ -923,4 +933,8 @@ func DeletedExecutionsErrorCount(count int) ZapTag {
 
 func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
+}
+
+func BuildId(buildId string) ZapTag {
+	return NewStringTag("build-id", buildId)
 }

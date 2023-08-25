@@ -30,11 +30,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/clock"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -73,7 +73,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 	queueFactory := NewArchivalQueueFactory(ArchivalQueueFactoryParams{
 		QueueFactoryBaseParams: QueueFactoryBaseParams{
 			Config:         tests.NewDynamicConfig(),
-			TimeSource:     namespace.NewMockClock(ctrl),
+			TimeSource:     clock.NewEventTimeSource(),
 			MetricsHandler: metricsHandler,
 			Logger:         log.NewNoopLogger(),
 		},

@@ -29,11 +29,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"golang.org/x/exp/maps"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
@@ -104,6 +106,39 @@ func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
 			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
 		},
+	}
+}
+
+func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Namespace {
+	info := &persistencespb.NamespaceInfo{
+		Id:          response.GetInfo().GetId(),
+		Name:        response.GetInfo().GetName(),
+		State:       response.GetInfo().GetState(),
+		Description: response.GetInfo().GetDescription(),
+		Owner:       response.GetInfo().GetOwnerEmail(),
+		Data:        response.GetInfo().GetData(),
+	}
+	config := &persistencespb.NamespaceConfig{
+		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
+		HistoryArchivalState:         response.GetConfig().GetHistoryArchivalState(),
+		HistoryArchivalUri:           response.GetConfig().GetHistoryArchivalUri(),
+		VisibilityArchivalState:      response.GetConfig().GetVisibilityArchivalState(),
+		VisibilityArchivalUri:        response.GetConfig().GetVisibilityArchivalUri(),
+		CustomSearchAttributeAliases: response.GetConfig().GetCustomSearchAttributeAliases(),
+	}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
+		State:             response.GetReplicationConfig().GetState(),
+		Clusters:          ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
+		FailoverHistory:   convertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
+	}
+	return &Namespace{
+		info:              *info,
+		config:            *config,
+		replicationConfig: *replicationConfig,
+		configVersion:     response.GetConfigVersion(),
+		failoverVersion:   response.GetFailoverVersion(),
+		isGlobalNamespace: response.GetIsGlobalNamespace(),
 	}
 }
 
@@ -212,7 +247,9 @@ func (ns *Namespace) FailoverVersion() int64 {
 	return ns.failoverVersion
 }
 
-// IsGlobalNamespace return whether the namespace is a global namespace
+// IsGlobalNamespace returns whether the namespace is a global namespace.
+// Being a global namespace doesn't necessarily mean that there are multiple registered clusters for it, only that it
+// has a failover version. To determine whether operations should be replicated for a namespace, see ReplicationPolicy.
 func (ns *Namespace) IsGlobalNamespace() bool {
 	return ns.isGlobalNamespace
 }

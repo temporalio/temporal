@@ -25,7 +25,7 @@
 package store
 
 // -aux_files is required here due to Closeable interface being in another file.
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_store_mock.go -aux_files go.temporal.io/server/common/persistence=../../dataInterfaces.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_store_mock.go -aux_files go.temporal.io/server/common/persistence=../../data_interfaces.go
 
 import (
 	"context"
@@ -44,6 +44,11 @@ type (
 		persistence.Closeable
 		GetName() string
 		GetIndexName() string
+
+		// Validate search attributes based on the store constraints. It returns a new map containing
+		// only search attributes with valid values. If there are invalid values, an error of type
+		// VisibilityStoreInvalidValuesError wraps all invalid values errors.
+		ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error)
 
 		// Write APIs.
 		RecordWorkflowExecutionStarted(ctx context.Context, request *InternalRecordWorkflowExecutionStartedRequest) error

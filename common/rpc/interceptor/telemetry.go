@@ -296,6 +296,7 @@ func (ti *TelemetryInterceptor) handleError(
 	// we emit service_error_with_type metrics, no need to emit specific metric for these known error types.
 	case *serviceerror.AlreadyExists,
 		*serviceerror.CancellationAlreadyRequested,
+		*serviceerror.FailedPrecondition,
 		*serviceerror.NamespaceInvalidState,
 		*serviceerror.NamespaceNotActive,
 		*serviceerror.NamespaceNotFound,
@@ -308,6 +309,7 @@ func (ti *TelemetryInterceptor) handleError(
 		*serviceerror.ClientVersionNotSupported,
 		*serviceerror.ServerVersionNotSupported,
 		*serviceerror.PermissionDenied,
+		*serviceerror.NewerBuildExists,
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.ShardOwnershipLost,
 		*serviceerrors.TaskAlreadyStarted,

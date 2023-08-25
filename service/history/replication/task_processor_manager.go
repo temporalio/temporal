@@ -80,8 +80,6 @@ type (
 	}
 )
 
-var _ common.Daemon = (*taskProcessorManagerImpl)(nil)
-
 func NewTaskProcessorManager(
 	config *configs.Config,
 	shard shard.Context,
@@ -264,12 +262,14 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 
 func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
 	for {
+		timer := time.NewTimer(backoff.FullJitter(dlqSizeCheckInterval))
 		select {
-		case <-time.After(backoff.FullJitter(dlqSizeCheckInterval)):
+		case <-timer.C:
 			if r.config.ReplicationEnableDLQMetrics() {
 				r.checkReplicationDLQSize()
 			}
 		case <-r.shutdownChan:
+			timer.Stop()
 			return
 		}
 	}
@@ -312,7 +312,8 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	)
 	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
 		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
-		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+		metrics.TargetClusterTag(currentClusterName),
+		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -366,7 +367,6 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 		}
 		if !isEmpty {
 			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
-			r.logger.Info("Replication DLQ is not empty.", tag.ShardID(r.shard.GetShardID()), tag.AckLevel(minTaskKey))
 			break
 		}
 	}

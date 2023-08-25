@@ -26,6 +26,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -35,7 +36,8 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+
+	updatespb "go.temporal.io/server/api/update/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -55,14 +57,13 @@ type (
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 
-		// ReadOutoundMessages polls each registered Update for outbound
+		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
-		ReadOutgoingMessages(startedEventID int64) ([]*protocolpb.Message, error)
+		ReadOutgoingMessages(startedEventID int64) []*protocolpb.Message
 
-		// HasUndeliveredUpdates returns true if the registry has Updates that
-		// are not known to have been seen by user workflow code. In practice
-		// this means updates that have not yet been accepted or rejected.
-		HasUndeliveredUpdates() bool
+		// TerminateUpdates terminates all existing updates in the registry
+		// and notifies update aPI callers with corresponding error.
+		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
 		// HasOutgoing returns true if the registry has any Updates that want to
 		// sent messages to a worker.
@@ -72,32 +73,37 @@ type (
 		Len() int
 	}
 
-	// UpdateStore represents the update package's requirements for writing
-	// events and restoring ephemeral state from an event index.
+	// UpdateStore represents the update package's requirements for reading updates from the store.
 	UpdateStore interface {
-		GetAcceptedWorkflowExecutionUpdateIDs(context.Context) []string
-		GetUpdateInfo(ctx context.Context, updateID string) (*persistencespb.UpdateInfo, bool)
+		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
 	RegistryImpl struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		store           UpdateStore
+		getStoreFn      func() UpdateStore
 		instrumentation instrumentation
 		maxInFlight     func() int
+		maxTotal        func() int
+		completedCount  int
 	}
 
 	regOpt func(*RegistryImpl)
 )
-
-//revive:disable:unexported-return I *want* it to be unexported
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) regOpt {
 	return func(r *RegistryImpl) {
 		r.maxInFlight = f
+	}
+}
+
+// WithTotalLimit provides an optional limit to the total number of updates for workflow.
+func WithTotalLimit(f func() int) regOpt {
+	return func(r *RegistryImpl) {
+		r.maxTotal = f
 	}
 }
 
@@ -125,32 +131,44 @@ func WithTracerProvider(t trace.TracerProvider) regOpt {
 	}
 }
 
-//revive:enable:unexported-return
-
 var _ Registry = (*RegistryImpl)(nil)
 
-func NewRegistry(store UpdateStore, opts ...regOpt) *RegistryImpl {
+func NewRegistry(
+	getStoreFn func() UpdateStore,
+	opts ...regOpt,
+) *RegistryImpl {
 	r := &RegistryImpl{
 		updates:         make(map[string]*Update),
-		store:           store,
+		getStoreFn:      getStoreFn,
 		instrumentation: noopInstrumentation,
 		maxInFlight:     func() int { return math.MaxInt },
+		maxTotal:        func() int { return math.MaxInt },
 	}
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	// need to eager load here so that Len and admit are correct.
-	for _, id := range store.GetAcceptedWorkflowExecutionUpdateIDs(context.Background()) {
-		r.updates[id] = newAccepted(id, r.remover(id), withInstrumentation(&r.instrumentation))
-	}
+	getStoreFn().VisitUpdates(func(updID string, updInfo *updatespb.UpdateInfo) {
+		// need to eager load here so that Len and admit are correct.
+		if acc := updInfo.GetAcceptance(); acc != nil {
+			r.updates[updID] = newAccepted(
+				updID,
+				acc.EventId,
+				r.remover(updID),
+				withInstrumentation(&r.instrumentation),
+			)
+		}
+		if updInfo.GetCompletion() != nil {
+			r.completedCount++
+		}
+	})
 	return r
 }
 
 func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if upd, ok := r.findLocked(ctx, id); ok {
+	if upd, found := r.findLocked(ctx, id); found {
 		return upd, true, nil
 	}
 	if err := r.admit(ctx); err != nil {
@@ -167,15 +185,10 @@ func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-func (r *RegistryImpl) HasUndeliveredUpdates() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, upd := range r.updates {
-		if !upd.hasBeenSeenByWorkflowExecution() {
-			return true
-		}
-	}
-	return false
+func (r *RegistryImpl) TerminateUpdates(_ context.Context, _ EventStore) {
+	// TODO (alex-update): implement
+	// This method is not implemented and update API callers will just timeout.
+	// In future, it should remove all existing updates and notify callers with better error.
 }
 
 func (r *RegistryImpl) HasOutgoing() bool {
@@ -190,27 +203,25 @@ func (r *RegistryImpl) HasOutgoing() bool {
 }
 
 func (r *RegistryImpl) ReadOutgoingMessages(
-	startedEventID int64,
-) ([]*protocolpb.Message, error) {
+	workflowTaskStartedEventID int64,
+) []*protocolpb.Message {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []*protocolpb.Message
-	for _, upd := range r.updates {
-		upd.ReadOutgoingMessages(&out)
-	}
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
-	// event before WorkflowTaskStartedEvent.  SDKs are supposed to respect this
-	// and process messages (specifically, updates) after event with that ID.
-	// In the future, sequencing_id could point to some specific event
-	// (specifically, signal) after which the update should be processed.
-	// Currently, it is not possible due to buffered events reordering on server
-	// and events reordering in some SDKs.
-	sequencingEventID := startedEventID - 1
-	for _, msg := range out {
-		msg.SequencingId = &protocolpb.Message_EventId{EventId: sequencingEventID}
+	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
+	//  and process messages (specifically, updates) after event with that ID.
+	//  In the future, sequencing_id could point to some specific event
+	//  (specifically, signal) after which the update should be processed.
+	//  Currently, it is not possible due to buffered events reordering on server
+	//  and events reordering in some SDKs.
+	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
+
+	for _, upd := range r.updates {
+		upd.ReadOutgoingMessages(&out, sequencingEventID)
 	}
-	return out, nil
+	return out
 }
 
 func (r *RegistryImpl) Len() int {
@@ -225,41 +236,53 @@ func (r *RegistryImpl) remover(id string) updateOpt {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			delete(r.updates, id)
+			r.completedCount++
 		},
 	)
 }
 
-func (r *RegistryImpl) admit(context.Context) error {
-	max := r.maxInFlight()
-	if len(r.updates) >= max {
+func (r *RegistryImpl) admit(ctx context.Context) error {
+	if len(r.updates) >= r.maxInFlight() {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			fmt.Sprintf("update concurrent in-flight limit has been reached (%v)", max),
+			fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
 		)
 	}
+
+	if len(r.updates)+r.completedCount >= r.maxTotal() {
+		return serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
+		)
+	}
+
 	return nil
 }
 
 func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
-	upd, ok := r.updates[id]
-	if ok {
+
+	if upd, ok := r.updates[id]; ok {
 		return upd, true
 	}
 
 	// update not found in ephemeral state, but could have already completed so
 	// check in registry storage
+	updOutcome, err := r.getStoreFn().GetUpdateOutcome(ctx, id)
 
-	if info, ok := r.store.GetUpdateInfo(ctx, id); ok {
-		if info.GetCompletedPointer() != nil {
-			// Completed, create the Update object but do not add to registry. this
-			// should not happen often.
-			fut := future.NewReadyFuture(r.store.GetUpdateOutcome(ctx, id))
-			return newCompleted(
-				id,
-				fut,
-				withInstrumentation(&r.instrumentation),
-			), true
-		}
+	// Swallow NotFound error because it means that update doesn't exist.
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return nil, false
 	}
-	return nil, false
+
+	// Other errors goes to the future of completed update because it means, that update exists, was found,
+	// but there is something broken in it.
+
+	// Completed, create the Update object but do not add to registry.
+	// This should not happen often.
+	fut := future.NewReadyFuture(updOutcome, err)
+	return newCompleted(
+		id,
+		fut,
+		withInstrumentation(&r.instrumentation),
+	), true
 }

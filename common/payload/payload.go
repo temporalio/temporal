@@ -25,7 +25,8 @@
 package payload
 
 import (
-	"github.com/gogo/protobuf/proto"
+	"bytes"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/util"
@@ -94,11 +95,22 @@ func MergeMapOfPayload(
 	}
 	res := util.CloneMapNonNil(dst)
 	for k, v := range src {
-		if proto.Equal(v, nilPayload) || proto.Equal(v, emptySlicePayload) {
+		if isEqual(v, nilPayload) || isEqual(v, emptySlicePayload) {
 			delete(res, k)
 		} else {
 			res[k] = v
 		}
 	}
 	return res
+}
+
+// isEqual returns true if both have the same encoding and data.
+// It does not take additional metadata into consideration.
+// Note that data equality it's not the same as semantic equality, ie.,
+// `[]` and `[ ]` are semantically the same, but different not data-wise.
+// Only use if you know that the data is encoded the same way.
+func isEqual(a, b *commonpb.Payload) bool {
+	aEnc := a.GetMetadata()[converter.MetadataEncoding]
+	bEnc := a.GetMetadata()[converter.MetadataEncoding]
+	return bytes.Equal(aEnc, bEnc) && bytes.Equal(a.GetData(), b.GetData())
 }

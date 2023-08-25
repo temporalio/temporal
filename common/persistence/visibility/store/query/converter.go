@@ -80,6 +80,12 @@ type (
 	}
 
 	notSupportedExprConverter struct{}
+
+	QueryParams struct {
+		Query   elastic.Query
+		Sorter  []elastic.Sorter
+		GroupBy []string
+	}
 )
 
 func NewConverter(fnInterceptor FieldNameInterceptor, whereConverter ExprConverter) *Converter {
@@ -187,10 +193,12 @@ func NewNotSupportedExprConverter() ExprConverter {
 
 // ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
 // It also supports ORDER BY clause.
-func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*QueryParams, error) {
 	whereOrderBy = strings.TrimSpace(whereOrderBy)
 
-	if whereOrderBy != "" && !strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") {
+	if whereOrderBy != "" &&
+		!strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") &&
+		!strings.HasPrefix(strings.ToLower(whereOrderBy), "group by ") {
 		whereOrderBy = "where " + whereOrderBy
 	}
 	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
@@ -199,56 +207,69 @@ func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*elastic.BoolQuery
 }
 
 // ConvertSql transforms SQL to Elasticsearch query.
-func (c *Converter) ConvertSql(sql string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+func (c *Converter) ConvertSql(sql string) (*QueryParams, error) {
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
+		return nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, isSelect := stmt.(*sqlparser.Select)
 	if !isSelect {
-		return nil, nil, NewConverterError("%s: statement must be 'select' not %T", NotSupportedErrMessage, stmt)
+		return nil, NewConverterError("%s: statement must be 'select' not %T", NotSupportedErrMessage, stmt)
 	}
 
 	return c.convertSelect(selectStmt)
 }
 
-func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
-	if sel.GroupBy != nil {
-		return nil, nil, NewConverterError("%s: 'group by' clause", NotSupportedErrMessage)
-	}
-
+func (c *Converter) convertSelect(sel *sqlparser.Select) (*QueryParams, error) {
 	if sel.Limit != nil {
-		return nil, nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
+		return nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
 	}
 
-	var query *elastic.BoolQuery
+	queryParams := &QueryParams{}
 	if sel.Where != nil {
-		q, err := c.whereConverter.Convert(sel.Where.Expr)
+		query, err := c.whereConverter.Convert(sel.Where.Expr)
 		if err != nil {
-			return nil, nil, wrapConverterError("unable to convert filter expression", err)
+			return nil, wrapConverterError("unable to convert filter expression", err)
 		}
 		// Result must be BoolQuery.
-		var isBoolQuery bool
-		if query, isBoolQuery = q.(*elastic.BoolQuery); !isBoolQuery {
-			query = elastic.NewBoolQuery().Filter(q)
+		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
+			query = elastic.NewBoolQuery().Filter(query)
 		}
+		queryParams.Query = query
 	}
 
-	var fieldSorts []*elastic.FieldSort
+	if len(sel.GroupBy) > 1 {
+		return nil, NewConverterError("%s: 'group by' clause supports only a single field", NotSupportedErrMessage)
+	}
+	for _, groupByExpr := range sel.GroupBy {
+		colName, err := convertColName(c.fnInterceptor, groupByExpr, FieldNameGroupBy)
+		if err != nil {
+			return nil, wrapConverterError("unable to convert 'group by' column name", err)
+		}
+		queryParams.GroupBy = append(queryParams.GroupBy, colName)
+	}
+
 	for _, orderByExpr := range sel.OrderBy {
 		colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
-			return nil, nil, wrapConverterError("unable to convert 'order by' column name", err)
+			return nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
 		fieldSort := elastic.NewFieldSort(colName)
 		if orderByExpr.Direction == sqlparser.DescScr {
 			fieldSort = fieldSort.Desc()
 		}
-		fieldSorts = append(fieldSorts, fieldSort)
+		queryParams.Sorter = append(queryParams.Sorter, fieldSort)
 	}
 
-	return query, fieldSorts, nil
+	if len(queryParams.GroupBy) > 0 && len(queryParams.Sorter) > 0 {
+		return nil, NewConverterError(
+			"%s: 'order by' clause is not supported with 'group by' clause",
+			NotSupportedErrMessage,
+		)
+	}
+
+	return queryParams, nil
 }
 
 func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {

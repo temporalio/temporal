@@ -37,7 +37,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/unit"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"golang.org/x/exp/maps"
@@ -95,7 +94,7 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
 				Kind: sdkmetrics.InstrumentKindHistogram,
-				Unit: unit.Unit(u),
+				Unit: u,
 			},
 			sdkmetrics.Stream{
 				Aggregation: aggregation.ExplicitBucketHistogram{
@@ -110,7 +109,10 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 	)
 	meter := provider.Meter("temporal")
 
-	otelHandler := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
+	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig)
+	if err != nil {
+		return nil, err
+	}
 	metricsHandler := &Handler{
 		Handler: otelHandler,
 		reg:     registry,

@@ -25,10 +25,12 @@
 package replication
 
 import (
+	"context"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -51,9 +53,6 @@ type (
 		definition.WorkflowKey
 		ExecutableTask
 		req *historyservice.ReplicateEventsV2Request
-
-		// variables to be perhaps removed (not essential to logic)
-		sourceClusterName string
 	}
 )
 
@@ -77,6 +76,7 @@ func NewExecutableHistoryTask(
 			metrics.HistoryReplicationTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
+			sourceClusterName,
 		),
 		req: &historyservice.ReplicateEventsV2Request{
 			NamespaceId: task.NamespaceId,
@@ -90,8 +90,6 @@ func NewExecutableHistoryTask(
 			// new run events does not need version history since there is no prior events
 			NewRunEvents: task.NewRunEvents,
 		},
-
-		sourceClusterName: sourceClusterName,
 	}
 }
 
@@ -104,10 +102,18 @@ func (e *ExecutableHistoryTask) Execute() error {
 		return nil
 	}
 
-	namespaceName, apply, nsError := e.GetNamespaceInfo(e.NamespaceID)
+	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemPreemptableCallerInfo,
+	), e.NamespaceID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
+		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
 		return nil
 	}
 	ctx, cancel := newTaskContext(namespaceName)
@@ -132,7 +138,10 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(e.NamespaceID)
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
 		if nsError != nil {
 			return err
 		}
@@ -141,13 +150,20 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 
 		if resendErr := e.Resend(
 			ctx,
-			e.sourceClusterName,
+			e.ExecutableTask.SourceClusterName(),
 			retryErr,
 		); resendErr != nil {
 			return err
 		}
 		return e.Execute()
 	default:
+		e.Logger.Error("history replication task encountered error",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
 		return err
 	}
 }
@@ -186,7 +202,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
-		SourceClusterName: e.sourceClusterName,
+		SourceClusterName: e.ExecutableTask.SourceClusterName(),
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  e.NamespaceID,
 			WorkflowId:   e.WorkflowID,

@@ -55,6 +55,7 @@ func NewManager(
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -72,6 +73,7 @@ func NewManager(
 		searchAttributesMapperProvider,
 		maxReadQPS,
 		maxWriteQPS,
+		operatorRPSRatio,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		metricsHandler,
@@ -94,6 +96,7 @@ func NewManager(
 		searchAttributesMapperProvider,
 		maxReadQPS,
 		maxWriteQPS,
+		operatorRPSRatio,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
 		metricsHandler,
@@ -139,6 +142,7 @@ func newVisibilityManager(
 	visStore store.VisibilityStore,
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	metricsHandler metrics.Handler,
 	tag metrics.Tag,
 	logger log.Logger,
@@ -152,7 +156,8 @@ func newVisibilityManager(
 	visManager = NewVisibilityManagerRateLimited(
 		visManager,
 		maxReadQPS,
-		maxWriteQPS)
+		maxWriteQPS,
+		operatorRPSRatio)
 	// wrap with metrics client
 	visManager = NewVisibilityManagerMetrics(
 		visManager,
@@ -175,6 +180,7 @@ func newVisibilityManagerFromDataStoreConfig(
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 
@@ -203,6 +209,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		visStore,
 		maxReadQPS,
 		maxWriteQPS,
+		operatorRPSRatio,
 		metricsHandler,
 		metrics.AdvancedVisibilityTypeTag(),
 		logger,

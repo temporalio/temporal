@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
@@ -159,4 +160,55 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		setDefaultPerUnitHistogramBoundaries(config)
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
 	}
+}
+
+func TestMetricsHandlerFromConfig(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewTestLogger()
+
+	for _, c := range []struct {
+		name         string
+		cfg          *Config
+		expectedType interface{}
+	}{
+		{
+			name:         "nil config",
+			cfg:          nil,
+			expectedType: &noopMetricsHandler{},
+		},
+		{
+			name: "tally",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     FrameworkTally,
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &tallyMetricsHandler{},
+		},
+		{
+			name: "opentelemetry",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     FrameworkOpentelemetry,
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &otelMetricsHandler{},
+		},
+	} {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler, err := MetricsHandlerFromConfig(logger, c.cfg)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				handler.Stop(logger)
+			})
+			assert.IsType(t, c.expectedType, handler)
+		})
+	}
+
 }

@@ -30,26 +30,28 @@ import (
 	"go.temporal.io/server/common/membership"
 )
 
-// Module provides a membership.Monitor given the types in factoryParams. It also adds lifecycle hooks, so there's no
-// need to start or stop the monitor manually.
+// Module provides membership objects given the types in factoryParams.
 var Module = fx.Provide(
-	provideMonitor,
+	provideFactory,
+	provideMembership,
+	provideHostInfoProvider,
 )
 
-func provideMonitor(lc fx.Lifecycle, params factoryParams) (membership.Monitor, error) {
+func provideFactory(lc fx.Lifecycle, params factoryParams) (*factory, error) {
 	f, err := newFactory(params)
 	if err != nil {
 		return nil, err
 	}
-
 	lc.Append(fx.StopHook(f.closeTChannel))
+	return f, nil
+}
 
-	m, err := f.getMonitor()
-	if err != nil {
-		return nil, err
-	}
+func provideMembership(lc fx.Lifecycle, f *factory) membership.Monitor {
+	m := f.getMonitor()
+	lc.Append(fx.StopHook(m.Stop))
+	return m
+}
 
-	lc.Append(fx.StartStopHook(m.Start, m.Stop))
-
-	return m, nil
+func provideHostInfoProvider(lc fx.Lifecycle, f *factory) (membership.HostInfoProvider, error) {
+	return f.getHostInfoProvider()
 }

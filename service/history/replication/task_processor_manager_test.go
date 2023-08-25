@@ -176,7 +176,11 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
-			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, s.shardID): {
+			shard.ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, common.MapShardID(
+				cluster.TestAllClusterInfo[cluster.TestCurrentClusterName].ShardCount,
+				cluster.TestAllClusterInfo[cluster.TestAlternativeClusterName].ShardCount,
+				s.shardID,
+			)[0]): {
 				Scopes: []*persistencespb.QueueSliceScope{{
 					Range: &persistencespb.QueueSliceRange{
 						InclusiveMin: shard.ConvertToPersistenceTaskKey(

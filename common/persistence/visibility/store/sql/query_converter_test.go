@@ -53,7 +53,7 @@ type (
 		name     string
 		input    string
 		args     map[string]any
-		output   string
+		output   any
 		retValue any
 		err      error
 	}
@@ -83,53 +83,95 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 		{
 			name:   "empty string",
 			input:  "",
-			output: "TemporalNamespaceDivision is null",
+			output: &queryParams{queryString: "TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "single condition int",
 			input:  "AliasForInt01 = 1",
-			output: "(Int01 = 1) and TemporalNamespaceDivision is null",
+			output: &queryParams{queryString: "(Int01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "single condition keyword",
 			input:  "AliasForKeyword01 = 1",
-			output: "(Keyword01 = 1) and TemporalNamespaceDivision is null",
+			output: &queryParams{queryString: "(Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "or condition keyword",
 			input:  "AliasForInt01 = 1 OR AliasForKeyword01 = 1",
-			output: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null",
+			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "no double parenthesis",
 			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1)",
-			output: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null",
+			output: &queryParams{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
 			err:    nil,
 		},
 		{
 			name:   "has namespace division",
 			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1) AND TemporalNamespaceDivision = 'foo'",
-			output: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')",
+			output: &queryParams{queryString: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')"},
 			err:    nil,
+		},
+		{
+			name:  "group by one field",
+			input: "GROUP BY ExecutionStatus",
+			output: &queryParams{
+				queryString: "TemporalNamespaceDivision is null",
+				groupBy:     []string{searchattribute.ExecutionStatus},
+			},
+			err: nil,
+		},
+		{
+			name:   "group by two fields not supported",
+			input:  "GROUP BY ExecutionStatus, WorkflowType",
+			output: nil,
+			err: query.NewConverterError(
+				"%s: 'group by' clause supports only a single field",
+				query.NotSupportedErrMessage,
+			),
+		},
+		{
+			name:   "group by non ExecutionStatus",
+			input:  "GROUP BY WorkflowType",
+			output: nil,
+			err: query.NewConverterError(
+				"%s: 'group by' clause is only supported for %s search attribute",
+				query.NotSupportedErrMessage,
+				searchattribute.ExecutionStatus,
+			),
 		},
 		{
 			name:   "order by not supported",
 			input:  "ORDER BY StartTime",
-			output: "",
+			output: nil,
+			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+		},
+		{
+			name:   "group by with order by not supported",
+			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
+			output: nil,
 			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
 		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
-			queryString, err := s.queryConverter.convertWhereString(tc.input)
+			qc := newQueryConverterInternal(
+				s.pqc,
+				testNamespaceName,
+				testNamespaceID,
+				searchattribute.TestNameTypeMap,
+				&searchattribute.TestMapper{},
+				"",
+			)
+			qp, err := qc.convertWhereString(tc.input)
 			if tc.err == nil {
 				s.NoError(err)
-				s.Equal(tc.output, queryString)
+				s.Equal(tc.output, qp)
 			} else {
 				s.Error(err)
 				s.Equal(err, tc.err)

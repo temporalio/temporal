@@ -62,6 +62,11 @@ func GetBoolPropertyFnFilteredByNamespace(value bool) func(namespace string) boo
 	return func(namespace string) bool { return value }
 }
 
+// GetBoolPropertyFnFilteredByTaskQueueInfo returns value as BoolPropertyFnWithTaskQueueInfoFilters
+func GetBoolPropertyFnFilteredByTaskQueueInfo(value bool) func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool { return value }
+}
+
 // GetDurationPropertyFnFilteredByNamespace returns value as DurationPropertyFnFilteredByNamespace
 func GetDurationPropertyFnFilteredByNamespace(value time.Duration) func(namespace string) time.Duration {
 	return func(namespace string) time.Duration { return value }

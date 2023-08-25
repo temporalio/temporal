@@ -25,41 +25,57 @@
 package matching
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 )
 
 var Module = fx.Options(
+	resource.Module,
 	fx.Provide(dynamicconfig.NewCollection),
-	fx.Provide(NewConfig),
+	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
-	resource.Module,
+	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func ConfigProvider(
+	dc *dynamicconfig.Collection,
+	persistenceConfig config.Persistence,
+) *Config {
+	return NewConfig(
+		dc,
+		persistenceConfig.StandardVisibilityConfigExist(),
+		persistenceConfig.AdvancedVisibilityConfigExist(),
+	)
+}
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 	return interceptor.NewRetryableInterceptor(
@@ -88,12 +104,12 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{},
 	)
 }
 
-// This function is the same between services but uses different config sources.
+// PersistenceRateLimitingParamsProvider is the same between services but uses different config sources.
 // if-case comes from resourceImpl.New.
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
@@ -104,6 +120,8 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
+		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
 }
 
@@ -111,17 +129,63 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
+// TaskQueueReplicatorNamespaceReplicationQueue is used to ensure the replicator only gets set if global namespaces are
+// enabled on this cluster. See NamespaceReplicationQueueProvider below.
+type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+func NamespaceReplicationQueueProvider(
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	clusterMetadata cluster.Metadata,
+) TaskQueueReplicatorNamespaceReplicationQueue {
+	var replicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+	if clusterMetadata.IsGlobalNamespaceEnabled() {
+		replicatorNamespaceReplicationQueue = namespaceReplicationQueue
+	}
+	return replicatorNamespaceReplicationQueue
+}
+
+func VisibilityManagerProvider(
+	logger log.Logger,
+	persistenceConfig *config.Persistence,
+	metricsHandler metrics.Handler,
+	serviceConfig *Config,
+	esClient esclient.Client,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+	saProvider searchattribute.Provider,
+) (manager.VisibilityManager, error) {
+	return visibility.NewManager(
+		*persistenceConfig,
+		persistenceServiceResolver,
+		esClient,
+		nil, // matching visibility never writes
+		saProvider,
+		searchAttributesMapperProvider,
+		serviceConfig.VisibilityPersistenceMaxReadQPS,
+		serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		serviceConfig.OperatorRPSRatio,
+		serviceConfig.EnableReadFromSecondaryVisibility,
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
+		serviceConfig.VisibilityDisableOrderByClause,
+		serviceConfig.VisibilityEnableManualPagination,
+		metricsHandler,
+		logger,
+	)
+}
+
 func HandlerProvider(
 	config *Config,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
+	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
+	visibilityManager manager.VisibilityManager,
 ) *Handler {
 	return NewHandler(
 		config,
@@ -134,30 +198,11 @@ func HandlerProvider(
 		metricsHandler,
 		namespaceRegistry,
 		clusterMetadata,
+		namespaceReplicationQueue,
+		visibilityManager,
 	)
 }
 
-func ServiceLifetimeHooks(
-	lc fx.Lifecycle,
-	svcStoppedCh chan struct{},
-	svc *Service,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
-					// Start is blocked until Stop() is called.
-					svc.Start()
-					close(svcStoppedCh)
-				}(svc, svcStoppedCh)
-
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				svc.Stop()
-				return nil
-			},
-		},
-	)
-
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
 }

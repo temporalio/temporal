@@ -174,12 +174,13 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(events 
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateMigrationTasks() (tasks.Task, error) {
+func (m *MockTaskGenerator) GenerateMigrationTasks() (tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateMigrationTasks")
 	ret0, _ := ret[0].(tasks.Task)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
@@ -287,17 +288,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 }
 
 // GenerateWorkflowCloseTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closeEvent *history.HistoryEvent, deleteAfterClose bool) error {
+func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime *time.Time, deleteAfterClose bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closeEvent, deleteAfterClose)
+	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closedTime, deleteAfterClose)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateWorkflowCloseTasks indicates an expected call of GenerateWorkflowCloseTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowCloseTasks(closeEvent, deleteAfterClose interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowCloseTasks(closedTime, deleteAfterClose interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowCloseTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowCloseTasks), closeEvent, deleteAfterClose)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowCloseTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowCloseTasks), closedTime, deleteAfterClose)
 }
 
 // GenerateWorkflowResetTasks mocks base method.

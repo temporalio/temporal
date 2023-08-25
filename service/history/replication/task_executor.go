@@ -320,12 +320,41 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 
 	// This might be extra cost if the workflow belongs to local shard.
 	// Add a wrapper of the history client to call history engine directly if it becomes an issue.
-	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
+	request := &historyservice.ReplicateWorkflowStateRequest{
 		NamespaceId:   namespaceID.String(),
 		WorkflowState: attr.GetWorkflowState(),
 		RemoteCluster: e.remoteCluster,
-	})
-	return err
+	}
+	_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+	switch retryErr := err.(type) {
+	case nil:
+		return nil
+	case *serviceerrors.RetryReplication:
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			e.remoteCluster,
+			namespace.ID(retryErr.NamespaceId),
+			retryErr.WorkflowId,
+			retryErr.RunId,
+			retryErr.StartEventId,
+			retryErr.StartEventVersion,
+			retryErr.EndEventId,
+			retryErr.EndEventVersion,
+		)
+		switch resendErr.(type) {
+		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+		case nil:
+			_, err = e.shardContext.GetHistoryClient().ReplicateWorkflowState(ctx, request)
+			return err
+		default:
+			e.logger.Error("error resend history for replicate workflow state", tag.Error(resendErr))
+			return err
+		}
+	default:
+		return err
+	}
 }
 
 func (e *taskExecutorImpl) filterTask(

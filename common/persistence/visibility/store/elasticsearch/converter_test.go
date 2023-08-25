@@ -37,18 +37,19 @@ import (
 )
 
 var errorCases = map[string]string{
-	"delete":                          query.MalformedSqlQueryErrMessage,
-	"update x":                        query.MalformedSqlQueryErrMessage,
-	"insert ":                         query.MalformedSqlQueryErrMessage,
-	"insert into a values(1,2)":       query.NotSupportedErrMessage,
-	"update a set id = 1":             query.NotSupportedErrMessage,
-	"delete from a where id=1":        query.NotSupportedErrMessage,
-	"select * from a where NOT(id=1)": query.NotSupportedErrMessage,
-	"select * from a where 1 = 1":     query.InvalidExpressionErrMessage,
-	"select * from a where 1=a":       query.InvalidExpressionErrMessage,
-	"select * from a where zz(k=2)":   query.NotSupportedErrMessage,
-	"select * from a group by k":      query.NotSupportedErrMessage,
-	"invalid query":                   query.MalformedSqlQueryErrMessage,
+	"delete":                                 query.MalformedSqlQueryErrMessage,
+	"update x":                               query.MalformedSqlQueryErrMessage,
+	"insert ":                                query.MalformedSqlQueryErrMessage,
+	"insert into a values(1,2)":              query.NotSupportedErrMessage,
+	"update a set id = 1":                    query.NotSupportedErrMessage,
+	"delete from a where id=1":               query.NotSupportedErrMessage,
+	"select * from a where NOT(id=1)":        query.NotSupportedErrMessage,
+	"select * from a where 1 = 1":            query.InvalidExpressionErrMessage,
+	"select * from a where 1=a":              query.InvalidExpressionErrMessage,
+	"select * from a where zz(k=2)":          query.NotSupportedErrMessage,
+	"select * from a group by k, m":          query.NotSupportedErrMessage,
+	"select * from a group by k order by id": query.NotSupportedErrMessage,
+	"invalid query":                          query.MalformedSqlQueryErrMessage,
 	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": query.NotSupportedErrMessage,
 }
 
@@ -112,14 +113,28 @@ var supportedWhereOrderCases = map[string]struct {
 	},
 }
 
+var supportedWhereGroupByCases = map[string]struct {
+	query   string
+	groupBy []string
+}{
+	"group by status": {
+		query:   ``,
+		groupBy: []string{"status"},
+	},
+	"id = 1 group by status": {
+		query:   `{"bool":{"filter":{"match":{"id":{"query":1}}}}}`,
+		groupBy: []string{"status"},
+	},
+}
+
 func TestSupportedSelectWhere(t *testing.T) {
 	c := newQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereCases {
-		query, _, err := c.ConvertWhereOrderBy(sql)
+		queryParams, err := c.ConvertWhereOrderBy(sql)
 		assert.NoError(t, err)
 
-		actualMap, _ := query.Source()
+		actualMap, _ := queryParams.Query.Source()
 		actualJson, _ := json.Marshal(actualMap)
 
 		assert.Equal(t, expectedJson, string(actualJson), fmt.Sprintf("sql: %s", sql))
@@ -129,16 +144,16 @@ func TestSupportedSelectWhere(t *testing.T) {
 func TestEmptySelectWhere(t *testing.T) {
 	c := newQueryConverter(nil, nil)
 
-	query, sorters, err := c.ConvertWhereOrderBy("")
+	queryParams, err := c.ConvertWhereOrderBy("")
 	assert.NoError(t, err)
-	assert.Nil(t, query)
-	assert.Nil(t, sorters)
+	assert.Nil(t, queryParams.Query)
+	assert.Nil(t, queryParams.Sorter)
 
-	query, sorters, err = c.ConvertWhereOrderBy("order by Id desc")
+	queryParams, err = c.ConvertWhereOrderBy("order by Id desc")
 	assert.NoError(t, err)
-	assert.Nil(t, query)
-	assert.Len(t, sorters, 1)
-	actualSorterMap, _ := sorters[0].Source()
+	assert.Nil(t, queryParams.Query)
+	assert.Len(t, queryParams.Sorter, 1)
+	actualSorterMap, _ := queryParams.Sorter[0].Source()
 	actualSorterJson, _ := json.Marshal([]interface{}{actualSorterMap})
 	assert.Equal(t, `[{"Id":{"order":"desc"}}]`, string(actualSorterJson))
 }
@@ -147,15 +162,15 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 	c := newQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereOrderCases {
-		query, sorters, err := c.ConvertWhereOrderBy(sql)
+		queryParams, err := c.ConvertWhereOrderBy(sql)
 		assert.NoError(t, err)
 
-		actualQueryMap, _ := query.Source()
+		actualQueryMap, _ := queryParams.Query.Source()
 		actualQueryJson, _ := json.Marshal(actualQueryMap)
 		assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
 
 		var actualSorterMaps []interface{}
-		for _, sorter := range sorters {
+		for _, sorter := range queryParams.Sorter {
 			actualSorterMap, _ := sorter.Source()
 			actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 		}
@@ -164,10 +179,28 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 	}
 }
 
+func TestSupportedSelectWhereGroupBy(t *testing.T) {
+	c := newQueryConverter(nil, nil)
+
+	for sql, expectedJson := range supportedWhereGroupByCases {
+		queryParams, err := c.ConvertWhereOrderBy(sql)
+		assert.NoError(t, err)
+
+		if expectedJson.query != "" {
+			actualQueryMap, _ := queryParams.Query.Source()
+			actualQueryJson, _ := json.Marshal(actualQueryMap)
+			assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+		} else {
+			assert.Nil(t, queryParams.Query)
+		}
+		assert.Equal(t, expectedJson.groupBy, queryParams.GroupBy)
+	}
+}
+
 func TestErrors(t *testing.T) {
 	c := newQueryConverter(nil, nil)
 	for sql, expectedErrMessage := range errorCases {
-		_, _, err := c.ConvertSql(sql)
+		_, err := c.ConvertSql(sql)
 		assert.Contains(t, err.Error(), expectedErrMessage, sql)
 	}
 }
