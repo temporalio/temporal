@@ -2687,16 +2687,19 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	if len(queryResponse.Info.RunningWorkflows) < origLen {
 		// we noticed some "running workflows" aren't running anymore. poke the workflow to
 		// refresh, but don't wait for the state to change. ignore errors.
-		go wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-			NamespaceId: namespaceID.String(),
-			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-				Namespace:         request.Namespace,
-				WorkflowExecution: execution,
-				SignalName:        scheduler.SignalNameRefresh,
-				Identity:          "internal refresh from describe request",
-				RequestId:         uuid.New(),
-			},
-		})
+		go func() {
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: namespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         request.Namespace,
+					WorkflowExecution: execution,
+					SignalName:        scheduler.SignalNameRefresh,
+					Identity:          "internal refresh from describe request",
+					RequestId:         uuid.New(),
+				},
+			})
+		}()
 	}
 
 	token := make([]byte, 8)

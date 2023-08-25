@@ -650,9 +650,11 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 	s.NoError(err)
 	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
 
-	// scheduler has done some stuff
-	events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-	s.Greater(len(events3), len(events2))
+	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
+	s.Eventually(func() bool {
+		events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+		return len(events3) > len(events2)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
