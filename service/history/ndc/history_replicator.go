@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -132,12 +131,8 @@ type (
 		transactionMgr    transactionMgr
 		logger            log.Logger
 
-		newBufferEventFlusherProvider bufferEventFlusherProvider
-		newBranchMgr                  branchMgrProvider
-		newConflictResolver           conflictResolverProvider
-		newResetter                   workflowResetterProvider
-		newStateBuilder               stateBuilderProvider
-		newMutableState               mutableStateProvider
+		mutableStateMapper *MutableStateMapperImpl
+		newResetter        workflowResetterProvider
 	}
 
 	rawHistoryData struct {
@@ -168,27 +163,40 @@ func NewHistoryReplicator(
 		eventsReapplier:   eventsReapplier,
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 
-		newBufferEventFlusherProvider: func(
-			wfContext workflow.Context,
-			mutableState workflow.MutableState,
-			logger log.Logger,
-		) BufferEventFlusher {
-			return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
-		},
-		newBranchMgr: func(
-			wfContext workflow.Context,
-			mutableState workflow.MutableState,
-			logger log.Logger,
-		) BranchMgr {
-			return NewBranchMgr(shardContext, wfContext, mutableState, logger)
-		},
-		newConflictResolver: func(
-			wfContext workflow.Context,
-			mutableState workflow.MutableState,
-			logger log.Logger,
-		) ConflictResolver {
-			return NewConflictResolver(shardContext, wfContext, mutableState, logger)
-		},
+		mutableStateMapper: NewMutableStateMapping(
+			shardContext,
+			func(
+				wfContext workflow.Context,
+				mutableState workflow.MutableState,
+				logger log.Logger,
+			) BufferEventFlusher {
+				return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
+			},
+			func(
+				wfContext workflow.Context,
+				mutableState workflow.MutableState,
+				logger log.Logger,
+			) BranchMgr {
+				return NewBranchMgr(shardContext, wfContext, mutableState, logger)
+			},
+			func(
+				wfContext workflow.Context,
+				mutableState workflow.MutableState,
+				logger log.Logger,
+			) ConflictResolver {
+				return NewConflictResolver(shardContext, wfContext, mutableState, logger)
+			},
+			func(
+				state workflow.MutableState,
+				logger log.Logger,
+			) workflow.MutableStateRebuilder {
+				return workflow.NewMutableStateRebuilder(
+					shardContext,
+					logger,
+					state,
+				)
+			},
+		),
 		newResetter: func(
 			namespaceID namespace.ID,
 			workflowID string,
@@ -198,29 +206,6 @@ func NewHistoryReplicator(
 			logger log.Logger,
 		) resetter {
 			return NewResetter(shardContext, transactionMgr, namespaceID, workflowID, baseRunID, newContext, newRunID, logger)
-		},
-		newStateBuilder: func(
-			state workflow.MutableState,
-			logger log.Logger,
-		) workflow.MutableStateRebuilder {
-			return workflow.NewMutableStateRebuilder(
-				shardContext,
-				logger,
-				state,
-			)
-		},
-		newMutableState: func(
-			namespaceEntry *namespace.Namespace,
-			startTime time.Time,
-			logger log.Logger,
-		) workflow.MutableState {
-			return workflow.NewMutableState(
-				shardContext,
-				shardContext.GetEventsCache(),
-				logger,
-				namespaceEntry,
-				startTime,
-			)
 		},
 	}
 
@@ -304,29 +289,33 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		mutableState, err := wfContext.LoadMutableState(ctx)
 		switch err.(type) {
 		case nil:
-			wfContext, mutableState, err := r.applyNonStartEventsFlushBufferEvents(ctx, wfContext, mutableState, task)
+			mutableState, _, err = r.mutableStateMapper.FlushBufferEvents(ctx, wfContext, mutableState, task)
 			if err != nil {
 				return err
 			}
-			doContinue, branchIndex, err := r.applyNonStartEventsPrepareBranch(ctx, wfContext, mutableState, task)
+			mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.PrepareHistoryBranch(ctx, wfContext, mutableState, task)
 			if err != nil {
 				return err
-			} else if !doContinue {
+			} else if !prepareHistoryBranchOut.DoContinue {
 				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.GetMetricName()).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
 				return nil
 			}
 
-			mutableState, isRebuilt, err := r.applyNonStartEventsPrepareMutableState(ctx, wfContext, mutableState, branchIndex, task)
+			mutableState, isRebuilt, err := r.mutableStateMapper.PrepareMutableState(
+				ctx,
+				wfContext,
+				mutableState,
+				PrepareMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
+			)
 			if err != nil {
 				return err
 			}
-
-			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
+			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == prepareHistoryBranchOut.BranchIndex {
 				return r.applyNonStartEventsToCurrentBranch(ctx, wfContext, mutableState, isRebuilt, releaseFn, task)
 			}
-			return r.applyNonStartEventsToNonCurrentBranch(ctx, wfContext, mutableState, branchIndex, releaseFn, task)
+			return r.applyNonStartEventsToNonCurrentBranch(ctx, wfContext, mutableState, prepareHistoryBranchOut.BranchIndex, releaseFn, task)
 
 		case *serviceerror.NotFound:
 			// mutable state not created, check if is workflow reset
@@ -350,30 +339,30 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
-
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(task.getNamespaceID())
 	if err != nil {
 		return err
 	}
-	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	mutableState := r.newMutableState(namespaceEntry, timestamp.TimeValue(task.getFirstEvent().GetEventTime()), task.getLogger())
-	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-
-	// use state builder for workflow mutable state mutation
-	_, err = stateBuilder.ApplyEvents(
-		ctx,
-		task.getNamespaceID(),
-		requestID,
-		*task.getExecution(),
-		task.getEvents(),
-		task.getNewEvents(),
+	var mutableState workflow.MutableState = workflow.NewMutableState(
+		r.shard,
+		r.shard.GetEventsCache(),
+		task.getLogger(),
+		namespaceEntry,
+		timestamp.TimeValue(task.getFirstEvent().GetEventTime()),
 	)
+	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
 		task.getLogger().Error(
-			"nDCHistoryReplicator unable to apply events when applyStartEvents",
+			"HistoryReplicator::applyStartEvents unable to apply events",
 			tag.Error(err),
 		)
 		return err
+	}
+	if newMutableState != nil {
+		task.getLogger().Error(
+			"HistoryReplicator::applyStartEvents encountered create workflow with continue as new case",
+			tag.Error(err),
+		)
 	}
 
 	err = r.transactionMgr.createWorkflow(
@@ -396,71 +385,6 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 	return err
 }
 
-func (r *HistoryReplicatorImpl) applyNonStartEventsFlushBufferEvents(
-	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
-	task replicationTask,
-) (workflow.Context, workflow.MutableState, error) {
-	bufferEventFlusher := r.newBufferEventFlusherProvider(wfContext, mutableState, task.getLogger())
-	return bufferEventFlusher.flush(ctx)
-}
-
-func (r *HistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
-	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
-	task replicationTask,
-) (bool, int32, error) {
-
-	incomingVersionHistory := task.getVersionHistory()
-	branchMgr := r.newBranchMgr(wfContext, mutableState, task.getLogger())
-	doContinue, versionHistoryIndex, err := branchMgr.prepareBranch(
-		ctx,
-		incomingVersionHistory,
-		task.getFirstEvent().GetEventId(),
-		task.getFirstEvent().GetVersion(),
-	)
-	switch err.(type) {
-	case nil:
-		return doContinue, versionHistoryIndex, nil
-	case *serviceerrors.RetryReplication:
-		// replication message can arrive out of order
-		// do not log
-		return false, 0, err
-	default:
-		task.getLogger().Error(
-			"nDCHistoryReplicator unable to prepare version history when applyNonStartEventsPrepareBranch",
-			tag.Error(err),
-		)
-		return false, 0, err
-	}
-}
-
-func (r *HistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
-	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
-	branchIndex int32,
-	task replicationTask,
-) (workflow.MutableState, bool, error) {
-
-	incomingVersion := task.getVersion()
-	conflictResolver := r.newConflictResolver(wfContext, mutableState, task.getLogger())
-	mutableState, isRebuilt, err := conflictResolver.prepareMutableState(
-		ctx,
-		branchIndex,
-		incomingVersion,
-	)
-	if err != nil {
-		task.getLogger().Error(
-			"nDCHistoryReplicator unable to prepare mutable state when applyNonStartEventsPrepareMutableState",
-			tag.Error(err),
-		)
-	}
-	return mutableState, isRebuilt, err
-}
-
 func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	ctx context.Context,
 	wfContext workflow.Context,
@@ -469,20 +393,10 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
-
-	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	newMutableState, err := stateBuilder.ApplyEvents(
-		ctx,
-		task.getNamespaceID(),
-		requestID,
-		*task.getExecution(),
-		task.getEvents(),
-		task.getNewEvents(),
-	)
+	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
 		task.getLogger().Error(
-			"nDCHistoryReplicator unable to apply events when applyNonStartEventsToCurrentBranch",
+			"HistoryReplicator::applyNonStartEventsToCurrentBranch unable to apply events",
 			tag.Error(err),
 		)
 		return err
@@ -494,7 +408,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		mutableState,
 		releaseFn,
 	)
-
 	var newWorkflow Workflow
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
@@ -732,23 +645,19 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 	mutableState workflow.MutableState,
 	task replicationTask,
 ) error {
-
-	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
-	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	_, err := stateBuilder.ApplyEvents(
-		ctx,
-		task.getNamespaceID(),
-		requestID,
-		*task.getExecution(),
-		task.getEvents(),
-		task.getNewEvents(),
-	)
+	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
 		task.getLogger().Error(
-			"nDCHistoryReplicator unable to apply events when applyNonStartEventsResetWorkflow",
+			"HistoryReplicator::applyNonStartEventsResetWorkflow unable to apply events",
 			tag.Error(err),
 		)
 		return err
+	}
+	if newMutableState != nil {
+		task.getLogger().Error(
+			"HistoryReplicator::applyNonStartEventsResetWorkflow encountered reset workflow with continue as new case",
+			tag.Error(err),
+		)
 	}
 
 	targetWorkflow := NewWorkflow(
