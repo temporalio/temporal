@@ -143,8 +143,8 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 		tasks.NewKey(r.InclusiveMin.FireTime.Add(time.Microsecond*10), rand.Int63()),
 		tasks.NewKey(r.InclusiveMin.FireTime.Add(time.Second), rand.Int63()),
 	}
-	slices.SortFunc(testTaskKeys, func(k1, k2 tasks.Key) bool {
-		return k1.CompareTo(k2) < 0
+	slices.SortFunc(testTaskKeys, func(k1, k2 tasks.Key) int {
+		return k1.CompareTo(k2)
 	})
 	shouldHaveNextPage := true
 	if testTaskKeys[len(testTaskKeys)-1].CompareTo(r.ExclusiveMax) >= 0 {

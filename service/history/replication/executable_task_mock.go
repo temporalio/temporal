@@ -128,9 +128,9 @@ func (mr *MockExecutableTaskMockRecorder) DeleteWorkflow(ctx, workflowKey interf
 }
 
 // GetNamespaceInfo mocks base method.
-func (m *MockExecutableTask) GetNamespaceInfo(namespaceID string) (string, bool, error) {
+func (m *MockExecutableTask) GetNamespaceInfo(ctx context.Context, namespaceID string) (string, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceInfo", namespaceID)
+	ret := m.ctrl.Call(m, "GetNamespaceInfo", ctx, namespaceID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -138,9 +138,9 @@ func (m *MockExecutableTask) GetNamespaceInfo(namespaceID string) (string, bool,
 }
 
 // GetNamespaceInfo indicates an expected call of GetNamespaceInfo.
-func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(namespaceID interface{}) *gomock.Call {
+func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(ctx, namespaceID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), namespaceID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), ctx, namespaceID)
 }
 
 // IsRetryableError mocks base method.
@@ -207,6 +207,20 @@ func (m *MockExecutableTask) RetryPolicy() backoff.RetryPolicy {
 func (mr *MockExecutableTaskMockRecorder) RetryPolicy() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockExecutableTask)(nil).RetryPolicy))
+}
+
+// SourceClusterName mocks base method.
+func (m *MockExecutableTask) SourceClusterName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SourceClusterName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// SourceClusterName indicates an expected call of SourceClusterName.
+func (mr *MockExecutableTaskMockRecorder) SourceClusterName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SourceClusterName", reflect.TypeOf((*MockExecutableTask)(nil).SourceClusterName))
 }
 
 // State mocks base method.

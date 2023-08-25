@@ -49,14 +49,15 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		clusterMetadata    *cluster.MockMetadata
-		clientBean         *client.MockBean
-		shardController    *shard.MockController
-		namespaceCache     *namespace.MockRegistry
-		ndcHistoryResender *xdc.MockNDCHistoryResender
-		metricsHandler     metrics.Handler
-		logger             log.Logger
+		controller              *gomock.Controller
+		clusterMetadata         *cluster.MockMetadata
+		clientBean              *client.MockBean
+		shardController         *shard.MockController
+		namespaceCache          *namespace.MockRegistry
+		ndcHistoryResender      *xdc.MockNDCHistoryResender
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
+		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 
 		taskID int64
 		task   *ExecutableUnknownTask
@@ -85,17 +86,19 @@ func (s *executableUnknownTaskSuite) SetupTest() {
 	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 
 	s.taskID = rand.Int63()
 	s.task = NewExecutableUnknownTask(
 		ProcessToolBox{
-			ClusterMetadata:    s.clusterMetadata,
-			ClientBean:         s.clientBean,
-			ShardController:    s.shardController,
-			NamespaceCache:     s.namespaceCache,
-			NDCHistoryResender: s.ndcHistoryResender,
-			MetricsHandler:     s.metricsHandler,
-			Logger:             s.logger,
+			ClusterMetadata:         s.clusterMetadata,
+			ClientBean:              s.clientBean,
+			ShardController:         s.shardController,
+			NamespaceCache:          s.namespaceCache,
+			NDCHistoryResender:      s.ndcHistoryResender,
+			MetricsHandler:          s.metricsHandler,
+			Logger:                  s.logger,
+			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),

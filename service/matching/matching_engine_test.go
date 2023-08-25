@@ -60,7 +60,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -2276,7 +2275,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	})
 	s.NoError(err)
 	s.True(res.TaskQueueHasUserData)
-	s.True(hybrid_logical_clock.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
+	s.True(hlc.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
 }
 
@@ -2512,7 +2511,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 			PersistUnknownBuildId: unknown,
 		},
-	}).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil).AnyTimes() // might get called again on dispatch from spooled
+	}).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil).MinTimes(1) // might get called again on dispatch from spooled
 
 	// add a task for an unknown build id, will get redirected to guessed set
 	_, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -2527,7 +2526,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 		},
 	})
 	s.NoError(err)
-	// allow taskReader to finish starting dispatch loop so we don't get an extra load
+	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
 	time.Sleep(10 * time.Millisecond)
 
 	// unload base and versioned tqm. note: unload versioned first since versioned taskReader
@@ -2538,16 +2537,16 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	s.NoError(err)
 	s.NotNil(verTqm)
 	s.matchingEngine.unloadTaskQueue(verTqm)
-	// allow taskReader goroutines time to exit
-	time.Sleep(10 * time.Millisecond)
+	// wait for taskReader goroutines to exit
+	verTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
 
 	// unload base
 	baseTqm, err := s.matchingEngine.getTaskQueueManager(ctx, id, normalStickyInfo, false)
 	s.NoError(err)
 	s.NotNil(baseTqm)
 	s.matchingEngine.unloadTaskQueue(baseTqm)
-	// allow taskReader goroutines time to exit
-	time.Sleep(10 * time.Millisecond)
+	// wait for taskReader goroutines to exit
+	baseTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
 	clock := hlc.Zero(1)

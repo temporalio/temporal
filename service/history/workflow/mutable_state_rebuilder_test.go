@@ -278,7 +278,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionTimedoutEvent(event.GetEventId(), event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		event,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -310,7 +310,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionTerminatedEvent(event.GetEventId(), event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		event,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -341,7 +341,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionFailedEvent(event.GetEventId(), event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		event,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -373,7 +373,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionCompletedEvent(event.GetEventId(), event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		event,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -405,7 +405,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionCanceledEvent(event.GetEventId(), event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		event,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -503,7 +503,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		continueAsNewEvent,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
@@ -561,7 +561,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
-		continueAsNewEvent,
+		&now,
 		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()

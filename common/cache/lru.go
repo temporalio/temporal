@@ -26,18 +26,22 @@ package cache
 
 import (
 	"container/list"
-	"errors"
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
 )
 
 var (
 	// ErrCacheFull is returned if Put fails due to cache being filled with pinned elements
-	ErrCacheFull = errors.New("cache capacity is fully occupied with pinned elements")
+	ErrCacheFull = serviceerror.NewResourceExhausted(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+		"cache capacity is fully occupied with pinned elements",
+	)
 	// ErrCacheItemTooLarge is returned if Put fails due to item size being larger than max cache capacity
-	ErrCacheItemTooLarge = errors.New("cache item size is larger than max cache capacity")
+	ErrCacheItemTooLarge = serviceerror.NewInternal("cache item size is larger than max cache capacity")
 )
 
 const emptyEntrySize = 0
