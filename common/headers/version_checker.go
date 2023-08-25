@@ -38,6 +38,7 @@ import (
 
 const (
 	ClientNameServer        = "temporal-server"
+	ClientNameServerHTTP    = "temporal-server-http"
 	ClientNameGoSDK         = "temporal-go"
 	ClientNameJavaSDK       = "temporal-java"
 	ClientNamePHPSDK        = "temporal-php"

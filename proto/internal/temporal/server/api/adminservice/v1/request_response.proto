@@ -406,4 +406,5 @@ message GetNamespaceResponse {
     int64 config_version = 6;
     int64 failover_version = 7;
     repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
+    bool is_global_namespace = 9;
 }

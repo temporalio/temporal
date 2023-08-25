@@ -1,6 +1,3 @@
-enablearchival: false
-enablemetricscapture: true
-clusterno: 0
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
@@ -8,3 +5,4 @@ workerconfig:
   enablearchiver: false
   enablereplicator: false
   startworkeranyway: true
+generatemtls: true

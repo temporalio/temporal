@@ -12,10 +12,10 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
   - Install on macOS with `brew install protobuf`.
   - Download all other versions from [protoc release page](https://github.com/protocolbuffers/protobuf/releases).
-* [Temporal CLI tctl](https://github.com/temporalio/tctl)
-  - Homebrew `brew install tctl`
-  - Go install `make update-tctl`
-  - Or download it from here https://github.com/temporalio/tctl
+* [Temporal CLI](https://github.com/temporalio/cli)
+  - Homebrew `brew install temporal`
+  - Go install `make update-cli`
+  - Or download it from here https://github.com/temporalio/cli
 
 
 ### Runtime (server and tests) prerequisites
@@ -114,9 +114,9 @@ and then run the server:
 make start
 ```
 
-Now you can create default namespace with `tctl`:
+Now you can create default namespace with Temporal CLI:
 ```bash
-tctl --namespace default namespace register
+temporal operator namespace create default
 ```
 and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
 

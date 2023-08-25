@@ -50,10 +50,7 @@ type (
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-			// TODO: remove closeEvent parameter
-			// when deprecating the backward compatible logic
-			// for getting close time from close event.
-			closeEvent *historypb.HistoryEvent,
+			closedTime *time.Time,
 			deleteAfterClose bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
@@ -154,7 +151,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
-	closeEvent *historypb.HistoryEvent,
+	closedTime *time.Time,
 	deleteAfterClose bool,
 ) error {
 
@@ -206,7 +203,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				delay = retention
 			}
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
-			archiveTime := closeEvent.GetEventTime().Add(delay)
+			archiveTime := timestamp.TimeValue(closedTime).Add(delay)
 
 			// This flag is only untrue for old server versions which were using the archival workflow instead of the
 			// archival queue.
@@ -219,7 +216,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			}
 			closeTasks = append(closeTasks, task)
 		} else {
-			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
+			closeTime := timestamp.TimeValue(closedTime)
 			if err := r.GenerateDeleteHistoryEventTask(closeTime, false); err != nil {
 				return err
 			}

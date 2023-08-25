@@ -66,6 +66,7 @@ func NewExecutableUnknownTask(
 			metrics.UnknownTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
+			"sourceCluster",
 		),
 		task: task,
 	}

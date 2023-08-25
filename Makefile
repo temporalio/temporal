@@ -135,6 +135,10 @@ update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
 	@go install github.com/temporalio/tctl/cmd/tctl@latest
 
+update-cli:
+	@printf $(COLOR) "Install/update cli..."
+	curl -sSf https://temporal.download/cli.sh | sh
+
 update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest

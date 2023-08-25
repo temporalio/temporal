@@ -27,6 +27,8 @@ package replication
 import (
 	"context"
 
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -49,6 +51,7 @@ var Module = fx.Options(
 	fx.Provide(StreamReceiverMonitorProvider),
 	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
+	fx.Provide(EagerNamespaceRefresherProvider),
 )
 
 func ReplicationTaskFetcherFactoryProvider(
@@ -62,6 +65,29 @@ func ReplicationTaskFetcherFactoryProvider(
 		config,
 		clusterMetadata,
 		clientBean,
+	)
+}
+
+func EagerNamespaceRefresherProvider(
+	metadataManager persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	clientBean client.Bean,
+	clusterMetadata cluster.Metadata,
+	metricsHandler metrics.Handler,
+) EagerNamespaceRefresher {
+	return NewEagerNamespaceRefresher(
+		metadataManager,
+		namespaceRegistry,
+		logger,
+		clientBean,
+		namespace.NewReplicationTaskExecutor(
+			clusterMetadata.GetCurrentClusterName(),
+			metadataManager,
+			logger,
+		),
+		clusterMetadata.GetCurrentClusterName(),
+		metricsHandler,
 	)
 }
 

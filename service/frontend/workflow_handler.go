@@ -369,7 +369,9 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	if request.GetRequestId() == "" {
-		return nil, errRequestIDNotSet
+		// For easy direct API use, we default the request ID here but expect all
+		// SDKs and other auto-retrying clients to set it
+		request.RequestId = uuid.New()
 	}
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {

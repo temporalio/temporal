@@ -2037,7 +2037,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 
 func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice.GetNamespaceRequest) (_ *adminservice.GetNamespaceResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
-
 	if request == nil || (len(request.GetId()) == 0 && len(request.GetNamespace()) == 0) {
 		return nil, errRequestNotSet
 	}
@@ -2076,9 +2075,10 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			State:             replicationConfig.GetState(),
 		},
-		ConfigVersion:   resp.Namespace.GetConfigVersion(),
-		FailoverVersion: resp.Namespace.GetFailoverVersion(),
-		FailoverHistory: convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
+		ConfigVersion:     resp.Namespace.GetConfigVersion(),
+		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
+		IsGlobalNamespace: resp.IsGlobalNamespace,
+		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
 	}
 	return nsResponse, nil
 }

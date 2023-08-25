@@ -134,6 +134,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
 	}
 	firstEvent := history[0]
+	lastEvent := history[len(history)-1]
 	var newRunMutableState MutableState
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
@@ -143,26 +144,24 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	executionInfo := b.mutableState.GetExecutionInfo()
 	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
-	for _, event := range history {
-		// NOTE: stateRebuilder is also being used in the active side
-		if executionInfo.GetVersionHistories() != nil {
-			if err := b.mutableState.UpdateCurrentVersion(event.GetVersion(), true); err != nil {
-				return nil, err
-			}
-			versionHistories := executionInfo.GetVersionHistories()
-			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-			if err != nil {
-				return nil, err
-			}
-			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewVersionHistoryItem(
-				event.GetEventId(),
-				event.GetVersion(),
-			)); err != nil {
-				return nil, err
-			}
-			executionInfo.LastEventTaskId = event.GetTaskId()
-		}
+	// NOTE: stateRebuilder is also being used in the active side
+	if err := b.mutableState.UpdateCurrentVersion(lastEvent.GetVersion(), true); err != nil {
+		return nil, err
+	}
+	versionHistories := executionInfo.GetVersionHistories()
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	if err != nil {
+		return nil, err
+	}
+	if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, versionhistory.NewVersionHistoryItem(
+		lastEvent.GetEventId(),
+		lastEvent.GetVersion(),
+	)); err != nil {
+		return nil, err
+	}
+	executionInfo.LastEventTaskId = lastEvent.GetTaskId()
 
+	for _, event := range history {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
@@ -561,7 +560,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -576,7 +575,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -591,7 +590,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -606,7 +605,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -621,7 +620,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -668,7 +667,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event,
+				event.GetEventTime(),
 				false,
 			); err != nil {
 				return nil, err
