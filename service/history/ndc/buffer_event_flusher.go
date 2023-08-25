@@ -44,10 +44,10 @@ type (
 	}
 
 	BufferEventFlusherImpl struct {
-		shard           shard.Context
+		shardContext    shard.Context
 		clusterMetadata cluster.Metadata
 
-		context      workflow.Context
+		wfContext    workflow.Context
 		mutableState workflow.MutableState
 		logger       log.Logger
 	}
@@ -56,17 +56,17 @@ type (
 var _ BufferEventFlusher = (*BufferEventFlusherImpl)(nil)
 
 func NewBufferEventFlusher(
-	shard shard.Context,
-	context workflow.Context,
+	shardContext shard.Context,
+	wfContext workflow.Context,
 	mutableState workflow.MutableState,
 	logger log.Logger,
 ) *BufferEventFlusherImpl {
 
 	return &BufferEventFlusherImpl{
-		shard:           shard,
-		clusterMetadata: shard.GetClusterMetadata(),
+		shardContext:    shardContext,
+		clusterMetadata: shardContext.GetClusterMetadata(),
 
-		context:      context,
+		wfContext:    wfContext,
 		mutableState: mutableState,
 		logger:       logger,
 	}
@@ -84,12 +84,12 @@ func (r *BufferEventFlusherImpl) flush(
 			}
 			// now transient task is gone
 		}
-		return r.context, r.mutableState, nil
+		return r.wfContext, r.mutableState, nil
 	}
 
 	targetWorkflow := NewWorkflow(
 		r.clusterMetadata,
-		r.context,
+		r.wfContext,
 		r.mutableState,
 		wcache.NoopReleaseFn,
 	)
@@ -104,7 +104,7 @@ func (r *BufferEventFlusherImpl) flush(
 		return nil, nil, err
 	}
 
-	r.context = targetWorkflow.GetContext()
+	r.wfContext = targetWorkflow.GetContext()
 	r.mutableState = targetWorkflow.GetMutableState()
-	return r.context, r.mutableState, nil
+	return r.wfContext, r.mutableState, nil
 }
