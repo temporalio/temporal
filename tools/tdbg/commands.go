@@ -34,6 +34,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -204,7 +205,7 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 // (e.g. if a child workflow has recorded its result in the parent workflow)
 // Please use normal workflow delete command to gracefully delete a workflow execution.
 func AdminDeleteWorkflow(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+	frontendClient := cFactory.WorkflowClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -222,9 +223,9 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resp, err := adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
+		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -232,15 +233,6 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to delete workflow execution: %s", err)
 	}
-
-	if len(resp.Warnings) != 0 {
-		fmt.Println("Warnings:")
-		for _, warning := range resp.Warnings {
-			fmt.Printf("- %s\n", warning)
-		}
-		fmt.Println("")
-	}
-
 	fmt.Println("Workflow execution deleted.")
 
 	return nil

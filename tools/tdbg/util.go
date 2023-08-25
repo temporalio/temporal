@@ -41,6 +41,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
@@ -196,7 +197,11 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
+		"xdc-redirection": "false",
+	}))
+	return ctx, cancel
 }
 
 func stringToEnum(search string, candidates map[string]int32) (int32, error) {
