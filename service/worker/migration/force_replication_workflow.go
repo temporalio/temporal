@@ -61,9 +61,8 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
-		TargetClusterEndpoint   string `validate:"required"`
-		VerifyIntervalInSeconds int    `validate:"gte=0"`
-		RetentionBiasInSeconds  int    `validate:"gte=0"`
+		TargetClusterEndpoint   string
+		VerifyIntervalInSeconds int `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
 		LastCloseTime                      time.Time
@@ -108,7 +107,6 @@ type (
 		NamespaceID           string
 		TargetClusterEndpoint string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		RetentionBiasDuration time.Duration `validate:"gte=0"`
 		Executions            []commonpb.WorkflowExecution
 	}
 
@@ -143,7 +141,6 @@ const (
 	defaultPageSizeForTaskQueueUserDataReplication = 20
 	defaultRPSForTaskQueueUserDataReplication      = 1.0
 	defaultVerifyIntervalInSeconds                 = 5
-	defaultRetentionBiasInSeconds                  = 60
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
@@ -279,6 +276,10 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint is required with verification enabled", "InvalidArgument", nil)
+	}
+
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
 	}
@@ -301,10 +302,6 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 
 	if params.VerifyIntervalInSeconds <= 0 {
 		params.VerifyIntervalInSeconds = defaultVerifyIntervalInSeconds
-	}
-
-	if params.RetentionBiasInSeconds <= 0 {
-		params.RetentionBiasInSeconds = defaultRetentionBiasInSeconds
 	}
 
 	return nil
@@ -406,7 +403,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				NamespaceID:           namespaceID,
 				Executions:            workflowExecutions,
 				VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
-				RetentionBiasDuration: time.Duration(params.RetentionBiasInSeconds) * time.Second,
 			})
 
 			pendingVerifyTasks++

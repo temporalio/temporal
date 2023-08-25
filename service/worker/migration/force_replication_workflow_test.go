@@ -98,6 +98,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -165,6 +166,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   maxPageCountPerExecution,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -181,6 +183,31 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	assert.Equal(t, 1, status.ContinuedAsNewCount)
 	assert.Equal(t, startTime, status.LastStartTime)
 	assert.Equal(t, closeTime, status.LastCloseTime)
+}
+
+func TestForceReplicationWorkflow_InvalidInput(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+
+	for _, invalidInput := range []ForceReplicationParams{
+		{
+			// Empty namespace
+		},
+		{
+			// Empty TargetClusterEndpoint
+			Namespace:          uuid.New(),
+			EnableVerification: true,
+		},
+	} {
+		env := testSuite.NewTestWorkflowEnvironment()
+		env.ExecuteWorkflow(ForceReplicationWorkflow, invalidInput)
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err)
+		require.ErrorContains(t, err, "InvalidArgument")
+		env.AssertExpectations(t)
+
+	}
 }
 
 func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
@@ -307,6 +334,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -362,6 +390,7 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
