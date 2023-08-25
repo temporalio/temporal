@@ -155,8 +155,6 @@ func Invoke(
 		resetRunID,
 		request.GetRequestId(),
 		ndc.NewWorkflow(
-			ctx,
-			shard.GetNamespaceRegistry(),
 			shard.GetClusterMetadata(),
 			currentWFContext.GetContext(),
 			currentWFContext.GetMutableState(),

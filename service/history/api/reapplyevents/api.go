@@ -151,8 +151,6 @@ func Invoke(
 					resetRunID.String(),
 					uuid.New().String(),
 					ndc.NewWorkflow(
-						ctx,
-						shard.GetNamespaceRegistry(),
 						shard.GetClusterMetadata(),
 						context,
 						mutableState,
