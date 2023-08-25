@@ -259,7 +259,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		esClient, err = esclient.NewClient(esConfig, esHttpClient, logger)
 		if err != nil {
 			return serverOptionsProvider{}, fmt.Errorf("unable to create Elasticsearch client (URL = %v, username = %q): %w",
-				esConfig.URL, esConfig.Username, err)
+				esConfig.URL.Redacted(), esConfig.Username, err)
 		}
 	}
 
