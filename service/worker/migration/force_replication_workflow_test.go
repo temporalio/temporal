@@ -98,6 +98,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -165,6 +166,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   maxPageCountPerExecution,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -187,8 +189,11 @@ func TestForceReplicationWorkflow_InvalidInput(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 
 	for _, invalidInput := range []ForceReplicationParams{
-		{},
 		{
+			// Empty namespace
+		},
+		{
+			// Empty TargetClusterEndpoint
 			Namespace:          uuid.New(),
 			EnableVerification: true,
 		},
@@ -329,6 +334,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -384,6 +390,7 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

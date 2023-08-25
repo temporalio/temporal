@@ -141,7 +141,6 @@ const (
 	defaultPageSizeForTaskQueueUserDataReplication = 20
 	defaultRPSForTaskQueueUserDataReplication      = 1.0
 	defaultVerifyIntervalInSeconds                 = 5
-	defaultRetentionBiasInSeconds                  = 60
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
@@ -275,6 +274,10 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
+	}
+
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint is required with verification enabled", "InvalidArgument", nil)
 	}
 
 	if params.ConcurrentActivityCount <= 0 {

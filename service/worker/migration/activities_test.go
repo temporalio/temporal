@@ -563,12 +563,10 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 }
 
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
-	bias := time.Minute
 	request := verifyReplicationTasksRequest{
 		Namespace:             mockedNamespace,
 		NamespaceID:           mockedNamespaceID,
 		TargetClusterEndpoint: remoteRpcAddress,
-		RetentionBiasDuration: bias,
 		Executions:            []commonpb.WorkflowExecution{execution1},
 	}
 
