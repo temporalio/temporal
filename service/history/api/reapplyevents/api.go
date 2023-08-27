@@ -177,7 +177,7 @@ func Invoke(
 				}, nil
 			}
 
-			_, err = eventsReapplier.ReapplyEvents(
+			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
 				toReapplyEvents,
@@ -187,8 +187,14 @@ func Invoke(
 				shard.GetLogger().Error("failed to re-apply stale events", tag.Error(err))
 				return nil, err
 			}
+			if len(reappliedEvents) == 0 {
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
+				}, nil
+			}
 			return &api.UpdateWorkflowAction{
-				Noop:               true,
+				Noop:               false,
 				CreateWorkflowTask: false,
 			}, nil
 		},
