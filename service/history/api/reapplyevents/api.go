@@ -193,7 +193,7 @@ func Invoke(
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
-				CreateWorkflowTask: true,
+				CreateWorkflowTask: false,
 			}, nil
 		},
 		nil,
