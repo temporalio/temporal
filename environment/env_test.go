@@ -30,6 +30,7 @@ import (
 )
 
 func TestLookupLocalhostIPSuccess(t *testing.T) {
+	t.Parallel()
 	a := assert.New(t)
 	ipString := lookupLocalhostIP("localhost")
 	ip := net.ParseIP(ipString)
@@ -40,6 +41,7 @@ func TestLookupLocalhostIPSuccess(t *testing.T) {
 }
 
 func TestLookupLocalhostIPMissingHostname(t *testing.T) {
+	t.Parallel()
 	a := assert.New(t)
 	ipString := lookupLocalhostIP("")
 	ip := net.ParseIP(ipString)
@@ -49,6 +51,7 @@ func TestLookupLocalhostIPMissingHostname(t *testing.T) {
 }
 
 func TestLookupLocalhostIPWithIPv6(t *testing.T) {
+	t.Parallel()
 	a := assert.New(t)
 	ipString := lookupLocalhostIP("::1")
 	ip := net.ParseIP(ipString)
