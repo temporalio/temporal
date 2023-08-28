@@ -30,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -48,7 +49,7 @@ func TestEmitActionMetric(t *testing.T) {
 	}{
 		{
 			metrics.FrontendQueryWorkflowScope,
-			frontendPackagePrefix + metrics.FrontendQueryWorkflowScope,
+			api.WorkflowServicePrefix + metrics.FrontendQueryWorkflowScope,
 			true,
 		},
 		{
@@ -58,7 +59,7 @@ func TestEmitActionMetric(t *testing.T) {
 		},
 		{
 			metrics.MatchingClientAddWorkflowTaskScope,
-			frontendPackagePrefix + metrics.FrontendQueryWorkflowScope,
+			api.WorkflowServicePrefix + metrics.FrontendQueryWorkflowScope,
 			false,
 		},
 	}
@@ -88,17 +89,17 @@ func TestOperationOverwrite(t *testing.T) {
 	}{
 		{
 			"DeleteWorkflowExecution",
-			adminServicePrefix + "DeleteWorkflowExecution",
+			api.AdminServicePrefix + "DeleteWorkflowExecution",
 			"AdminDeleteWorkflowExecution",
 		},
 		{
 			"DeleteNamespace",
-			operatorServicePrefix + "DeleteNamespace",
+			api.OperatorServicePrefix + "DeleteNamespace",
 			"OperatorDeleteNamespace",
 		},
 		{
 			metrics.FrontendStartWorkflowExecutionScope,
-			frontendPackagePrefix + metrics.FrontendStartWorkflowExecutionScope,
+			api.WorkflowServicePrefix + metrics.FrontendStartWorkflowExecutionScope,
 			metrics.FrontendStartWorkflowExecutionScope,
 		},
 	}
