@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -63,9 +64,6 @@ var (
 var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
-	frontendPackagePrefix        = "/temporal.api.workflowservice.v1.WorkflowService/"
-	operatorServicePrefix        = "/temporal.api.operatorservice.v1.OperatorService/"
-	adminServicePrefix           = "/temporal.server.api.adminservice.v1.AdminService/"
 
 	grpcActions = map[string]struct{}{
 		metrics.FrontendQueryWorkflowScope:                    {},
@@ -106,7 +104,7 @@ func NewTelemetryInterceptor(
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
 func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation string, req interface{}) string {
-	if strings.HasPrefix(fullName, frontendPackagePrefix) {
+	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 		// remove this "if" case when that is done.
@@ -125,11 +123,11 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 // Ideally this method should never be used.
 func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
-	if strings.HasPrefix(fullName, operatorServicePrefix) {
+	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
 	}
 	// prepend Admin prefix to Admin APIs
-	if strings.HasPrefix(fullName, adminServicePrefix) {
+	if strings.HasPrefix(fullName, api.AdminServicePrefix) {
 		return "Admin" + operation
 	}
 	return operation
@@ -203,7 +201,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	metricsHandler metrics.Handler,
 	result interface{},
 ) {
-	if _, ok := grpcActions[methodName]; !ok || !strings.HasPrefix(fullName, frontendPackagePrefix) {
+	if _, ok := grpcActions[methodName]; !ok || !strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// grpcActions checks that methodName is the one that we care about.
 		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
 		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
