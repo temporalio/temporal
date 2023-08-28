@@ -863,3 +863,34 @@ func TestPersistUnknownBuildId(t *testing.T) {
 	assert.Equal(t, 1, len(newSet.BuildIds))
 	assert.Equal(t, "new-build-id", newSet.BuildIds[0].Id)
 }
+
+func TestPersistUnknownBuildIdAlreadyThere(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Next(hlc.Zero(1), commonclock.NewRealTimeSource())
+
+	initial := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{hashBuildId("1")},
+				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock), mkBuildId("2", clock)},
+				BecameDefaultTimestamp: &clock,
+			},
+		},
+	}
+
+	actual := PersistUnknownBuildId(clock, initial, "1")
+	assert.Equal(t, initial, actual)
+
+	// build id is already there but adds set id
+	actual = PersistUnknownBuildId(clock, initial, "2")
+	expected := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{
+			{
+				SetIds:                 []string{hashBuildId("1"), hashBuildId("2")},
+				BuildIds:               []*persistencespb.BuildId{mkBuildId("1", clock), mkBuildId("2", clock)},
+				BecameDefaultTimestamp: &clock,
+			},
+		},
+	}
+	assert.Equal(t, expected, actual)
+}
