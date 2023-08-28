@@ -863,3 +863,34 @@ func TestPersistUnknownBuildId(t *testing.T) {
 	assert.Equal(t, 1, len(newSet.BuildIds))
 	assert.Equal(t, "new-build-id", newSet.BuildIds[0].Id)
 }
+
+func TestCleanUpDemotedSetId(t *testing.T) {
+	t.Parallel()
+	clock := hlc.Next(hlc.Zero(1), commonclock.NewRealTimeSource())
+
+	initialData := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{{
+			SetIds:                 []string{"id1", "id2", "id3"},
+			BuildIds:               []*persistencespb.BuildId{buildID(1, "0.1"), buildID(6, "0.2")},
+			BecameDefaultTimestamp: &clock,
+		}},
+	}
+
+	// not found
+	actual := CleanUpDemotedSetId(initialData, "some-other-id")
+	assert.Equal(t, initialData, actual)
+
+	// not actually demoted
+	actual = CleanUpDemotedSetId(initialData, "id1")
+	assert.Equal(t, initialData, actual)
+
+	actual = CleanUpDemotedSetId(initialData, "id2")
+	expected := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{{
+			SetIds:                 []string{"id1", "id3"},
+			BuildIds:               []*persistencespb.BuildId{buildID(1, "0.1"), buildID(6, "0.2")},
+			BecameDefaultTimestamp: &clock,
+		}},
+	}
+	assert.Equal(t, expected, actual)
+}

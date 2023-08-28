@@ -849,8 +849,6 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId()
 	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
 		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
-	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 	}
 
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
@@ -861,6 +859,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		}
 		updatedClock := hlc.Next(*clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
+		replicate := true // most updates need to be replicated
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
 			var err error
@@ -896,6 +895,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				data.GetVersioningData(),
 				req.GetPersistUnknownBuildId(),
 			)
+		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_CleanUpDemotedSetId:
+			versioningData = CleanUpDemotedSetId(
+				data.GetVersioningData(),
+				req.GetCleanUpDemotedSetId(),
+			)
+			replicate = false // set ids are local only, this does not have to be replicated
 		default:
 			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}
@@ -903,7 +908,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		ret := *data
 		ret.Clock = &updatedClock
 		ret.VersioningData = versioningData
-		return &ret, true, nil
+		return &ret, replicate, nil
 	})
 	if err != nil {
 		return nil, err

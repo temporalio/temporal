@@ -32,12 +32,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/clock"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"golang.org/x/time/rate"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -45,6 +44,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/future"
@@ -78,8 +78,12 @@ var (
 	// this retry policy is currently only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reloaded
 	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
+					WithMaximumInterval(1 * time.Second).
+					WithExpirationInterval(30 * time.Second)
+
+	// Rate limiter for cleaning up demoted set ids. Note that this is process-wide since this
+	// should be very rare.
+	cleanUpDemotedSetIdRate = rate.NewLimiter(1/10, 1)
 )
 
 type (
@@ -150,6 +154,7 @@ type (
 		QueueID() *taskQueueID
 		TaskQueueKind() enumspb.TaskQueueKind
 		LongPollExpirationInterval() time.Duration
+		HasNoBacklog() bool
 		RedirectToVersionedQueueForAdd(context.Context, *taskqueuespb.TaskVersionDirective) (taskQueueManager, chan struct{}, error)
 		RedirectToVersionedQueueForPoll(context.Context, *commonpb.WorkerVersionCapabilities) (taskQueueManager, error)
 	}
@@ -772,6 +777,22 @@ func (c *taskQueueManagerImpl) LongPollExpirationInterval() time.Duration {
 	return c.config.LongPollExpirationInterval()
 }
 
+// HasNoBacklog returns true if the taskReader for this tqm definitely had no tasks in the
+// backlog for at least some time during this call. It returns false it might have tasks.
+func (c *taskQueueManagerImpl) HasNoBacklog() bool {
+	// Note that we should read ackLevel first for correctness: ackLevel <= maxReadLevel, so if
+	// we read maxReadLevel first, then both maxReadLevel and ackLevel move up before reading
+	// ackLevel, we could get a match even though were tasks in the backlog the whole time.
+	// Also note that this ack level may not be persisted yet: if we get unloaded and reloaded
+	// we might read some tasks again, but that doesn't matter because they'll fail when we
+	// record task started.
+	ackLevel := c.taskAckManager.getAckLevel()
+	if ackLevel < 0 {
+		return false // not initialized
+	}
+	return c.taskWriter.GetMaxReadLevel() == ackLevel
+}
+
 func (c *taskQueueManagerImpl) RedirectToVersionedQueueForPoll(ctx context.Context, caps *commonpb.WorkerVersionCapabilities) (taskQueueManager, error) {
 	if !caps.GetUseVersioning() {
 		// Either this task queue is versioned, or there are still some workflows running on
@@ -816,14 +837,31 @@ func (c *taskQueueManagerImpl) loadDemotedSetIds(demotedSetIds []string) {
 	// If we have demoted set ids, we need to load all task queues for them because even though
 	// no new tasks will be sent to them, they might have old tasks in the db.
 	// Also mark them alive, so that their liveness will be roughly synchronized.
-	// TODO: once we know a demoted set id has no more tasks, we can remove it from versioning data
 	for _, demotedSetId := range demotedSetIds {
 		newId := newTaskQueueIDWithVersionSet(c.taskQueueID, demotedSetId)
 		tqm, _ := c.engine.getTaskQueueManagerNoWait(newId, c.stickyInfo, true)
 		if tqm != nil {
 			tqm.MarkAlive()
+			if tqm.HasNoBacklog() && cleanUpDemotedSetIdRate.Allow() {
+				go c.cleanUpDemotedSetId(demotedSetId)
+			}
 		}
 	}
+}
+
+func (c *taskQueueManagerImpl) cleanUpDemotedSetId(demotedSetId string) {
+	// Send rpc to root partition to clean up the obsolete set id.
+	// Runs in a new goroutine to avoid blocking, and ignore any error (we'll just try again
+	// the next time we notice).
+	ctx, cancel := c.newIOContext()
+	defer cancel()
+	_, _ = c.matchingClient.UpdateWorkerBuildIdCompatibility(ctx, &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: c.taskQueueID.namespaceID.String(),
+		TaskQueue:   c.taskQueueID.Root().FullName(),
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_CleanUpDemotedSetId{
+			CleanUpDemotedSetId: demotedSetId,
+		},
+	})
 }
 
 func (c *taskQueueManagerImpl) RedirectToVersionedQueueForAdd(ctx context.Context, directive *taskqueuespb.TaskVersionDirective) (taskQueueManager, chan struct{}, error) {

@@ -2502,6 +2502,8 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	unknown := "unknown"
 	build1 := "build1"
 
+	cleanUpDemotedSetIdRate.SetBurst(1e6) // allow testing with -count
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -2533,20 +2535,19 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	// tries to load base for dispatching.
 	id := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	verId := newTaskQueueIDWithVersionSet(id, hashBuildId(unknown))
-	verTqm, err := s.matchingEngine.getTaskQueueManager(ctx, verId, normalStickyInfo, false)
-	s.NoError(err)
-	s.NotNil(verTqm)
-	s.matchingEngine.unloadTaskQueue(verTqm)
-	// wait for taskReader goroutines to exit
-	verTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
 
-	// unload base
-	baseTqm, err := s.matchingEngine.getTaskQueueManager(ctx, id, normalStickyInfo, false)
-	s.NoError(err)
-	s.NotNil(baseTqm)
-	s.matchingEngine.unloadTaskQueue(baseTqm)
-	// wait for taskReader goroutines to exit
-	baseTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+	getTqm := func(id *taskQueueID) *taskQueueManagerImpl {
+		tqm, err := s.matchingEngine.getTaskQueueManager(ctx, id, normalStickyInfo, true)
+		s.NoError(err)
+		s.NotNil(tqm)
+		return tqm.(*taskQueueManagerImpl)
+	}
+	unload := func(tqm *taskQueueManagerImpl) {
+		s.matchingEngine.unloadTaskQueue(tqm)
+		tqm.taskReader.gorogrp.Wait() // wait for taskReader goroutines to exit
+	}
+	unload(getTqm(verId))
+	unload(getTqm(id))
 
 	// both are now unloaded. change versioning data to merge unknown into another set.
 	clock := hlc.Zero(1)
@@ -2588,6 +2589,33 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
 	task.finish(nil)
+
+	// Finishing the task means there's now no backlog. But for HasNoBacklog to return true, we need
+	// the ack level to be bumped up to the end of the current range. (It may be possible for an
+	// improved implementation of HasNoBacklog to not require this but it's not worth it.) In
+	// general this doesn't happen while the tqm is loaded. But we can force it to happen by
+	// unloading it and reloading it, which will trigger the condition to move ackLevel in
+	// ackManager.setReadLevelAfterGap.
+	unload(getTqm(verId))
+	getTqm(verId)
+	time.Sleep(10 * time.Millisecond) // wait for taskReader to read an empty batch and update ackLevel
+
+	// now poll again and it should notice the demoted set id has no tasks and clean it up
+	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue:   tq,
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_CleanUpDemotedSetId{
+			CleanUpDemotedSetId: hashBuildId(unknown),
+		},
+	}).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil)
+
+	_, err = s.matchingEngine.getTask(ctx, id, normalStickyInfo, &pollMetadata{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       build1,
+			UseVersioning: true,
+		},
+	})
+	s.ErrorIs(err, errNoTasks)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
