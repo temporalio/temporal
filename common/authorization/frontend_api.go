@@ -24,50 +24,23 @@
 
 package authorization
 
-var readOnlyNamespaceAPI = map[string]struct{}{
-	"DescribeNamespace":                  {},
-	"GetWorkflowExecutionHistory":        {},
-	"GetWorkflowExecutionHistoryReverse": {},
-	"ListOpenWorkflowExecutions":         {},
-	"ListClosedWorkflowExecutions":       {},
-	"ListWorkflowExecutions":             {},
-	"ListArchivedWorkflowExecutions":     {},
-	"ScanWorkflowExecutions":             {},
-	"CountWorkflowExecutions":            {},
-	"QueryWorkflow":                      {},
-	"DescribeWorkflowExecution":          {},
-	"DescribeTaskQueue":                  {},
-	"ListTaskQueuePartitions":            {},
-	"DescribeSchedule":                   {},
-	"ListSchedules":                      {},
-	"ListScheduleMatchingTimes":          {},
-	"DescribeBatchOperation":             {},
-	"ListBatchOperations":                {},
-	"GetWorkerBuildIdCompatibility":      {},
-	"GetWorkerTaskReachability":          {},
-}
+import "go.temporal.io/server/common/api"
 
-var readOnlyGlobalAPI = map[string]struct{}{
-	"ListNamespaces":      {},
-	"GetSearchAttributes": {},
-	"GetClusterInfo":      {},
-	"GetSystemInfo":       {},
-}
-
-// note that these use the fully-qualified name
 var healthCheckAPI = map[string]struct{}{
 	"/grpc.health.v1.Health/Check":                                   {},
 	"/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo": {},
 }
 
-func IsReadOnlyNamespaceAPI(api string) bool {
-	_, found := readOnlyNamespaceAPI[api]
-	return found
+func IsReadOnlyNamespaceAPI(workflowServiceMethod string) bool {
+	fullApiName := api.WorkflowServicePrefix + workflowServiceMethod
+	metadata := api.GetMethodMetadata(fullApiName)
+	return metadata.Scope == api.ScopeNamespace && metadata.Access == api.AccessReadOnly
 }
 
-func IsReadOnlyGlobalAPI(api string) bool {
-	_, found := readOnlyGlobalAPI[api]
-	return found
+func IsReadOnlyGlobalAPI(workflowServiceMethod string) bool {
+	fullApiName := api.WorkflowServicePrefix + workflowServiceMethod
+	metadata := api.GetMethodMetadata(fullApiName)
+	return metadata.Scope == api.ScopeCluster && metadata.Access == api.AccessReadOnly
 }
 
 func IsHealthCheckAPI(fullApi string) bool {
