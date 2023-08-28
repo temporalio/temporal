@@ -114,6 +114,7 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
 		},
 		logger,
+		commongocql.NewTracer(*cassandraConfig),
 	)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))

@@ -105,6 +105,7 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 			return commongocql.NewCassandraCluster(adminCfg, resolver.NewNoopResolver())
 		},
 		logger,
+		commongocql.NewTracer(adminCfg),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
@@ -133,6 +134,7 @@ func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logg
 			return commongocql.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 		},
 		logger,
+		commongocql.NewTracer(*cfg),
 	)
 	if err != nil {
 		panic(err)
@@ -167,6 +169,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 			return commongocql.NewCassandraCluster(adminCfg, resolver.NewNoopResolver())
 		},
 		log.NewNoopLogger(),
+		commongocql.NewTracer(adminCfg),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
