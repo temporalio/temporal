@@ -22,13 +22,14 @@ type (
 	}
 
 	batchedTask struct {
-		batchedTask       BatchableTask
-		individualTasks   []BatchableTask
-		lock              sync.Mutex
-		state             batchState
-		reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask] // This scheduler is used to re-submit individual tasks if batch processing failed
-		logger            log.Logger
-		metricsHandler    metrics.Handler
+		batchedTask     BatchableTask
+		individualTasks []BatchableTask
+		lock            sync.Mutex
+		state           batchState
+		// individualTaskHandler will be called when batched task was Nack, Reschedule, MarkPoisonPill
+		individualTaskHandler func(task TrackableExecutableTask)
+		logger                log.Logger
+		metricsHandler        metrics.Handler
 	}
 
 	batchState int
@@ -57,7 +58,7 @@ func (w *batchedTask) MarkPoisonPill() error {
 	if len(w.individualTasks) == 1 {
 		return w.batchedTask.MarkPoisonPill()
 	}
-	w.reSubmitIndividualTasks()
+	w.handleIndividualTasks()
 	return nil
 }
 
@@ -98,7 +99,7 @@ func (w *batchedTask) Nack(err error) {
 		w.batchedTask.Nack(err)
 	} else {
 		w.logger.Info("Failed to process batched replication task", tag.Error(err))
-		w.reSubmitIndividualTasks()
+		w.handleIndividualTasks()
 	}
 }
 
@@ -106,7 +107,7 @@ func (w *batchedTask) Reschedule() {
 	if len(w.individualTasks) == 1 {
 		w.Reschedule()
 	} else {
-		w.reSubmitIndividualTasks()
+		w.handleIndividualTasks()
 	}
 }
 
@@ -120,10 +121,10 @@ func (w *batchedTask) callIndividual(f func(task BatchableTask)) {
 	}
 }
 
-func (w *batchedTask) reSubmitIndividualTasks() {
+func (w *batchedTask) handleIndividualTasks() {
 	w.callIndividual(func(t BatchableTask) {
 		t.MarkUnbatchable()
-		w.reSubmitScheduler.Submit(t)
+		w.individualTaskHandler(t)
 	})
 }
 

@@ -38,17 +38,17 @@ type (
 		id interface{}
 
 		sync.Mutex
-		taskQueue         collection.Queue[TrackableExecutableTask]
-		lastTask          TrackableExecutableTask
-		reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask]
-		logger            log.Logger
-		metricsHandler    metrics.Handler
+		taskQueue                    collection.Queue[TrackableExecutableTask]
+		lastTask                     TrackableExecutableTask
+		batchedIndividualTaskHandler func(task TrackableExecutableTask)
+		logger                       log.Logger
+		metricsHandler               metrics.Handler
 	}
 )
 
 func NewSequentialBatchableTaskQueue(
 	task TrackableExecutableTask,
-	reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask],
+	batchedIndividualTaskHandler func(task TrackableExecutableTask),
 	logger log.Logger,
 	metricsHandler metrics.Handler) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialBatchableTaskQueue{
@@ -57,9 +57,9 @@ func NewSequentialBatchableTaskQueue(
 		taskQueue: collection.NewPriorityQueue[TrackableExecutableTask](
 			SequentialTaskQueueCompareLess,
 		),
-		reSubmitScheduler: reSubmitScheduler,
-		logger:            logger,
-		metricsHandler:    metricsHandler,
+		batchedIndividualTaskHandler: batchedIndividualTaskHandler,
+		logger:                       logger,
+		metricsHandler:               metricsHandler,
 	}
 }
 
@@ -143,9 +143,9 @@ func (q *SequentialBatchableTaskQueue) updateLastTask(task TrackableExecutableTa
 
 func (q *SequentialBatchableTaskQueue) createBatchedTask(task BatchableTask) *batchedTask {
 	return &batchedTask{
-		batchedTask:       task,
-		individualTasks:   append([]BatchableTask{}, task),
-		state:             batchStateOpen,
-		reSubmitScheduler: q.reSubmitScheduler,
+		batchedTask:           task,
+		individualTasks:       append([]BatchableTask{}, task),
+		state:                 batchStateOpen,
+		individualTaskHandler: q.batchedIndividualTaskHandler,
 	}
 }
