@@ -73,9 +73,6 @@ func (c *clientImpl) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	if request.GetDescRequest().GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-	  request.GetDescRequest().TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	}
 	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetDescRequest().GetTaskQueue(), request.GetDescRequest().GetTaskQueueType())
 	if err != nil {
 		return nil, err
