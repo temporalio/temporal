@@ -31,31 +31,25 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-// SequentialBatchableTaskQueue is not thread-safe. It is a 2-tiered queue. If incoming task is batchable,
-// the batched task will be added to main queue or merged with last item in main queue. In above case, the incoming task
-// will also be added into individualTaskQueue, so when batched task failed to execute, we can dispatch individual task and try again.
-// If multiple threads polling this queue at same time, we may see an issue where batched task and individual tasks are executing at same time
 type (
 	SequentialBatchableTaskQueue struct {
 		id interface{}
 
 		sync.Mutex
-		mainQueue           collection.Queue[TrackableExecutableTask]
-		individualTaskQueue []BatchableTask
-		lastTask            TrackableExecutableTask
-		size                int
+		taskQueue         collection.Queue[TrackableExecutableTask]
+		lastTask          TrackableExecutableTask
+		reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask]
 	}
 )
 
-func NewSequentialBatchableTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+func NewSequentialBatchableTaskQueue(task TrackableExecutableTask, reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask]) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialBatchableTaskQueue{
 		id: task.QueueID(),
 
-		mainQueue: collection.NewPriorityQueue[TrackableExecutableTask](
+		taskQueue: collection.NewPriorityQueue[TrackableExecutableTask](
 			SequentialTaskQueueCompareLess,
 		),
-		individualTaskQueue: make([]BatchableTask, 0),
-		size:                0,
+		reSubmitScheduler: reSubmitScheduler,
 	}
 }
 
@@ -66,125 +60,61 @@ func (q *SequentialBatchableTaskQueue) ID() interface{} {
 func (q *SequentialBatchableTaskQueue) Peek() TrackableExecutableTask {
 	q.Lock()
 	defer q.Unlock()
-	if q.mainQueue.IsEmpty() {
-		return q.individualTaskQueue[0]
-	}
-
-	if len(q.individualTaskQueue) == 0 {
-		return q.mainQueue.Peek()
-	}
-
-	if SequentialTaskQueueCompareLess(q.individualTaskQueue[0], q.mainQueue.Peek()) {
-		return q.individualTaskQueue[0]
-	} else {
-		return q.mainQueue.Peek()
-	}
+	return q.taskQueue.Peek()
 }
 
 // Add will try to batch input task with the last task in the queue. Since most likely incoming task
-// are ordered by task ID, so we only try to batch incoming task with last task in the queue.
+// are ordered by task ID, we only try to batch incoming task with last task in the queue.
 func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 	q.Lock()
 	defer q.Unlock()
+	q.updateLastTask(task)
 
-	q.size++
-	// case 1: input task is not batchable: simply add task into the queue
-	t, isBatchable := task.(BatchableTask)
+	batchableTask, isBatchable := task.(BatchableTask)
 
-	if !isBatchable {
-		q.mainQueue.Add(task)
+	// case 1: input task is not a batchable task or input task does not want to be batched: simply add task into the queue
+	if !isBatchable || !batchableTask.CanBatch() {
 		q.updateLastTask(task)
+		q.taskQueue.Add(task)
 		return
 	}
 
-	// case 2: lastTask is a batchedTask, try to addTask, if success, put the task into individual task queue and return
-	lt, lastTaskIsBatchedTask := q.lastTask.(*batchedTask)
-	if lastTaskIsBatchedTask {
-		err := lt.addTask(t)
-		if err == nil {
-			q.individualTaskQueue = append(q.individualTaskQueue, t)
-			return
-		}
+	// case 2: lastTask is a batchedTask, try to addTask
+	batchedTask, lastTaskIsBatchedTask := q.lastTask.(*batchedTask)
+	if lastTaskIsBatchedTask && batchedTask.addTask(batchableTask) {
+		return
 	}
 
-	// case 3: failed to addTask: If the incoming task will be the last task, create new batchedTask
+	// case 3: If the incoming task will be the last task, create new batchedTask
 	if SequentialTaskQueueCompareLess(q.lastTask, task) {
-		task = q.createBatchedTask(t)
-		q.individualTaskQueue = append(q.individualTaskQueue, t)
+		task = q.createBatchedTask(batchableTask)
 	}
 
-	q.mainQueue.Add(task)
+	q.taskQueue.Add(task)
 	q.updateLastTask(task)
 }
 
 func (q *SequentialBatchableTaskQueue) Remove() (task TrackableExecutableTask) {
 	q.Lock()
 	defer q.Unlock()
-	defer func() {
-		if _, isBatchedTask := task.(*batchedTask); !isBatchedTask {
-			q.size--
-		}
-	}()
-
-	if q.mainQueue.IsEmpty() {
-		return q.removeFromUnderlyingQueue()
-	}
-
-	if len(q.individualTaskQueue) == 0 {
-		return q.removeFromMainQueue()
-	}
-
-	// if both mainQueue and individualTasks queue are not empty, will dispatch the smaller one
-	if SequentialTaskQueueCompareLess(q.individualTaskQueue[0], q.mainQueue.Peek()) {
-		return q.removeFromUnderlyingQueue()
-	} else {
-		return q.removeFromMainQueue()
-	}
-}
-
-func (q *SequentialBatchableTaskQueue) removeFromUnderlyingQueue() TrackableExecutableTask {
-	toBeRemoved := q.individualTaskQueue[0]
-	q.individualTaskQueue = q.individualTaskQueue[1:]
-	return toBeRemoved
-}
-
-func (q *SequentialBatchableTaskQueue) removeFromMainQueue() TrackableExecutableTask {
-	toBeRemoved := q.mainQueue.Remove().(TrackableExecutableTask)
-	if toBeRemoved == q.lastTask {
+	taskToRemove := q.taskQueue.Remove()
+	if taskToRemove == q.lastTask {
 		q.lastTask = nil
 	}
-	return toBeRemoved
-}
-
-func (q *SequentialBatchableTaskQueue) removeNonPendingTasksFromUnderlyingQueue() {
-	var firstPendingTask = -1
-	for index, task := range q.individualTaskQueue {
-		if (task).State() == ctasks.TaskStatePending {
-			firstPendingTask = index
-			break
-		} else {
-			q.size--
-		}
-	}
-	if firstPendingTask >= 0 {
-		q.individualTaskQueue = q.individualTaskQueue[firstPendingTask:]
-	} else {
-		q.individualTaskQueue = []BatchableTask{}
-	}
+	return taskToRemove
 }
 
 func (q *SequentialBatchableTaskQueue) IsEmpty() bool {
 	q.Lock()
 	defer q.Unlock()
 
-	q.removeNonPendingTasksFromUnderlyingQueue()
-	return q.mainQueue.IsEmpty() && len(q.individualTaskQueue) == 0
+	return q.taskQueue.IsEmpty()
 }
 
 func (q *SequentialBatchableTaskQueue) Len() int {
 	q.Lock()
 	defer q.Unlock()
-	return q.size
+	return q.taskQueue.Len()
 }
 
 func (q *SequentialBatchableTaskQueue) updateLastTask(task TrackableExecutableTask) {
@@ -195,7 +125,9 @@ func (q *SequentialBatchableTaskQueue) updateLastTask(task TrackableExecutableTa
 
 func (q *SequentialBatchableTaskQueue) createBatchedTask(task BatchableTask) *batchedTask {
 	return &batchedTask{
-		batchedTask:     task,
-		individualTasks: append([]BatchableTask{}, task),
+		batchedTask:       task,
+		individualTasks:   append([]BatchableTask{}, task),
+		state:             batchStateOpen,
+		reSubmitScheduler: q.reSubmitScheduler,
 	}
 }

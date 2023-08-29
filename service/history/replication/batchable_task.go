@@ -1,7 +1,6 @@
 package replication
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -12,15 +11,19 @@ import (
 type (
 	BatchableTask interface {
 		TrackableExecutableTask
-		Combine(task BatchableTask) (BatchableTask, error)
+		// BatchWith bt and return a new BatchableTask
+		BatchWith(bt BatchableTask) (BatchableTask, error)
+		CanBatch() bool
+		// MarkUnbatchable will mark current task not batchable, so CanBatch() will return false
+		MarkUnbatchable()
 	}
 
-	// batchedTask should be only used by sequential_combined_queue
 	batchedTask struct {
-		batchedTask     BatchableTask
-		individualTasks []BatchableTask
-		lock            sync.Mutex
-		state           batchState
+		batchedTask       BatchableTask
+		individualTasks   []BatchableTask
+		lock              sync.Mutex
+		state             batchState
+		reSubmitScheduler ctasks.Scheduler[TrackableExecutableTask] // This scheduler is used to re-submit individual tasks if batch processing failed
 	}
 
 	batchState int
@@ -48,9 +51,9 @@ func (w *batchedTask) TaskCreationTime() time.Time {
 func (w *batchedTask) MarkPoisonPill() error {
 	if len(w.individualTasks) == 1 {
 		return w.batchedTask.MarkPoisonPill()
-	} else {
-		return nil
 	}
+	w.reSubmitIndividualTasks()
+	return nil
 }
 
 func (w *batchedTask) Ack() {
@@ -89,13 +92,16 @@ func (w *batchedTask) Nack(err error) {
 	if len(w.individualTasks) == 1 {
 		w.batchedTask.Nack(err)
 	} else {
-		// TODO: logging
+		// TODO: log the error
+		w.reSubmitIndividualTasks()
 	}
 }
 
 func (w *batchedTask) Reschedule() {
 	if len(w.individualTasks) == 1 {
 		w.Reschedule()
+	} else {
+		w.reSubmitIndividualTasks()
 	}
 }
 
@@ -109,19 +115,26 @@ func (w *batchedTask) callIndividual(f func(task BatchableTask)) {
 	}
 }
 
-func (w *batchedTask) addTask(task BatchableTask) error {
+func (w *batchedTask) reSubmitIndividualTasks() {
+	w.callIndividual(func(t BatchableTask) {
+		t.MarkUnbatchable()
+		w.reSubmitScheduler.Submit(t)
+	})
+}
+
+func (w *batchedTask) addTask(task BatchableTask) bool {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	// This is to make sure no task can be added into this batch after it starts executing
 	if w.state != batchStateOpen {
-		return errors.New("cannot combine tasks on non-pending state")
+		return false
 	}
-	newTask, err := w.batchedTask.Combine(task)
+	newTask, err := w.batchedTask.BatchWith(task)
 	if err != nil {
-		return err
+		return false
 	}
 	w.batchedTask = newTask
 	w.individualTasks = append(w.individualTasks, task)
-	return nil
+	return true
 }
