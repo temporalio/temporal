@@ -2722,7 +2722,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	}
 	
 	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-	  request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
