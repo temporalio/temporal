@@ -767,9 +767,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	taskQueueType := request.DescRequest.GetTaskQueueType()
-	if taskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-	  taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	}
 	taskQueueName := request.DescRequest.TaskQueue.GetName()
 	stickyInfo := stickyInfoFromTaskQueue(request.DescRequest.TaskQueue)
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
