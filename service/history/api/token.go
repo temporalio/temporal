@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func GeneratePaginationToken(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
@@ -51,6 +52,7 @@ func GeneratePaginationToken(
 	}
 }
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func ValidatePaginationToken(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	token *tokenspb.RawHistoryContinuation,
@@ -70,6 +72,7 @@ func ValidatePaginationToken(
 	return nil
 }
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func SerializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -78,12 +81,14 @@ func SerializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 	return token.Marshal()
 }
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func DeserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation, error) {
 	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func SerializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -92,6 +97,7 @@ func SerializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 	return token.Marshal()
 }
 
+// NOTE: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
 func DeserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error) {
 	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)

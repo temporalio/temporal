@@ -30,7 +30,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 )
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func generatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
@@ -50,7 +50,7 @@ func generatePaginationToken(
 	}
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func validatePaginationToken(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	token *tokenspb.RawHistoryContinuation,
@@ -69,7 +69,7 @@ func validatePaginationToken(
 	return nil
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -78,14 +78,14 @@ func serializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 	return token.Marshal()
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func deserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation, error) {
 	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
 	return token, err
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) {
 	if token == nil {
 		return nil, nil
@@ -94,7 +94,7 @@ func serializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 	return token.Marshal()
 }
 
-// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/frontend/token_deprecated.go
+// DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO ./service/history/api/token.go
 func deserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error) {
 	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
