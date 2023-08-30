@@ -40,3 +40,5 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
+frontend.accessHistoryFraction:
+  - value: 1.0

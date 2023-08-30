@@ -102,6 +102,18 @@ var (
 	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
 	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
 
+	ErrWorkflowIDNotSet                 = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	ErrInvalidRunID                     = serviceerror.NewInvalidArgument("Invalid RunId.")
+	ErrInvalidNextPageToken             = serviceerror.NewInvalidArgument("Invalid NextPageToken.")
+	ErrNextPageTokenRunIDMismatch       = serviceerror.NewInvalidArgument("RunId in the request does not match the NextPageToken.")
+	ErrInvalidPageSize                  = serviceerror.NewInvalidArgument("Invalid PageSize.")
+	ErrInvalidPaginationToken           = serviceerror.NewInvalidArgument("Invalid pagination token.")
+	ErrInvalidFirstNextEventCombination = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
+	ErrInvalidVersionHistories          = serviceerror.NewInvalidArgument("Invalid version histories.")
+	ErrInvalidEventQueryRange           = serviceerror.NewInvalidArgument("Invalid event query range.")
+
+	ErrUnableToGetSearchAttributesMessage = "Unable to get search attributes: %v."
+
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
 	FailedWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
