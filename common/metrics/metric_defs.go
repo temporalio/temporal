@@ -797,6 +797,14 @@ const (
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
 	// HistoryGetMutableStateScope tracks GetMutableStateScope API calls received by service
 	HistoryGetMutableStateScope = "GetMutableState"
+	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
+	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
+	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
+	HistoryGetHistoryScope = "GetHistory"
+	// HistoryGetRawHistoryScope tracks GetRawHistoryScope API calls received by service
+	HistoryGetRawHistoryScope = "GetRawHistory"
+	// HistoryGetHistoryReverseScope tracks GetHistoryReverseScope API calls received by service
+	HistoryGetHistoryReverseScope = "GetHistoryReverse"
 	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
 	HistoryPollMutableStateScope = "PollMutableState"
 	// HistoryResetStickyTaskQueueScope tracks ResetStickyTaskQueueScope API calls received by service
