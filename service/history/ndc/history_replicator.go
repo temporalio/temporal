@@ -293,7 +293,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			if err != nil {
 				return err
 			}
-			mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.PrepareHistoryBranch(ctx, wfContext, mutableState, task)
+			mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)
 			if err != nil {
 				return err
 			} else if !prepareHistoryBranchOut.DoContinue {

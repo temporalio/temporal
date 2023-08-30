@@ -63,7 +63,7 @@ type (
 )
 
 var _ MutableStateMapper[replicationTask, struct{}] = (*MutableStateMapperImpl)(nil).FlushBufferEvents
-var _ MutableStateMapper[replicationTask, PrepareHistoryBranchOut] = (*MutableStateMapperImpl)(nil).PrepareHistoryBranch
+var _ MutableStateMapper[replicationTask, PrepareHistoryBranchOut] = (*MutableStateMapperImpl)(nil).GetOrCreateHistoryBranch
 var _ MutableStateMapper[PrepareMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).PrepareMutableState
 var _ MutableStateMapper[replicationTask, workflow.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
@@ -101,7 +101,7 @@ func (m *MutableStateMapperImpl) FlushBufferEvents(
 	return mutableState, struct{}{}, err
 }
 
-func (m *MutableStateMapperImpl) PrepareHistoryBranch(
+func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 	ctx context.Context,
 	wfContext workflow.Context,
 	mutableState workflow.MutableState,
@@ -127,7 +127,7 @@ func (m *MutableStateMapperImpl) PrepareHistoryBranch(
 		return nil, PrepareHistoryBranchOut{}, err
 	default:
 		task.getLogger().Error(
-			"MutableStateMapping::PrepareHistoryBranch unable to prepare version history",
+			"MutableStateMapping::GetOrCreateHistoryBranch unable to prepare version history",
 			tag.Error(err),
 		)
 		return nil, PrepareHistoryBranchOut{}, err
