@@ -191,7 +191,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEve
 	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
 
-	doContinue, index, err := s.nDCBranchMgr.prepareBranch(
+	doContinue, index, err := s.nDCBranchMgr.getOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		150+1,
@@ -231,7 +231,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchAppendable_MissingEvent
 		RunId: s.runID,
 	}).AnyTimes()
 
-	_, _, err = s.nDCBranchMgr.prepareBranch(
+	_, _, err = s.nDCBranchMgr.getOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		150+2,
@@ -289,7 +289,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMissing
 			}, nil
 		})
 
-	doContinue, index, err := s.nDCBranchMgr.prepareBranch(
+	doContinue, index, err := s.nDCBranchMgr.getOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+1,
@@ -334,7 +334,7 @@ func (s *branchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_MissingEv
 		RunId: s.runID,
 	}).AnyTimes()
 
-	_, _, err := s.nDCBranchMgr.prepareBranch(
+	_, _, err := s.nDCBranchMgr.getOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+2,

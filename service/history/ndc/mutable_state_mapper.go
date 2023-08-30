@@ -109,7 +109,7 @@ func (m *MutableStateMapperImpl) PrepareHistoryBranch(
 ) (workflow.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
-	doContinue, versionHistoryIndex, err := branchMgr.prepareBranch(
+	doContinue, versionHistoryIndex, err := branchMgr.getOrCreate(
 		ctx,
 		incomingVersionHistory,
 		task.getFirstEvent().GetEventId(),

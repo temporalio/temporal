@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	history "go.temporal.io/server/api/history/v1"
 )
 
@@ -60,9 +61,9 @@ func (m *MockBranchMgr) EXPECT() *MockBranchMgrMockRecorder {
 }
 
 // prepareBranch mocks base method.
-func (m *MockBranchMgr) prepareBranch(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
+func (m *MockBranchMgr) getOrCreate(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "prepareBranch", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	ret := m.ctrl.Call(m, "getOrCreate", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(int32)
 	ret2, _ := ret[2].(error)
@@ -72,5 +73,5 @@ func (m *MockBranchMgr) prepareBranch(ctx context.Context, incomingVersionHistor
 // prepareBranch indicates an expected call of prepareBranch.
 func (mr *MockBranchMgrMockRecorder) prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareBranch", reflect.TypeOf((*MockBranchMgr)(nil).prepareBranch), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getOrCreate", reflect.TypeOf((*MockBranchMgr)(nil).getOrCreate), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 }
