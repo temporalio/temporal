@@ -352,10 +352,6 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 	)
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
-		task.getLogger().Error(
-			"HistoryReplicator::applyStartEvents unable to apply events",
-			tag.Error(err),
-		)
 		return err
 	}
 	if newMutableState != nil {
@@ -395,10 +391,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 ) error {
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
-		task.getLogger().Error(
-			"HistoryReplicator::applyNonStartEventsToCurrentBranch unable to apply events",
-			tag.Error(err),
-		)
 		return err
 	}
 
@@ -647,10 +639,6 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 ) error {
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
-		task.getLogger().Error(
-			"HistoryReplicator::applyNonStartEventsResetWorkflow unable to apply events",
-			tag.Error(err),
-		)
 		return err
 	}
 	if newMutableState != nil {
