@@ -56,7 +56,7 @@ type (
 		BranchIndex int32
 	}
 
-	PrepareMutableStateIn struct {
+	GetOrRebuildCurrentMutableStateIn struct {
 		replicationTask
 		BranchIndex int32
 	}
@@ -64,7 +64,7 @@ type (
 
 var _ MutableStateMapper[replicationTask, struct{}] = (*MutableStateMapperImpl)(nil).FlushBufferEvents
 var _ MutableStateMapper[replicationTask, PrepareHistoryBranchOut] = (*MutableStateMapperImpl)(nil).GetOrCreateHistoryBranch
-var _ MutableStateMapper[PrepareMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).PrepareMutableState
+var _ MutableStateMapper[GetOrRebuildCurrentMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildCurrentMutableState
 var _ MutableStateMapper[replicationTask, workflow.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
 func NewMutableStateMapping(
@@ -109,7 +109,7 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 ) (workflow.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
-	doContinue, versionHistoryIndex, err := branchMgr.getOrCreate(
+	doContinue, versionHistoryIndex, err := branchMgr.GetOrCreate(
 		ctx,
 		incomingVersionHistory,
 		task.getFirstEvent().GetEventId(),
@@ -134,15 +134,15 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 	}
 }
 
-func (m *MutableStateMapperImpl) PrepareMutableState(
+func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	wfContext workflow.Context,
 	mutableState workflow.MutableState,
-	task PrepareMutableStateIn,
+	task GetOrRebuildCurrentMutableStateIn,
 ) (workflow.MutableState, bool, error) {
 	conflictResolver := m.newConflictResolver(wfContext, mutableState, task.getLogger())
 	incomingVersion := task.getVersion()
-	mutableState, isRebuilt, err := conflictResolver.prepareMutableState(
+	mutableState, isRebuilt, err := conflictResolver.GetOrRebuildCurrentMutableState(
 		ctx,
 		task.BranchIndex,
 		incomingVersion,

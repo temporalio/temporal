@@ -507,7 +507,6 @@ func AdminHandlerProvider(
 		esClient,
 		visibilityMrg,
 		logger,
-		persistenceExecutionManager,
 		taskManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
@@ -527,6 +526,7 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
+		persistenceExecutionManager,
 	}
 	return NewAdminHandler(args)
 }

@@ -303,11 +303,11 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 				return nil
 			}
 
-			mutableState, isRebuilt, err := r.mutableStateMapper.PrepareMutableState(
+			mutableState, isRebuilt, err := r.mutableStateMapper.GetOrRebuildCurrentMutableState(
 				ctx,
 				wfContext,
 				mutableState,
-				PrepareMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
+				GetOrRebuildCurrentMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
 			)
 			if err != nil {
 				return err

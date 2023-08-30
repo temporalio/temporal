@@ -208,9 +208,10 @@ message RespondWorkflowTaskCompletedRequest {
 }
 
 message RespondWorkflowTaskCompletedResponse {
-    RecordWorkflowTaskStartedResponse started_response = 1;
+    RecordWorkflowTaskStartedResponse started_response = 1 [deprecated = true];
     repeated temporal.api.workflowservice.v1.PollActivityTaskQueueResponse activity_tasks = 2;
     int64 reset_history_event_id = 3;
+    temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse new_workflow_task = 4;
 }
 
 message RespondWorkflowTaskFailedRequest {
@@ -690,4 +691,44 @@ message PollWorkflowExecutionUpdateRequest {
 
 message PollWorkflowExecutionUpdateResponse {
     temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse response = 1;
+}
+
+message GetWorkflowExecutionHistoryRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest request = 2;
+}
+
+message GetWorkflowExecutionHistoryResponse {
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse response = 1;
+}
+
+message GetWorkflowExecutionHistoryReverseRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest request = 2;
+}
+
+message GetWorkflowExecutionHistoryReverseResponse {
+    temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse response = 1;
+}
+
+/**
+  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
+  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+  **/
+message GetWorkflowExecutionRawHistoryV2Request {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request request = 2;
+}
+
+message GetWorkflowExecutionRawHistoryV2Response {
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response response = 1;
+}
+
+message ForceDeleteWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest request = 2;
+}
+
+message ForceDeleteWorkflowExecutionResponse {
+    temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }

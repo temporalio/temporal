@@ -59,34 +59,34 @@ func (m *MockBranchMgr) EXPECT() *MockBranchMgrMockRecorder {
 	return m.recorder
 }
 
-// create mocks base method.
-func (m *MockBranchMgr) create(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
+// Create mocks base method.
+func (m *MockBranchMgr) Create(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "create", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	ret := m.ctrl.Call(m, "Create", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(int32)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// create indicates an expected call of create.
-func (mr *MockBranchMgrMockRecorder) create(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
+// Create indicates an expected call of Create.
+func (mr *MockBranchMgrMockRecorder) Create(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "create", reflect.TypeOf((*MockBranchMgr)(nil).create), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockBranchMgr)(nil).Create), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 }
 
-// getOrCreate mocks base method.
-func (m *MockBranchMgr) getOrCreate(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
+// GetOrCreate mocks base method.
+func (m *MockBranchMgr) GetOrCreate(ctx context.Context, incomingVersionHistory *history.VersionHistory, incomingFirstEventID, incomingFirstEventVersion int64) (bool, int32, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getOrCreate", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	ret := m.ctrl.Call(m, "GetOrCreate", ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(int32)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// getOrCreate indicates an expected call of getOrCreate.
-func (mr *MockBranchMgrMockRecorder) getOrCreate(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
+// GetOrCreate indicates an expected call of GetOrCreate.
+func (mr *MockBranchMgrMockRecorder) GetOrCreate(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getOrCreate", reflect.TypeOf((*MockBranchMgr)(nil).getOrCreate), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreate", reflect.TypeOf((*MockBranchMgr)(nil).GetOrCreate), ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion)
 }

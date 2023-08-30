@@ -192,7 +192,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_NoMissingEventInBetwee
 		VersionHistories: versionHistories,
 	}).AnyTimes()
 
-	doContinue, index, err := s.nDCBranchMgr.getOrCreate(
+	doContinue, index, err := s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		150+1,
@@ -229,7 +229,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_MissingEventInBetween(
 		RunId: s.runID,
 	}).AnyTimes()
 
-	_, _, err = s.nDCBranchMgr.getOrCreate(
+	_, _, err = s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		150+2,
@@ -283,7 +283,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBet
 			}, nil
 		})
 
-	doContinue, index, err := s.nDCBranchMgr.getOrCreate(
+	doContinue, index, err := s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+1,
@@ -325,7 +325,7 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_MissingEventInBetwe
 		RunId: s.runID,
 	}).AnyTimes()
 
-	_, _, err := s.nDCBranchMgr.getOrCreate(
+	_, _, err := s.nDCBranchMgr.GetOrCreate(
 		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+2,
@@ -379,7 +379,7 @@ func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
 			}, nil
 		})
 
-	doContinue, index, err := s.nDCBranchMgr.create(
+	doContinue, index, err := s.nDCBranchMgr.Create(
 		context.Background(),
 		incomingVersionHistory,
 		baseBranchLCAEventID+1,
@@ -417,7 +417,7 @@ func (s *branchMgrSuite) TestCreate_MissingEventInBetween() {
 		RunId: s.runID,
 	}).AnyTimes()
 
-	_, _, err = s.nDCBranchMgr.create(
+	_, _, err = s.nDCBranchMgr.Create(
 		context.Background(),
 		incomingVersionHistory,
 		150+2,

@@ -49,13 +49,13 @@ const (
 
 type (
 	BranchMgr interface {
-		getOrCreate(
+		GetOrCreate(
 			ctx context.Context,
 			incomingVersionHistory *historyspb.VersionHistory,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
 		) (bool, int32, error)
-		create(
+		Create(
 			ctx context.Context,
 			incomingVersionHistory *historyspb.VersionHistory,
 			incomingFirstEventID int64,
@@ -96,7 +96,7 @@ func NewBranchMgr(
 	}
 }
 
-func (r *BranchMgrImpl) getOrCreate(
+func (r *BranchMgrImpl) GetOrCreate(
 	ctx context.Context,
 	incomingVersionHistory *historyspb.VersionHistory,
 	incomingFirstEventID int64,
@@ -105,7 +105,7 @@ func (r *BranchMgrImpl) getOrCreate(
 	return r.prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion, true)
 }
 
-func (r *BranchMgrImpl) create(
+func (r *BranchMgrImpl) Create(
 	ctx context.Context,
 	incomingVersionHistory *historyspb.VersionHistory,
 	incomingFirstEventID int64,
