@@ -76,6 +76,14 @@ services:
     volumes:
       - ../../.coverage:/temporal/.coverage
 
+  ci-build-misc:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    volumes:
+      # note: this one mounts the whole checkout to get .git
+      - ../..:/temporal
+
   db-integration-test:
     build:
       context: ../..

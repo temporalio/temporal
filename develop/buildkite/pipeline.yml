@@ -9,6 +9,7 @@ steps:
           build: build
           build-alias:
             # All services in the docker-compose file that run the server or tests should be listed here:
+            - "ci-build-misc"
             - "db-integration-test"
             - "integration-test-cassandra"
             - "integration-test-cassandra-es8"
@@ -44,9 +45,9 @@ steps:
           download: "develop/buildkite/*"
       - ecr#v2.7.0: {login: true}
       - docker-compose#v4.14.0:
-          run: build
+          run: ci-build-misc
           config: ./develop/buildkite/docker-compose.yml
-          skip-checkout: true
+          skip-checkout: false  # do full checkout to get .git on this one
           mount-buildkite-agent: true
           propagate-environment: true
 
