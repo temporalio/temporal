@@ -162,6 +162,7 @@ func QueueSchedulerRateLimiterProvider(
 		config.TaskSchedulerMaxQPS,
 		config.PersistenceNamespaceMaxQPS,
 		config.PersistenceMaxQPS,
+		config.TaskSchedulerRateLimiterStartupDelay,
 	)
 }
 

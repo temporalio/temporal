@@ -94,6 +94,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 			s.mockShard.GetConfig().TaskSchedulerMaxQPS,
 			s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
 			s.mockShard.GetConfig().PersistenceMaxQPS,
+			s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
 		),
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
