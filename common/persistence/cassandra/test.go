@@ -160,6 +160,7 @@ func (s *TestCluster) CreateSession(
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
 	}
+	s.logger.Debug("created session", tag.NewStringTag("keyspace", keyspace))
 }
 
 // CreateDatabase from PersistenceTestCluster interface
@@ -168,6 +169,7 @@ func (s *TestCluster) CreateDatabase() {
 	if err != nil {
 		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
+	s.logger.Info("created database", tag.NewStringTag("database", s.DatabaseName()))
 }
 
 // DropDatabase from PersistenceTestCluster interface
@@ -176,6 +178,7 @@ func (s *TestCluster) DropDatabase() {
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}
+	s.logger.Info("dropped database", tag.NewStringTag("database", s.DatabaseName()))
 }
 
 // LoadSchema from PersistenceTestCluster interface
@@ -189,6 +192,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
+	s.logger.Info("loaded schema")
 }
 
 func (s *TestCluster) GetSession() commongocql.Session {
