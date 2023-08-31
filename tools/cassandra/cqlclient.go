@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/common/schema"
@@ -114,6 +115,7 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 			return commongocql.NewCassandraCluster(*cassandraConfig, resolver.NewNoopResolver())
 		},
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))
