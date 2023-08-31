@@ -26,13 +26,14 @@ package gocql
 
 import (
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/gocql/gocql"
 	"github.com/golang/mock/gomock"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"testing"
-	"time"
 )
 
 func TestSessionEmitsMetricOnRefreshError(t *testing.T) {
