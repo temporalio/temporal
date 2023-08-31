@@ -1,5 +1,11 @@
 .coverage
+.github
 .idea
+.vscode
+*.md
+
+develop/docker-compose
+
 .git
 
 # exclude binaries from the docker build context
