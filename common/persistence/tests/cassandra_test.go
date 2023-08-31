@@ -232,7 +232,7 @@ func TestCassandraQueuePersistence(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraQueueV2(t *testing.T) {
+func TestCassandraQueueV2Persistence(t *testing.T) {
 	t.Parallel()
 
 	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
@@ -259,6 +259,15 @@ func TestCassandraQueueV2(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrEnqueueMessageQuery(t, cluster)
 	})
+}
+
+func TestCassandraHistoryTaskQueueManager(t *testing.T) {
+	t.Parallel()
+
+	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
+	cluster.SetupTestDatabase()
+	t.Cleanup(cluster.TearDownTestDatabase)
+	RunHistoryTaskQueueManagerTestSuite(t, cassandra.NewQueueV2Store(cluster.GetSession()))
 }
 
 func testCassandraQueueV2Interface(t *testing.T, cluster *cassandra.TestCluster) {
