@@ -511,7 +511,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 // application worker.
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3690,6 +3689,10 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return errTaskQueueTooLong
+	}
+
+	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		wh.logger.Warn("Unspecified task queue kind")
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
