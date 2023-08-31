@@ -36,12 +36,18 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Session = (*session)(nil)
 
 const (
 	sessionRefreshMinInternal = 5 * time.Second
+)
+
+const (
+	refreshThrottleTagValue = "throttle"
+	refreshErrorTagValue    = "error"
 )
 
 type (
@@ -53,12 +59,14 @@ type (
 
 		sync.Mutex
 		sessionInitTime time.Time
+		metricsHandler  metrics.Handler
 	}
 )
 
 func NewSession(
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (*session, error) {
 
 	gocqlSession, err := initSession(newClusterConfigFunc)
@@ -70,6 +78,7 @@ func NewSession(
 		status:               common.DaemonStatusStarted,
 		newClusterConfigFunc: newClusterConfigFunc,
 		logger:               logger,
+		metricsHandler:       metricsHandler,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -87,12 +96,16 @@ func (s *session) refresh() {
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
 		s.logger.Warn("gocql wrapper: too soon to refresh gocql session")
+		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
+		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
 		return
 	}
 
 	newSession, err := initSession(s.newClusterConfigFunc)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
+		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
+		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
 		return
 	}
 
