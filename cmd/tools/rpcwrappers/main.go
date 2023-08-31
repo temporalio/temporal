@@ -113,6 +113,7 @@ var (
 		"metricsClient.matching.PollActivityTaskQueue": true,
 		"metricsClient.matching.PollWorkflowTaskQueue": true,
 		"metricsClient.matching.QueryWorkflow":         true,
+		"client.history.GetDLQTasks":                   true,
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
