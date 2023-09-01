@@ -49,7 +49,7 @@ func TestNewServer(t *testing.T) {
 	t.Parallel()
 
 	cfg := loadConfig(t)
-	logDetector := newErrorLogDetector(t)
+	logDetector := newErrorLogDetector(t, log.NewTestLogger())
 	logDetector.Start()
 
 	server, err := temporal.NewServer(
@@ -102,9 +102,35 @@ func setTestPorts(cfg *config.Config) {
 }
 
 type errorLogDetector struct {
-	t  testing.TB
-	on atomic.Bool
-	log.Logger
+	t      testing.TB
+	on     atomic.Bool
+	logger log.Logger
+}
+
+func (d *errorLogDetector) logUnexpected(operation string, msg string, tags []tag.Tag) {
+	if !d.on.Load() {
+		return
+	}
+
+	msg = fmt.Sprintf("unexpected %v log: %v", operation, msg)
+	d.t.Error(msg)
+	d.logger.Error(msg, tags...)
+}
+
+func (d *errorLogDetector) Debug(string, ...tag.Tag) {}
+
+func (d *errorLogDetector) Info(string, ...tag.Tag) {}
+
+func (d *errorLogDetector) DPanic(msg string, tags ...tag.Tag) {
+	d.logUnexpected("DPanic", msg, tags)
+}
+
+func (d *errorLogDetector) Panic(msg string, tags ...tag.Tag) {
+	d.logUnexpected("Panic", msg, tags)
+}
+
+func (d *errorLogDetector) Fatal(msg string, tags ...tag.Tag) {
+	d.logUnexpected("Fatal", msg, tags)
 }
 
 func (d *errorLogDetector) Start() {
@@ -116,73 +142,84 @@ func (d *errorLogDetector) Stop() {
 }
 
 func (d *errorLogDetector) Warn(msg string, tags ...tag.Tag) {
-	d.Logger.Warn(msg, tags...)
-
-	if !d.on.Load() {
-		return
-	}
-
 	if strings.Contains(msg, "error creating sdk client") {
 		return
 	}
 
-	d.t.Errorf("unexpected warning log: %s", msg)
+	d.logUnexpected("Warn", msg, tags)
 }
 
 func (d *errorLogDetector) Error(msg string, tags ...tag.Tag) {
-	d.Logger.Error(msg, tags...)
-
-	if !d.on.Load() {
-		return
+	for _, s := range []string{
+		"Unable to process new range",
+		"Unable to call",
+		"service failures",
+	} {
+		if strings.Contains(msg, s) {
+			return
+		}
 	}
 
-	if strings.Contains(msg, "Unable to process new range") {
-		return
-	}
-
-	d.t.Errorf("unexpected error log: %s", msg)
+	d.logUnexpected("Error", msg, tags)
 }
 
 // newErrorLogDetector returns a logger that fails the test if it logs any errors or warnings, except for the ones that
 // are expected. Ideally, there are no "expected" errors or warnings, but we still want this test to avoid introducing
 // any new ones while we are working on removing the existing ones.
-func newErrorLogDetector(t testing.TB) *errorLogDetector {
+func newErrorLogDetector(t testing.TB, baseLogger log.Logger) *errorLogDetector {
 	return &errorLogDetector{
 		t:      t,
-		Logger: log.NewCLILogger(),
+		logger: baseLogger,
 	}
 }
 
 type fakeTest struct {
 	testing.TB
-	errorfMsgs []string
+	errorLogs []string
 }
 
-func (f *fakeTest) Errorf(msg string, args ...any) {
-	f.errorfMsgs = append(f.errorfMsgs, fmt.Sprintf(msg, args...))
+func (f *fakeTest) Error(args ...any) {
+	require.Len(f.TB, args, 1)
+	msg, ok := args[0].(string)
+	require.True(f.TB, ok)
+	f.errorLogs = append(f.errorLogs, msg)
 }
 
 func TestErrorLogDetector(t *testing.T) {
 	t.Parallel()
 
 	f := &fakeTest{TB: t}
-	d := newErrorLogDetector(f)
+	d := newErrorLogDetector(f, log.NewNoopLogger())
 	d.Start()
+	d.Debug("debug")
+	d.Info("info")
 	d.Warn("error creating sdk client")
-	d.Error("Unable to process new range")
-	d.Error("unexpected error")
 	d.Warn("unexpected warning")
+	d.Error("Unable to process new range")
+	d.Error("Unable to call matching.PollActivityTaskQueue")
+	d.Error("service failures")
+	d.Error("unexpected error")
+	d.DPanic("dpanic")
+	d.Panic("panic")
+	d.Fatal("fatal")
 
-	assert.Equal(t, []string{
-		"unexpected error log: unexpected error",
-		"unexpected warning log: unexpected warning",
-	}, f.errorfMsgs, "should fail the test if there are any unexpected errors or warnings")
+	expectedMsgs := []string{
+		"unexpected Warn log: unexpected warning",
+		"unexpected Error log: unexpected error",
+		"unexpected DPanic log: dpanic",
+		"unexpected Panic log: panic",
+		"unexpected Fatal log: fatal",
+	}
+	assert.Equal(t, expectedMsgs, f.errorLogs)
 
 	d.Stop()
 
-	f.errorfMsgs = nil
+	f.errorLogs = nil
 
-	d.Error("unexpected error")
 	d.Warn("unexpected warning")
-	assert.Empty(t, f.errorfMsgs, "should not fail the test if the detector is stopped")
+	d.Error("unexpected error")
+	d.DPanic("dpanic")
+	d.Panic("panic")
+	d.Fatal("fatal")
+	assert.Empty(t, f.errorLogs, "should not fail the test if the detector is stopped")
 }
