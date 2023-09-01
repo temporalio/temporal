@@ -181,3 +181,24 @@ All commit messages are from the titles of your pull requests. So make sure foll
 Please don't use very generic titles like "bug fixes". 
 
 All PR titles should start with Upper case and have no dot at the end.
+
+## IDE-Specific Tips
+
+### GoLand
+If you are using GoLand, the following tips would be helpful:
+
+#### Code Style Config
+Save the following schema in an XML file and import that to GoLands settings (Editor > Code Style > Go) 
+```xml
+<code_scheme name="Default" version="173">
+  <GoCodeStyleSettings>
+    <option name="IMPORT_SORTING" value="GOIMPORTS" />
+    <option name="LOCAL_PACKAGE_PREFIXES" />
+  </GoCodeStyleSettings>
+</code_scheme>
+```
+
+####  GolangCI-Lint Plugin
+The [Go Linter](https://plugins.jetbrains.com/plugin/12496-go-linter) plugin runs GolangCI-Lint on the background. 
+It helps you can catch the linter errors in the editor while writing code, instead of having to run `make lint` 
+manually (or worse, being caught by the PR checks).
