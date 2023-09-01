@@ -360,7 +360,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -532,7 +532,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -694,7 +694,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -705,7 +706,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -1575,7 +1576,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -1587,7 +1589,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
@@ -2318,12 +2319,13 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 	
@@ -2402,11 +2404,12 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2553,7 +2556,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(startWorkflow.TaskQueue, namespaceName); err != nil {
 		return err
 	}
 
@@ -3193,7 +3196,9 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3230,7 +3235,9 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errWorkerVersioningNotAllowed
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3280,9 +3287,11 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
 	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
 	for _, taskQueue := range request.GetTaskQueues() {
 		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-		if err := wh.validateTaskQueue(taskQueue); err != nil {
+		if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 			return nil, err
 		}
 	}
@@ -3683,7 +3692,7 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
-func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespace namespace.Name) error {
 	if t == nil || t.GetName() == "" {
 		return errTaskQueueNotSet
 	}
@@ -3692,7 +3701,9 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
-		wh.logger.Warn("Unspecified task queue kind")
+		wh.logger.Warn("Unspecified task queue kind",
+			tag.WorkflowTaskQueueName(t.GetName()), tag.WorkflowNamespace(namespace.String()),
+		)
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
