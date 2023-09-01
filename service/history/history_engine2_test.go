@@ -175,7 +175,7 @@ func (s *engine2Suite) SetupTest() {
 			},
 		).
 		AnyTimes()
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	s.logger = log.NewMockLogger(s.controller)
 	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
@@ -531,6 +531,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	// this enables us to set query registry on it
 	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
 		tests.NamespaceID,
 		workflowExecution,
 		workflow.LockPriorityHigh,
@@ -2005,6 +2006,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
 	weContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,

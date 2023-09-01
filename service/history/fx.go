@@ -146,7 +146,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 	}
 
-	// prevent us from trying to serve requests before shard controller is started and ready
+	// prevent us from trying to serve requests before shardContext controller is started and ready
 	handler.startWG.Add(1)
 	return handler
 }

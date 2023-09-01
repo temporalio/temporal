@@ -190,7 +190,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
 
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	s.logger = s.mockShard.GetLogger()
 
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
@@ -1121,7 +1121,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	mutableState.FlushBufferedEvents()
 
 	// clear the cache
-	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -1230,7 +1230,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	)
 	s.NoError(err)
 
-	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)

@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/headers"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -199,7 +200,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return nil
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shardContext replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
 		SourceClusterName: e.ExecutableTask.SourceClusterName(),

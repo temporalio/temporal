@@ -66,19 +66,19 @@ func (p pollerManagerImpl) getSourceClusterShardIDs(sourceClusterName string) ([
 		return nil, errors.New(fmt.Sprintf("cannot get source cluster %s info from cluster metadata cache", sourceClusterName))
 	}
 
-	// The remote shard count and local shard count must be multiples.
+	// The remote shardContext count and local shardContext count must be multiples.
 	large, small := remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount
 	if small > large {
 		large, small = small, large
 	}
 	if large%small != 0 {
-		return nil, errors.New(fmt.Sprintf("remote shard count %d and local shard count %d are not multiples.", remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount))
+		return nil, errors.New(fmt.Sprintf("remote shardContext count %d and local shardContext count %d are not multiples.", remoteClusterInfo.ShardCount, currentClusterInfo.ShardCount))
 	}
 	return generateShardIDs(p.currentShardId, currentClusterInfo.ShardCount, remoteClusterInfo.ShardCount), nil
 }
 
 // NOTE generateShardIDs is different than common.MapShardID
-// common.MapShardID guarantee to return the corresponding shard IDs for give shard ID
+// common.MapShardID guarantee to return the corresponding shardContext IDs for give shardContext ID
 // this function however is only a helper function for polling & redirecting replication task,
 func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCount int32) []int32 {
 	var pollingShards []int32
@@ -88,7 +88,7 @@ func generateShardIDs(localShardId int32, localShardCount int32, remoteShardCoun
 		}
 		return pollingShards
 	}
-	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shard.
+	// remoteShardCount > localShardCount, replication poller will poll from multiple remote shardContext.
 	for i := localShardId; i <= remoteShardCount; i += localShardCount {
 		pollingShards = append(pollingShards, i)
 	}

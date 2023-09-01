@@ -81,7 +81,7 @@ type (
 
 	ackMgrImpl struct {
 		currentClusterName string
-		shard              shard.Context
+		shardContext       shard.Context
 		config             *configs.Config
 		workflowCache      wcache.Cache
 		eventBlobCache     persistence.XDCCache
@@ -114,15 +114,15 @@ var (
 )
 
 func NewAckManager(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
 
-	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
-	config := shard.GetConfig()
+	currentClusterName := shardContext.GetClusterMetadata().GetCurrentClusterName()
+	config := shardContext.GetConfig()
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
 		WithMaximumAttempts(5).
@@ -130,15 +130,15 @@ func NewAckManager(
 
 	return &ackMgrImpl{
 		currentClusterName: currentClusterName,
-		shard:              shard,
-		config:             shard.GetConfig(),
+		shardContext:       shardContext,
+		config:             shardContext.GetConfig(),
 		workflowCache:      workflowCache,
 		eventBlobCache:     eventBlobCache,
 		executionMgr:       executionMgr,
-		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
+		metricsHandler:     shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
-		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		namespaceRegistry:  shardContext.GetNamespaceRegistry(),
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
 		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
 
@@ -186,16 +186,16 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 
 	maxTaskID := p.maxTaskID
 	if maxTaskID == nil {
-		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
+		// maxTaskID is nil before any replication task is written which happens right after shardContext reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
-		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
+		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shardContext reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		taskID := p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+		taskID := p.shardContext.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
 		maxTaskID = &taskID
 	}
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
 	if maxVisibilityTimestamp == nil {
-		maxVisibilityTimestamp = timestamp.TimePtr(p.shard.GetTimeSource().Now())
+		maxVisibilityTimestamp = timestamp.TimePtr(p.shardContext.GetTimeSource().Now())
 	}
 
 	return *maxTaskID, timestamp.TimeValue(maxVisibilityTimestamp)
@@ -265,7 +265,7 @@ func (p *ackMgrImpl) GetTasks(
 		return nil, err
 	}
 
-	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
+	// Note this is a very rough indicator of how much the remote DC is behind on this shardContext.
 	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
 		maxTaskID-lastTaskID,
 		metrics.TargetClusterTag(pollingCluster),
@@ -275,7 +275,7 @@ func (p *ackMgrImpl) GetTasks(
 	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
 		Record(int64(len(replicationTasks)))
 
-	replicationEventTime := timestamp.TimePtr(p.shard.GetTimeSource().Now())
+	replicationEventTime := timestamp.TimePtr(p.shardContext.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
 	}
@@ -305,8 +305,8 @@ func (p *ackMgrImpl) Close() {
 
 	for readerID := range p.registeredQueueReaders {
 		p.executionMgr.UnregisterHistoryTaskReader(closeCtx, &persistence.UnregisterHistoryTaskReaderRequest{
-			ShardID:      p.shard.GetShardID(),
-			ShardOwner:   p.shard.GetOwner(),
+			ShardID:      p.shardContext.GetShardID(),
+			ShardOwner:   p.shardContext.GetOwner(),
 			TaskCategory: tasks.CategoryReplication,
 			ReaderID:     readerID,
 		})
@@ -322,7 +322,7 @@ func (p *ackMgrImpl) getTasks(
 	maxTaskID int64,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 	if minTaskID > maxTaskID {
-		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shard re-balancing")
+		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shardContext re-balancing")
 	} else if minTaskID == maxTaskID {
 		return nil, maxTaskID, nil
 	}
@@ -389,7 +389,7 @@ func (p *ackMgrImpl) getReplicationTasksFn(
 ) collection.PaginationFn[tasks.Task] {
 	return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
+			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
 			ReaderID:            readerID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
@@ -421,13 +421,13 @@ func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+	maxTaskID = p.shardContext.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
 
 	p.Lock()
 	defer p.Unlock()
 	defer func() { p.maxTaskID = convert.Int64Ptr(maxTaskID) }()
 
-	now := p.shard.GetTimeSource().Now()
+	now := p.shardContext.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
 		p.sanityCheckTime = now.Add(backoff.Jitter(
 			p.config.ReplicatorProcessorMaxPollInterval(),
@@ -460,8 +460,8 @@ func (p *ackMgrImpl) clusterToReaderID(
 
 	if _, ok := p.registeredQueueReaders[readerID]; !ok {
 		err := p.executionMgr.RegisterHistoryTaskReader(ctx, &persistence.RegisterHistoryTaskReaderRequest{
-			ShardID:      p.shard.GetShardID(),
-			ShardOwner:   p.shard.GetOwner(),
+			ShardID:      p.shardContext.GetShardID(),
+			ShardOwner:   p.shardContext.GetOwner(),
 			TaskCategory: tasks.CategoryReplication,
 			ReaderID:     readerID,
 		})
@@ -484,20 +484,23 @@ func (p *ackMgrImpl) ConvertTask(
 	case *tasks.SyncActivityTask:
 		return convertActivityStateReplicationTask(
 			ctx,
+			p.shardContext,
 			task,
 			p.workflowCache,
 		)
 	case *tasks.SyncWorkflowStateTask:
 		return convertWorkflowStateReplicationTask(
 			ctx,
+			p.shardContext,
 			task,
 			p.workflowCache,
 		)
 	case *tasks.HistoryReplicationTask:
 		return convertHistoryReplicationTask(
 			ctx,
+			p.shardContext,
 			task,
-			p.shard.GetShardID(),
+			p.shardContext.GetShardID(),
 			p.workflowCache,
 			p.eventBlobCache,
 			p.executionMgr,
@@ -556,7 +559,7 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	}
 	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
+			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
 			ReaderID:            readerID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),

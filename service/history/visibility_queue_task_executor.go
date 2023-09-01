@@ -49,7 +49,7 @@ import (
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shard          shard.Context
+		shardContext   shard.Context
 		cache          wcache.Cache
 		logger         log.Logger
 		metricProvider metrics.Handler
@@ -63,7 +63,7 @@ type (
 var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
 
 func newVisibilityQueueTaskExecutor(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
@@ -72,7 +72,7 @@ func newVisibilityQueueTaskExecutor(
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
-		shard:          shard,
+		shardContext:   shardContext,
 		cache:          workflowCache,
 		logger:         logger,
 		metricProvider: metricProvider,
@@ -90,7 +90,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
-		t.shard.GetNamespaceRegistry(),
+		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
 	metricsTags := []metrics.Tag{
@@ -104,7 +104,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		// them during namespace handover.
 		// Visibility tasks should all be safe, but close execution task
 		// might do a setWorkflowExecution to clean up memo and search attributes, which
-		// will be blocked by shard context during ns handover
+		// will be blocked by shardContext context during ns handover
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
 		// be returned from task executor
 		return metricsTags, true, consts.ErrNamespaceHandover
@@ -134,7 +134,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 			ExecutionTime:        executionTime,
 			StateTransitionCount: stateTransitionCount, TaskID: taskID,
 			Status:           status,
-			ShardID:          t.shard.GetShardID(),
+			ShardID:          t.shardContext.GetShardID(),
 			Memo:             visibilityMemo,
 			TaskQueue:        taskQueue,
 			SearchAttributes: searchAttributes,
@@ -305,7 +305,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -322,7 +322,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 			StartTime:            startTime,
 			ExecutionTime:        executionTime,
 			StateTransitionCount: stateTransitionCount, TaskID: taskID,
-			ShardID:          t.shard.GetShardID(),
+			ShardID:          t.shardContext.GetShardID(),
 			Status:           status,
 			Memo:             visibilityMemo,
 			TaskQueue:        taskQueue,
@@ -340,12 +340,12 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	ctx, cancel := context.WithTimeout(parentCtx, taskTimeout)
 	defer cancel()
 
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -363,7 +363,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 			StateTransitionCount: stateTransitionCount,
 			Status:               status,
 			TaskID:               taskID,
-			ShardID:              t.shard.GetShardID(),
+			ShardID:              t.shardContext.GetShardID(),
 			Memo:                 visibilityMemo,
 			TaskQueue:            taskQueue,
 			SearchAttributes:     searchAttributes,
@@ -501,7 +501,7 @@ func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task
 		return false
 	}
 	// check if close execution visibility task is completed
-	visibilityQueueState, ok := t.shard.GetQueueState(tasks.CategoryVisibility)
+	visibilityQueueState, ok := t.shardContext.GetQueueState(tasks.CategoryVisibility)
 	if !ok {
 		return true
 	}
@@ -521,7 +521,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -539,7 +539,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if err != nil {
 		return err
 	}

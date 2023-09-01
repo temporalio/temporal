@@ -129,7 +129,7 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{

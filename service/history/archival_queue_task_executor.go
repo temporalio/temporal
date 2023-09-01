@@ -308,7 +308,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	logger log.Logger,
 	task tasks.Task,
 ) (lockedMutableState *lockedMutableState, err error) {
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.workflowCache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.workflowCache, task)
 	if err != nil {
 		return nil, err
 	}

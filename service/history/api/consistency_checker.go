@@ -171,6 +171,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 
 	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
@@ -205,6 +206,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 
 	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		c.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,

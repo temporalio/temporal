@@ -33,6 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 
 	"go.temporal.io/server/common/tasktoken"
@@ -59,7 +60,7 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardCtx                   shard.Context
+	shardContext               shard.Context
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            common.TaskTokenSerializer
 	request                    *historyservice.StartWorkflowExecutionRequest
@@ -87,17 +88,17 @@ type mutableStateInfo struct {
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
 func NewStarter(
-	shardCtx shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer common.TaskTokenSerializer,
 	request *historyservice.StartWorkflowExecutionRequest,
 ) (*Starter, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
 	return &Starter{
-		shardCtx:                   shardCtx,
+		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
 		request:                    request,
@@ -108,10 +109,10 @@ func NewStarter(
 // prepare applies request overrides, validates the request, and records eager execution metrics.
 func (s *Starter) prepare(ctx context.Context) error {
 	request := s.request.StartRequest
-	metricsHandler := s.shardCtx.GetMetricsHandler()
+	metricsHandler := s.shardContext.GetMetricsHandler()
 
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, s.shardCtx, metricsHandler)
-	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardCtx, s.namespace, "StartWorkflowExecution")
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, s.shardContext, metricsHandler)
+	err := api.ValidateStartWorkflowExecutionRequest(ctx, request, s.shardContext, s.namespace, "StartWorkflowExecution")
 	if err != nil {
 		return err
 	}
@@ -126,7 +127,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
-	if !s.shardCtx.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
+	if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
 		s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 		request.RequestEagerExecution = false
 	}
@@ -138,7 +139,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 }
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
-	metricsHandler := s.shardCtx.GetMetricsHandler()
+	metricsHandler := s.shardContext.GetMetricsHandler()
 	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.GetMetricName()).Record(
 		1,
 		metrics.NamespaceTag(s.namespace.Name().String()),
@@ -192,6 +193,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 ) (cache.ReleaseCacheFunc, error) {
 	_, currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
 		ctx,
+		s.shardContext,
 		s.namespace.ID(),
 		s.request.StartRequest.WorkflowId,
 		workflow.LockPriorityHigh,
@@ -207,7 +209,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, runID string) (*creationParams, error) {
 	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
-		s.shardCtx,
+		s.shardContext,
 		s.namespace,
 		workflowID,
 		runID,
@@ -302,7 +304,7 @@ func (s *Starter) createAsCurrent(
 
 func (s *Starter) verifyNamespaceActive(creationParams *creationParams, currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError) error {
 	if creationParams.workflowContext.GetMutableState().GetCurrentVersion() < currentWorkflowConditionFailed.LastWriteVersion {
-		clusterMetadata := s.shardCtx.GetClusterMetadata()
+		clusterMetadata := s.shardContext.GetClusterMetadata()
 		clusterName := clusterMetadata.ClusterNameForFailoverVersion(s.namespace.IsGlobalNamespace(), currentWorkflowConditionFailed.LastWriteVersion)
 		return serviceerror.NewNamespaceNotActive(
 			s.namespace.Name().String(),
@@ -355,7 +357,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 		func() (workflow.Context, workflow.MutableState, error) {
 			workflowContext, err := api.NewWorkflowWithSignal(
 				ctx,
-				s.shardCtx,
+				s.shardContext,
 				s.namespace,
 				workflowID,
 				creationParams.runID,
@@ -371,7 +373,7 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 			}
 			return workflowContext.GetContext(), mutableState, nil
 		},
-		s.shardCtx,
+		s.shardContext,
 		s.workflowConsistencyChecker,
 	)
 	switch err {
@@ -435,6 +437,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 	// We techincally never want to create a new execution but in practice this should not happen.
 	workflowContext, releaseFn, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		s.namespace.ID(),
 		commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
 		workflow.LockPriorityHigh,
@@ -483,8 +486,8 @@ func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *mutableS
 	// NOTE: While unlikely that there'll be more than one page, it's safer to make less assumptions.
 	// TODO: Frontend also supports returning raw history and it's controlled by a feature flag (yycptt thinks).
 	for {
-		response, err := s.shardCtx.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-			ShardID:     s.shardCtx.GetShardID(),
+		response, err := s.shardContext.GetExecutionManager().ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:     s.shardContext.GetShardID(),
 			BranchToken: mutableState.branchToken,
 			MinEventID:  1,
 			MaxEventID:  mutableState.lastEventID,
@@ -522,7 +525,7 @@ func (s *Starter) generateResponse(
 	workflowTaskInfo *workflow.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	shardCtx := s.shardCtx
+	shardCtx := s.shardContext
 	tokenSerializer := s.tokenSerializer
 	request := s.request.StartRequest
 	workflowID := request.WorkflowId

@@ -110,6 +110,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		namespace.ID(s.namespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -143,6 +144,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		namespace.ID(s.namespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -178,6 +180,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		namespace.ID(s.namespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -211,6 +214,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		namespace.ID(s.namespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -244,6 +248,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		namespace.ID(s.namespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,

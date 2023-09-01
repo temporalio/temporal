@@ -122,11 +122,13 @@ func (c *SourceTaskConverterImpl) Convert(
 
 func convertActivityStateReplicationTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	taskInfo *tasks.SyncActivityTask,
 	workflowCache wcache.Cache,
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
+		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
@@ -183,11 +185,13 @@ func convertActivityStateReplicationTask(
 
 func convertWorkflowStateReplicationTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	taskInfo *tasks.SyncWorkflowStateTask,
 	workflowCache wcache.Cache,
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
+		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
@@ -211,6 +215,7 @@ func convertWorkflowStateReplicationTask(
 
 func convertHistoryReplicationTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	taskInfo *tasks.HistoryReplicationTask,
 	shardID int32,
 	workflowCache wcache.Cache,
@@ -220,6 +225,7 @@ func convertHistoryReplicationTask(
 ) (*replicationspb.ReplicationTask, error) {
 	currentVersionHistory, currentEvents, currentBaseWorkflowInfo, err := getVersionHistoryAndEvents(
 		ctx,
+		shardContext,
 		shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		taskInfo.Version,
@@ -240,6 +246,7 @@ func convertHistoryReplicationTask(
 	if len(taskInfo.NewRunID) != 0 {
 		newVersionHistory, newEventBlob, _, err := getVersionHistoryAndEvents(
 			ctx,
+			shardContext,
 			shardID,
 			definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.NewRunID),
 			taskInfo.Version,
@@ -278,12 +285,14 @@ func convertHistoryReplicationTask(
 
 func generateStateReplicationTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
 	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
@@ -309,6 +318,7 @@ func generateStateReplicationTask(
 
 func getVersionHistoryAndEvents(
 	ctx context.Context,
+	shardContext shard.Context,
 	shardID int32,
 	workflowKey definition.WorkflowKey,
 	eventVersion int64,
@@ -331,6 +341,7 @@ func getVersionHistoryAndEvents(
 	}
 	versionHistory, branchToken, baseWorkflowInfo, err := getBranchToken(
 		ctx,
+		shardContext,
 		workflowKey,
 		workflowCache,
 		firstEventID,
@@ -351,6 +362,7 @@ func getVersionHistoryAndEvents(
 
 func getBranchToken(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
 	eventID int64,
@@ -358,6 +370,7 @@ func getBranchToken(
 ) (_ []*historyspb.VersionHistoryItem, _ []byte, _ *workflowspb.BaseExecutionInfo, retError error) {
 	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,

@@ -97,7 +97,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.requestChan = make(chan *replicationTaskRequest, 10)
 
 	s.shardID = rand.Int31()
-	s.shardOwner = "test-shard-owner"
+	s.shardOwner = "test-shardContext-owner"
 	s.mockShard = shard.NewMockContext(s.controller)
 	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockClientBean = client.NewMockBean(s.controller)

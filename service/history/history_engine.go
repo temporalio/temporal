@@ -278,7 +278,7 @@ func NewEngineWithShardContext(
 	return historyEngImpl
 }
 
-// Start will spin up all the components needed to start serving this shard.
+// Start will spin up all the components needed to start serving this shardContext.
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {
@@ -655,7 +655,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	now := timestamp.TimeValue(request.GetStatusTime())
 
 	// here there are 3 main things
-	// 1. update the view of remote cluster's shard time
+	// 1. update the view of remote cluster's shardContext time
 	// 2. notify the timer gate in the timer queue standby processor
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
@@ -728,6 +728,7 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 ) (*replicationspb.ReplicationTask, error) {
 	return e.replicationAckMgr.ConvertTask(ctx, task)
 }
+
 func (e *historyEngineImpl) GetReplicationTasksIter(
 	ctx context.Context,
 	pollingCluster string,

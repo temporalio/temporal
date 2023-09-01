@@ -54,7 +54,7 @@ var (
 type (
 	timerQueueTaskExecutorBase struct {
 		currentClusterName string
-		shard              shard.Context
+		shardContext       shard.Context
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
 		cache              wcache.Cache
@@ -66,7 +66,7 @@ type (
 )
 
 func newTimerQueueTaskExecutorBase(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	deleteManager deletemanager.DeleteManager,
 	matchingRawClient resource.MatchingRawClient,
@@ -75,9 +75,9 @@ func newTimerQueueTaskExecutorBase(
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		currentClusterName: shard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              shard,
-		registry:           shard.GetNamespaceRegistry(),
+		currentClusterName: shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:       shardContext,
+		registry:           shardContext.GetNamespaceRegistry(),
 		cache:              workflowCache,
 		deleteManager:      deleteManager,
 		logger:             logger,
@@ -101,6 +101,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
+		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		workflow.LockPriorityLow,
@@ -135,7 +136,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
 		return err
 	}
 
@@ -155,12 +156,14 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
 	return getWorkflowExecutionContext(
 		ctx,
+		shardContext,
 		workflowCache,
 		namespaceID,
 		execution,
@@ -169,6 +172,7 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
@@ -177,6 +181,7 @@ func getWorkflowExecutionContext(
 	// locking workflow for all background calls, we don't need a separate context here
 	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		shardContext,
 		namespaceID,
 		execution,
 		workflow.LockPriorityLow,
@@ -201,8 +206,8 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	branchToken []byte,
 ) error {
 	if len(branchToken) > 0 {
-		return t.shard.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     t.shard.GetShardID(),
+		return t.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			ShardID:     t.shardContext.GetShardID(),
 			BranchToken: branchToken,
 		})
 	}

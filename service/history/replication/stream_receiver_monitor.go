@@ -192,7 +192,7 @@ func (m *StreamReceiverMonitorImpl) generateInboundStreamKeys() map[ClusterShard
 				serverShardID,
 			) {
 				m.Logger.Debug(fmt.Sprintf(
-					"inbound cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					"inbound cluster shardContext ID %v/%v -> cluster shardContext ID %v/%v",
 					clientClusterID, clientShardID, serverClusterID, serverShardID,
 				))
 				streamKeys[ClusterShardKeyPair{
@@ -229,7 +229,7 @@ func (m *StreamReceiverMonitorImpl) generateOutboundStreamKeys() map[ClusterShar
 				clientShardID,
 			) {
 				m.Logger.Debug(fmt.Sprintf(
-					"outbound cluster shard ID %v/%v -> cluster shard ID %v/%v",
+					"outbound cluster shardContext ID %v/%v -> cluster shardContext ID %v/%v",
 					clientClusterID, clientShardID, serverClusterID, serverShardID,
 				))
 				streamKeys[ClusterShardKeyPair{

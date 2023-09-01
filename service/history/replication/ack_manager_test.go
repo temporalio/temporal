@@ -97,7 +97,7 @@ func (s *ackManagerSuite) SetupTest() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 1,
-			Owner:   "test-shard-owner",
+			Owner:   "test-shardContext-owner",
 		},
 		tests.NewDynamicConfig(),
 	)
@@ -119,7 +119,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewCache(s.mockShard)
+	workflowCache := wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 
 	s.replicationAckManager = NewAckManager(
 		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,

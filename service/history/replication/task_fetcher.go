@@ -394,9 +394,9 @@ func (f *replicationTaskFetcherWorker) bufferRequests(
 	// Here we only add the request to map. We will wait until timer fires to send the request to remote.
 	if req, ok := f.requestByShard[request.token.GetShardId()]; ok && req != request {
 		// since this replication task fetcher is per host
-		// and replication task processor is per shard
-		// during shard movement, duplicated requests can appear
-		// if shard moved from this host, to this host.
+		// and replication task processor is per shardContext
+		// during shardContext movement, duplicated requests can appear
+		// if shardContext moved from this host, to this host.
 		close(req.respChan)
 	}
 

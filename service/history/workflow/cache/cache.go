@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -59,6 +60,7 @@ type (
 	Cache interface {
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
+			shardContext shard.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 			lockPriority workflow.LockPriority,
@@ -66,6 +68,7 @@ type (
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
+			shardContext shard.Context,
 			namespaceID namespace.ID,
 			execution commonpb.WorkflowExecution,
 			lockPriority workflow.LockPriority,
@@ -74,14 +77,11 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		shard          shard.Context
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
 		nonUserContextLockTimeout time.Duration
 	}
-
-	NewCacheFn func(shard shard.Context) Cache
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
@@ -95,23 +95,26 @@ const (
 	workflowLockTimeoutTailTime = 500 * time.Millisecond
 )
 
-func NewCache(shard shard.Context) Cache {
+func NewCache(
+	config *configs.Config,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) Cache {
 	opts := &cache.Options{}
-	config := shard.GetConfig()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &CacheImpl{
 		Cache:                     cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:                     shard,
-		logger:                    log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler:            shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
+		logger:                    log.With(logger, tag.ComponentHistoryCache),
+		metricsHandler:            metricsHandler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 	}
 }
 
 func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
+	shardContext shard.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	lockPriority workflow.LockPriority,
@@ -134,6 +137,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 	weCtx, weReleaseFn, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
+		shardContext,
 		namespaceID,
 		execution,
 		handler,
@@ -148,12 +152,13 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
+	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, &execution); err != nil {
 		return nil, nil, err
 	}
 
@@ -164,6 +169,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 
 	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
+		shardContext,
 		namespaceID,
 		execution,
 		handler,
@@ -178,6 +184,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
+	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	handler metrics.Handler,
@@ -190,7 +197,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(c.shard, key, c.logger)
+		workflowCtx = workflow.NewContext(shardContext, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -287,6 +294,7 @@ func (c *CacheImpl) makeReleaseFunc(
 
 func (c *CacheImpl) validateWorkflowExecutionInfo(
 	ctx context.Context,
+	shardContext shard.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 ) error {
@@ -297,8 +305,8 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := c.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     c.shard.GetShardID(),
+		response, err := shardContext.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+			ShardID:     shardContext.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 		})

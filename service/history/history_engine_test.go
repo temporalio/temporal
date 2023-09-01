@@ -171,7 +171,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.eventsCache = events.NewEventsCache(
@@ -676,6 +676,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	// buffer query so that when history.QueryWorkflow is called buffer is already full
 	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		tests.NamespaceID,
 		execution,
 		workflow.LockPriorityHigh,
@@ -4474,6 +4475,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	// this enables us to set query registry on it
 	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		tests.NamespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -5972,6 +5974,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
 	context, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		tests.NamespaceID,
 		we,
 		workflow.LockPriorityHigh,

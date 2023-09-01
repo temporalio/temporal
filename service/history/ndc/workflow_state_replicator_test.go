@@ -176,6 +176,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
 		workflow.LockPriorityLow,
@@ -279,6 +280,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
 		workflow.LockPriorityLow,
@@ -451,6 +453,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 	mockMutableState := workflow.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		namespace.ID(namespaceID),
 		we,
 		workflow.LockPriorityLow,

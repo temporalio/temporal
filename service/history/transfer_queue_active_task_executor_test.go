@@ -213,7 +213,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
 
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -2565,7 +2565,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
 			mockWorkflowCache := wcache.NewMockCache(ctrl)
-			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
+			mockShard := shard.NewMockContext(ctrl)
+			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
 				gomock.Any(),
 			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
 			}), nil)
@@ -2573,7 +2574,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
-			mockShard := shard.NewMockContext(ctrl)
 			mockShard.EXPECT().GetConfig().Return(&configs.Config{
 				TransferProcessorEnsureCloseBeforeDelete: func() bool {
 					return c.EnsureCloseBeforeDelete
@@ -2610,7 +2610,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					cache:                 mockWorkflowCache,
 					config:                mockShard.GetConfig(),
 					metricHandler:         metrics.NoopMetricsHandler,
-					shard:                 mockShard,
+					shardContext:          mockShard,
 					workflowDeleteManager: mockWorkflowDeleteManager,
 				},
 			}
