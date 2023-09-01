@@ -842,19 +842,6 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 	ctx context.Context,
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history size or history count limits
-	if c.maxHistorySizeExceeded() {
-		if err := c.forceTerminateWorkflow(ctx, common.FailureReasonHistorySizeExceedsLimit); err != nil {
-			return false, err
-		}
-		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
-		return true, nil
-	}
-	return false, nil
-}
-
-// Returns true if the workflow is running and history size or event count should trigger a forced termination
-// Prints a log message if history size or history event count are over the error or warn limits
-func (c *ContextImpl) maxHistorySizeExceeded() bool {
 	namespaceName := c.GetNamespace().String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
@@ -872,10 +859,14 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
-
-		return true
+		if err := c.forceTerminateWorkflow(ctx, fmt.Sprintf(
+			common.FailureReasonHistorySizeExceedsLimit+" historySize: %v, historySizeLimit: %v, historyCount: %v, historyCountLimit: %v",
+			historySize, historySizeLimitError, historyCount, historyCountLimitError)); err != nil {
+			return false, err
+		}
+		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
+		return true, nil
 	}
-
 	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
 		c.throttledLogger.Warn("history size exceeds warn limit.",
 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
@@ -884,26 +875,48 @@ func (c *ContextImpl) maxHistorySizeExceeded() bool {
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 	}
-
-	return false
+	return false, nil
 }
+
+// Returns true if the workflow is running and history size or event count should trigger a forced termination
+// Prints a log message if history size or history event count are over the error or warn limits
+// func (c *ContextImpl) maxHistorySizeExceeded() bool {
+// 	namespaceName := c.GetNamespace().String()
+// 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
+// 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
+// 	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
+// 	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
+
+// 	historySize := int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize)
+// 	historyCount := int(c.MutableState.GetNextEventID() - 1)
+
+// 	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
+// 		c.MutableState.IsWorkflowExecutionRunning() {
+// 		c.logger.Warn("history size exceeds error limit.",
+// 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+// 			tag.WorkflowID(c.workflowKey.WorkflowID),
+// 			tag.WorkflowRunID(c.workflowKey.RunID),
+// 			tag.WorkflowHistorySize(historySize),
+// 			tag.WorkflowEventCount(historyCount))
+
+// 		return true
+// 	}
+
+// 	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
+// 		c.throttledLogger.Warn("history size exceeds warn limit.",
+// 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
+// 			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
+// 			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
+// 			tag.WorkflowHistorySize(historySize),
+// 			tag.WorkflowEventCount(historyCount))
+// 	}
+
+// 	return false
+// }
 
 // Returns true if execution is forced terminated
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context) (bool, error) {
-	if c.maxMutableStateSizeExceeded() {
-		if err := c.forceTerminateWorkflow(ctx, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
-			return false, err
-		}
-		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
-		return true, nil
-	}
-	return false, nil
-}
-
-// Returns true if the workflow is running and mutable state size should trigger a forced termination
-// Prints a log message if mutable state size is over the error or warn limits
-func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
@@ -916,9 +929,13 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowMutableStateSize(mutableStateSize))
 
-		return true
+		if err := c.forceTerminateWorkflow(ctx, fmt.Sprintf(
+			common.FailureReasonMutableStateSizeExceedsLimit+" mutableStateSize: %v, mutableStateSizeLimit: %v",
+			mutableStateSize, mutableStateSizeLimitError)); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-
 	if mutableStateSize > mutableStateSizeLimitWarn {
 		c.throttledLogger.Warn("mutable state size exceeds warn limit.",
 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
@@ -926,9 +943,37 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
 			tag.WorkflowMutableStateSize(mutableStateSize))
 	}
-
-	return false
+	return false, nil
 }
+
+// Returns true if the workflow is running and mutable state size should trigger a forced termination
+// Prints a log message if mutable state size is over the error or warn limits
+// func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
+// 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
+// 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
+
+// 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
+
+// 	if mutableStateSize > mutableStateSizeLimitError {
+// 		c.logger.Warn("mutable state size exceeds error limit.",
+// 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+// 			tag.WorkflowID(c.workflowKey.WorkflowID),
+// 			tag.WorkflowRunID(c.workflowKey.RunID),
+// 			tag.WorkflowMutableStateSize(mutableStateSize))
+
+// 		return true
+// 	}
+
+// 	if mutableStateSize > mutableStateSizeLimitWarn {
+// 		c.throttledLogger.Warn("mutable state size exceeds warn limit.",
+// 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
+// 			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
+// 			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
+// 			tag.WorkflowMutableStateSize(mutableStateSize))
+// 	}
+
+// 	return false
+// }
 
 func (c *ContextImpl) forceTerminateWorkflow(
 	ctx context.Context,
