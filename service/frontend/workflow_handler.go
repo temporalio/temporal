@@ -3692,7 +3692,7 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
-func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespace namespace.Name) error {
+func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespaceName namespace.Name) error {
 	if t == nil || t.GetName() == "" {
 		return errTaskQueueNotSet
 	}
@@ -3702,7 +3702,7 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespace
 
 	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
 		wh.logger.Warn("Unspecified task queue kind",
-			tag.WorkflowTaskQueueName(t.GetName()), tag.WorkflowNamespace(namespace.String()),
+			tag.WorkflowTaskQueueName(t.GetName()), tag.WorkflowNamespace(namespaceName.String()),
 		)
 	}
 
