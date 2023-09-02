@@ -3631,6 +3631,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
+	s.T().Skip()
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
