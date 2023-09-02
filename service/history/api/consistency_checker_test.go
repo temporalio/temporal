@@ -118,7 +118,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		},
 		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState, nil)
+	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
 
 	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,
@@ -153,9 +153,9 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	gomock.InOrder(
-		wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState1, nil),
+		wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState1, nil),
 		wfContext.EXPECT().Clear(),
-		wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState2, nil),
+		wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState2, nil),
 	)
 
 	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
@@ -188,7 +188,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		},
 		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
+	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
 
@@ -222,7 +222,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		},
 		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
+	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
 
@@ -256,7 +256,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		},
 		workflow.LockPriorityHigh,
 	).Return(wfContext, releaseFn, nil)
-	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewUnavailable(""))
+	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(nil, serviceerror.NewUnavailable(""))
 
 	workflowContext, err := s.checker.getWorkflowContextValidatedByCheck(
 		ctx,

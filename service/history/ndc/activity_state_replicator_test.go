@@ -641,7 +641,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -717,7 +717,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -794,7 +794,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -828,6 +828,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
+		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
 		workflow.MutableState(nil),
@@ -887,7 +888,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	weContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	weContext.EXPECT().IsDirty().Return(false).AnyTimes()
@@ -922,6 +923,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
+		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),
 		workflow.MutableState(nil),

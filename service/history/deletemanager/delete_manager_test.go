@@ -290,7 +290,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 				s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
 				mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
-				mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any()).Return(&persistencespb.ExecutionStats{
+				mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any(), s.mockShardContext).Return(&persistencespb.ExecutionStats{
 					HistorySize: 22,
 				}, nil)
 				mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)
@@ -367,7 +367,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 				s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
 				mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
-				mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any()).Return(&persistencespb.ExecutionStats{
+				mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any(), s.mockShardContext).Return(&persistencespb.ExecutionStats{
 					HistorySize: 22 * 1024 * 1024 * 1024,
 				}, nil)
 				mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)

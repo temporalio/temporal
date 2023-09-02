@@ -194,8 +194,8 @@ func newTransactionMgr(
 		createMgr: nil,
 		updateMgr: nil,
 	}
-	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(transactionMgr)
-	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(transactionMgr)
+	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr)
+	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr)
 	return transactionMgr
 }
 
@@ -242,6 +242,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	sizeSiff, err := targetWorkflow.GetContext().PersistWorkflowEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSlice...,
 	)
 	if err != nil {
@@ -260,6 +261,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		updateMode,
 		nil,
 		nil,
@@ -366,6 +368,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	//  find the current & active workflow to reapply
 	if err := targetWorkflow.GetContext().ReapplyEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSlice,
 	); err != nil {
 		return 0, workflow.TransactionPolicyActive, err
@@ -451,7 +454,7 @@ func (r *transactionMgrImpl) loadWorkflow(
 		return nil, err
 	}
 
-	ms, err := weContext.LoadMutableState(ctx)
+	ms, err := weContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)

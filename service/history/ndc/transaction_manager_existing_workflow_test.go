@@ -35,6 +35,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -46,6 +47,7 @@ type (
 
 		controller         *gomock.Controller
 		mockTransactionMgr *MocktransactionMgr
+		mockShard          *shard.MockContext
 
 		updateMgr *nDCTransactionMgrForExistingWorkflowImpl
 	}
@@ -61,8 +63,9 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
+	s.mockShard = shard.NewMockContext(s.controller)
 
-	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockTransactionMgr)
+	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TearDownTest() {
@@ -97,6 +100,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().UpdateWorkflowExecutionWithNewAsPassive(
 		gomock.Any(),
+		s.mockShard,
 		newContext,
 		newMutableState,
 	).Return(nil)
@@ -194,6 +198,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetMutableState,
 		newContext,
@@ -268,6 +273,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetMutableState,
 		newContext,
@@ -344,6 +350,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
+		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		newContext,
 		newMutableState,
@@ -418,6 +425,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
+		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		(workflow.Context)(nil),
 		(workflow.MutableState)(nil),
@@ -471,6 +479,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetMutableState,
 		newContext,
@@ -543,6 +552,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetMutableState,
 		newContext,
@@ -618,6 +628,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeBypassCurrent,
 		targetMutableState,
 		newContext,
@@ -693,6 +704,7 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.ConflictResolveWorkflowModeBypassCurrent,
 		targetMutableState,
 		(workflow.Context)(nil),

@@ -249,6 +249,7 @@ func (s *Starter) createNewMutableState(ctx context.Context, workflowID string, 
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		persistence.CreateWorkflowModeBrandNew,
 		"", // prevRunID
 		0,  // prevLastWriteVersion
@@ -293,6 +294,7 @@ func (s *Starter) createAsCurrent(
 ) error {
 	return creationParams.workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
+		s.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
@@ -452,7 +454,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 	}()
 
 	var mutableState workflow.MutableState
-	mutableState, releaseErr = workflowContext.LoadMutableState(ctx)
+	mutableState, releaseErr = workflowContext.LoadMutableState(ctx, s.shardContext)
 	return extractMutableStateInfo(mutableState)
 }
 

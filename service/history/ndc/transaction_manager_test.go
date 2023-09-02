@@ -172,9 +172,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: runID})
 	mutableState.EXPECT().AddHistorySize(historySize)
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
@@ -250,9 +250,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(histroySize, nil)
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(histroySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
@@ -329,9 +329,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
@@ -365,10 +365,10 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open(
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
-	weContext.EXPECT().ReapplyEvents(gomock.Any(), []*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
@@ -416,10 +416,10 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Close
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
-	weContext.EXPECT().ReapplyEvents(gomock.Any(), []*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
@@ -475,10 +475,10 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
-	weContext.EXPECT().ReapplyEvents(gomock.Any(), []*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
@@ -533,10 +533,10 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
-	weContext.EXPECT().ReapplyEvents(gomock.Any(), []*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, []*persistence.WorkflowEvents{workflowEvents})
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
-		gomock.Any(), persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)

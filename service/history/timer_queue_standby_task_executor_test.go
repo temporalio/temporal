@@ -170,7 +170,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,

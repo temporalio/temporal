@@ -526,7 +526,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, taskInfo, t.metricHandler, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}

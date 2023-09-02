@@ -134,7 +134,7 @@ func (s *engine3Suite) SetupTest() {
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
@@ -178,7 +178,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	executionInfo := ms.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
@@ -302,7 +302,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	ms := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
 	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: workflowID,

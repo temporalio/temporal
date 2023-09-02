@@ -305,7 +305,7 @@ func generateStateReplicationTask(
 	}
 	defer func() { release(retError) }()
 
-	ms, err := wfContext.LoadMutableState(ctx)
+	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
 		return action(ms)
@@ -383,7 +383,7 @@ func getBranchToken(
 	}
 	defer func() { release(retError) }()
 
-	ms, err := wfContext.LoadMutableState(ctx)
+	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
 		return persistence.GetXDCCacheValue(ms.GetExecutionInfo(), eventID, eventVersion)

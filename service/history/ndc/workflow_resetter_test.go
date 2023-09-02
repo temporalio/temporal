@@ -259,6 +259,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
 		currentLastWriteVersion,
@@ -701,7 +702,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Unlock(workflow.LockPriorityHigh)
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	resetContext.EXPECT().LoadMutableState(gomock.Any()).Return(resetMutableState, nil)
+	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID)

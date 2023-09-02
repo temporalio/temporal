@@ -197,7 +197,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext, key, c.logger)
+		workflowCtx = workflow.NewContext(shardContext.GetConfig(), key, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)

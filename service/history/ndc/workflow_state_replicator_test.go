@@ -181,9 +181,10 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound("ms not found"))
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -285,9 +286,10 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound("ms not found"))
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -458,7 +460,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		we,
 		workflow.LockPriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: &historyspb.VersionHistories{
 			CurrentVersionHistoryIndex: 0,

@@ -247,7 +247,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx)
+		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
 		return nil, err
 	}
 
@@ -457,7 +457,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}

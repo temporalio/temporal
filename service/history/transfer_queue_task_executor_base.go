@@ -276,7 +276,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}

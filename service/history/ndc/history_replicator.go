@@ -302,7 +302,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		mutableState, err := wfContext.LoadMutableState(ctx)
+		mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
 		switch err.(type) {
 		case nil:
 			wfContext, mutableState, err := r.applyNonStartEventsFlushBufferEvents(ctx, wfContext, mutableState, task)
@@ -501,13 +501,15 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newExecutionState := newMutableState.GetExecutionState()
 		newContext := workflow.NewContext(
-			r.shardContext,
+			r.shardContext.GetConfig(),
 			definition.NewWorkflowKey(
 				newExecutionInfo.NamespaceId,
 				newExecutionInfo.WorkflowId,
 				newExecutionState.RunId,
 			),
 			r.logger,
+			r.shardContext.GetThrottledLogger(),
+			r.shardContext.GetMetricsHandler(),
 		)
 
 		newWorkflow = NewWorkflow(

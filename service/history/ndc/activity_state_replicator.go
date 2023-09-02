@@ -115,7 +115,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := executionContext.LoadMutableState(ctx)
+	mutableState, err := executionContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// this can happen if the workflow start event and this sync activity task are out of order
@@ -205,6 +205,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 
 	return executionContext.UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow

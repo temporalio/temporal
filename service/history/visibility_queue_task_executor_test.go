@@ -149,7 +149,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,

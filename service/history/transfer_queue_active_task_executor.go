@@ -182,7 +182,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, transferTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, transferTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -453,7 +453,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -573,7 +573,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -726,7 +726,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -913,7 +913,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	defer func() { currentRelease(retError) }()
 
-	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricHandler, t.logger)
+	currentMutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, currentContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -1002,7 +1002,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		defer func() { baseRelease(retError) }()
-		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricHandler, t.logger)
+		baseMutableState, err = loadMutableStateForTransferTask(ctx, t.shardContext, baseContext, task, t.metricHandler, t.logger)
 		if err != nil {
 			return err
 		}
@@ -1243,7 +1243,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	createWorkflowTask bool,
 	action func(workflow.MutableState) error,
 ) error {
-	mutableState, err := context.LoadMutableState(ctx)
+	mutableState, err := context.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -1260,7 +1260,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		}
 	}
 
-	return context.UpdateWorkflowExecutionAsActive(ctx)
+	return context.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(

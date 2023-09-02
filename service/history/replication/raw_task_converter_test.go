@@ -161,7 +161,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
@@ -195,7 +195,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
@@ -230,7 +230,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(nil, false).AnyTimes()
 
@@ -295,7 +295,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			versionHistory,
 		},
 	}
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
@@ -401,7 +401,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 			versionHistory,
 		},
 	}
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
@@ -474,7 +474,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enums.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
@@ -507,7 +507,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: s.namespaceID,
@@ -573,7 +573,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WorkflowMissin
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
 	result, err := convertHistoryReplicationTask(ctx, s.shardContext, task, shardID, s.workflowCache, nil, s.executionManager, s.logger)
 	s.NoError(err)
@@ -635,7 +635,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		BaseExecutionInfo: baseWorkflowInfo,
 		VersionHistories:  versionHistories,
@@ -682,7 +682,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		},
 		workflow.LockPriorityLow,
 	).Return(s.newWorkflowContext, s.releaseFn, nil)
-	s.newWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.newMutableState, nil)
+	s.newWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.newMutableState, nil)
 	s.newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		BaseExecutionInfo: baseWorkflowInfo,
 		VersionHistories:  newVersionHistories,
@@ -775,7 +775,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		},
 		workflow.LockPriorityLow,
 	).Return(s.workflowContext, s.releaseFn, nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mutableState, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		BaseExecutionInfo: baseWorkflowInfo,
 		VersionHistories:  versionHistories,

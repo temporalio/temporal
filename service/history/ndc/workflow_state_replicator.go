@@ -132,7 +132,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}()
 
 	// Handle existing workflows
-	ms, err := wfCtx.LoadMutableState(ctx)
+	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
 		// no-op, continue to replicate workflow state

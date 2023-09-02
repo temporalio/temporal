@@ -140,7 +140,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -351,7 +351,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -527,7 +527,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -548,7 +548,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
 	executionInfo.CloseVisibilityTaskCompleted = true
-	return weContext.SetWorkflowExecution(ctx)
+	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 
 func getWorkflowMemo(

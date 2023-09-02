@@ -218,7 +218,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
@@ -2561,11 +2561,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 
 			mockWorkflowContext := workflow.NewMockContext(ctrl)
+			mockShard := shard.NewMockContext(ctrl)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
-			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil)
 
 			mockWorkflowCache := wcache.NewMockCache(ctrl)
-			mockShard := shard.NewMockContext(ctrl)
+
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
 				gomock.Any(),
 			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {

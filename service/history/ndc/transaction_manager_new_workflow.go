@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -46,6 +47,7 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
+		shardContext   shard.Context
 		transactionMgr transactionMgr
 	}
 )
@@ -53,10 +55,12 @@ type (
 var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
+	shardContext shard.Context,
 	transactionMgr transactionMgr,
 ) *nDCTransactionMgrForNewWorkflowImpl {
 
 	return &nDCTransactionMgrForNewWorkflowImpl{
+		shardContext:   shardContext,
 		transactionMgr: transactionMgr,
 	}
 }
@@ -167,6 +171,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		}
 		return targetWorkflow.GetContext().CreateWorkflowExecution(
 			ctx,
+			r.shardContext,
 			createMode,
 			prevRunID,
 			prevLastWriteVersion,
@@ -182,6 +187,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -221,6 +227,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	if err := targetWorkflow.GetContext().ReapplyEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -232,6 +239,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -268,6 +276,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	return currentWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),

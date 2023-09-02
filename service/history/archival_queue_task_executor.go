@@ -320,7 +320,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		// If we don't return an error, the caller will release the mutable state, so we don't need to do it here.
 	}()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return nil, err
 	}

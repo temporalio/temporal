@@ -107,7 +107,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	}).AnyTimes()
 
 	s.currentContext = workflow.NewMockContext(s.controller)
-	s.currentContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.currentMutableState, nil).AnyTimes()
+	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
