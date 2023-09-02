@@ -204,7 +204,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 		}
 		sourceShardIds, err := r.taskPollerManager.getSourceClusterShardIDs(clusterName)
 		if err != nil {
-			r.logger.Error("Failed to get source shardContext id list", tag.Error(err), tag.ClusterName(clusterName))
+			r.logger.Error("Failed to get source shard id list", tag.Error(err), tag.ClusterName(clusterName))
 			continue
 		}
 		var processors []TaskProcessor

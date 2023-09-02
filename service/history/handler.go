@@ -657,14 +657,14 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 	return &historyservice.RemoveTaskResponse{}, err
 }
 
-// CloseShard closes a shardContext hosted by this instance
+// CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.controller.CloseShardByID(request.GetShardId())
 	return &historyservice.CloseShardResponse{}, nil
 }
 
-// GetShard gets a shardContext hosted by this instance
+// GetShard gets a shard hosted by this instance
 func (h *Handler) GetShard(ctx context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	resp, err := h.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
@@ -1393,7 +1393,7 @@ func (h *Handler) ReplicateWorkflowState(
 	return &historyservice.ReplicateWorkflowStateResponse{}, nil
 }
 
-// SyncShardStatus is called by processor to sync history shardContext information from another cluster
+// SyncShardStatus is called by processor to sync history shardinformation from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
@@ -2108,7 +2108,7 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
-// correct shardContext.
+// correct shard.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:

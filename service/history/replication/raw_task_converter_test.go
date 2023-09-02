@@ -108,7 +108,7 @@ func (s *rawTaskConverterSuite) SetupTest() {
 		&persistencespb.ShardInfo{
 			ShardId: 0,
 			RangeId: 1,
-			Owner:   "test-shardContext-owner",
+			Owner:   "test-shard-owner",
 		},
 		tests.NewDynamicConfig(),
 	)

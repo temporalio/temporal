@@ -607,7 +607,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Error() {
 	s.Empty(tasks)
 	select {
 	case <-s.replicationTaskProcessor.syncShardChan:
-		s.Fail("should not receive any sync shardContext task")
+		s.Fail("should not receive any sync shard task")
 	default:
 		s.Equal(maxRxProcessedTaskID, s.replicationTaskProcessor.maxRxProcessedTaskID)
 		s.Equal(maxRxReceivedTaskID, s.replicationTaskProcessor.maxRxReceivedTaskID)

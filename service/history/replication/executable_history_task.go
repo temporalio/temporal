@@ -200,7 +200,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return nil
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shardContext replication.
+	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
 		SourceClusterName: e.ExecutableTask.SourceClusterName(),

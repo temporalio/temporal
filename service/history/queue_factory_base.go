@@ -54,8 +54,8 @@ type (
 		// TODO:
 		// 1. Remove the cache parameter after workflow cache become a host level component
 		// and it can be provided as a parameter when creating a QueueFactory instance.
-		// Currently, workflow cache is shardContext level, but we can't get it from shardContext or engine interface,
-		// as that will lead to a cycle dependency issue between shardContext and workflow package.
+		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
+		// as that will lead to a cycle dependency issue between shard and workflow package.
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
 		CreateQueue(shard shard.Context, cache wcache.Cache) queues.Queue

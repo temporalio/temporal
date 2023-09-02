@@ -208,7 +208,7 @@ func (p *taskProcessorImpl) eventLoop() {
 
 		case <-syncShardTimer.C:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
-				p.logger.Error("unable to sync shardContext status", tag.Error(err))
+				p.logger.Error("unable to sync shard status", tag.Error(err))
 				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.GetMetricName()).Record(
 					1,
 					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
@@ -383,7 +383,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	switch replicationTask.TaskType {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shardContext replication.
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -415,7 +415,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		// NOTE: last event vs next event, next event ID is exclusive
 		nextEventID := lastEvent.GetEventId() + 1
 
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shardContext replication.
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -444,7 +444,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			return nil, err
 		}
 
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shardContext replication.
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
@@ -485,8 +485,8 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 		case p.syncShardChan <- resp.GetSyncShardStatus():
 
 		default:
-			// channel full, it is ok to drop the sync shardContext status
-			// since sync shardContext status are periodically updated
+			// channel full, it is ok to drop the sync shard status
+			// since sync shard status are periodically updated
 		}
 
 		var tasks []interface{}

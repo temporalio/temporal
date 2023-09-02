@@ -186,9 +186,9 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 
 	maxTaskID := p.maxTaskID
 	if maxTaskID == nil {
-		// maxTaskID is nil before any replication task is written which happens right after shardContext reload. In that case,
+		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
-		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shardContext reload. Remote cluster will quickly (in
+		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
 		taskID := p.shardContext.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
 		maxTaskID = &taskID
@@ -265,7 +265,7 @@ func (p *ackMgrImpl) GetTasks(
 		return nil, err
 	}
 
-	// Note this is a very rough indicator of how much the remote DC is behind on this shardContext.
+	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
 	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
 		maxTaskID-lastTaskID,
 		metrics.TargetClusterTag(pollingCluster),
@@ -322,7 +322,7 @@ func (p *ackMgrImpl) getTasks(
 	maxTaskID int64,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 	if minTaskID > maxTaskID {
-		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shardContext re-balancing")
+		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shard re-balancing")
 	} else if minTaskID == maxTaskID {
 		return nil, maxTaskID, nil
 	}

@@ -104,7 +104,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		// them during namespace handover.
 		// Visibility tasks should all be safe, but close execution task
 		// might do a setWorkflowExecution to clean up memo and search attributes, which
-		// will be blocked by shardContext context during ns handover
+		// will be blocked by shard context during ns handover
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
 		// be returned from task executor
 		return metricsTags, true, consts.ErrNamespaceHandover

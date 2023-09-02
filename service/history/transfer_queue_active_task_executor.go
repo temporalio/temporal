@@ -585,7 +585,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
 	if !ok {
 		// TODO: here we should also RemoveSignalMutableState from target workflow
-		// Otherwise, target SignalRequestID still can leak if shardContext restart after signalExternalExecutionCompleted
+		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}

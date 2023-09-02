@@ -124,7 +124,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues
 	}
 }
 
-// CreateQueue creates a new archival queue for the given shardContext.
+// CreateQueue creates a new archival queue for the given shard.
 func (f *archivalQueueFactory) CreateQueue(
 	shard shard.Context,
 	workflowCache wcache.Cache,
@@ -136,7 +136,7 @@ func (f *archivalQueueFactory) CreateQueue(
 	return f.newScheduledQueue(shard, executor)
 }
 
-// newArchivalTaskExecutor creates a new archival task executor for the given shardContext.
+// newArchivalTaskExecutor creates a new archival task executor for the given shard.
 func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, workflowCache wcache.Cache) queues.Executor {
 	return NewArchivalQueueTaskExecutor(
 		f.Archiver,
@@ -148,7 +148,7 @@ func (f *archivalQueueFactory) newArchivalTaskExecutor(shard shard.Context, work
 	)
 }
 
-// newScheduledQueue creates a new scheduled queue for the given shardContext with archival-specific configurations.
+// newScheduledQueue creates a new scheduled queue for the given shard with archival-specific configurations.
 func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor queues.Executor) queues.Queue {
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))

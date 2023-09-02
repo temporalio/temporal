@@ -111,7 +111,7 @@ func (s *Service) Start() {
 	go func() {
 		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
 			// In some situations, like rolling upgrades of the history service,
-			// pausing before joining membership can help separate the shardContext movement
+			// pausing before joining membership can help separate the shard movement
 			// caused by another history instance terminating with this instance starting.
 			s.logger.Info("history start: delaying before membership start",
 				tag.NewDurationTag("startupMembershipJoinDelay", delay))
