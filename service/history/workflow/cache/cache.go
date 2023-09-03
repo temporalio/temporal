@@ -197,7 +197,6 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	//key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 	cacheKey := key{
 		workflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		shardUUID:   shardContext.GetOwner(),

@@ -508,8 +508,11 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				WorkflowId: "some random workflow id",
 				RunId:      uuid.New(),
 			}
-			key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), key, c.logger, s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+			cacheKey := key{
+				workflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+				shardUUID:   uuid.New(),
+			}
+			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.workflowKey, c.logger, s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
@@ -520,7 +523,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				s.NoError(err)
 			}
 
-			if err := c.lockWorkflowExecution(ctx, workflowCtx, key, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
+			if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
 				s.T().Errorf("CacheImpl.lockWorkflowExecution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
