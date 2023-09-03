@@ -83,9 +83,9 @@ type (
 		nonUserContextLockTimeout time.Duration
 	}
 
-	key struct {
-		workflowKey definition.WorkflowKey
-		shardUUID   string
+	Key struct {
+		WorkflowKey definition.WorkflowKey
+		ShardUUID   string
 	}
 )
 
@@ -197,15 +197,15 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	cacheKey := key{
-		workflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
-		shardUUID:   shardContext.GetOwner(),
+	cacheKey := Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		ShardUUID:   shardContext.GetOwner(),
 	}
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.workflowKey, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
+		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -228,7 +228,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 	workflowCtx workflow.Context,
-	cacheKey key,
+	cacheKey Key,
 	lockPriority workflow.LockPriority) error {
 
 	// skip if there is no deadline
@@ -258,7 +258,7 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 }
 
 func (c *CacheImpl) makeReleaseFunc(
-	cacheKey key,
+	cacheKey Key,
 	context workflow.Context,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,

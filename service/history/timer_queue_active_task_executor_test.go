@@ -1591,9 +1591,11 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	workflowID string,
 	runID string,
 ) workflow.MutableState {
-	return s.workflowCache.(*wcache.CacheImpl).Get(
-		definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-	).(*workflow.ContextImpl).MutableState
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
+	return s.workflowCache.(*wcache.CacheImpl).Get(key).(*workflow.ContextImpl).MutableState
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(

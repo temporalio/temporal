@@ -639,7 +639,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_WorkflowClosed() {
 		},
 	}
 
-	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
@@ -715,7 +718,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityNotFound() {
 		},
 	}
 
-	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
@@ -792,7 +798,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		},
 	}
 
-	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
@@ -886,7 +895,10 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		},
 	}
 
-	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
