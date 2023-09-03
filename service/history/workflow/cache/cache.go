@@ -82,6 +82,11 @@ type (
 
 		nonUserContextLockTimeout time.Duration
 	}
+
+	key struct {
+		workflowKey definition.WorkflowKey
+		shardUUID   string
+	}
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
@@ -192,25 +197,28 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-	workflowCtx, cacheHit := c.Get(key).(workflow.Context)
+	//key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+	cacheKey := key{
+		workflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		shardUUID:   shardContext.GetOwner(),
+	}
+	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), key, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
-		elem, err := c.PutIfNotExist(key, workflowCtx)
+		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.workflowKey, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
+		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 			return nil, nil, err
 		}
 		workflowCtx = elem.(workflow.Context)
 	}
-
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext, lockPriority)
+	releaseFunc := c.makeReleaseFunc(cacheKey, workflowCtx, forceClearContext, lockPriority)
 
-	if err := c.lockWorkflowExecution(ctx, workflowCtx, key, lockPriority); err != nil {
+	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
@@ -221,7 +229,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 	workflowCtx workflow.Context,
-	key definition.WorkflowKey,
+	cacheKey key,
 	lockPriority workflow.LockPriority) error {
 
 	// skip if there is no deadline
@@ -244,14 +252,14 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 
 	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
-		c.Release(key)
+		c.Release(cacheKey)
 		return consts.ErrResourceExhaustedBusyWorkflow
 	}
 	return nil
 }
 
 func (c *CacheImpl) makeReleaseFunc(
-	key definition.WorkflowKey,
+	cacheKey key,
 	context workflow.Context,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
@@ -263,14 +271,14 @@ func (c *CacheImpl) makeReleaseFunc(
 			if rec := recover(); rec != nil {
 				context.Clear()
 				context.Unlock(lockPriority)
-				c.Release(key)
+				c.Release(cacheKey)
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					context.Clear()
 					context.Unlock(lockPriority)
-					c.Release(key)
+					c.Release(cacheKey)
 				} else {
 					isDirty := context.IsDirty()
 					if isDirty {
@@ -282,7 +290,7 @@ func (c *CacheImpl) makeReleaseFunc(
 						)
 					}
 					context.Unlock(lockPriority)
-					c.Release(key)
+					c.Release(cacheKey)
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")
 					}

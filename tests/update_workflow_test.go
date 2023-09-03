@@ -3364,7 +3364,6 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	s.T().Skip()
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3493,7 +3492,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
-	s.T().Skip()
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3633,7 +3631,6 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 }
 
 func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
-	s.T().Skip()
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
