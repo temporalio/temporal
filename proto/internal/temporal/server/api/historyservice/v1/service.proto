@@ -299,4 +299,16 @@ service HistoryService {
 
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
     }
+
+    rpc GetWorkflowExecutionHistory(GetWorkflowExecutionHistoryRequest) returns (GetWorkflowExecutionHistoryResponse) {
+    }
+
+    rpc GetWorkflowExecutionHistoryReverse(GetWorkflowExecutionHistoryReverseRequest) returns (GetWorkflowExecutionHistoryReverseResponse) {
+    }
+
+    rpc GetWorkflowExecutionRawHistoryV2(GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
+    }
 }

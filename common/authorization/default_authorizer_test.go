@@ -66,21 +66,17 @@ var (
 	claimsSystemReader = Claims{
 		System: RoleReader,
 	}
-	targetFooBar = CallTarget{
-		APIName:   "Foo",
+	targetNamespaceWriteBar = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
 		Namespace: "bar",
 	}
-	targetFooBAR = CallTarget{
-		APIName:   "Foo",
+	targetNamespaceWriteBAR = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
 		Namespace: "BAR",
 	}
-	targetListNamespaces = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces",
-		Namespace: "BAR",
-	}
-	targetDescribeNamespace = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
-		Namespace: "BAR",
+	targetOperatorNamespaceRead = CallTarget{
+		APIName:   "/temporal.api.operatorservice.v1.OperatorService/ListSearchAttributes",
+		Namespace: testNamespace,
 	}
 	targetGrpcHealthCheck = CallTarget{
 		APIName:   "/grpc.health.v1.Health/Check",
@@ -91,16 +87,12 @@ var (
 		Namespace: "",
 	}
 	targetStartWorkflow = CallTarget{
-		Namespace: testNamespace,
 		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
+		Namespace: testNamespace,
 	}
 	targetAdminAPI = CallTarget{
-		Namespace: testNamespace,
 		APIName:   "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes",
-	}
-	targetAdminReadonlyAPI = CallTarget{
 		Namespace: testNamespace,
-		APIName:   "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes",
 	}
 )
 
@@ -137,44 +129,40 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 		Decision Decision
 	}{
 		// SystemAdmin is allowed on everything
-		{"SystemAdminOnFooBar", claimsSystemAdmin, targetFooBar, DecisionAllow},
+		{"SystemAdminOnFooBar", claimsSystemAdmin, targetNamespaceWriteBar, DecisionAllow},
 		{"SystemAdminOnAdminAPI", claimsSystemAdmin, targetAdminAPI, DecisionAllow},
-		{"SystemAdminOnReadonlyAPI", claimsSystemAdmin, targetAdminReadonlyAPI, DecisionAllow},
 		{"SystemAdminOnStartWorkflow", claimsSystemAdmin, targetStartWorkflow, DecisionAllow},
 
 		// SystemWriter is allowed on all read only APIs and non-admin APIs on every namespaces
-		{"SystemWriterOnFooBar", claimsSystemWriter, targetFooBar, DecisionAllow},
+		{"SystemWriterOnFooBar", claimsSystemWriter, targetNamespaceWriteBar, DecisionAllow},
 		{"SystemWriterOnAdminAPI", claimsSystemWriter, targetAdminAPI, DecisionDeny},
-		{"SystemWriterOnReadonlyAPI", claimsSystemWriter, targetAdminReadonlyAPI, DecisionAllow},
 		{"SystemWriterOnStartWorkflow", claimsSystemWriter, targetStartWorkflow, DecisionAllow},
 
 		// SystemReader is allowed on all read only APIs and blocked
-		{"SystemReaderOnFooBar", claimsSystemReader, targetFooBar, DecisionDeny},
+		{"SystemReaderOnFooBar", claimsSystemReader, targetNamespaceWriteBar, DecisionDeny},
 		{"SystemReaderOnAdminAPI", claimsSystemReader, targetAdminAPI, DecisionDeny},
-		{"SystemReaderOnReadonlyAPI", claimsSystemReader, targetAdminReadonlyAPI, DecisionAllow},
 		{"SystemReaderOnStartWorkflow", claimsSystemReader, targetStartWorkflow, DecisionDeny},
 
 		// NamespaceAdmin is allowed on admin service to their own namespaces (test-namespace)
-		{"NamespaceAdminOnAdminAPI", claimsNamespaceAdmin, targetAdminAPI, DecisionAllow},
-		{"NamespaceAdminOnReadonlyAPI", claimsNamespaceAdmin, targetAdminReadonlyAPI, DecisionAllow},
+		{"NamespaceAdminOnAdminAPI", claimsNamespaceAdmin, targetAdminAPI, DecisionDeny},
 		{"NamespaceAdminOnStartWorkflow", claimsNamespaceAdmin, targetStartWorkflow, DecisionAllow},
-		{"NamespaceAdminOnFooBar", claimsNamespaceAdmin, targetFooBar, DecisionDeny}, // namespace mismatch
+		{"NamespaceAdminOnFooBar", claimsNamespaceAdmin, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
 
-		{"BarAdminOnFooBar", claimsBarAdmin, targetFooBar, DecisionAllow},
-		{"BarAdminOnFooBAR", claimsBarAdmin, targetFooBAR, DecisionDeny}, // namespace case mismatch
+		{"BarAdminOnFooBar", claimsBarAdmin, targetNamespaceWriteBar, DecisionAllow},
+		{"BarAdminOnFooBAR", claimsBarAdmin, targetNamespaceWriteBAR, DecisionDeny}, // namespace case mismatch
 
 		// NamespaceWriter is not allowed on admin APIs
 		{"NamespaceWriterOnAdminAPI", claimsNamespaceWriter, targetAdminAPI, DecisionDeny},
-		{"NamespaceWriterOnReadonlyAPI", claimsNamespaceWriter, targetAdminReadonlyAPI, DecisionDeny},
 		{"NamespaceWriterOnStartWorkflow", claimsNamespaceWriter, targetStartWorkflow, DecisionAllow},
-		{"NamespaceWriterOnFooBar", claimsNamespaceWriter, targetFooBar, DecisionDeny}, // namespace mismatch
+		{"NamespaceWriterOnOperatorNamespaceRead", claimsNamespaceWriter, targetOperatorNamespaceRead, DecisionAllow},
+		{"NamespaceWriterOnFooBar", claimsNamespaceWriter, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
 
 		// NamespaceReader is allowed on read-only APIs on non admin service
 		{"NamespaceReaderOnAdminAPI", claimsNamespaceReader, targetAdminAPI, DecisionDeny},
-		{"NamespaceReaderOnReadonlyAPI", claimsNamespaceReader, targetAdminReadonlyAPI, DecisionDeny},
 		{"NamespaceReaderOnStartWorkflow", claimsNamespaceReader, targetStartWorkflow, DecisionDeny},
-		{"NamespaceReaderOnFooBar", claimsNamespaceReader, targetFooBar, DecisionDeny}, // namespace mismatch
+		{"NamespaceReaderOnFooBar", claimsNamespaceReader, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
 		{"NamespaceReaderOnListWorkflow", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
+		{"NamespaceReaderOnOperatorNamespaceRead", claimsNamespaceReader, targetOperatorNamespaceRead, DecisionAllow},
 
 		// healthcheck allowed to everyone
 		{"RoleNoneOnGetSystemInfo", claimsNone, targetGetSystemInfo, DecisionAllow},

@@ -153,21 +153,17 @@ func hashBuildId(buildID string) string {
 }
 
 func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
-	clone := persistencespb.VersioningData{
-		VersionSets: make([]*persistencespb.CompatibleVersionSet, len(data.GetVersionSets())),
+	return &persistencespb.VersioningData{
+		VersionSets: slices.Clone(data.GetVersionSets()),
 	}
-	copy(clone.VersionSets, data.GetVersionSets())
-	return &clone
 }
 
 func shallowCloneVersionSet(set *persistencespb.CompatibleVersionSet) *persistencespb.CompatibleVersionSet {
-	clone := &persistencespb.CompatibleVersionSet{
-		SetIds:                 set.SetIds,
-		BuildIds:               make([]*persistencespb.BuildId, len(set.BuildIds)),
+	return &persistencespb.CompatibleVersionSet{
+		SetIds:                 slices.Clone(set.SetIds),
+		BuildIds:               slices.Clone(set.BuildIds),
 		BecameDefaultTimestamp: set.BecameDefaultTimestamp,
 	}
-	copy(clone.BuildIds, set.BuildIds)
-	return clone
 }
 
 // UpdateVersionSets updates version sets given existing versioning data and an update request. The request is expected
@@ -510,9 +506,21 @@ func ClearTombstones(versioningData *persistencespb.VersioningData) *persistence
 }
 
 func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData, buildId string) *persistencespb.VersioningData {
+	guessedSetId := hashBuildId(buildId)
+
 	if foundSetId, _ := worker_versioning.FindBuildId(data, buildId); foundSetId >= 0 {
-		// it's already there
-		return data
+		// it's already there. make sure its set id is present.
+		set := data.VersionSets[foundSetId]
+		if slices.Contains(set.SetIds, guessedSetId) {
+			return data
+		}
+
+		// if not, add the guessed set id
+		newSet := shallowCloneVersionSet(set)
+		newSet.SetIds = append(newSet.SetIds, guessedSetId)
+		newData := shallowCloneVersioningData(data)
+		newData.VersionSets[foundSetId] = newSet
+		return newData
 	}
 
 	// insert unknown build id with zero time so that if merged with any other set, the other
@@ -521,7 +529,7 @@ func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData,
 
 	newData := shallowCloneVersioningData(data)
 	newData.VersionSets = slices.Insert(newData.VersionSets, 0, &persistencespb.CompatibleVersionSet{
-		SetIds: []string{hashBuildId(buildId)},
+		SetIds: []string{guessedSetId},
 		BuildIds: []*persistencespb.BuildId{{
 			Id:                     buildId,
 			State:                  persistencespb.STATE_ACTIVE,

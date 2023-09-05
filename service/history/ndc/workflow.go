@@ -27,7 +27,6 @@
 package ndc
 
 import (
-	"context"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -36,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
@@ -63,10 +61,8 @@ type (
 	}
 
 	WorkflowImpl struct {
-		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
+		clusterMetadata cluster.Metadata
 
-		ctx          context.Context
 		context      workflow.Context
 		mutableState workflow.MutableState
 		releaseFn    wcache.ReleaseCacheFunc
@@ -74,8 +70,6 @@ type (
 )
 
 func NewWorkflow(
-	ctx context.Context,
-	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 	context workflow.Context,
 	mutableState workflow.MutableState,
@@ -83,9 +77,7 @@ func NewWorkflow(
 ) *WorkflowImpl {
 
 	return &WorkflowImpl{
-		ctx:               ctx,
-		namespaceRegistry: namespaceRegistry,
-		clusterMetadata:   clusterMetadata,
+		clusterMetadata: clusterMetadata,
 
 		context:      context,
 		mutableState: mutableState,

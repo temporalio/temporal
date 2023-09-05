@@ -368,6 +368,14 @@ const (
 	HistoryClientGetReplicationMessagesScope = "HistoryClientGetReplicationMessages"
 	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service
 	HistoryClientStreamWorkflowReplicationMessagesScope = "HistoryClientStreamWorkflowReplicationMessages"
+	// HistoryClientGetWorkflowExecutionHistoryScope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionHistoryScope = "HistoryClientGetWorkflowExecutionHistory"
+	// HistoryClientGetWorkflowExecutionHistoryReverseScope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionHistoryReverseScope = "HistoryClientGetWorkflowExecutionHistoryReverse"
+	// HistoryClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to history service
+	HistoryClientGetWorkflowExecutionRawHistoryV2Scope = "HistoryClientGetWorkflowExecutionRawHistoryV2"
+	// HistoryClientForceDeleteWorkflowExecutionScope tracks RPC calls to history service
+	HistoryClientForceDeleteWorkflowExecutionScope = "HistoryClientForceDeleteWorkflowExecution"
 )
 
 // Matching Client Operations
@@ -789,6 +797,14 @@ const (
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
 	// HistoryGetMutableStateScope tracks GetMutableStateScope API calls received by service
 	HistoryGetMutableStateScope = "GetMutableState"
+	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
+	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
+	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
+	HistoryGetHistoryScope = "GetHistory"
+	// HistoryGetRawHistoryScope tracks GetRawHistoryScope API calls received by service
+	HistoryGetRawHistoryScope = "GetRawHistory"
+	// HistoryGetHistoryReverseScope tracks GetHistoryReverseScope API calls received by service
+	HistoryGetHistoryReverseScope = "GetHistoryReverse"
 	// HistoryPollMutableStateScope tracks PollMutableStateScope API calls received by service
 	HistoryPollMutableStateScope = "PollMutableState"
 	// HistoryResetStickyTaskQueueScope tracks ResetStickyTaskQueueScope API calls received by service
@@ -1676,4 +1692,16 @@ var (
 	VisibilityPersistenceFailures          = NewCounterDef("visibility_persistence_errors")
 	VisibilityPersistenceResourceExhausted = NewCounterDef("visibility_persistence_resource_exhausted")
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
+)
+
+// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
+const (
+	AccessHistoryOld = "AccessHistoryOld"
+	AccessHistoryNew = "AccessHistoryNew"
+
+	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
+	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
+	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
+	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
+	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
 )

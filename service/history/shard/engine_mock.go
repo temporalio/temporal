@@ -244,6 +244,51 @@ func (mr *MockEngineMockRecorder) GetReplicationTasksIter(ctx, pollingCluster, m
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksIter", reflect.TypeOf((*MockEngine)(nil).GetReplicationTasksIter), ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
+// GetWorkflowExecutionHistory mocks base method.
+func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistory indicates an expected call of GetWorkflowExecutionHistory.
+func (mr *MockEngineMockRecorder) GetWorkflowExecutionHistory(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistory", reflect.TypeOf((*MockEngine)(nil).GetWorkflowExecutionHistory), ctx, request)
+}
+
+// GetWorkflowExecutionHistoryReverse mocks base method.
+func (m *MockEngine) GetWorkflowExecutionHistoryReverse(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryReverseRequest) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistoryReverse", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistoryReverse indicates an expected call of GetWorkflowExecutionHistoryReverse.
+func (mr *MockEngineMockRecorder) GetWorkflowExecutionHistoryReverse(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistoryReverse", reflect.TypeOf((*MockEngine)(nil).GetWorkflowExecutionHistoryReverse), ctx, request)
+}
+
+// GetWorkflowExecutionRawHistoryV2 mocks base method.
+func (m *MockEngine) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistoryV2 indicates an expected call of GetWorkflowExecutionRawHistoryV2.
+func (mr *MockEngineMockRecorder) GetWorkflowExecutionRawHistoryV2(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockEngine)(nil).GetWorkflowExecutionRawHistoryV2), ctx, request)
+}
+
 // IsActivityTaskValid mocks base method.
 func (m *MockEngine) IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error) {
 	m.ctrl.T.Helper()
