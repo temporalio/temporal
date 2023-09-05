@@ -28,39 +28,35 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/fx"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
-	ProcessToolBox struct {
-		fx.In
+	ExecutableTaskConverter interface {
+		Convert(
+			taskClusterName string,
+			clientShardKey ClusterShardKey,
+			serverShardKey ClusterShardKey,
+			replicationTasks ...*replicationspb.ReplicationTask,
+		) []TrackableExecutableTask
+	}
 
-		Config                  *configs.Config
-		ClusterMetadata         cluster.Metadata
-		ClientBean              client.Bean
-		ShardController         shard.Controller
-		NamespaceCache          namespace.Registry
-		EagerNamespaceRefresher EagerNamespaceRefresher
-		NDCHistoryResender      xdc.NDCHistoryResender
-		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
-		MetricsHandler          metrics.Handler
-		Logger                  log.Logger
+	executableTaskConverterImpl struct {
+		processToolBox ProcessToolBox
 	}
 )
 
-func (i *ProcessToolBox) ConvertTasks(
+func NewExecutableTaskConverter(
+	processToolBox ProcessToolBox,
+) *executableTaskConverterImpl {
+	return &executableTaskConverterImpl{
+		processToolBox: processToolBox,
+	}
+}
+
+func (e *executableTaskConverterImpl) Convert(
 	taskClusterName string,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
@@ -68,18 +64,18 @@ func (i *ProcessToolBox) ConvertTasks(
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for index, replicationTask := range replicationTasks {
-		i.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
 			int64(1),
 			metrics.FromClusterIDTag(serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTag(replicationTask)),
 		)
-		tasks[index] = i.convertOne(taskClusterName, replicationTask)
+		tasks[index] = e.convertOne(taskClusterName, replicationTask)
 	}
 	return tasks
 }
 
-func (i *ProcessToolBox) convertOne(
+func (e *executableTaskConverterImpl) convertOne(
 	taskClusterName string,
 	replicationTask *replicationspb.ReplicationTask,
 ) TrackableExecutableTask {
@@ -93,21 +89,21 @@ func (i *ProcessToolBox) convertOne(
 	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		return NewExecutableActivityStateTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
@@ -115,7 +111,7 @@ func (i *ProcessToolBox) convertOne(
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
@@ -123,16 +119,16 @@ func (i *ProcessToolBox) convertOne(
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
 			taskClusterName,
 		)
 	default:
-		i.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
+		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(
-			*i,
+			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask,
