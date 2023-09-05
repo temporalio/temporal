@@ -1642,3 +1642,68 @@ func (s *clientIntegrationSuite) TestBatchReset() {
 
 	s.Equal(1, result)
 }
+
+func (s *clientIntegrationSuite) Test_FinishWorkflowWithDeferredCommands() {
+	activityFn := func(ctx context.Context) error {
+		return nil
+	}
+
+	childWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		defer workflow.ExecuteActivity(ctx, activityFn)
+
+		childID := "child_workflow"
+		cwo := workflow.ChildWorkflowOptions{
+			WorkflowID:         childID,
+			WorkflowRunTimeout: 10 * time.Second,
+			TaskQueue:          s.taskQueue,
+		}
+		ctx = workflow.WithChildOptions(ctx, cwo)
+		defer workflow.ExecuteChildWorkflow(ctx, childWorkflowFn)
+		workflow.NewTimer(ctx, time.Second)
+		return nil
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterWorkflow(childWorkflowFn)
+	s.worker.RegisterActivity(activityFn)
+
+	id := "integration-test-finish-workflow-with-deffered-commands"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 10 * time.Second,
+	}
+
+	ctx := context.Background()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	// verify event sequence
+	expectedHistory := []enumspb.EventType{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		enumspb.EVENT_TYPE_TIMER_STARTED,
+		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+	}
+	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
+}
