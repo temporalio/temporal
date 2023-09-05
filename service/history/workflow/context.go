@@ -66,8 +66,8 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
-		LoadMutableState(ctx context.Context, shardContext shard.Context,) (MutableState, error)
-		LoadExecutionStats(ctx context.Context, shardContext shard.Context,) (*persistencespb.ExecutionStats, error)
+		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
+		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
 
 		Lock(ctx context.Context, lockPriority LockPriority) error
@@ -225,7 +225,7 @@ func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
 	return c.workflowKey
 }
 
-func (c *ContextImpl) GetNamespace(shardContext shard.Context,) namespace.Name {
+func (c *ContextImpl) GetNamespace(shardContext shard.Context) namespace.Name {
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(c.workflowKey.NamespaceID),
 	)
@@ -623,10 +623,9 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	// finally emit session stats
-	namespace := c.GetNamespace(shardContext)
 	emitWorkflowHistoryStats(
 		c.metricsHandler,
-		namespace,
+		c.GetNamespace(shardContext),
 		int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize),
 		int(c.MutableState.GetNextEventID()-1),
 	)
@@ -877,7 +876,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 
 // Returns true if the workflow is running and history size or event count should trigger a forced termination
 // Prints a log message if history size or history event count are over the error or warn limits
-func (c *ContextImpl) maxHistorySizeExceeded(shardContext shard.Context,) bool {
+func (c *ContextImpl) maxHistorySizeExceeded(shardContext shard.Context) bool {
 	namespaceName := c.GetNamespace(shardContext).String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
