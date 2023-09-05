@@ -1393,7 +1393,7 @@ func (h *Handler) ReplicateWorkflowState(
 	return &historyservice.ReplicateWorkflowStateResponse{}, nil
 }
 
-// SyncShardStatus is called by processor to sync history shardinformation from another cluster
+// SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
@@ -1497,12 +1497,12 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 			shardContext, err := h.controller.GetShardByID(token.GetShardId())
 			if err != nil {
-				h.logger.Warn("History engine not found for shardContext", tag.Error(err))
+				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
 			engine, err := shardContext.GetEngine(ctx)
 			if err != nil {
-				h.logger.Warn("History engine not found for shardContext", tag.Error(err))
+				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
 
@@ -1514,7 +1514,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				token.GetLastRetrievedMessageId(),
 			)
 			if err != nil {
-				h.logger.Warn("Failed to get replication tasks for shardContext", tag.Error(err))
+				h.logger.Warn("Failed to get replication tasks for shard", tag.Error(err))
 				return
 			}
 
@@ -1946,7 +1946,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 
 	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
 	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shardContext ID metadata")
+		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
 	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
 	if err != nil {
