@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -50,7 +49,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/common"
@@ -76,7 +74,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -94,7 +91,6 @@ type (
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
 		mockExecutionMgr     *persistence.MockExecutionManager
-		mockArchivalClient   *warchiver.MockClient
 		mockArchivalMetadata archiver.MetadataMock
 		mockArchiverProvider *provider.MockArchiverProvider
 
@@ -138,7 +134,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-	s.mockArchivalClient = warchiver.NewMockClient(s.controller)
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -211,7 +206,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.transferQueueStandbyTaskExecutor = newTransferQueueStandbyTaskExecutor(
 		s.mockShard,
 		s.workflowCache,
-		s.mockArchivalClient,
 		s.mockNDCHistoryResender,
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -655,94 +649,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
 	_, _, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
-}
-
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_CanSkipVisibilityArchival() {
-	for _, skipVisibilityArchival := range []bool{
-		false,
-		true,
-	} {
-		s.Run(fmt.Sprintf("CanSkipVisibilityArchival=%v", skipVisibilityArchival), func() {
-			execution := commonpb.WorkflowExecution{
-				WorkflowId: "some random workflow ID",
-				RunId:      uuid.New(),
-			}
-			workflowType := "some random workflow type"
-			taskQueueName := "some random task queue"
-
-			mutableState := workflow.TestGlobalMutableState(
-				s.mockShard,
-				s.mockShard.GetEventsCache(),
-				s.logger,
-				s.version,
-				execution.GetRunId(),
-			)
-			_, err := mutableState.AddWorkflowExecutionStartedEvent(
-				execution,
-				&historyservice.StartWorkflowExecutionRequest{
-					Attempt:     1,
-					NamespaceId: tests.StandbyWithVisibilityArchivalNamespaceID.String(),
-					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-						WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-						TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-						WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-						WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-					},
-				},
-			)
-			s.Nil(err)
-
-			wt := addWorkflowTaskScheduledEvent(mutableState)
-			event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
-			wt.StartedEventID = event.GetEventId()
-			event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
-
-			taskID := int64(59)
-			event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
-
-			transferTask := &tasks.CloseExecutionTask{
-				WorkflowKey: definition.NewWorkflowKey(
-					tests.StandbyWithVisibilityArchivalNamespaceID.String(),
-					execution.GetWorkflowId(),
-					execution.GetRunId(),
-				),
-				Version:                   s.version,
-				TaskID:                    taskID,
-				VisibilityTimestamp:       time.Now().UTC(),
-				CanSkipVisibilityArchival: skipVisibilityArchival,
-			}
-
-			persistenceMutableState := s.createPersistenceMutableState(
-				mutableState,
-				event.GetEventId(),
-				event.GetVersion(),
-			)
-			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(
-				gomock.Any(),
-				gomock.Any(),
-			).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-			if !skipVisibilityArchival {
-				s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(
-					archiver.NewArchivalConfig(
-						"enabled",
-						dc.GetStringPropertyFn("enabled"),
-						dc.GetBoolPropertyFn(true),
-						"disabled",
-						"random URI",
-					),
-				).AnyTimes()
-				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
-				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
-				s.mockVisibilityManager.EXPECT().GetIndexName().Return("")
-			}
-
-			_, _, err = s.transferQueueStandbyTaskExecutor.Execute(
-				context.Background(),
-				s.newTaskExecutable(transferTask),
-			)
-			s.Nil(err)
-		})
-	}
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {

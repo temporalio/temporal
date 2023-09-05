@@ -157,9 +157,6 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 		Version:             rand.Int63(),
 	}
 	s.assertEqualTasks(closeTask)
-
-	closeTask.CanSkipVisibilityArchival = true
-	s.assertEqualTasks(closeTask)
 }
 
 func (s *taskSerializerSuite) TestTransferResetTask() {
@@ -257,8 +254,6 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		Version:             rand.Int63(),
 		BranchToken:         []byte{123},
 	}
-	s.assertEqualTasks(workflowCleanupTimer)
-	workflowCleanupTimer.WorkflowDataAlreadyArchived = true
 	s.assertEqualTasks(workflowCleanupTimer)
 }
 

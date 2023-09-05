@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -54,7 +53,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -72,7 +70,6 @@ type (
 		shard                    shard.Context
 		registry                 namespace.Registry
 		cache                    wcache.Cache
-		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.Handler
 		historyRawClient         resource.HistoryRawClient
@@ -87,7 +84,6 @@ type (
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.Handler,
 	historyRawClient resource.HistoryRawClient,
@@ -99,7 +95,6 @@ func newTransferQueueTaskExecutorBase(
 		shard:                    shard,
 		registry:                 shard.GetNamespaceRegistry(),
 		cache:                    workflowCache,
-		archivalClient:           archivalClient,
 		logger:                   logger,
 		metricHandler:            metricHandler,
 		historyRawClient:         historyRawClient,
@@ -111,7 +106,6 @@ func newTransferQueueTaskExecutorBase(
 			shard,
 			workflowCache,
 			shard.GetConfig(),
-			archivalClient,
 			shard.GetTimeSource(),
 			visibilityManager,
 		),
@@ -172,71 +166,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
 	}
-
-	return err
-}
-
-func (t *transferQueueTaskExecutorBase) archiveVisibility(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTime time.Time,
-	executionTime time.Time,
-	endTime time.Time,
-	status enumspb.WorkflowExecutionStatus,
-	historyLength int64,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	clusterConfiguredForVisibilityArchival := t.shard.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForVisibilityArchival := namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
-	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
-
-	if !archiveVisibility {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
-	defer cancel()
-
-	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.visibilityManager.GetIndexName(), false)
-	if err != nil {
-		return err
-	}
-
-	// Setting search attributes types here because archival client needs to stringify them
-	// and it might not have access to type map (i.e. type needs to be embedded).
-	searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-
-	_, err = t.archivalClient.Archive(ctx, &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			ShardID:          t.shard.GetShardID(),
-			NamespaceID:      namespaceID.String(),
-			Namespace:        namespaceEntry.Name().String(),
-			WorkflowID:       workflowID,
-			RunID:            runID,
-			WorkflowTypeName: workflowTypeName,
-			StartTime:        startTime,
-			ExecutionTime:    executionTime,
-			CloseTime:        endTime,
-			Status:           status,
-			HistoryLength:    historyLength,
-			Memo:             visibilityMemo,
-			SearchAttributes: searchAttributes,
-			VisibilityURI:    namespaceEntry.VisibilityArchivalState().URI,
-			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
-			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
-		},
-		CallerService:        string(primitives.HistoryService),
-		AttemptArchiveInline: true, // archive visibility inline by default
-	})
 
 	return err
 }
