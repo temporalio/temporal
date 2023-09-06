@@ -259,7 +259,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error
 			return nil, err
 		}
 
-		c.MutableState, err = newMutableStateFromDB(
+		c.MutableState, err = NewMutableStateFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,

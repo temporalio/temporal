@@ -251,7 +251,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		e.shardContext.GetConfig(),
 		e.shardContext.GetArchivalMetadata(),
 	)
-	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime, true)
+	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime)
 	if err != nil {
 		return err
 	}

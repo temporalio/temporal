@@ -62,9 +62,9 @@ func (s *rateLimiterSuite) TearDownTest() {
 func (s *rateLimiterSuite) TestSetRate_Same() {
 	rateLimiter := NewRateLimiter(testRate, testBurst)
 
-	rateLimiterBefore := rateLimiter.goRateLimiter
-	rateLimiter.SetRate(testRate)
-	rateLimiterAfter := rateLimiter.goRateLimiter
+	rateLimiterBefore := rateLimiter.ClockedRateLimiter
+	rateLimiter.SetRPS(testRate)
+	rateLimiterAfter := rateLimiter.ClockedRateLimiter
 	s.Equal(testRate, rateLimiter.Rate())
 	s.Equal(testBurst, rateLimiter.Burst())
 	s.Equal(rateLimiterBefore, rateLimiterAfter)
@@ -74,7 +74,7 @@ func (s *rateLimiterSuite) TestSetRate_Diff() {
 	rateLimiter := NewRateLimiter(testRate, testBurst)
 
 	newRate := testRate * 2
-	rateLimiter.SetRate(newRate)
+	rateLimiter.SetRPS(newRate)
 	s.Equal(newRate, rateLimiter.Rate())
 	s.Equal(testBurst, rateLimiter.Burst())
 }
@@ -82,9 +82,9 @@ func (s *rateLimiterSuite) TestSetRate_Diff() {
 func (s *rateLimiterSuite) TestSetBurst_Same() {
 	rateLimiter := NewRateLimiter(testRate, testBurst)
 
-	rateLimiterBefore := rateLimiter.goRateLimiter
+	rateLimiterBefore := rateLimiter.ClockedRateLimiter
 	rateLimiter.SetBurst(testBurst)
-	rateLimiterAfter := rateLimiter.goRateLimiter
+	rateLimiterAfter := rateLimiter.ClockedRateLimiter
 	s.Equal(testRate, rateLimiter.Rate())
 	s.Equal(testBurst, rateLimiter.Burst())
 	s.Equal(rateLimiterBefore, rateLimiterAfter)
@@ -102,9 +102,9 @@ func (s *rateLimiterSuite) TestSetBurst_Diff() {
 func (s *rateLimiterSuite) TestSetRateBurst_Same() {
 	rateLimiter := NewRateLimiter(testRate, testBurst)
 
-	rateLimiterBefore := rateLimiter.goRateLimiter
+	rateLimiterBefore := rateLimiter.ClockedRateLimiter
 	rateLimiter.SetRateBurst(rateLimiter.Rate(), rateLimiter.Burst())
-	rateLimiterAfter := rateLimiter.goRateLimiter
+	rateLimiterAfter := rateLimiter.ClockedRateLimiter
 	s.Equal(testRate, rateLimiter.Rate())
 	s.Equal(testBurst, rateLimiter.Burst())
 	s.Equal(rateLimiterBefore, rateLimiterAfter)

@@ -55,10 +55,7 @@ type (
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
 		// This task is used to delete the history events of the workflow execution after the retention period expires.
-		// If workflowDataAlreadyArchived is true, then the workflow data is already archived,
-		// so we can delete the history immediately. Otherwise, we need to archive the history first before we can
-		// safely delete it.
-		GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error
+		GenerateDeleteHistoryEventTask(closeTime time.Time) error
 		GenerateDeleteExecutionTask() (*tasks.DeleteExecutionTask, error)
 		GenerateRecordWorkflowStartedTasks(
 			startEvent *historypb.HistoryEvent,
@@ -190,7 +187,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				Version:     currentVersion,
 			},
 		)
-		if r.archivalQueueEnabled() {
+		if r.archivalEnabled() {
 			retention, err := r.getRetention()
 			if err != nil {
 				return err
@@ -205,9 +202,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := timestamp.TimeValue(closedTime).Add(delay)
 
-			// This flag is only untrue for old server versions which were using the archival workflow instead of the
-			// archival queue.
-			closeExecutionTask.CanSkipVisibilityArchival = true
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -217,7 +211,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			closeTasks = append(closeTasks, task)
 		} else {
 			closeTime := timestamp.TimeValue(closedTime)
-			if err := r.GenerateDeleteHistoryEventTask(closeTime, false); err != nil {
+			if err := r.GenerateDeleteHistoryEventTask(closeTime); err != nil {
 				return err
 			}
 		}
@@ -250,7 +244,7 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 // GenerateDeleteHistoryEventTask adds a task to delete all history events for a workflow execution.
 // This method only adds the task to the mutable state object in memory; it does not write the task to the database.
 // You must call shard.Context#AddTasks to notify the history engine of this task.
-func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
+func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time) error {
 	retention, err := r.getRetention()
 	if err != nil {
 		return err
@@ -265,11 +259,10 @@ func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, 
 	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
 	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard
-		WorkflowKey:                 r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp:         deleteTime,
-		Version:                     currentVersion,
-		BranchToken:                 branchToken,
-		WorkflowDataAlreadyArchived: workflowDataAlreadyArchived,
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: deleteTime,
+		Version:             currentVersion,
+		BranchToken:         branchToken,
 	})
 	return nil
 }
@@ -663,10 +656,9 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
 }
 
-// archivalQueueEnabled returns true if archival is enabled for either history or visibility, and the archival queue
-// itself is also enabled.
+// archivalEnabled returns true if archival is enabled for either history or visibility.
 // For both history and visibility, we check that archival is enabled for both the cluster and the namespace.
-func (r *TaskGeneratorImpl) archivalQueueEnabled() bool {
+func (r *TaskGeneratorImpl) archivalEnabled() bool {
 	namespaceEntry := r.mutableState.GetNamespaceEntry()
 	return r.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED ||

@@ -43,10 +43,14 @@ import (
 
 type (
 	ConflictResolver interface {
-		prepareMutableState(
+		GetOrRebuildCurrentMutableState(
 			ctx context.Context,
 			branchIndex int32,
 			incomingVersion int64,
+		) (workflow.MutableState, bool, error)
+		GetOrRebuildMutableState(
+			ctx context.Context,
+			branchIndex int32,
 		) (workflow.MutableState, bool, error)
 	}
 
@@ -79,20 +83,13 @@ func NewConflictResolver(
 	}
 }
 
-func (r *ConflictResolverImpl) prepareMutableState(
+func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	branchIndex int32,
 	incomingVersion int64,
 ) (workflow.MutableState, bool, error) {
-
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
-
-	// replication task to be applied to current branch
-	if branchIndex == currentVersionHistoryIndex {
-		return r.mutableState, false, nil
-	}
-
 	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
 	if err != nil {
 		return nil, false, err
@@ -106,9 +103,31 @@ func (r *ConflictResolverImpl) prepareMutableState(
 	if incomingVersion < currentLastItem.GetVersion() {
 		return r.mutableState, false, nil
 	}
-
-	if incomingVersion == currentLastItem.GetVersion() {
+	if incomingVersion == currentLastItem.GetVersion() && branchIndex != currentVersionHistoryIndex {
 		return nil, false, serviceerror.NewInvalidArgument("ConflictResolver encountered replication task version == current branch last write version")
+	}
+	// incomingVersion > currentLastItem.GetVersion()
+	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
+}
+
+func (r *ConflictResolverImpl) GetOrRebuildMutableState(
+	ctx context.Context,
+	branchIndex int32,
+) (workflow.MutableState, bool, error) {
+	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
+}
+
+func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
+	ctx context.Context,
+	branchIndex int32,
+) (workflow.MutableState, bool, error) {
+
+	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
+	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
+
+	// replication task to be applied to current branch
+	if branchIndex == currentVersionHistoryIndex {
+		return r.mutableState, false, nil
 	}
 
 	// task.getVersion() > currentLastItem
