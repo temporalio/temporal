@@ -52,7 +52,7 @@ type (
 		EventNotifier                   events.Notifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
-		NewCacheFn                      wcache.NewCacheFn
+		WorkflowCache                   wcache.Cache
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
@@ -70,8 +70,7 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
 ) shard.Engine {
-	workflowCache := f.NewCacheFn(shard)
-	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
+	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, f.WorkflowCache)
 	return NewEngineWithShardContext(
 		shard,
 		f.ClientBean,
@@ -80,7 +79,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.RawMatchingClient,
-		workflowCache,
+		f.WorkflowCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

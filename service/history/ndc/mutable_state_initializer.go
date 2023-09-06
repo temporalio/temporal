@@ -110,6 +110,7 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 ) (Workflow, MutableStateInitializationSpec, error) {
 	wfContext, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		namespace.ID(workflowKey.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
@@ -121,7 +122,7 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 		return nil, MutableStateInitializationSpec{}, err
 	}
 
-	mutableState, err := wfContext.LoadMutableState(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case nil:
 		mutableState, err = r.flushBufferEvents(ctx, wfContext, mutableState)
@@ -172,7 +173,13 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 	workflowKey definition.WorkflowKey,
 	token []byte,
 ) (Workflow, MutableStateInitializationSpec, error) {
-	wfContext := workflow.NewContext(r.shardContext, workflowKey, r.logger)
+	wfContext := workflow.NewContext(
+		r.shardContext.GetConfig(),
+		workflowKey,
+		r.logger,
+		r.shardContext.GetThrottledLogger(),
+		r.shardContext.GetMetricsHandler(),
+	)
 	mutableStateRow, dbRecordVersion, dbHistorySize, existsInDB, err := r.deserializeBackfillToken(token)
 	if err != nil {
 		return nil, MutableStateInitializationSpec{}, err

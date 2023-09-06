@@ -40,6 +40,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -85,6 +86,7 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 		resolver.NewNoopResolver(),
 		testCassandraClusterName,
 		testData.Logger,
+		metrics.NoopMetricsHandler,
 	)
 
 	tearDown := func() {
@@ -105,6 +107,7 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 			return commongocql.NewCassandraCluster(adminCfg, resolver.NewNoopResolver())
 		},
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
@@ -133,6 +136,7 @@ func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logg
 			return commongocql.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 		},
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		panic(err)
@@ -167,6 +171,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 			return commongocql.NewCassandraCluster(adminCfg, resolver.NewNoopResolver())
 		},
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))

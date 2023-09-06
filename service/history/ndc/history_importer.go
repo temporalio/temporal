@@ -427,7 +427,7 @@ func (r *HistoryImporterImpl) commit(
 		}
 		sizeDiff := memNDCWorkflow.GetMutableState().GetHistorySize() - mutableStateSpec.DBHistorySize
 		dbNDCWorkflow.GetMutableState().AddHistorySize(sizeDiff)
-		if err := dbNDCWorkflow.GetContext().SetWorkflowExecution(ctx); err != nil {
+		if err := dbNDCWorkflow.GetContext().SetWorkflowExecution(ctx, r.shardContext); err != nil {
 			r.logger.Error("HistoryImporter::commit encountered error", tag.Error(err))
 		}
 		return nil

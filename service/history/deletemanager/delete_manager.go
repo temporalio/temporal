@@ -31,6 +31,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
@@ -75,7 +76,7 @@ type (
 	}
 
 	DeleteManagerImpl struct {
-		shard             shard.Context
+		shardContext      shard.Context
 		workflowCache     wcache.Cache
 		config            *configs.Config
 		metricsHandler    metrics.Handler
@@ -87,16 +88,16 @@ type (
 var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
-	shard shard.Context,
+	shardContext shard.Context,
 	cache wcache.Cache,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 	visibilityManager manager.VisibilityManager,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
-		shard:             shard,
+		shardContext:      shardContext,
 		workflowCache:     cache,
-		metricsHandler:    shard.GetMetricsHandler(),
+		metricsHandler:    shardContext.GetMetricsHandler(),
 		config:            config,
 		timeSource:        timeSource,
 		visibilityManager: visibilityManager,
@@ -113,7 +114,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	workflowClosedVersion int64,
 ) error {
 
-	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shard, ms)
+	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
@@ -123,9 +124,9 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	}
 
 	deleteTask.Version = workflowClosedVersion
-	return m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: m.shard.GetShardID(),
-		// RangeID is set by shard
+	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID: m.shardContext.GetShardID(),
+		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
 		RunID:       we.GetRunId(),
@@ -194,7 +195,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	if err := m.shard.DeleteWorkflowExecution(
+	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
 			NamespaceID: namespaceID.String(),
