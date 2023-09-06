@@ -32,7 +32,9 @@ import (
 )
 
 const (
-	maxAllowedTimer = 100 * 365 * 24 * time.Hour
+	// MaxAllowedTimer is the maximum allowed timer duration in the system
+	// exported for integration tests
+	MaxAllowedTimer = 100 * 365 * 24 * time.Hour
 )
 
 var (
@@ -51,8 +53,8 @@ func ValidateAndCapTimer(delay *time.Duration) error {
 	// NOTE: we choose to cap the timer instead of returning error so that
 	// existing workflows implementation using higher than allowed timer
 	// can continue to run.
-	if duration > maxAllowedTimer {
-		*delay = maxAllowedTimer
+	if duration > MaxAllowedTimer {
+		*delay = MaxAllowedTimer
 	}
 	return nil
 }
