@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -54,7 +53,6 @@ type (
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
-		ArchivalClient                  archiver.Client
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
@@ -82,7 +80,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		f.WorkflowCache,
-		f.ArchivalClient,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

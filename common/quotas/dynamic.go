@@ -53,7 +53,7 @@ type (
 	}
 
 	MutableRateBurst interface {
-		SetRate(rate float64)
+		SetRPS(rps float64)
 		SetBurst(burst int)
 		RateBurst
 	}
@@ -120,7 +120,7 @@ func NewMutableRateBurst(
 	}
 }
 
-func (d *MutableRateBurstImpl) SetRate(rate float64) {
+func (d *MutableRateBurstImpl) SetRPS(rate float64) {
 	d.rate.Store(rate)
 }
 

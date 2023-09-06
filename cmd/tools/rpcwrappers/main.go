@@ -416,8 +416,6 @@ import (
 
 	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/metrics"
 )
 `)
 
@@ -428,7 +426,7 @@ func (c *metricClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) (_ {{.ResponseType}}, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.{{.MetricPrefix}}{{.Method}}Scope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "{{.MetricPrefix}}{{.Method}}")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()

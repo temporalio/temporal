@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -325,32 +326,40 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) < 0 ||
-		timestamp.DurationValue(attributes.GetStartToCloseTimeout()) < 0 || timestamp.DurationValue(attributes.GetHeartbeatTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("A valid timeout may not be negative.")
+	if err := timer.ValidateAndCapTimer(attributes.GetScheduleToCloseTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToCloseTimeout: %v.", err))
+	}
+	if err := timer.ValidateAndCapTimer(attributes.GetScheduleToStartTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToStartTimeout: %v.", err))
+	}
+	if err := timer.ValidateAndCapTimer(attributes.GetStartToCloseTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid StartToCloseTimeout: %v.", err))
+	}
+	if err := timer.ValidateAndCapTimer(attributes.GetHeartbeatTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid HeartbeatTimeout: %v.", err))
 	}
 
-	validScheduleToClose := timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > 0
-	validScheduleToStart := timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > 0
-	validStartToClose := timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > 0
+	ScheduleToCloseSet := timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > 0
+	ScheduleToStartSet := timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > 0
+	StartToCloseSet := timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > 0
 
-	if validScheduleToClose {
-		if validScheduleToStart {
+	if ScheduleToCloseSet {
+		if ScheduleToStartSet {
 			attributes.ScheduleToStartTimeout = timestamp.MinDurationPtr(attributes.GetScheduleToStartTimeout(),
 				attributes.GetScheduleToCloseTimeout())
 		} else {
 			attributes.ScheduleToStartTimeout = attributes.GetScheduleToCloseTimeout()
 		}
-		if validStartToClose {
+		if StartToCloseSet {
 			attributes.StartToCloseTimeout = timestamp.MinDurationPtr(attributes.GetStartToCloseTimeout(),
 				attributes.GetScheduleToCloseTimeout())
 		} else {
 			attributes.StartToCloseTimeout = attributes.GetScheduleToCloseTimeout()
 		}
-	} else if validStartToClose {
+	} else if StartToCloseSet {
 		// We are in !validScheduleToClose due to the first if above
 		attributes.ScheduleToCloseTimeout = &runTimeout
-		if !validScheduleToStart {
+		if !ScheduleToStartSet {
 			attributes.ScheduleToStartTimeout = &runTimeout
 		}
 	} else {
@@ -391,8 +400,8 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
 	}
-	if timestamp.DurationValue(attributes.GetStartToFireTimeout()) <= 0 {
-		return failedCause, serviceerror.NewInvalidArgument("A valid StartToFireTimeout is not set on command.")
+	if err := timer.ValidateAndCapTimer(attributes.GetStartToFireTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on command: %v.", err))
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -636,16 +645,16 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	}
 	attributes.TaskQueue = taskQueue
 
-	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowRunTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout: %v.", err))
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowTaskTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout: %v.", err))
 	}
 
-	if timestamp.DurationValue(attributes.GetBackoffStartInterval()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid BackoffStartInterval.")
+	if err := timer.ValidateAndCapTimer(attributes.GetBackoffStartInterval()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid BackoffStartInterval: %v.", err))
 	}
 
 	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
@@ -724,16 +733,16 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeout.")
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowExecutionTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowExecutionTimeout: %v.", err))
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeout.")
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowRunTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout: %v.", err))
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) < 0 {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeout.")
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowTaskTimeout()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout: %v.", err))
 	}
 
 	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {

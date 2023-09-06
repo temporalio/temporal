@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -80,7 +79,6 @@ type (
 func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
 	metricProvider metrics.Handler,
@@ -93,7 +91,6 @@ func newTransferQueueActiveTaskExecutor(
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
 			workflowCache,
-			archivalClient,
 			logger,
 			metricProvider,
 			historyRawClient,
@@ -324,7 +321,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		RunId:      task.GetRunID(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	var completionEvent *historypb.HistoryEvent // needed to report close event to parent workflow
 	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
 	if replyToParentWorkflow {
@@ -349,19 +345,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		)
 	}
 
-	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
-	if err != nil {
-		return err
-	}
-
-	workflowStatus := executionState.Status
-	workflowHistoryLength := mutableState.GetNextEventID() - 1
-
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	namespaceName := mutableState.GetNamespaceEntry().Name()
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
@@ -369,26 +352,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// Release lock immediately since mutable state is not needed
 	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
-
-	if !task.CanSkipVisibilityArchival {
-		err = t.archiveVisibility(
-			ctx,
-			namespace.ID(task.NamespaceID),
-			task.WorkflowID,
-			task.RunID,
-			workflowTypeName,
-			workflowStartTime,
-			workflowExecutionTime,
-			*workflowCloseTime,
-			workflowStatus,
-			workflowHistoryLength,
-			visibilityMemo,
-			searchAttr,
-		)
-		if err != nil {
-			return err
-		}
-	}
 
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
