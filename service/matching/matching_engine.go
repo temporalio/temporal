@@ -832,6 +832,10 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
 ) (*matchingservice.UpdateWorkerBuildIdCompatibilityResponse, error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
 	taskQueueName := req.GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
@@ -846,7 +850,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	switch req.GetOperation().(type) {
 	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
 		// Only apply the limit when request is initiated by a user.
-		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId()
+		updateOptions.TaskQueueLimitPerBuildId = e.config.TaskQueueLimitPerBuildId(ns.Name().String())
 	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
 		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
 	}
@@ -866,17 +870,13 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetApplyPublicRequest().GetRequest(),
-				e.config.VersionCompatibleSetLimitPerQueue(),
-				e.config.VersionBuildIdLimitPerQueue(),
+				e.config.VersionCompatibleSetLimitPerQueue(ns.Name().String()),
+				e.config.VersionBuildIdLimitPerQueue(ns.Name().String()),
 			)
 			if err != nil {
 				return nil, false, err
 			}
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_:
-			ns, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
-			if err != nil {
-				return nil, false, err
-			}
 			versioningData = RemoveBuildIds(
 				updatedClock,
 				data.GetVersioningData(),
