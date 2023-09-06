@@ -84,10 +84,18 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	rateLimiter, _ := NewSchedulerRateLimiter(
-		s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
-		s.mockShard.GetConfig().TaskSchedulerMaxQPS,
-		s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
-		s.mockShard.GetConfig().PersistenceMaxQPS,
+		func(namespace string) float64 {
+			return float64(s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS(namespace))
+		},
+		func() float64 {
+			return float64(s.mockShard.GetConfig().TaskSchedulerMaxQPS())
+		},
+		func(namespace string) float64 {
+			return float64(s.mockShard.GetConfig().PersistenceNamespaceMaxQPS(namespace))
+		},
+		func() float64 {
+			return float64(s.mockShard.GetConfig().PersistenceMaxQPS())
+		},
 		s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
 		s.mockShard.GetTimeSource(),
 	)

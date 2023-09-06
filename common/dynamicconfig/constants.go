@@ -577,9 +577,15 @@ const (
 	TaskSchedulerRateLimiterStartupDelay = "history.taskSchedulerRateLimiterStartupDelay"
 	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
 	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
+	// TaskSchedulerGlobalMaxQPS is the max qps all task schedulers in the cluster can schedule tasks
+	// If value less or equal to 0, will fall back to TaskSchedulerMaxQPS
+	TaskSchedulerGlobalMaxQPS = "history.taskSchedulerGlobalMaxQPS"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerGlobalNamespaceMaxQPS is the max qps all task schedulers in the cluster can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS
+	TaskSchedulerGlobalNamespaceMaxQPS = "history.taskSchedulerGlobalNamespaceMaxQPS"
 	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"

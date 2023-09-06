@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -155,14 +156,35 @@ func getOptionalQueueFactories(
 }
 
 func QueueSchedulerRateLimiterProvider(
+	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewSchedulerRateLimiter(
-		config.TaskSchedulerNamespaceMaxQPS,
-		config.TaskSchedulerMaxQPS,
-		config.PersistenceNamespaceMaxQPS,
-		config.PersistenceMaxQPS,
+		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
+			GlobalQuota:      config.TaskSchedulerGlobalNamespaceMaxQPS,
+		}.GetQuota,
+		quotas.ClusterAwareQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.TaskSchedulerMaxQPS,
+			GlobalQuota:      config.TaskSchedulerGlobalMaxQPS,
+		}.GetQuota,
+		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
+			// TODO: use dynamic config after persistence global namespace quota is implemented
+			// GlobalQuota: config.PersistenceGlobalNamespaceMaxQPS,
+			GlobalQuota: func(_ string) int { return 0 },
+		}.GetQuota,
+		quotas.ClusterAwareQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.PersistenceMaxQPS,
+			// TODO: use dynamic config after persistence global quota is implemented
+			// GlobalQuota: config.PersistenceGlobalMaxQPS,
+			GlobalQuota: func() int { return 0 },
+		}.GetQuota,
 		config.TaskSchedulerRateLimiterStartupDelay,
 		timeSource,
 	)

@@ -104,7 +104,9 @@ type Config struct {
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay     dynamicconfig.DurationPropertyFn
 	TaskSchedulerThrottleDuration            dynamicconfig.DurationPropertyFn
+	TaskSchedulerGlobalMaxQPS                dynamicconfig.IntPropertyFn
 	TaskSchedulerMaxQPS                      dynamicconfig.IntPropertyFn
+	TaskSchedulerGlobalNamespaceMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerNamespaceMaxQPS             dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// TimerQueueProcessor settings
@@ -385,8 +387,10 @@ func NewConfig(
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
 		TaskSchedulerRateLimiterStartupDelay:     dc.GetDurationProperty(dynamicconfig.TaskSchedulerRateLimiterStartupDelay, 30*time.Second),
 		TaskSchedulerThrottleDuration:            dc.GetDurationProperty(dynamicconfig.TaskSchedulerThrottleDuration, time.Second),
+		TaskSchedulerGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.TaskSchedulerGlobalMaxQPS, 0),
 		TaskSchedulerMaxQPS:                      dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
 		TaskSchedulerNamespaceMaxQPS:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
+		TaskSchedulerGlobalNamespaceMaxQPS:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS, 0),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 512),
