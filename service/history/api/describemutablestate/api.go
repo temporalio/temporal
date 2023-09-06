@@ -38,7 +38,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeMutableStateRequest,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
@@ -71,7 +71,7 @@ func Invoke(
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
 	weCtx.GetContext().Clear()
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

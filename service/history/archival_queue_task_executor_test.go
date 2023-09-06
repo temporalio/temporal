@@ -390,7 +390,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
 				mutableState.EXPECT().GetCurrentVersion().Return(p.LastWriteVersionBeforeArchival).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
-				workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(
+				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					mutableState,
 					p.LoadMutableStateError,
 				).AnyTimes()
@@ -450,12 +450,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					})
 				}
 			} else {
-				workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(
+				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					nil,
 					p.LoadMutableStateError,
 				).AnyTimes()
 			}
 			workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),

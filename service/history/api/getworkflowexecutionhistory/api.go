@@ -49,7 +49,7 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	versionChecker headers.VersionChecker,
 	eventNotifier events.Notifier,
@@ -78,13 +78,13 @@ func Invoke(
 	) ([]byte, string, int64, int64, bool, error) {
 		response, err := api.GetOrPollMutableState(
 			ctx,
+			shardContext,
 			&historyservice.GetMutableStateRequest{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
 				ExpectedNextEventId: expectedNextEventID,
 				CurrentBranchToken:  currentBranchToken,
 			},
-			shard,
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
@@ -166,7 +166,7 @@ func Invoke(
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
 			api.TrimHistoryNode(
 				ctx,
-				shard,
+				shardContext,
 				workflowConsistencyChecker,
 				eventNotifier,
 				namespaceID.String(),
@@ -181,10 +181,10 @@ func Invoke(
 	var historyBlob []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			if shard.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
+			if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
 				historyBlob, _, err = api.GetRawHistory(
 					ctx,
-					shard,
+					shardContext,
 					namespaceID,
 					*execution,
 					lastFirstEventID,
@@ -203,7 +203,7 @@ func Invoke(
 			} else {
 				history, _, err = api.GetHistory(
 					ctx,
-					shard,
+					shardContext,
 					namespaceID,
 					*execution,
 					lastFirstEventID,
@@ -236,10 +236,10 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
-			if shard.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
+			if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
 				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
 					ctx,
-					shard,
+					shardContext,
 					namespaceID,
 					*execution,
 					continuationToken.FirstEventId,
@@ -252,7 +252,7 @@ func Invoke(
 			} else {
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
 					ctx,
-					shard,
+					shardContext,
 					namespaceID,
 					*execution,
 					continuationToken.FirstEventId,

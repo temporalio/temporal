@@ -50,12 +50,12 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
-	ns, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -65,10 +65,16 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceId: ns.ID().String(),
-			Execution:   execution,
-		}, shard, workflowConsistencyChecker, eventNotifier)
+		response, err := api.GetOrPollMutableState(
+			ctx,
+			shardContext,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: ns.ID().String(),
+				Execution:   execution,
+			},
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -121,9 +127,9 @@ func Invoke(
 	shardID := common.WorkflowIDToHistoryShard(
 		ns.ID().String(),
 		execution.GetWorkflowId(),
-		shard.GetConfig().NumberOfShards,
+		shardContext.GetConfig().NumberOfShards,
 	)
-	rawHistoryResponse, err := shard.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
@@ -150,7 +156,7 @@ func Invoke(
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
 	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
