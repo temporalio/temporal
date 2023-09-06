@@ -444,8 +444,6 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	)
 	resetMutableState.AddHistorySize(resetHistorySize)
 	return NewWorkflow(
-		ctx,
-		r.namespaceRegistry,
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,

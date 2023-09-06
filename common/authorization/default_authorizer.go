@@ -26,17 +26,13 @@ package authorization
 
 import (
 	"context"
-	"strings"
+
+	"go.temporal.io/server/common/api"
 )
 
 type (
 	defaultAuthorizer struct {
 	}
-)
-
-const (
-	operatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
-	adminServicePrefix    = "/temporal.server.api.adminservice.v1.AdminService/"
 )
 
 var _ Authorizer = (*defaultAuthorizer)(nil)
@@ -53,9 +49,9 @@ var resultDeny = Result{Decision: DecisionDeny}
 // Rules:
 //
 //	Health check APIs are allowed to everyone.
-//	System Admin is allowed to access all APIs on all namespaces.
-//	System Writer is allowed to access non admin APIs on all namespaces.
-//	System Reader is allowed to access readonly APIs on all namespaces.
+//	System Admin is allowed to access all APIs on all namespaces and cluster-level.
+//	System Writer is allowed to access non admin APIs on all namespaces and cluster-level.
+//	System Reader is allowed to access readonly APIs on all namespaces and cluster-level.
 //	Namespace Admin is allowed to access all APIs on their namespaces.
 //	Namespace Writer is allowed to access non admin APIs on their namespaces.
 //	Namespace Reader is allowed to access non admin readonly APIs on their namespaces.
@@ -65,59 +61,38 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	if IsHealthCheckAPI(target.APIName) {
 		return resultAllow, nil
 	}
-
 	if claims == nil {
 		return resultDeny, nil
 	}
-	// System Admin is allowed for everything
-	if claims.System >= RoleAdmin {
-		return resultAllow, nil
-	}
 
-	// admin service means admin / operator service
-	isAdminService := strings.HasPrefix(target.APIName, adminServicePrefix) || strings.HasPrefix(target.APIName, operatorServicePrefix)
+	metadata := api.GetMethodMetadata(target.APIName)
 
-	// System Writer is allowed for non admin service APIs
-	if claims.System >= RoleWriter && !isAdminService {
-		return resultAllow, nil
-	}
-
-	api := ApiName(target.APIName)
-	readOnlyNamespaceAPI := IsReadOnlyNamespaceAPI(api)
-	readOnlyGlobalAPI := IsReadOnlyGlobalAPI(api)
-	// System Reader is allowed for all read only APIs
-	if claims.System >= RoleReader && (readOnlyNamespaceAPI || readOnlyGlobalAPI) {
-		return resultAllow, nil
-	}
-
-	// Below are for non system roles.
-	role, found := claims.Namespaces[target.Namespace]
-	if !found || role == RoleUndefined {
+	var hasRole Role
+	switch metadata.Scope {
+	case api.ScopeCluster:
+		hasRole = claims.System
+	case api.ScopeNamespace:
+		// Note: system-level claims apply across all namespaces.
+		// Note: if claims.Namespace is nil or target.Namespace is not found, the lookup will return zero.
+		hasRole = claims.System | claims.Namespaces[target.Namespace]
+	default:
 		return resultDeny, nil
 	}
 
-	if isAdminService {
-		// for admin service APIs, only RoleAdmin of given namespace can access
-		if role >= RoleAdmin {
-			return resultAllow, nil
-		}
-	} else {
-		// for non admin service APIs
-		if role >= RoleWriter {
-			return resultAllow, nil
-		}
-		if role >= RoleReader && readOnlyNamespaceAPI {
-			return resultAllow, nil
-		}
+	if hasRole >= getRequiredRole(metadata.Access) {
+		return resultAllow, nil
 	}
-
 	return resultDeny, nil
 }
 
-func ApiName(api string) string {
-	index := strings.LastIndex(api, "/")
-	if index > -1 {
-		return api[index+1:]
+// Convert from api.Access to Role
+func getRequiredRole(access api.Access) Role {
+	switch access {
+	case api.AccessReadOnly:
+		return RoleReader
+	case api.AccessWrite:
+		return RoleWriter
+	default:
+		return RoleAdmin
 	}
-	return api
 }

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination activity_replicator_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination activity_state_replicator_mock.go
 
 package ndc
 
@@ -59,34 +59,34 @@ const (
 )
 
 type (
-	ActivityReplicator interface {
-		SyncActivity(
+	ActivityStateReplicator interface {
+		SyncActivityState(
 			ctx context.Context,
 			request *historyservice.SyncActivityRequest,
 		) error
 	}
 
-	ActivityReplicatorImpl struct {
+	ActivityStateReplicatorImpl struct {
 		workflowCache   wcache.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
 )
 
-func NewActivityReplicator(
+func NewActivityStateReplicator(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
-) *ActivityReplicatorImpl {
+) *ActivityStateReplicatorImpl {
 
-	return &ActivityReplicatorImpl{
+	return &ActivityStateReplicatorImpl{
 		workflowCache:   workflowCache,
 		clusterMetadata: shard.GetClusterMetadata(),
 		logger:          log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }
 
-func (r *ActivityReplicatorImpl) SyncActivity(
+func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	ctx context.Context,
 	request *historyservice.SyncActivityRequest,
 ) (retError error) {
@@ -213,7 +213,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 	)
 }
 
-func (r *ActivityReplicatorImpl) testRefreshActivityTimerTaskMask(
+func (r *ActivityStateReplicatorImpl) testRefreshActivityTimerTaskMask(
 	version int64,
 	attempt int32,
 	activityInfo *persistencespb.ActivityInfo,
@@ -231,7 +231,7 @@ func (r *ActivityReplicatorImpl) testRefreshActivityTimerTaskMask(
 	return false
 }
 
-func (r *ActivityReplicatorImpl) testActivity(
+func (r *ActivityStateReplicatorImpl) testActivity(
 	version int64,
 	attempt int32,
 	lastHeartbeatTime time.Time,
@@ -271,7 +271,7 @@ func (r *ActivityReplicatorImpl) testActivity(
 	return true
 }
 
-func (r *ActivityReplicatorImpl) testVersionHistory(
+func (r *ActivityStateReplicatorImpl) testVersionHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,

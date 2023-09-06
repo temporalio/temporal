@@ -153,21 +153,17 @@ func hashBuildId(buildID string) string {
 }
 
 func shallowCloneVersioningData(data *persistencespb.VersioningData) *persistencespb.VersioningData {
-	clone := persistencespb.VersioningData{
-		VersionSets: make([]*persistencespb.CompatibleVersionSet, len(data.GetVersionSets())),
+	return &persistencespb.VersioningData{
+		VersionSets: slices.Clone(data.GetVersionSets()),
 	}
-	copy(clone.VersionSets, data.GetVersionSets())
-	return &clone
 }
 
 func shallowCloneVersionSet(set *persistencespb.CompatibleVersionSet) *persistencespb.CompatibleVersionSet {
-	clone := &persistencespb.CompatibleVersionSet{
-		SetIds:                 set.SetIds,
-		BuildIds:               make([]*persistencespb.BuildId, len(set.BuildIds)),
+	return &persistencespb.CompatibleVersionSet{
+		SetIds:                 slices.Clone(set.SetIds),
+		BuildIds:               slices.Clone(set.BuildIds),
 		BecameDefaultTimestamp: set.BecameDefaultTimestamp,
 	}
-	copy(clone.BuildIds, set.BuildIds)
-	return clone
 }
 
 // UpdateVersionSets updates version sets given existing versioning data and an update request. The request is expected
@@ -351,7 +347,14 @@ func makeVersionInSetDefault(data *persistencespb.VersioningData, setIx, version
 	}
 }
 
+// Looks up a version set in versioning data based on worker version capabilities to determine
+// how to redirect a poll request.
 // Requires: caps is not nil
+// Returns:
+// - set id to redirect to (primary)
+// - slice of demoted set ids (see comments on persistencespb.CompatibleVersionSet)
+// - whether the primary set id was guessed (as opposed to found in versioning data)
+// - error (can only be nil or serviceerror.NewerBuildExists)
 func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (string, []string, bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
@@ -378,7 +381,13 @@ func lookupVersionSetForPoll(data *persistencespb.VersioningData, caps *commonpb
 	return primarySetId, demotedSetIds, false, nil
 }
 
+// Looks up a version set in versioning data based on worker version capabilities to determine
+// how to redirect a poll request, but specific for sticky queues. The difference from
+// lookupVersionSetForPoll is that we never redirect, we just need to return an error or not.
 // Requires: caps is not nil
+// Returns:
+// - whether the build id was not found
+// - error (can only be nil or serviceerror.NewerBuildExists)
 func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *commonpb.WorkerVersionCapabilities) (bool, error) {
 	// For poll, only the latest version in the compatible set can get tasks.
 	// Find the version set that this worker is in.
@@ -398,7 +407,12 @@ func checkVersionForStickyPoll(data *persistencespb.VersioningData, caps *common
 	return false, nil
 }
 
-// For this function, buildId == "" means "use default"
+// Looks up a version set in versioning data based on a build id associated with a task to
+// determine how to redirect a task. For this function, buildId == "" means "use default"
+// Returns:
+// - set id to redirect to (primary)
+// - whether the primary set id was guessed (as opposed to found in versioning data)
+// - error (can only be nil or errEmptyVersioningData)
 func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string) (string, bool, error) {
 	var set *persistencespb.CompatibleVersionSet
 	if buildId == "" {
@@ -434,7 +448,12 @@ func lookupVersionSetForAdd(data *persistencespb.VersioningData, buildId string)
 	return primarySetId, false, nil
 }
 
-// For this function, buildId == "" means "use default"
+// Looks up a version set in versioning data based on a build id associated with a task to
+// determine if a task for a sticky queue should be bounced back to history. For this function,
+// buildId == "" means "use default"
+// Returns:
+// - whether the build id was not found
+// - error (can only be nil or serviceerrors.StickyWorkerUnavailable. or internal error for a bug)
 func checkVersionForStickyAdd(data *persistencespb.VersioningData, buildId string) (bool, error) {
 	if buildId == "" {
 		// This shouldn't happen.
@@ -487,9 +506,21 @@ func ClearTombstones(versioningData *persistencespb.VersioningData) *persistence
 }
 
 func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData, buildId string) *persistencespb.VersioningData {
+	guessedSetId := hashBuildId(buildId)
+
 	if foundSetId, _ := worker_versioning.FindBuildId(data, buildId); foundSetId >= 0 {
-		// it's already there
-		return data
+		// it's already there. make sure its set id is present.
+		set := data.VersionSets[foundSetId]
+		if slices.Contains(set.SetIds, guessedSetId) {
+			return data
+		}
+
+		// if not, add the guessed set id
+		newSet := shallowCloneVersionSet(set)
+		newSet.SetIds = append(newSet.SetIds, guessedSetId)
+		newData := shallowCloneVersioningData(data)
+		newData.VersionSets[foundSetId] = newSet
+		return newData
 	}
 
 	// insert unknown build id with zero time so that if merged with any other set, the other
@@ -498,7 +529,7 @@ func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData,
 
 	newData := shallowCloneVersioningData(data)
 	newData.VersionSets = slices.Insert(newData.VersionSets, 0, &persistencespb.CompatibleVersionSet{
-		SetIds: []string{hashBuildId(buildId)},
+		SetIds: []string{guessedSetId},
 		BuildIds: []*persistencespb.BuildId{{
 			Id:                     buildId,
 			State:                  persistencespb.STATE_ACTIVE,

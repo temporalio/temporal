@@ -69,6 +69,7 @@ type (
 		engine                 FrontendClient
 		adminClient            AdminClient
 		operatorClient         operatorservice.OperatorServiceClient
+		httpAPIAddress         string
 		Logger                 log.Logger
 		namespace              string
 		foreignNamespace       string
@@ -96,6 +97,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.engine = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
+		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
 		cluster, err := NewCluster(clusterConfig, s.Logger)
@@ -104,6 +106,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.engine = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
 		s.operatorClient = s.testCluster.GetOperatorClient()
+		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
 	}
 
 	s.namespace = s.randomizeStr("integration-test-namespace")

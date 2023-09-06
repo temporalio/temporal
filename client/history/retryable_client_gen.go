@@ -125,6 +125,21 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) ForceDeleteWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
+	var resp *historyservice.ForceDeleteWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ForceDeleteWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
@@ -224,6 +239,51 @@ func (c *retryableClient) GetShard(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+	var resp *historyservice.GetWorkflowExecutionHistoryResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+	var resp *historyservice.GetWorkflowExecutionHistoryReverseResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...grpc.CallOption,
+) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	var resp *historyservice.GetWorkflowExecutionRawHistoryV2Response
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

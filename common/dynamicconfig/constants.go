@@ -179,6 +179,8 @@ const (
 	// HistoryCountSuggestContinueAsNew is the workflow execution history event count limit to
 	// suggest continue-as-new (in workflow task started event)
 	HistoryCountSuggestContinueAsNew = "limit.historyCount.suggestContinueAsNew"
+	// HistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
+	HistoryMaxPageSize = "limit.historyMaxPageSize"
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
@@ -321,10 +323,6 @@ const (
 	SearchAttributesTotalSizeLimit = "frontend.searchAttributesTotalSizeLimit"
 	// VisibilityArchivalQueryMaxPageSize is the maximum page size for a visibility archival query
 	VisibilityArchivalQueryMaxPageSize = "frontend.visibilityArchivalQueryMaxPageSize"
-	// VisibilityArchivalQueryMaxRangeInDays is the maximum number of days for a visibility archival query
-	VisibilityArchivalQueryMaxRangeInDays = "frontend.visibilityArchivalQueryMaxRangeInDays"
-	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
-	VisibilityArchivalQueryMaxQPS = "frontend.visibilityArchivalQueryMaxQPS"
 	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
 	EnableServerVersionCheck = "frontend.enableServerVersionCheck"
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
@@ -365,6 +363,9 @@ const (
 	FrontendMaxExecutionCountBatchOperationPerNamespace = "frontend.MaxExecutionCountBatchOperationPerNamespace"
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
+	// FrontendAccessHistoryFraction (0.0~1.0) is the fraction of history operations that are sent to the history
+	// service using the new RPCs. The remaining access history via the existing implementation.
+	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
 	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
@@ -599,10 +600,6 @@ const (
 	TimerProcessorPollBackoffInterval = "history.timerProcessorPollBackoffInterval"
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift = "history.timerProcessorMaxTimeShift"
-	// TimerProcessorHistoryArchivalSizeLimit is the max history size for inline archival
-	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
-	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
-	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
@@ -637,8 +634,6 @@ const (
 	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
-	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
-	TransferProcessorVisibilityArchivalTimeLimit = "history.transferProcessorVisibilityArchivalTimeLimit"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 
@@ -666,8 +661,6 @@ const (
 	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
-	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
-	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.visibilityProcessorEnsureCloseBeforeDelete"
 	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
@@ -738,12 +731,6 @@ const (
 	EmitShardLagLog = "history.emitShardLagLog"
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding = "history.defaultEventEncoding"
-	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
-	NumArchiveSystemWorkflows = "history.numArchiveSystemWorkflows"
-	// ArchiveRequestRPS is the rate limit on the number of archive request per second
-	ArchiveRequestRPS = "history.archiveRequestRPS"
-	// ArchiveSignalTimeout is the signal timeout used when starting an archive system workflow
-	ArchiveSignalTimeout = "history.archiveSignalTimeout"
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy = "history.defaultActivityRetryPolicy"
@@ -827,6 +814,8 @@ const (
 	ReplicationProcessorSchedulerQueueSize = "history.ReplicationProcessorSchedulerQueueSize"
 	// ReplicationProcessorSchedulerWorkerCount is the replication task executor worker count
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
+	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
+	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
 
 	// keys for worker
 
@@ -854,20 +843,6 @@ const (
 	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
 	WorkerESProcessorAckTimeout = "worker.ESProcessorAckTimeout"
-	// WorkerArchiverMaxConcurrentActivityExecutionSize indicates worker archiver max concurrent activity execution size
-	WorkerArchiverMaxConcurrentActivityExecutionSize = "worker.ArchiverMaxConcurrentActivityExecutionSize"
-	// WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize indicates worker archiver max concurrent workflow execution size
-	WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize = "worker.ArchiverMaxConcurrentWorkflowTaskExecutionSize"
-	// WorkerArchiverMaxConcurrentActivityTaskPollers indicates worker archiver max concurrent activity pollers
-	WorkerArchiverMaxConcurrentActivityTaskPollers = "worker.ArchiverMaxConcurrentActivityTaskPollers"
-	// WorkerArchiverMaxConcurrentWorkflowTaskPollers indicates worker archiver max concurrent workflow pollers
-	WorkerArchiverMaxConcurrentWorkflowTaskPollers = "worker.ArchiverMaxConcurrentWorkflowTaskPollers"
-	// WorkerArchiverConcurrency controls the number of coroutines handling archival work per archival workflow
-	WorkerArchiverConcurrency = "worker.ArchiverConcurrency"
-	// WorkerArchivalsPerIteration controls the number of archivals handled in each iteration of archival workflow
-	WorkerArchivalsPerIteration = "worker.ArchivalsPerIteration"
-	// WorkerTimeLimitPerArchivalIteration controls the time limit of each iteration of archival workflow
-	WorkerTimeLimitPerArchivalIteration = "worker.TimeLimitPerArchivalIteration"
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS = "worker.throttledLogRPS"
 	// WorkerScannerMaxConcurrentActivityExecutionSize indicates worker scanner max concurrent activity execution size

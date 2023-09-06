@@ -85,7 +85,7 @@ type (
 
 	// RPC contains the rpc config items
 	RPC struct {
-		// GRPCPort is the port  on which gRPC will listen
+		// GRPCPort is the port on which gRPC will listen
 		GRPCPort int `yaml:"grpcPort"`
 		// Port used for membership listener
 		MembershipPort int `yaml:"membershipPort"`
@@ -95,6 +95,12 @@ type (
 		// check net.ParseIP for supported syntax, only IPv4 is supported,
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
+		// HTTPPort is the port on which HTTP will listen. If unset/0, HTTP will be
+		// disabled. This setting only applies to the frontend service.
+		HTTPPort int `yaml:"httpPort"`
+		// HTTPAdditionalForwardedHeaders adds additional headers to the default set
+		// forwarded from HTTP to gRPC.
+		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
 	}
 
 	// Global contains config items that apply process-wide to all services

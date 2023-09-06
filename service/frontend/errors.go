@@ -34,8 +34,8 @@ var (
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
 	errSignalNameNotSet                                   = serviceerror.NewInvalidArgument("SignalName is not set on request.")
 	errInvalidRunID                                       = serviceerror.NewInvalidArgument("Invalid RunId.")
-	errInvalidNextPageToken                               = serviceerror.NewInvalidArgument("Invalid NextPageToken.")
-	errNextPageTokenRunIDMismatch                         = serviceerror.NewInvalidArgument("RunId in the request does not match the NextPageToken.")
+	errInvalidNextPageToken                               = serviceerror.NewInvalidArgument("Invalid NextPageToken.")                                 // DEPRECATED
+	errNextPageTokenRunIDMismatch                         = serviceerror.NewInvalidArgument("RunId in the request does not match the NextPageToken.") // DEPRECATED
 	errQueryNotSet                                        = serviceerror.NewInvalidArgument("WorkflowQuery is not set on request.")
 	errQueryTypeNotSet                                    = serviceerror.NewInvalidArgument("QueryType is not set on request.")
 	errRequestNotSet                                      = serviceerror.NewInvalidArgument("Request is nil.")
@@ -62,11 +62,11 @@ var (
 	errClusterIsNotConfiguredForReadingArchivalVisibility = serviceerror.NewInvalidArgument("Cluster is not configured for reading archived visibility records.")
 	errNamespaceIsNotConfiguredForVisibilityArchival      = serviceerror.NewInvalidArgument("Namespace is not configured for visibility archival.")
 	errSearchAttributesNotSet                             = serviceerror.NewInvalidArgument("SearchAttributes are not set on request.")
-	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")
-	errInvalidPaginationToken                             = serviceerror.NewInvalidArgument("Invalid pagination token.")
-	errInvalidFirstNextEventCombination                   = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
-	errInvalidVersionHistories                            = serviceerror.NewInvalidArgument("Invalid version histories.")
-	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
+	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")                                 // DEPRECATED
+	errInvalidPaginationToken                             = serviceerror.NewInvalidArgument("Invalid pagination token.")                         // DEPRECATED
+	errInvalidFirstNextEventCombination                   = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.") // DEPRECATED
+	errInvalidVersionHistories                            = serviceerror.NewInvalidArgument("Invalid version histories.")                        // DEPRECATED
+	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")                        // DEPRECATED
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")

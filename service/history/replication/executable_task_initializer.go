@@ -47,15 +47,16 @@ type (
 	ProcessToolBox struct {
 		fx.In
 
-		Config             *configs.Config
-		ClusterMetadata    cluster.Metadata
-		ClientBean         client.Bean
-		ShardController    shard.Controller
-		NamespaceCache     namespace.Registry
-		NDCHistoryResender xdc.NDCHistoryResender
-		TaskScheduler      ctasks.Scheduler[TrackableExecutableTask]
-		MetricsHandler     metrics.Handler
-		Logger             log.Logger
+		Config                  *configs.Config
+		ClusterMetadata         cluster.Metadata
+		ClientBean              client.Bean
+		ShardController         shard.Controller
+		NamespaceCache          namespace.Registry
+		EagerNamespaceRefresher EagerNamespaceRefresher
+		NDCHistoryResender      xdc.NDCHistoryResender
+		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
+		MetricsHandler          metrics.Handler
+		Logger                  log.Logger
 	}
 )
 
@@ -95,12 +96,14 @@ func (i *ProcessToolBox) convertOne(
 			*i,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
+			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
 			*i,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
+			taskClusterName,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		return NewExecutableActivityStateTask(

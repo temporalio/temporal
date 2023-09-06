@@ -456,7 +456,7 @@ func (r *transactionMgrImpl) loadWorkflow(
 		release(err)
 		return nil, err
 	}
-	return NewWorkflow(ctx, r.namespaceRegistry, r.clusterMetadata, weContext, ms, release), nil
+	return NewWorkflow(r.clusterMetadata, weContext, ms, release), nil
 }
 
 func (r *transactionMgrImpl) isWorkflowCurrent(

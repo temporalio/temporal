@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -109,105 +108,91 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoErr() {
-	for _, alreadyArchived := range []bool{false, true} {
-		s.Run(fmt.Sprintf("AlreadyArchived=%v", alreadyArchived), func() {
-			task := &tasks.DeleteHistoryEventTask{
-				WorkflowKey: definition.NewWorkflowKey(
-					tests.NamespaceID.String(),
-					tests.WorkflowID,
-					tests.RunID,
-				),
-				Version:                     123,
-				TaskID:                      12345,
-				VisibilityTimestamp:         time.Now().UTC(),
-				WorkflowDataAlreadyArchived: alreadyArchived,
-			}
-			we := commonpb.WorkflowExecution{
-				WorkflowId: tests.WorkflowID,
-				RunId:      tests.RunID,
-			}
-
-			mockWeCtx := workflow.NewMockContext(s.controller)
-			mockMutableState := workflow.NewMockMutableState(s.controller)
-
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-
-			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
-			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
-			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
-			mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
-			mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
-			s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
-
-			archiveIfEnabled := !alreadyArchived
-			stage := tasks.DeleteWorkflowExecutionStageNone
-			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
-				gomock.Any(),
-				tests.NamespaceID,
-				we,
-				mockWeCtx,
-				mockMutableState,
-				archiveIfEnabled,
-				&stage,
-			).Return(nil)
-
-			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
-				context.Background(),
-				task)
-			s.NoError(err)
-		})
+	task := &tasks.DeleteHistoryEventTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tests.NamespaceID.String(),
+			tests.WorkflowID,
+			tests.RunID,
+		),
+		Version:             123,
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now().UTC(),
 	}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	mockMutableState := workflow.NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+
+	stage := tasks.DeleteWorkflowExecutionStageNone
+	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
+		gomock.Any(),
+		tests.NamespaceID,
+		we,
+		mockWeCtx,
+		mockMutableState,
+		&stage,
+	).Return(nil)
+
+	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
+		context.Background(),
+		task)
+	s.NoError(err)
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
-	for _, alreadyArchived := range []bool{false, true} {
-		s.Run(fmt.Sprintf("AlreadyArchived=%v", alreadyArchived), func() {
-			task := &tasks.DeleteHistoryEventTask{
-				WorkflowKey: definition.NewWorkflowKey(
-					tests.NamespaceID.String(),
-					tests.WorkflowID,
-					tests.RunID,
-				),
-				Version:                     123,
-				TaskID:                      12345,
-				VisibilityTimestamp:         time.Now().UTC(),
-				WorkflowDataAlreadyArchived: alreadyArchived,
-			}
-			we := commonpb.WorkflowExecution{
-				WorkflowId: tests.WorkflowID,
-				RunId:      tests.RunID,
-			}
-
-			mockWeCtx := workflow.NewMockContext(s.controller)
-			mockMutableState := workflow.NewMockMutableState(s.controller)
-
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-
-			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
-			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
-			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
-			mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
-			mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
-			s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
-
-			archiveIfEnabled := !alreadyArchived
-			stage := tasks.DeleteWorkflowExecutionStageNone
-			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
-				gomock.Any(),
-				tests.NamespaceID,
-				we,
-				mockWeCtx,
-				mockMutableState,
-				archiveIfEnabled,
-				&stage,
-			).Return(serviceerror.NewInternal("test error"))
-
-			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
-				context.Background(),
-				task)
-			s.Error(err)
-		})
+	task := &tasks.DeleteHistoryEventTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tests.NamespaceID.String(),
+			tests.WorkflowID,
+			tests.RunID,
+		),
+		Version:             123,
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now().UTC(),
 	}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	mockMutableState := workflow.NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.LockPriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+
+	stage := tasks.DeleteWorkflowExecutionStageNone
+	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
+		gomock.Any(),
+		tests.NamespaceID,
+		we,
+		mockWeCtx,
+		mockMutableState,
+		&stage,
+	).Return(serviceerror.NewInternal("test error"))
+
+	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
+		context.Background(),
+		task)
+	s.Error(err)
 }

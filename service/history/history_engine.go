@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -57,6 +59,9 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
+	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/pollupdate"
@@ -91,7 +96,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -109,8 +113,9 @@ type (
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
-		nDCReplicator              ndc.HistoryReplicator
-		nDCActivityReplicator      ndc.ActivityReplicator
+		nDCHistoryReplicator       ndc.HistoryReplicator
+		nDCActivityStateReplicator ndc.ActivityStateReplicator
+		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
@@ -130,6 +135,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
 	}
 )
@@ -144,7 +150,6 @@ func NewEngineWithShardContext(
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
@@ -163,7 +168,6 @@ func NewEngineWithShardContext(
 		shard,
 		workflowCache,
 		config,
-		archivalClient,
 		shard.GetTimeSource(),
 		persistenceVisibilityMgr,
 	)
@@ -188,6 +192,7 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
@@ -207,16 +212,23 @@ func NewEngineWithShardContext(
 			executionManager,
 			logger,
 		)
-		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
+		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			logger,
 			eventSerializer,
+			logger,
 		)
-		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
+		historyEngImpl.nDCActivityStateReplicator = ndc.NewActivityStateReplicator(
 			shard,
 			workflowCache,
+			logger,
+		)
+		historyEngImpl.nDCWorkflowStateReplicator = ndc.NewWorkflowStateReplicator(
+			shard,
+			workflowCache,
+			historyEngImpl.eventsReapplier,
+			eventSerializer,
 			logger,
 		)
 	}
@@ -613,8 +625,14 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	ctx context.Context,
 	replicateRequest *historyservice.ReplicateEventsV2Request,
 ) error {
+	return e.nDCHistoryReplicator.ApplyEvents(ctx, replicateRequest)
+}
 
-	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
+func (e *historyEngineImpl) SyncActivity(
+	ctx context.Context,
+	request *historyservice.SyncActivityRequest,
+) (retError error) {
+	return e.nDCActivityStateReplicator.SyncActivityState(ctx, request)
 }
 
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
@@ -622,8 +640,7 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
 	request *historyservice.ReplicateWorkflowStateRequest,
 ) error {
-
-	return e.nDCReplicator.ApplyWorkflowState(ctx, request)
+	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
 func (e *historyEngineImpl) SyncShardStatus(
@@ -643,14 +660,6 @@ func (e *historyEngineImpl) SyncShardStatus(
 		processor.NotifyNewTasks([]tasks.Task{})
 	}
 	return nil
-}
-
-func (e *historyEngineImpl) SyncActivity(
-	ctx context.Context,
-	request *historyservice.SyncActivityRequest,
-) (retError error) {
-
-	return e.nDCActivityReplicator.SyncActivity(ctx, request)
 }
 
 // ResetWorkflowExecution terminates current workflow (if running) and replay & create new workflow
@@ -803,4 +812,25 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+	return getworkflowexecutionhistory.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.versionChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+	return getworkflowexecutionhistoryreverse.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
+}
+
+func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.shard, e.workflowConsistencyChecker, e.eventNotifier, request)
 }
