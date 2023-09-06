@@ -96,7 +96,7 @@ func (s *workflowCacheSuite) TearDownTest() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheBasic() {
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -143,7 +143,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCachePanic() {
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -185,7 +185,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
@@ -244,7 +244,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
@@ -300,7 +300,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	coroutineCount := 50
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -366,7 +366,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -422,7 +422,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
-	s.cache = NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.cache = NewCache(s.mockShard.GetConfig())
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
@@ -502,7 +502,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 	}
 	for _, tt := range testSets {
 		s.Run(tt.name, func() {
-			c := NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler()).(*CacheImpl)
+			c := NewCache(s.mockShard.GetConfig()).(*CacheImpl)
 			namespaceID := namespace.ID("test_namespace_id")
 			execution := commonpb.WorkflowExecution{
 				WorkflowId: "some random workflow id",
@@ -512,7 +512,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 				ShardUUID:   uuid.New(),
 			}
-			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, c.logger, s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, s.mockShard.GetLogger(), s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()

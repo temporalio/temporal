@@ -77,8 +77,6 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		logger         log.Logger
-		metricsHandler metrics.Handler
 
 		nonUserContextLockTimeout time.Duration
 	}
@@ -104,8 +102,6 @@ const (
 
 func NewCache(
 	config *configs.Config,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
 ) Cache {
 	opts := &cache.Options{}
 	opts.TTL = config.HistoryCacheTTL()
@@ -113,8 +109,6 @@ func NewCache(
 
 	return &CacheImpl{
 		Cache:                     cache.New(config.HistoryCacheMaxSize(), opts),
-		logger:                    log.With(logger, tag.ComponentHistoryCache),
-		metricsHandler:            metricsHandler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 	}
 }
@@ -131,7 +125,10 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		return nil, nil, err
 	}
 
-	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope))
+	handler := shardContext.GetMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.HistoryCacheGetOrCreateCurrentScope),
+		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+	)
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	start := time.Now()
 	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start)) }()
@@ -169,7 +166,10 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		return nil, nil, err
 	}
 
-	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope))
+	handler := shardContext.GetMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope),
+		metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue),
+	)
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	start := time.Now()
 	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start)) }()
@@ -207,8 +207,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		wfCtxLogger := log.With(c.logger, tag.ShardID(shardContext.GetShardID()))
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, wfCtxLogger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
+		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, shardContext.GetLogger(), shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -218,7 +217,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	}
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(cacheKey, workflowCtx, forceClearContext, lockPriority)
+	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority)
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -262,6 +261,7 @@ func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
 
 func (c *CacheImpl) makeReleaseFunc(
 	cacheKey Key,
+	shardContext shard.Context,
 	context workflow.Context,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
@@ -285,7 +285,8 @@ func (c *CacheImpl) makeReleaseFunc(
 					isDirty := context.IsDirty()
 					if isDirty {
 						context.Clear()
-						c.logger.Error("Cache encountered dirty mutable state transaction",
+						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
+						logger.Error("Cache encountered dirty mutable state transaction",
 							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
 							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
 							tag.WorkflowRunID(context.GetWorkflowKey().RunID),

@@ -103,7 +103,7 @@ func (s *transactionMgrSuite) SetupTest() {
 
 	s.transactionMgr = newTransactionMgr(
 		s.mockShard,
-		wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler()),
+		wcache.NewCache(s.mockShard.GetConfig()),
 		s.mockEventsReapplier,
 		s.logger,
 	)

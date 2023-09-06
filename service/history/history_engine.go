@@ -275,7 +275,7 @@ func NewEngineWithShardContext(
 	return historyEngImpl
 }
 
-// Start will spin up all the components needed to start serving this shardContext.
+// Start will spin up all the components needed to start serving this shard.
 // Make sure all the components are loaded lazily so start can return immediately.  This is important because
 // ShardController calls start sequentially for all the shards for a given host during startup.
 func (e *historyEngineImpl) Start() {

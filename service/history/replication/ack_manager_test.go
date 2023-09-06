@@ -119,7 +119,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	workflowCache := wcache.NewCache(s.mockShard.GetConfig())
 
 	s.replicationAckManager = NewAckManager(
 		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
