@@ -69,7 +69,7 @@ func NewSession(
 	metricsHandler metrics.Handler,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(newClusterConfigFunc)
+	gocqlSession, err := initSession(newClusterConfigFunc, metricsHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (s *session) refresh() {
 		return
 	}
 
-	newSession, err := initSession(s.newClusterConfigFunc)
+	newSession, err := initSession(s.newClusterConfigFunc, s.metricsHandler)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
@@ -119,11 +119,16 @@ func (s *session) refresh() {
 
 func initSession(
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
+	metricsHandler metrics.Handler,
 ) (*gocql.Session, error) {
 	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
+	defer func() {
+		metricsHandler.Timer(metrics.CassandraInitSessionLatency.GetMetricName()).Record(time.Since(start))
+	}()
 	return cluster.CreateSession()
 }
 
