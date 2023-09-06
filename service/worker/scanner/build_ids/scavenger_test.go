@@ -49,13 +49,16 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/grpc"
 )
 
 func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
-	a := &Activities{}
+	a := &Activities{
+		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
+	}
 
 	ctx := context.Background()
 	c0 := hlc.Zero(0)
@@ -184,6 +187,20 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 					BecameDefaultTimestamp: &c0,
 				},
 				{
+					SetIds: []string{"v4.1"},
+					BuildIds: []*persistencespb.BuildId{
+						{
+							Id:    "v4.1",
+							State: persistencespb.STATE_ACTIVE,
+							// We should not even query for this one since we assume it was
+							// used soon after being added
+							StateUpdateTimestamp:   &c1,
+							BecameDefaultTimestamp: &c0,
+						},
+					},
+					BecameDefaultTimestamp: &c0,
+				},
+				{
 					SetIds: []string{"v5"},
 					BuildIds: []*persistencespb.BuildId{
 						{
@@ -199,8 +216,11 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 		},
 	}
 
+	ns := namespace.NewNamespaceForTest(nil, &persistencespb.NamespaceConfig{
+		Retention: timestamp.DurationPtr(24 * time.Hour),
+	}, false, nil, 0)
 	act := func(ctx context.Context) ([]string, error) {
-		return a.findBuildIdsToRemove(ctx, rateLimiter, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
+		return a.findBuildIdsToRemove(ctx, rateLimiter, heartbeatDetails{}, ns, &persistence.TaskQueueUserDataEntry{
 			TaskQueue: "test",
 			UserData: &persistencespb.VersionedTaskQueueUserData{
 				Version: 0,
