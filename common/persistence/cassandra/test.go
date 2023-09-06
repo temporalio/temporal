@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
@@ -154,6 +155,7 @@ func (s *TestCluster) CreateSession(
 			)
 		},
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
