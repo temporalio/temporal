@@ -239,8 +239,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(err)
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflowClosedCleanup() {
@@ -309,8 +309,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 	s.mockExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.SetWorkflowExecutionResponse{}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(err)
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
@@ -363,8 +363,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibilityTask, mutableState, backoff, taskQueueName),
 	).Return(nil)
 
-	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.Nil(err)
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
@@ -412,8 +412,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
-	s.NoError(err)
+	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties() {
@@ -477,11 +477,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	_, _, err = s.visibilityQueueTaskExecutor.Execute(
+	resp := s.visibilityQueueTaskExecutor.Execute(
 		context.Background(),
 		s.newTaskExecutable(visibilityTask),
 	)
-	s.NoError(err)
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
@@ -525,8 +525,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 }
 
 func (s *visibilityQueueTaskExecutorSuite) execute(task tasks.Task) error {
-	_, _, err := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(task))
-	return err
+	return s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(task)).ExecutionErr
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(

@@ -91,7 +91,7 @@ func newTimerQueueStandbyTaskExecutor(
 func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
 	metricsTags := []metrics.Tag{
@@ -120,7 +120,11 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 		err = errUnknownTimerTask
 	}
 
-	return metricsTags, false, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    false,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(

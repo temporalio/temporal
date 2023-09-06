@@ -67,9 +67,17 @@ type (
 	}
 
 	Executor interface {
-		// TODO: remove isActive return value after deprecating
-		// active/standby queue processing logic
-		Execute(context.Context, Executable) (tags []metrics.Tag, isActive bool, err error)
+		Execute(context.Context, Executable) ExecuteResponse
+	}
+
+	ExecuteResponse struct {
+		// Following two fields are metadata of the execution
+		// and should be populated by the executor even
+		// when the actual task execution fails
+		ExecutionMetricTags []metrics.Tag
+		ExecutedAsActive    bool
+
+		ExecutionErr error
 	}
 
 	ExecutorWrapper interface {
@@ -233,17 +241,17 @@ func (e *executableImpl) Execute() (retErr error) {
 		// Not doing it here as for certain errors latency for the attempt should not be counted
 	}()
 
-	metricsTags, isActive, err := e.executor.Execute(ctx, e)
-	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)
+	resp := e.executor.Execute(ctx, e)
+	e.taggedMetricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
 
-	if isActive != e.lastActiveness {
+	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
 		e.resetAttempt()
 	}
-	e.lastActiveness = isActive
+	e.lastActiveness = resp.ExecutedAsActive
 
-	return err
+	return resp.ExecutionErr
 }
 
 func (e *executableImpl) HandleErr(err error) (retErr error) {
