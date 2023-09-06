@@ -211,12 +211,12 @@ func (a *Activities) processNamespaceEntry(
 				return ctx.Err()
 			}
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-			err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry)
-			if common.IsContextDeadlineExceededErr(err) {
-				// This is either a real DeadlineExceeded from the context, or the rate limiter
-				// thinks there's not enough time left until the deadline. Either way, we're done.
-				return err
-			} else if err != nil {
+			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
+				if common.IsContextDeadlineExceededErr(err) {
+					// This is either a real DeadlineExceeded from the context, or the rate limiter
+					// thinks there's not enough time left until the deadline. Either way, we're done.
+					return err
+				}
 				// Intentionally don't fail the activity on single entry.
 				a.logger.Error("Failed to update task queue user data",
 					tag.WorkflowNamespace(ns.Name().String()),
