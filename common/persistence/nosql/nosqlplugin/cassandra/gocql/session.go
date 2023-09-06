@@ -26,7 +26,6 @@ package gocql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -43,7 +42,7 @@ import (
 var _ Session = (*session)(nil)
 
 const (
-	sessionRefreshMinInternalSecs = 5
+	sessionRefreshMinInternal = 5 * time.Second
 )
 
 const (
@@ -95,10 +94,9 @@ func (s *session) refresh() {
 	s.Lock()
 	defer s.Unlock()
 
-	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternalSecs*time.Second {
-		s.logger.Warn(fmt.Sprintf(
-			"gocql wrapper: did not refresh gocql session because the last refresh was within %d seconds",
-			sessionRefreshMinInternalSecs))
+	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
+		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
+			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
 		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
 		return
