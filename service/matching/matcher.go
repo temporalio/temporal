@@ -309,25 +309,25 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 }
 
 // UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
-	if rps == nil {
+func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
+	if rpsPtr == nil {
 		return
 	}
 
-	rate := *rps
+	rps := *rpsPtr
 	nPartitions := float64(tm.numPartitions())
 	if nPartitions > 0 {
 		// divide the rate equally across all partitions
-		rate = rate / nPartitions
+		rps = rps / nPartitions
 	}
-	burst := int(math.Ceil(rate))
+	burst := int(math.Ceil(rps))
 
 	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
 	if burst < minTaskThrottlingBurstSize {
 		burst = minTaskThrottlingBurstSize
 	}
 
-	tm.dynamicRateBurst.SetRate(rate)
+	tm.dynamicRateBurst.SetRPS(rps)
 	tm.dynamicRateBurst.SetBurst(burst)
 	tm.forceRefreshRateOnce.Do(func() {
 		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
