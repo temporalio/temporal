@@ -103,6 +103,7 @@ func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	globalNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
@@ -114,11 +115,18 @@ func NewPersistenceRateLimitingParams(
 		PerInstanceQuota: maxQps,
 		GlobalQuota:      globalMaxQps,
 	}
+	namespaceCalculator := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+		MemberCounter:    lazyLoadedServiceResolver,
+		PerInstanceQuota: namespaceMaxQps,
+		GlobalQuota:      globalNamespaceMaxQps,
+	}
 	return PersistenceRateLimitingParams{
 		PersistenceMaxQps: func() int {
 			return int(calculator.GetQuota())
 		},
-		PersistenceNamespaceMaxQps:         persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		PersistenceNamespaceMaxQps: func(namespace string) int {
+			return int(namespaceCalculator.GetQuota(namespace))
+		},
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
 		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
