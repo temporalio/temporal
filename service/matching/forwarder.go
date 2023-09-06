@@ -197,8 +197,9 @@ func (fwdr *Forwarder) ForwardQueryTask(
 			Name: target.FullName(),
 			Kind: fwdr.taskQueueKind,
 		},
-		QueryRequest:    task.query.request.QueryRequest,
-		ForwardedSource: fwdr.taskQueueID.FullName(),
+		QueryRequest:     task.query.request.QueryRequest,
+		ForwardedSource:  fwdr.taskQueueID.FullName(),
+		VersionDirective: task.query.request.VersionDirective,
 	})
 
 	return resp, fwdr.handleErr(err)
