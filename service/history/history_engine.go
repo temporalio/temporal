@@ -655,7 +655,7 @@ func (e *historyEngineImpl) SyncShardStatus(
 	now := timestamp.TimeValue(request.GetStatusTime())
 
 	// here there are 3 main things
-	// 1. update the view of remote cluster's shardContext time
+	// 1. update the view of remote cluster's shard time
 	// 2. notify the timer gate in the timer queue standby processor
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shardContext.SetCurrentTime(clusterName, now)

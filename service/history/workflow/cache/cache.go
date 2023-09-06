@@ -84,6 +84,8 @@ type (
 	}
 
 	Key struct {
+		// Those are exported because some unit tests uses the cache directly.
+		// TODO: Update the unit tests and make those fields private.
 		WorkflowKey definition.WorkflowKey
 		ShardUUID   string
 	}
@@ -205,7 +207,8 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, c.logger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
+		wfCtxLogger := log.With(c.logger, tag.ShardID(shardContext.GetShardID()))
+		workflowCtx = workflow.NewContext(shardContext.GetConfig(), cacheKey.WorkflowKey, wfCtxLogger, shardContext.GetThrottledLogger(), shardContext.GetMetricsHandler())
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)

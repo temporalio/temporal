@@ -345,8 +345,8 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		return err
 	}
 	var mutableState workflow.MutableState = workflow.NewMutableState(
-		r.shard,
-		r.shard.GetEventsCache(),
+		r.shardContext,
+		r.shardContext.GetEventsCache(),
 		task.getLogger(),
 		namespaceEntry,
 		timestamp.TimeValue(task.getFirstEvent().GetEventTime()),
