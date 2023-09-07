@@ -112,7 +112,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewCache(s.mockShard.GetConfig()),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig()),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() StateRebuilder {

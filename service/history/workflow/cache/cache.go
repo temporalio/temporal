@@ -81,6 +81,8 @@ type (
 		nonUserContextLockTimeout time.Duration
 	}
 
+	NewCacheFn func(config *configs.Config) Cache
+
 	Key struct {
 		// Those are exported because some unit tests uses the cache directly.
 		// TODO: Update the unit tests and make those fields private.
@@ -100,16 +102,38 @@ const (
 	workflowLockTimeoutTailTime = 500 * time.Millisecond
 )
 
-func NewCache(
+func NewHostLevelCache(
 	config *configs.Config,
 ) Cache {
+	return newCache(
+		config.HistoryCacheMaxSize(),
+		config.HistoryCacheTTL(),
+		config.HistoryCacheNonUserContextLockTimeout(),
+	)
+}
+
+func NewShardLevelCache(
+	config *configs.Config,
+) Cache {
+	return newCache(
+		config.HistoryShardLevelCacheMaxSize(),
+		config.HistoryCacheTTL(),
+		config.HistoryCacheNonUserContextLockTimeout(),
+	)
+}
+
+func newCache(
+	size int,
+	ttl time.Duration,
+	nonUserContextLockTimeout time.Duration,
+) Cache {
 	opts := &cache.Options{}
-	opts.TTL = config.HistoryCacheTTL()
+	opts.TTL = ttl
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:                     cache.New(config.HistoryCacheMaxSize(), opts),
-		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
+		Cache:                     cache.New(size, opts),
+		nonUserContextLockTimeout: nonUserContextLockTimeout,
 	}
 }
 
