@@ -26,13 +26,16 @@ package environment
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 )
 
 const (
-	// Localhost default localhost
-	Localhost = "127.0.0.1"
+	// LocalhostIP default localhost
+	LocalhostIP = "LOCALHOST_IP"
+	// Localhost default hostname
+	LocalhostIPDefault = "127.0.0.1"
 
 	// CassandraSeeds env
 	CassandraSeeds = "CASSANDRA_SEEDS"
@@ -69,8 +72,15 @@ const (
 
 // SetupEnv setup the necessary env
 func SetupEnv() {
+	if os.Getenv(LocalhostIP) == "" {
+		err := os.Setenv(LocalhostIP, lookupLocalhostIP("localhost"))
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", LocalhostIP))
+		}
+	}
+
 	if os.Getenv(CassandraSeeds) == "" {
-		err := os.Setenv(CassandraSeeds, Localhost)
+		err := os.Setenv(CassandraSeeds, LocalhostIP)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", CassandraSeeds))
 		}
@@ -84,7 +94,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(MySQLSeeds) == "" {
-		err := os.Setenv(MySQLSeeds, Localhost)
+		err := os.Setenv(MySQLSeeds, LocalhostIP)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", MySQLSeeds))
 		}
@@ -98,7 +108,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(PostgresSeeds) == "" {
-		err := os.Setenv(PostgresSeeds, Localhost)
+		err := os.Setenv(PostgresSeeds, LocalhostIP)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", PostgresSeeds))
 		}
@@ -112,7 +122,7 @@ func SetupEnv() {
 	}
 
 	if os.Getenv(ESSeeds) == "" {
-		err := os.Setenv(ESSeeds, Localhost)
+		err := os.Setenv(ESSeeds, LocalhostIP)
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", ESSeeds))
 		}
@@ -133,11 +143,41 @@ func SetupEnv() {
 	}
 }
 
+func lookupLocalhostIP(domain string) string {
+	// lookup localhost and favor the first ipv4 address
+	// unless there are only ipv6 addresses available
+	ips, err := net.LookupIP(domain)
+	if err != nil || len(ips) == 0 {
+		// fallback to default instead of error
+		return LocalhostIPDefault
+	}
+	var listenIp net.IP
+	for _, ip := range ips {
+		listenIp = ip
+		if listenIp.To4() != nil {
+			break
+		}
+	}
+	return listenIp.String()
+}
+
+// GetLocalhostIP returns the ip address of the localhost domain
+func GetLocalhostIP() string {
+	localhostIP := os.Getenv(LocalhostIP)
+	ip := net.ParseIP(localhostIP)
+	if ip != nil {
+		// if localhost is an ip return it
+		return ip.String()
+	}
+	// otherwise, ignore the value and lookup `localhost`
+	return lookupLocalhostIP("localhost")
+}
+
 // GetCassandraAddress return the cassandra address
 func GetCassandraAddress() string {
 	addr := os.Getenv(CassandraSeeds)
 	if addr == "" {
-		addr = Localhost
+		addr = GetLocalhostIP()
 	}
 	return addr
 }
@@ -159,7 +199,7 @@ func GetCassandraPort() int {
 func GetMySQLAddress() string {
 	addr := os.Getenv(MySQLSeeds)
 	if addr == "" {
-		addr = Localhost
+		addr = GetLocalhostIP()
 	}
 	return addr
 }
@@ -181,7 +221,7 @@ func GetMySQLPort() int {
 func GetPostgreSQLAddress() string {
 	addr := os.Getenv(PostgresSeeds)
 	if addr == "" {
-		addr = Localhost
+		addr = GetLocalhostIP()
 	}
 	return addr
 }
