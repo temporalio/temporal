@@ -442,6 +442,11 @@ func IgnoredValue(v interface{}) ZapTag {
 	return NewAnyTag("ignored-value", v)
 }
 
+// Host returns tag for Host
+func Host(h string) ZapTag {
+	return NewStringTag("host", h)
+}
+
 // Port returns tag for Port
 func Port(p int) ZapTag {
 	return NewInt("port", p)

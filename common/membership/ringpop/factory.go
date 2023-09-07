@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/environment"
 )
 
 const (
@@ -217,7 +218,7 @@ func (factory *factory) getListenIP() net.IP {
 	}
 
 	if factory.RPCConfig.BindOnLocalHost {
-		return net.IPv4(127, 0, 0, 1)
+		return net.ParseIP(environment.GetLocalhostIP())
 	}
 
 	if len(factory.RPCConfig.BindOnIP) > 0 {
@@ -229,6 +230,7 @@ func (factory *factory) getListenIP() net.IP {
 		factory.Logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(factory.RPCConfig.BindOnIP))
 		return nil
 	}
+
 	ip, err := config.ListenIP()
 	if err != nil {
 		factory.Logger.Fatal("ListenIP failed", tag.Error(err))

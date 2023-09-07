@@ -58,7 +58,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
 		Password:          "",
-		ConnectAddr:       environment.Localhost,
+		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
 		DatabaseName:      "default",
@@ -71,7 +71,7 @@ func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
 		Password:          "",
-		ConnectAddr:       environment.Localhost,
+		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
 		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
