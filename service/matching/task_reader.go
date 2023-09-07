@@ -113,6 +113,11 @@ func (tr *taskReader) Signal() {
 	}
 }
 
+// HasDispatchableTasks returns whether there is any buffered tasks ready to be dispatched right now.
+func (tr *taskReader) hasDispatchableTasks() bool {
+	return len(tr.taskBuffer) > 0
+}
+
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
 	ctx = tr.tlMgr.callerInfoContext(ctx)
 

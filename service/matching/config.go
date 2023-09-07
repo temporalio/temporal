@@ -89,6 +89,8 @@ type (
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
+
+		FairOrdering dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
 	}
 
 	forwarderConfig struct {
@@ -132,6 +134,14 @@ type (
 
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
+
+		// This config enables (approximate) FIFO ordering for the task queue. When enabled, we'd not attempt
+		// sync match when there are buffered tasks already loaded from database. Note that this is not an
+		// absolute guarantee of FIFO ordering as there are infrequent cases in which tasks may still be dispatched
+		// out of order (e.g. sync match can happen when there is no buffered task in memory, but there are
+		// unloaded tasks in the database)
+		// Note that `system.enableActivityEagerExecution` should be disabled for fair queuing to work properly.
+		FairOrdering func() bool
 	}
 )
 
@@ -196,6 +206,7 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+		FairOrdering: dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingFairOrdering, true),
 	}
 }
 
@@ -265,5 +276,9 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 			},
 		},
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
+
+		FairOrdering: func() bool {
+			return config.FairOrdering(namespace.String(), taskQueueName, taskType)
+		},
 	}
 }

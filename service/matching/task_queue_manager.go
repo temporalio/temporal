@@ -718,6 +718,10 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 	if params.forwardedFrom == "" && c.config.TestDisableSyncMatch() {
 		return false, nil
 	}
+	if c.config.FairOrdering() && c.taskReader.hasDispatchableTasks() {
+		return false, nil // allow the spooled tasks to be processed first
+	}
+
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 

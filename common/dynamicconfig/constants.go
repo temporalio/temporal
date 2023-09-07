@@ -457,6 +457,14 @@ const (
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.
 	MatchingGetUserDataLongPollTimeout = "matching.getUserDataLongPollTimeout"
+	// MatchingFairOrdering enables (approximate) FIFO ordering for the task queue. When enabled, we'd not attempt
+	// sync match when there are buffered tasks already loaded from database. Note that this is not an
+	// absolute guarantee of FIFO ordering as there are infrequent cases in which tasks may still be dispatched
+	// out of order (e.g. sync match can happen when there is no buffered task in memory, but there are
+	// unloaded tasks in the database)
+	// Note that `system.enableActivityEagerExecution` should be disabled for fair queuing to work properly.
+	MatchingFairOrdering = "matching.fairOrdering"
+
 
 	// for matching testing only:
 
