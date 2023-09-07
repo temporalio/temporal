@@ -72,7 +72,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		historyBatch,
 	)
 
-	executionManager := s.active.GetExecutionManager()
+	executionManager := s.cluster.GetExecutionManager()
 	expectedDLQMsgs := map[int64]bool{}
 	for _, batch := range historyBatch {
 		firstEventID := batch.Events[0].GetEventId()

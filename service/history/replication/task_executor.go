@@ -392,12 +392,12 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.LockPriorityLow)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, ex, workflow.LockPriorityLow)
 	if err != nil {
 		return err
 	}
 	defer func() { releaseFn(retErr) }()
-	mutableState, err := wfCtx.LoadMutableState(ctx)
+	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return err
 	}

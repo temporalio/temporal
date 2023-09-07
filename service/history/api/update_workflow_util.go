@@ -60,7 +60,7 @@ func GetAndUpdateWorkflowWithNew(
 }
 
 func UpdateWorkflowWithNew(
-	shard shard.Context,
+	shardContext shard.Context,
 	ctx context.Context,
 	workflowContext WorkflowContext,
 	action UpdateWorkflowActionFunc,
@@ -99,17 +99,18 @@ func UpdateWorkflowWithNew(
 		if err != nil {
 			return err
 		}
-		if err = NewWorkflowVersionCheck(shard, lastWriteVersion, newMutableState); err != nil {
+		if err = NewWorkflowVersionCheck(shardContext, lastWriteVersion, newMutableState); err != nil {
 			return err
 		}
 
 		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
+			shardContext,
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx)
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
 	return updateErr

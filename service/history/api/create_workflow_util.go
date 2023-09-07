@@ -127,13 +127,15 @@ func NewWorkflowWithSignal(
 	}
 
 	newWorkflowContext := workflow.NewContext(
-		shard,
+		shard.GetConfig(),
 		definition.NewWorkflowKey(
 			namespaceEntry.ID().String(),
 			workflowID,
 			runID,
 		),
 		shard.GetLogger(),
+		shard.GetThrottledLogger(),
+		shard.GetMetricsHandler(),
 	)
 	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }

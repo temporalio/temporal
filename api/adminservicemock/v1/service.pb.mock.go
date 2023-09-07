@@ -381,6 +381,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
 }
 
+// ImportWorkflowExecution mocks base method.
+func (m *MockAdminServiceClient) ImportWorkflowExecution(ctx context.Context, in *adminservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockAdminServiceClientMockRecorder) ImportWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).ImportWorkflowExecution), varargs...)
+}
+
 // ListClusterMembers mocks base method.
 func (m *MockAdminServiceClient) ListClusterMembers(ctx context.Context, in *adminservice.ListClusterMembersRequest, opts ...grpc.CallOption) (*adminservice.ListClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
@@ -1039,6 +1059,21 @@ func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.C
 func (mr *MockAdminServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
+}
+
+// ImportWorkflowExecution mocks base method.
+func (m *MockAdminServiceServer) ImportWorkflowExecution(arg0 context.Context, arg1 *adminservice.ImportWorkflowExecutionRequest) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockAdminServiceServerMockRecorder) ImportWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).ImportWorkflowExecution), arg0, arg1)
 }
 
 // ListClusterMembers mocks base method.

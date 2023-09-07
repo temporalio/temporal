@@ -56,7 +56,7 @@ type (
 		BranchIndex int32
 	}
 
-	GetOrRebuildCurrentMutableStateIn struct {
+	GetOrRebuildMutableStateIn struct {
 		replicationTask
 		BranchIndex int32
 	}
@@ -64,7 +64,8 @@ type (
 
 var _ MutableStateMapper[replicationTask, struct{}] = (*MutableStateMapperImpl)(nil).FlushBufferEvents
 var _ MutableStateMapper[replicationTask, PrepareHistoryBranchOut] = (*MutableStateMapperImpl)(nil).GetOrCreateHistoryBranch
-var _ MutableStateMapper[GetOrRebuildCurrentMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildCurrentMutableState
+var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildCurrentMutableState
+var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildMutableState
 var _ MutableStateMapper[replicationTask, workflow.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
 func NewMutableStateMapping(
@@ -134,11 +135,44 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 	}
 }
 
+func (m *MutableStateMapperImpl) CreateHistoryBranch(
+	ctx context.Context,
+	wfContext workflow.Context,
+	mutableState workflow.MutableState,
+	task replicationTask,
+) (workflow.MutableState, PrepareHistoryBranchOut, error) {
+	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
+	incomingVersionHistory := task.getVersionHistory()
+	doContinue, versionHistoryIndex, err := branchMgr.Create(
+		ctx,
+		incomingVersionHistory,
+		task.getFirstEvent().GetEventId(),
+		task.getFirstEvent().GetVersion(),
+	)
+	switch err.(type) {
+	case nil:
+		return mutableState, PrepareHistoryBranchOut{
+			DoContinue:  doContinue,
+			BranchIndex: versionHistoryIndex,
+		}, nil
+	case *serviceerrors.RetryReplication:
+		// replication message can arrive out of order
+		// do not log
+		return nil, PrepareHistoryBranchOut{}, err
+	default:
+		task.getLogger().Error(
+			"MutableStateMapping::GetOrCreateHistoryBranch unable to prepare version history",
+			tag.Error(err),
+		)
+		return nil, PrepareHistoryBranchOut{}, err
+	}
+}
+
 func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	wfContext workflow.Context,
 	mutableState workflow.MutableState,
-	task GetOrRebuildCurrentMutableStateIn,
+	task GetOrRebuildMutableStateIn,
 ) (workflow.MutableState, bool, error) {
 	conflictResolver := m.newConflictResolver(wfContext, mutableState, task.getLogger())
 	incomingVersion := task.getVersion()
@@ -146,6 +180,26 @@ func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 		ctx,
 		task.BranchIndex,
 		incomingVersion,
+	)
+	if err != nil {
+		task.getLogger().Error(
+			"MutableStateMapping::PrepareMutableState unable to prepare mutable state",
+			tag.Error(err),
+		)
+	}
+	return mutableState, isRebuilt, err
+}
+
+func (m *MutableStateMapperImpl) GetOrRebuildMutableState(
+	ctx context.Context,
+	wfContext workflow.Context,
+	mutableState workflow.MutableState,
+	task GetOrRebuildMutableStateIn,
+) (workflow.MutableState, bool, error) {
+	conflictResolver := m.newConflictResolver(wfContext, mutableState, task.getLogger())
+	mutableState, isRebuilt, err := conflictResolver.GetOrRebuildMutableState(
+		ctx,
+		task.BranchIndex,
 	)
 	if err != nil {
 		task.getLogger().Error(

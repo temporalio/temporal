@@ -31,6 +31,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -44,7 +45,7 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
@@ -64,13 +65,13 @@ func Invoke(
 	) ([]byte, string, int64, error) {
 		response, err := api.GetOrPollMutableState(
 			ctx,
+			shardContext,
 			&historyservice.GetMutableStateRequest{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
 				ExpectedNextEventId: expectedNextEventID,
 				CurrentBranchToken:  currentBranchToken,
 			},
-			shard,
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
@@ -124,7 +125,7 @@ func Invoke(
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
 			api.TrimHistoryNode(
 				ctx,
-				shard,
+				shardContext,
 				workflowConsistencyChecker,
 				eventNotifier,
 				namespaceID.String(),
@@ -139,7 +140,7 @@ func Invoke(
 	// return all events
 	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = api.GetHistoryReverse(
 		ctx,
-		shard,
+		shardContext,
 		namespaceID,
 		*execution,
 		continuationToken.NextEventId,

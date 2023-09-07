@@ -271,6 +271,20 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
+func (c *metricClient) ImportWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ImportWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientImportWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ImportWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) IsActivityTaskValid(
 	ctx context.Context,
 	request *historyservice.IsActivityTaskValidRequest,

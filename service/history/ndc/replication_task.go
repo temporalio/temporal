@@ -493,3 +493,24 @@ func deserializeBlob(
 
 	return events, err
 }
+
+func DeserializeBlobs(
+	historySerializer serialization.Serializer,
+	blobs []*commonpb.DataBlob,
+) ([][]*historypb.HistoryEvent, error) {
+	eventBatches := make([][]*historypb.HistoryEvent, 0, len(blobs))
+	if blobs == nil {
+		return eventBatches, nil
+	}
+	for _, blob := range blobs {
+		events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         blob.Data,
+		})
+		if err != nil {
+			return nil, err
+		}
+		eventBatches = append(eventBatches, events)
+	}
+	return eventBatches, nil
+}
