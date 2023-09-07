@@ -863,7 +863,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (bool, error) {
-	namespaceName := c.GetNamespace().String()
+	namespaceName := c.GetNamespace(shardContext).String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
 	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
@@ -880,7 +880,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
-		if err := c.forceTerminateWorkflow(ctx, fmt.Sprintf(
+		if err := c.forceTerminateWorkflow(ctx, shardContext, fmt.Sprintf(
 			common.FailureReasonHistorySizeExceedsLimit+" historySize: %v, historySizeLimit: %v, historyCount: %v, historyCountLimit: %v",
 			historySize, historySizeLimitError, historyCount, historyCountLimitError)); err != nil {
 			return false, err
@@ -901,7 +901,11 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 
 // Returns true if execution is forced terminated
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
-func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context) (bool, error) {
+func (c *ContextImpl) enforceMutableStateSizeCheck(
+	ctx context.Context,
+	shardContext shard.Context,
+) (bool, error) {
+
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
@@ -914,7 +918,7 @@ func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context) (bool, e
 			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowMutableStateSize(mutableStateSize))
 
-		if err := c.forceTerminateWorkflow(ctx, fmt.Sprintf(
+		if err := c.forceTerminateWorkflow(ctx, shardContext, fmt.Sprintf(
 			common.FailureReasonMutableStateSizeExceedsLimit+" mutableStateSize: %v, mutableStateSizeLimit: %v",
 			mutableStateSize, mutableStateSizeLimitError)); err != nil {
 			return false, err
