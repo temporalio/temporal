@@ -206,7 +206,7 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
-		FairOrdering: dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingFairOrdering, true),
+		FairOrdering: dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingFairOrdering, false),
 	}
 }
 

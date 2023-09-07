@@ -465,7 +465,6 @@ const (
 	// Note that `system.enableActivityEagerExecution` should be disabled for fair queuing to work properly.
 	MatchingFairOrdering = "matching.fairOrdering"
 
-
 	// for matching testing only:
 
 	// TestMatchingDisableSyncMatch forces tasks to go through the db once
