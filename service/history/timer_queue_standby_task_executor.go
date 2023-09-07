@@ -95,7 +95,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
 	}
@@ -247,7 +247,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx)
+		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
 		return nil, err
 	}
 
@@ -276,7 +276,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +324,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil {
 			return nil, err
 		}
@@ -398,7 +398,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
 		if err != nil {
 			return nil, err
 		}
@@ -436,7 +436,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(timerTask.GetNamespaceID()))
+	nsRecord, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(timerTask.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
@@ -445,7 +445,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return nil
 	}
 
-	executionContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, timerTask)
+	executionContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, timerTask)
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, executionContext, timerTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -514,7 +514,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",
-			tag.ShardID(t.shard.GetShardID()),
+			tag.ShardID(t.shardContext.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
@@ -541,7 +541,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			return err
 		}
 		t.logger.Error("Error re-replicating history from remote.",
-			tag.ShardID(t.shard.GetShardID()),
+			tag.ShardID(t.shardContext.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
@@ -579,12 +579,12 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		},
 		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 	})
 	return err
 }
 
 func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {
-	return t.shard.GetCurrentTime(t.clusterName)
+	return t.shardContext.GetCurrentTime(t.clusterName)
 }

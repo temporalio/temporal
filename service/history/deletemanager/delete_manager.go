@@ -31,7 +31,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
@@ -41,14 +40,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -75,17 +71,15 @@ type (
 			we commonpb.WorkflowExecution,
 			weCtx workflow.Context,
 			ms workflow.MutableState,
-			archiveIfEnabled bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 	}
 
 	DeleteManagerImpl struct {
-		shard             shard.Context
+		shardContext      shard.Context
 		workflowCache     wcache.Cache
 		config            *configs.Config
 		metricsHandler    metrics.Handler
-		archivalClient    archiver.Client
 		timeSource        clock.TimeSource
 		visibilityManager manager.VisibilityManager
 	}
@@ -94,19 +88,17 @@ type (
 var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
-	shard shard.Context,
+	shardContext shard.Context,
 	cache wcache.Cache,
 	config *configs.Config,
-	archiverClient archiver.Client,
 	timeSource clock.TimeSource,
 	visibilityManager manager.VisibilityManager,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
-		shard:             shard,
+		shardContext:      shardContext,
 		workflowCache:     cache,
-		metricsHandler:    shard.GetMetricsHandler(),
+		metricsHandler:    shardContext.GetMetricsHandler(),
 		config:            config,
-		archivalClient:    archiverClient,
 		timeSource:        timeSource,
 		visibilityManager: visibilityManager,
 	}
@@ -122,7 +114,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	workflowClosedVersion int64,
 ) error {
 
-	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shard, ms)
+	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
@@ -132,9 +124,9 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	}
 
 	deleteTask.Version = workflowClosedVersion
-	return m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: m.shard.GetShardID(),
-		// RangeID is set by shard
+	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID: m.shardContext.GetShardID(),
+		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
 		RunID:       we.GetRunId(),
@@ -154,17 +146,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(
-		ctx,
-		nsID,
-		we,
-		weCtx,
-		ms,
-		false,
-		forceDeleteFromOpenVisibility,
-		stage,
-		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
-	)
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, forceDeleteFromOpenVisibility, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -173,21 +155,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	we commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
-	archiveIfEnabled bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(
-		ctx,
-		nsID,
-		we,
-		weCtx,
-		ms,
-		archiveIfEnabled,
-		false, // When retention is fired, workflow execution is always closed.
-		stage,
-		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
-	)
+	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, false, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -196,8 +167,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	we commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
-	archiveIfEnabled bool,
-	forceDeleteFromOpenVisibility bool,
+	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
 	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.Handler,
 ) error {
@@ -225,27 +195,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	// NOTE: old versions (before server version 1.17.3) of archival workflow will delete workflow history directly
-	// after archiving history. But getting workflow close time requires workflow close event (for workflows closed by
-	// server version before 1.17), so this step needs to be done after getting workflow close time.
-	if archiveIfEnabled {
-		deletionPromised, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, metricsHandler)
-		if err != nil {
-			return err
-		}
-		if deletionPromised {
-			// Don't delete workflow data. The workflow data will be deleted after history archived.
-			// if we proceed to delete mutable state, then history scavanger may kick in and
-			// delete history before history archival is done.
-
-			// HOWEVER, when rolling out this change, we don't know if worker is running an old version of the
-			// archival workflow (before 1.17.3), which will only delete workflow history. To prevent this from
-			// happening, worker role must be deployed first.
-			return nil
-		}
-	}
-
-	if err := m.shard.DeleteWorkflowExecution(
+	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
 			NamespaceID: namespaceID.String(),
@@ -266,76 +216,4 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.GetMetricName()).Record(1)
 	return nil
-}
-
-func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowExecution commonpb.WorkflowExecution,
-	currentBranchToken []byte,
-	weCtx workflow.Context,
-	ms workflow.MutableState,
-	metricsHandler metrics.Handler,
-) (deletionPromised bool, err error) {
-
-	namespaceRegistryEntry := ms.GetNamespaceEntry()
-
-	clusterConfiguredForHistoryArchival := m.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
-	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
-
-	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
-	if !archiveHistory {
-		return false, nil
-	}
-
-	closeFailoverVersion, err := ms.GetLastWriteVersion()
-	if err != nil {
-		return false, err
-	}
-
-	req := &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			ShardID:              m.shard.GetShardID(),
-			NamespaceID:          namespaceID.String(),
-			WorkflowID:           workflowExecution.GetWorkflowId(),
-			RunID:                workflowExecution.GetRunId(),
-			Namespace:            namespaceRegistryEntry.Name().String(),
-			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
-			NextEventID:          ms.GetNextEventID(),
-			BranchToken:          currentBranchToken,
-			CloseFailoverVersion: closeFailoverVersion,
-		},
-		CallerService:        string(primitives.HistoryService),
-		AttemptArchiveInline: false, // archive in workflow by default
-	}
-	executionStats, err := weCtx.LoadExecutionStats(ctx)
-	if err == nil && executionStats.HistorySize < int64(m.config.TimerProcessorHistoryArchivalSizeLimit()) {
-		req.AttemptArchiveInline = true
-	}
-
-	saTypeMap, err := m.shard.GetSearchAttributesProvider().GetSearchAttributes(m.visibilityManager.GetIndexName(), false)
-	if err != nil {
-		return false, err
-	}
-	// Setting search attributes types here because archival client needs to stringify them,
-	// and it might not have access to typeMap (i.e. type needs to be embedded).
-	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
-
-	ctx, cancel := context.WithTimeout(ctx, m.config.TimerProcessorArchivalTimeLimit())
-	defer cancel()
-	resp, err := m.archivalClient.Archive(ctx, req)
-	if err != nil {
-		return false, err
-	}
-	if resp.HistoryArchivedInline {
-		metricsHandler.Counter(metrics.WorkflowCleanupDeleteHistoryInlineCount.GetMetricName()).Record(1)
-	} else {
-		metricsHandler.Counter(metrics.WorkflowCleanupArchiveCount.GetMetricName()).Record(1)
-	}
-
-	// inline archival don't perform deletion
-	// only archival through archival workflow will
-	return !resp.HistoryArchivedInline, nil
 }

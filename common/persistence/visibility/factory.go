@@ -245,10 +245,10 @@ func newVisibilityStoreFromDataStoreConfig(
 				logger,
 			)
 		default:
-			visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger)
+			visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger, metricsHandler)
 		}
 	} else if dsConfig.Cassandra != nil {
-		visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger)
+		visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger, metricsHandler)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(
 			dsConfig.Elasticsearch.GetVisibilityIndex(),
@@ -269,6 +269,7 @@ func newStandardVisibilityStore(
 	dsConfig config.DataStore,
 	persistenceResolver resolver.ServiceResolver,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (store.VisibilityStore, error) {
 	var (
 		visStore store.VisibilityStore
@@ -279,6 +280,7 @@ func newStandardVisibilityStore(
 			*dsConfig.Cassandra,
 			persistenceResolver,
 			logger,
+			metricsHandler,
 		)
 	} else if dsConfig.SQL != nil {
 		visStore, err = standardSql.NewSQLVisibilityStore(

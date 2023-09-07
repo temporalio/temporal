@@ -390,7 +390,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
 				mutableState.EXPECT().GetCurrentVersion().Return(p.LastWriteVersionBeforeArchival).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
-				workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(
+				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					mutableState,
 					p.LoadMutableStateError,
 				).AnyTimes()
@@ -433,7 +433,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 						assert.Zero(t, task.TaskID)
 						assert.Equal(t, p.LastWriteVersionBeforeArchival, task.Version)
 						assert.Equal(t, branchToken, task.BranchToken)
-						assert.True(t, task.WorkflowDataAlreadyArchived)
 						assert.Equal(t, p.ExpectedDeleteTime, task.VisibilityTimestamp)
 						popTasks := map[tasks.Category][]tasks.Task{
 							tasks.CategoryTimer: {
@@ -451,12 +450,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					})
 				}
 			} else {
-				workflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(
+				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					nil,
 					p.LoadMutableStateError,
 				).AnyTimes()
 			}
 			workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),

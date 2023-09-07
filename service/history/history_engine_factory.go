@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -53,8 +52,7 @@ type (
 		EventNotifier                   events.Notifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
-		NewCacheFn                      wcache.NewCacheFn
-		ArchivalClient                  archiver.Client
+		WorkflowCache                   wcache.Cache
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
@@ -72,8 +70,7 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
 ) shard.Engine {
-	workflowCache := f.NewCacheFn(shard)
-	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
+	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, f.WorkflowCache)
 	return NewEngineWithShardContext(
 		shard,
 		f.ClientBean,
@@ -82,8 +79,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.RawMatchingClient,
-		workflowCache,
-		f.ArchivalClient,
+		f.WorkflowCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,

@@ -181,6 +181,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
 }
 
+// ForceDeleteWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) ForceDeleteWorkflowExecution(ctx context.Context, in *historyservice.ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceDeleteWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.ForceDeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceDeleteWorkflowExecution indicates an expected call of ForceDeleteWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) ForceDeleteWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).ForceDeleteWorkflowExecution), varargs...)
+}
+
 // GenerateLastHistoryReplicationTasks mocks base method.
 func (m *MockHistoryServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *historyservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -319,6 +339,66 @@ func (mr *MockHistoryServiceClientMockRecorder) GetShard(ctx, in interface{}, op
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetShard), varargs...)
+}
+
+// GetWorkflowExecutionHistory mocks base method.
+func (m *MockHistoryServiceClient) GetWorkflowExecutionHistory(ctx context.Context, in *historyservice.GetWorkflowExecutionHistoryRequest, opts ...grpc.CallOption) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistory indicates an expected call of GetWorkflowExecutionHistory.
+func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionHistory(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistory", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionHistory), varargs...)
+}
+
+// GetWorkflowExecutionHistoryReverse mocks base method.
+func (m *MockHistoryServiceClient) GetWorkflowExecutionHistoryReverse(ctx context.Context, in *historyservice.GetWorkflowExecutionHistoryReverseRequest, opts ...grpc.CallOption) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistoryReverse", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistoryReverse indicates an expected call of GetWorkflowExecutionHistoryReverse.
+func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionHistoryReverse(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistoryReverse", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionHistoryReverse), varargs...)
+}
+
+// GetWorkflowExecutionRawHistoryV2 mocks base method.
+func (m *MockHistoryServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *historyservice.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistoryV2 indicates an expected call of GetWorkflowExecutionRawHistoryV2.
+func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
 }
 
 // IsActivityTaskValid mocks base method.
@@ -1311,6 +1391,21 @@ func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
 }
 
+// ForceDeleteWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) ForceDeleteWorkflowExecution(arg0 context.Context, arg1 *historyservice.ForceDeleteWorkflowExecutionRequest) (*historyservice.ForceDeleteWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceDeleteWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ForceDeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceDeleteWorkflowExecution indicates an expected call of ForceDeleteWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) ForceDeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceDeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).ForceDeleteWorkflowExecution), arg0, arg1)
+}
+
 // GenerateLastHistoryReplicationTasks mocks base method.
 func (m *MockHistoryServiceServer) GenerateLastHistoryReplicationTasks(arg0 context.Context, arg1 *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1414,6 +1509,51 @@ func (m *MockHistoryServiceServer) GetShard(arg0 context.Context, arg1 *historys
 func (mr *MockHistoryServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetShard), arg0, arg1)
+}
+
+// GetWorkflowExecutionHistory mocks base method.
+func (m *MockHistoryServiceServer) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistory indicates an expected call of GetWorkflowExecutionHistory.
+func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionHistory(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistory", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionHistory), arg0, arg1)
+}
+
+// GetWorkflowExecutionHistoryReverse mocks base method.
+func (m *MockHistoryServiceServer) GetWorkflowExecutionHistoryReverse(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionHistoryReverseRequest) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistoryReverse", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionHistoryReverse indicates an expected call of GetWorkflowExecutionHistoryReverse.
+func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionHistoryReverse(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionHistoryReverse", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionHistoryReverse), arg0, arg1)
+}
+
+// GetWorkflowExecutionRawHistoryV2 mocks base method.
+func (m *MockHistoryServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecutionRawHistoryV2 indicates an expected call of GetWorkflowExecutionRawHistoryV2.
+func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
 }
 
 // IsActivityTaskValid mocks base method.

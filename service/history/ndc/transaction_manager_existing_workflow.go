@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -48,6 +49,7 @@ type (
 	}
 
 	nDCTransactionMgrForExistingWorkflowImpl struct {
+		shardContext   shard.Context
 		transactionMgr transactionMgr
 	}
 )
@@ -55,10 +57,12 @@ type (
 var _ transactionMgrForExistingWorkflow = (*nDCTransactionMgrForExistingWorkflowImpl)(nil)
 
 func newNDCTransactionMgrForExistingWorkflow(
+	shardContext shard.Context,
 	transactionMgr transactionMgr,
 ) *nDCTransactionMgrForExistingWorkflowImpl {
 
 	return &nDCTransactionMgrForExistingWorkflowImpl{
+		shardContext:   shardContext,
 		transactionMgr: transactionMgr,
 	}
 }
@@ -220,11 +224,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 ) error {
 
 	if newWorkflow == nil {
-		return targetWorkflow.GetContext().UpdateWorkflowExecutionAsPassive(ctx)
+		return targetWorkflow.GetContext().UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
 	}
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNewAsPassive(
 		ctx,
+		r.shardContext,
 		newWorkflow.GetContext(),
 		newWorkflow.GetMutableState(),
 	)
@@ -294,6 +299,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		newContext,
 		newMutableState,
@@ -336,6 +342,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
+		r.shardContext,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,
@@ -361,6 +368,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
+		r.shardContext,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,
@@ -432,6 +440,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
+		r.shardContext,
 		persistence.ConflictResolveWorkflowModeBypassCurrent,
 		targetWorkflow.GetMutableState(),
 		newContext,

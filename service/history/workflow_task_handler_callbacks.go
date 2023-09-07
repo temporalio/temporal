@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -39,6 +40,8 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -50,13 +53,16 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -79,10 +85,11 @@ type (
 	workflowTaskHandlerCallbacksImpl struct {
 		currentClusterName             string
 		config                         *configs.Config
-		shard                          shard.Context
+		shardContext                   shard.Context
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
 		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
+		eventNotifier                  events.Notifier
 		tokenSerializer                common.TaskTokenSerializer
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
@@ -90,6 +97,7 @@ type (
 		commandAttrValidator           *commandAttrValidator
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
+		persistenceVisibilityMgr       manager.VisibilityManager
 	}
 )
 
@@ -97,21 +105,23 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 	return &workflowTaskHandlerCallbacksImpl{
 		currentClusterName:         historyEngine.currentClusterName,
 		config:                     historyEngine.config,
-		shard:                      historyEngine.shard,
+		shardContext:               historyEngine.shardContext,
 		workflowConsistencyChecker: historyEngine.workflowConsistencyChecker,
-		timeSource:                 historyEngine.shard.GetTimeSource(),
-		namespaceRegistry:          historyEngine.shard.GetNamespaceRegistry(),
+		timeSource:                 historyEngine.shardContext.GetTimeSource(),
+		namespaceRegistry:          historyEngine.shardContext.GetNamespaceRegistry(),
+		eventNotifier:              historyEngine.eventNotifier,
 		tokenSerializer:            historyEngine.tokenSerializer,
 		metricsHandler:             historyEngine.metricsHandler,
 		logger:                     historyEngine.logger,
 		throttledLogger:            historyEngine.throttledLogger,
 		commandAttrValidator: newCommandAttrValidator(
-			historyEngine.shard.GetNamespaceRegistry(),
+			historyEngine.shardContext.GetNamespaceRegistry(),
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
-		searchAttributesMapperProvider: historyEngine.shard.GetSearchAttributesMapperProvider(),
+		searchAttributesMapperProvider: historyEngine.shardContext.GetSearchAttributesMapperProvider(),
 		searchAttributesValidator:      historyEngine.searchAttributesValidator,
+		persistenceVisibilityMgr:       historyEngine.persistenceVisibilityMgr,
 	}
 }
 
@@ -120,7 +130,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
 
-	_, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -157,7 +167,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 			return &api.UpdateWorkflowAction{}, nil
 		},
 		nil,
-		handler.shard,
+		handler.shardContext,
 		handler.workflowConsistencyChecker,
 	)
 }
@@ -166,7 +176,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +288,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			return updateAction, nil
 		},
 		nil,
-		handler.shard,
+		handler.shardContext,
 		handler.workflowConsistencyChecker,
 	)
 
@@ -293,7 +303,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) (retError error) {
 
-	_, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -353,7 +363,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			}, nil
 		},
 		nil,
-		handler.shard,
+		handler.shardContext,
 		handler.workflowConsistencyChecker,
 	)
 }
@@ -362,7 +372,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(handler.shard, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(handler.shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +554,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.namespaceRegistry,
 			handler.metricsHandler,
 			handler.config,
-			handler.shard,
+			handler.shardContext,
 			handler.searchAttributesMapperProvider,
 			hasBufferedEvents,
 		)
@@ -589,7 +599,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -679,14 +689,17 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newWorkflowExecutionState := newMutableState.GetExecutionState()
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
+			handler.shardContext,
 			workflow.NewContext(
-				handler.shard,
+				handler.shardContext.GetConfig(),
 				definition.NewWorkflowKey(
 					newWorkflowExecutionInfo.NamespaceId,
 					newWorkflowExecutionInfo.WorkflowId,
 					newWorkflowExecutionState.RunId,
 				),
 				handler.logger,
+				handler.shardContext.GetThrottledLogger(),
+				handler.shardContext.GetMetricsHandler(),
 			),
 			newMutableState,
 		)
@@ -695,7 +708,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// OR new WT is normal, then mutable state is persisted.
 		// Otherwise, (both old and new WT are speculative) mutable state is updated in memory only but not persisted.
 		if completedEvent != nil || newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
-			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx)
+			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 		}
 	}
 
@@ -712,7 +725,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		case *persistence.TransactionSizeLimitError:
 			// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
 			// clears mutable state if error is returned
-			ms, err = weContext.LoadMutableState(ctx)
+			ms, err = weContext.LoadMutableState(ctx, handler.shardContext)
 			if err != nil {
 				return nil, err
 			}
@@ -728,6 +741,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			}
 			if err := weContext.UpdateWorkflowExecutionAsActive(
 				ctx,
+				handler.shardContext,
 			); err != nil {
 				return nil, err
 			}
@@ -776,6 +790,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
+
+		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// If completedEvent is nil then it means that WT was speculative and
@@ -893,6 +912,155 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
+func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	branchToken []byte,
+	maximumPageSize int32,
+) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
+
+	if matchingResp.WorkflowExecution == nil {
+		// this will happen if there is no workflow task to be send to worker / caller
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+	}
+
+	var history *historypb.History
+	var continuation []byte
+	var err error
+
+	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
+		// meaning sticky query, we should not return any events to worker
+		// since query task only check the current status
+		history = &historypb.History{
+			Events: []*historypb.HistoryEvent{},
+		}
+	} else {
+		// here we have 3 cases:
+		// 1. sticky && non query task
+		// 2. non sticky &&  non query task
+		// 3. non sticky && query task
+		// for 1, partial history have to be send back
+		// for 2 and 3, full history have to be send back
+
+		var persistenceToken []byte
+
+		firstEventID := common.FirstEventID
+		nextEventID := matchingResp.GetNextEventId()
+		if matchingResp.GetStickyExecutionEnabled() {
+			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
+		}
+
+		// TODO below is a temporal solution to guard against invalid event batch
+		//  when data inconsistency occurs
+		//  long term solution should check event batch pointing backwards within history store
+		defer func() {
+			if _, ok := retError.(*serviceerror.DataLoss); ok {
+				api.TrimHistoryNode(
+					ctx,
+					handler.shardContext,
+					handler.workflowConsistencyChecker,
+					handler.eventNotifier,
+					namespaceID.String(),
+					matchingResp.WorkflowExecution.GetWorkflowId(),
+					matchingResp.WorkflowExecution.GetRunId(),
+				)
+			}
+		}()
+		history, persistenceToken, err = api.GetHistory(
+			ctx,
+			handler.shardContext,
+			namespaceID,
+			*matchingResp.GetWorkflowExecution(),
+			firstEventID,
+			nextEventID,
+			maximumPageSize,
+			nil,
+			matchingResp.GetTransientWorkflowTask(),
+			branchToken,
+			handler.persistenceVisibilityMgr,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(persistenceToken) != 0 {
+			continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
+				FirstEventId:          firstEventID,
+				NextEventId:           nextEventID,
+				PersistenceToken:      persistenceToken,
+				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
+				BranchToken:           branchToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	resp := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  matchingResp.TaskToken,
+		WorkflowExecution:          matchingResp.WorkflowExecution,
+		WorkflowType:               matchingResp.WorkflowType,
+		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
+		StartedEventId:             matchingResp.StartedEventId,
+		Query:                      matchingResp.Query,
+		BacklogCountHint:           matchingResp.BacklogCountHint,
+		Attempt:                    matchingResp.Attempt,
+		History:                    history,
+		NextPageToken:              continuation,
+		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
+		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
+	}
+
+	return resp, nil
+}
+
+func (handler *workflowTaskHandlerCallbacksImpl) withNewWorkflowTask(
+	ctx context.Context,
+	namespaceName namespace.Name,
+	request *historyservice.RespondWorkflowTaskCompletedRequest,
+	response *historyservice.RecordWorkflowTaskStartedResponse,
+) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+	taskToken, err := handler.tokenSerializer.Deserialize(request.CompleteRequest.TaskToken)
+	if err != nil {
+		return nil, err
+	}
+
+	taskToken = tasktoken.NewWorkflowTaskToken(
+		taskToken.GetNamespaceId(),
+		taskToken.GetWorkflowId(),
+		taskToken.GetRunId(),
+		response.GetScheduledEventId(),
+		response.GetStartedEventId(),
+		response.GetStartedTime(),
+		response.GetAttempt(),
+		response.GetClock(),
+		response.GetVersion(),
+	)
+	token, err := handler.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, err
+	}
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: taskToken.GetWorkflowId(),
+		RunId:      taskToken.GetRunId(),
+	}
+	matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(response, workflowExecution, token)
+
+	return handler.createPollWorkflowTaskQueueResponse(
+		ctx,
+		namespace.ID(taskToken.NamespaceId),
+		matchingResp,
+		matchingResp.GetBranchToken(),
+		int32(handler.config.HistoryMaxPageSize(namespaceName.String())),
+	)
+}
+
 func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {
 	queryRegistry := ms.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
@@ -992,6 +1160,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 
 func failWorkflowTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	wfContext workflow.Context,
 	workflowTask *workflow.WorkflowTaskInfo,
 	wtFailedCause *workflowTaskFailedCause,
@@ -1002,7 +1171,7 @@ func failWorkflowTask(
 	wfContext.Clear()
 
 	// Reload workflow execution so we can apply the workflow task failure event
-	mutableState, err := wfContext.LoadMutableState(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, common.EmptyEventID, err
 	}

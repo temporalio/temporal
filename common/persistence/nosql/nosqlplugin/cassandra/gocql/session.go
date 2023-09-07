@@ -36,12 +36,18 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Session = (*session)(nil)
 
 const (
 	sessionRefreshMinInternal = 5 * time.Second
+)
+
+const (
+	refreshThrottleTagValue = "throttle"
+	refreshErrorTagValue    = "error"
 )
 
 type (
@@ -53,15 +59,17 @@ type (
 
 		sync.Mutex
 		sessionInitTime time.Time
+		metricsHandler  metrics.Handler
 	}
 )
 
 func NewSession(
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(newClusterConfigFunc)
+	gocqlSession, err := initSession(newClusterConfigFunc, metricsHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +78,7 @@ func NewSession(
 		status:               common.DaemonStatusStarted,
 		newClusterConfigFunc: newClusterConfigFunc,
 		logger:               logger,
+		metricsHandler:       metricsHandler,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -86,13 +95,18 @@ func (s *session) refresh() {
 	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
-		s.logger.Warn("gocql wrapper: too soon to refresh gocql session")
+		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
+			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
+		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
+		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
 		return
 	}
 
-	newSession, err := initSession(s.newClusterConfigFunc)
+	newSession, err := initSession(s.newClusterConfigFunc, s.metricsHandler)
 	if err != nil {
 		s.logger.Error("gocql wrapper: unable to refresh gocql session", tag.Error(err))
+		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshErrorTagValue))
+		handler.Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Record(1)
 		return
 	}
 
@@ -105,11 +119,16 @@ func (s *session) refresh() {
 
 func initSession(
 	newClusterConfigFunc func() (*gocql.ClusterConfig, error),
+	metricsHandler metrics.Handler,
 ) (*gocql.Session, error) {
 	cluster, err := newClusterConfigFunc()
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
+	defer func() {
+		metricsHandler.Timer(metrics.CassandraInitSessionLatency.GetMetricName()).Record(time.Since(start))
+	}()
 	return cluster.CreateSession()
 }
 
