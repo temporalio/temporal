@@ -173,6 +173,7 @@ func newTransactionMgr(
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
+	bypassVersionSemanticsCheck bool,
 ) *transactionMgrImpl {
 
 	transactionMgr := &transactionMgrImpl{
@@ -194,8 +195,8 @@ func newTransactionMgr(
 		createMgr: nil,
 		updateMgr: nil,
 	}
-	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr)
-	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr)
+	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
+	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
 	return transactionMgr
 }
 

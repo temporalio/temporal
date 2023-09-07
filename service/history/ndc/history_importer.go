@@ -83,7 +83,7 @@ func NewHistoryImporter(
 			shardContext.GetNamespaceRegistry(),
 			logger,
 		),
-		transactionMgr: newTransactionMgr(shardContext, workflowCache, nil, logger),
+		transactionMgr: newTransactionMgr(shardContext, workflowCache, nil, logger, true),
 		logger:         logger,
 
 		mutableStateInitializer: NewMutableStateInitializer(

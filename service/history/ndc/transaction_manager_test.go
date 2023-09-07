@@ -106,6 +106,7 @@ func (s *transactionMgrSuite) SetupTest() {
 		wcache.NewCache(s.mockShard.GetConfig()),
 		s.mockEventsReapplier,
 		s.logger,
+		false,
 	)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr
