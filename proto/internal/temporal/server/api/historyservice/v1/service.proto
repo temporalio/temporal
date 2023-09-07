@@ -278,7 +278,13 @@ service HistoryService {
     }
 
     // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+    // NOTE: this is experimental API
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    }
+
+    // ImportWorkflowExecution attempts to import workflow according to persisted history events.
+    // NOTE: this is experimental API
+    rpc ImportWorkflowExecution (ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
     }
 
     // DeleteWorkflowVisibilityRecord force delete a workflow's visibility record.

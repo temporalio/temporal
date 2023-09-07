@@ -83,6 +83,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -360,7 +361,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -511,7 +512,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 // application worker.
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -533,7 +533,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
@@ -695,7 +695,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -706,7 +707,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -1576,7 +1577,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -1588,7 +1590,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
@@ -2319,15 +2320,16 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
-	
+
 	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
@@ -2403,11 +2405,12 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2554,7 +2557,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(startWorkflow.TaskQueue, namespaceName); err != nil {
 		return err
 	}
 
@@ -3194,7 +3197,9 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3231,7 +3236,9 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errWorkerVersioningNotAllowed
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3281,9 +3288,11 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
 	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
 	for _, taskQueue := range request.GetTaskQueues() {
 		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-		if err := wh.validateTaskQueue(taskQueue); err != nil {
+		if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 			return nil, err
 		}
 	}
@@ -3684,12 +3693,18 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
-func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespaceName namespace.Name) error {
 	if t == nil || t.GetName() == "" {
 		return errTaskQueueNotSet
 	}
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return errTaskQueueTooLong
+	}
+
+	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		wh.logger.Warn("Unspecified task queue kind",
+			tag.WorkflowTaskQueueName(t.GetName()), tag.WorkflowNamespace(namespaceName.String()),
+		)
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
@@ -3893,15 +3908,15 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -3911,15 +3926,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -3934,7 +3949,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if timestamp.DurationValue(startDelay) < 0 {
+	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
 		return errInvalidWorkflowStartDelaySeconds
 	}
 

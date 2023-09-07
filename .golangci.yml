@@ -78,6 +78,10 @@ linters-settings:
         disabled: true
       - name: var-naming
         disabled: true
+      - name: empty-block
+        disabled: true
+      - name: flag-parameter
+        disabled: true
 
       # Rule tuning
       - name: cognitive-complexity
@@ -85,10 +89,10 @@ linters-settings:
           - 25
       - name: cyclomatic
         arguments:
-          - 15
+          - 18
       - name: function-result-limit
         arguments:
-          - 4
+          - 5
       - name: unhandled-error
         arguments:
           - "fmt.*"

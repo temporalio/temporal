@@ -63,8 +63,6 @@ import (
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -144,13 +142,11 @@ type (
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		HostInfoProvider                    membership.HostInfoProvider
-		ArchiverProvider                    provider.ArchiverProvider
 		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
 		ClusterMetadata                     cluster.Metadata
-		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
@@ -636,7 +632,10 @@ func (adh *AdminHandler) getSearchAttributesSQL(
 	}, nil
 }
 
-func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *adminservice.RebuildMutableStateRequest) (_ *adminservice.RebuildMutableStateResponse, retError error) {
+func (adh *AdminHandler) RebuildMutableState(
+	ctx context.Context,
+	request *adminservice.RebuildMutableStateRequest,
+) (_ *adminservice.RebuildMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	if request == nil {
@@ -659,6 +658,40 @@ func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *admin
 		return nil, err
 	}
 	return &adminservice.RebuildMutableStateResponse{}, nil
+}
+
+func (adh *AdminHandler) ImportWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.ImportWorkflowExecutionRequest,
+) (_ *adminservice.ImportWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, &historyservice.ImportWorkflowExecutionRequest{
+		NamespaceId:    namespaceID.String(),
+		Execution:      request.Execution,
+		HistoryBatches: request.HistoryBatches,
+		VersionHistory: request.VersionHistory,
+		Token:          request.Token,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ImportWorkflowExecutionResponse{
+		Token: resp.Token,
+	}, nil
 }
 
 // DescribeMutableState returns information about the specified workflow execution.

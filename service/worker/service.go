@@ -34,8 +34,6 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
-	carchiver "go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,7 +50,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
@@ -65,7 +62,6 @@ type (
 	// Archiver: Handles archival of workflow histories.
 	Service struct {
 		logger                 log.Logger
-		archivalMetadata       carchiver.ArchivalMetadata
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -78,8 +74,6 @@ type (
 		namespaceRegistry      namespace.Registry
 		workerServiceResolver  membership.ServiceResolver
 		visibilityManager      manager.VisibilityManager
-
-		archiverProvider provider.ArchiverProvider
 
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 
@@ -99,7 +93,6 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ArchiverConfig                        *archiver.Config
 		ScannerCfg                            *scanner.Config
 		ParentCloseCfg                        *parentclosepolicy.Config
 		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
@@ -130,13 +123,11 @@ func NewService(
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	esClient esclient.Client,
-	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
 	executionManager persistence.ExecutionManager,
-	archiverProvider provider.ArchiverProvider,
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
@@ -160,7 +151,6 @@ func NewService(
 		sdkClientFactory:          sdkClientFactory,
 		esClient:                  esClient,
 		logger:                    logger,
-		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
@@ -170,7 +160,6 @@ func NewService(
 		workerServiceResolver:     workerServiceResolver,
 		membershipMonitor:         membershipMonitor,
 		hostInfo:                  hostInfoProvider.HostInfo(),
-		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		metricsHandler:            metricsHandler,
 		metadataManager:           metadataManager,
@@ -196,38 +185,6 @@ func NewConfig(
 	enableReadFromES bool,
 ) *Config {
 	config := &Config{
-		ArchiverConfig: &archiver.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize,
-				1000,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize,
-				1000,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentActivityTaskPollers,
-				4,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskPollers,
-				4,
-			),
-
-			ArchiverConcurrency: dc.GetIntProperty(
-				dynamicconfig.WorkerArchiverConcurrency,
-				50,
-			),
-			ArchivalsPerIteration: dc.GetIntProperty(
-				dynamicconfig.WorkerArchivalsPerIteration,
-				1000,
-			),
-			TimeLimitPerArchivalIteration: dc.GetDurationProperty(
-				dynamicconfig.WorkerTimeLimitPerArchivalIteration,
-				archiver.MaxArchivalIterationTimeout(),
-			),
-		},
-
 		ParentCloseCfg: &parentclosepolicy.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
 				dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize,
@@ -398,9 +355,6 @@ func (s *Service) Start() {
 	if s.clusterMetadata.IsGlobalNamespaceEnabled() {
 		s.startReplicator()
 	}
-	if s.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() {
-		s.startArchiver()
-	}
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
@@ -524,28 +478,6 @@ func (s *Service) startReplicator() {
 		s.namespaceRegistry,
 	)
 	msgReplicator.Start()
-}
-
-func (s *Service) startArchiver() {
-	historyClient := s.clientBean.GetHistoryClient()
-	bc := &archiver.BootstrapContainer{
-		MetricsHandler:   s.metricsHandler,
-		Logger:           s.logger,
-		HistoryV2Manager: s.executionManager,
-		NamespaceCache:   s.namespaceRegistry,
-		Config:           s.config.ArchiverConfig,
-		ArchiverProvider: s.archiverProvider,
-		SdkClientFactory: s.sdkClientFactory,
-		HistoryClient:    historyClient,
-	}
-	clientWorker := archiver.NewClientWorker(bc)
-	if err := clientWorker.Start(); err != nil {
-		clientWorker.Stop()
-		s.logger.Fatal(
-			"failed to start archiver",
-			tag.Error(err),
-		)
-	}
 }
 
 func (s *Service) ensureSystemNamespaceExists(

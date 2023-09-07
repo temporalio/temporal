@@ -28,6 +28,7 @@ import (
 	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
@@ -87,6 +88,7 @@ func CheckCompatibleVersion(
 			return commongocql.NewCassandraCluster(cfg, r)
 		},
 		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
 		return err

@@ -107,7 +107,7 @@ var (
 		"GetSearchAttributes":                MethodMetadata{Scope: ScopeCluster, Access: AccessReadOnly},
 		"RespondQueryTaskCompleted":          MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetStickyTaskQueue":               MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
-		"QueryWorkflow":                      MethodMetadata{Scope: ScopeNamespace, Access: AccessWrite},
+		"QueryWorkflow":                      MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeWorkflowExecution":          MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeTaskQueue":                  MethodMetadata{Scope: ScopeNamespace, Access: AccessReadOnly},
 		"GetClusterInfo":                     MethodMetadata{Scope: ScopeCluster, Access: AccessReadOnly},

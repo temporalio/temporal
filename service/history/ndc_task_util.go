@@ -72,6 +72,7 @@ func CheckTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
 	metricsHandler metrics.Handler,
@@ -80,6 +81,7 @@ func loadMutableStateForTransferTask(
 	logger = tasks.InitializeLogger(transferTask, logger)
 	mutableState, err := LoadMutableStateForTask(
 		ctx,
+		shardContext,
 		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
@@ -116,6 +118,7 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
 	metricsHandler metrics.Handler,
@@ -124,6 +127,7 @@ func loadMutableStateForTimerTask(
 	logger = tasks.InitializeLogger(timerTask, logger)
 	return LoadMutableStateForTask(
 		ctx,
+		shardContext,
 		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
@@ -134,6 +138,7 @@ func loadMutableStateForTimerTask(
 
 func LoadMutableStateForTask(
 	ctx context.Context,
+	shardContext shard.Context,
 	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
@@ -141,7 +146,7 @@ func LoadMutableStateForTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
-	mutableState, err := wfContext.LoadMutableState(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +162,7 @@ func LoadMutableStateForTask(
 	metricsHandler.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
 	wfContext.Clear()
 
-	mutableState, err = wfContext.LoadMutableState(ctx)
+	mutableState, err = wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

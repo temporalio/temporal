@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -54,7 +53,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -69,10 +67,9 @@ var (
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
-		shard                    shard.Context
+		shardContext             shard.Context
 		registry                 namespace.Registry
 		cache                    wcache.Cache
-		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.Handler
 		historyRawClient         resource.HistoryRawClient
@@ -85,9 +82,8 @@ type (
 )
 
 func newTransferQueueTaskExecutorBase(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.Handler,
 	historyRawClient resource.HistoryRawClient,
@@ -95,24 +91,22 @@ func newTransferQueueTaskExecutorBase(
 	visibilityManager manager.VisibilityManager,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
-		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                    shard,
-		registry:                 shard.GetNamespaceRegistry(),
+		currentClusterName:       shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:             shardContext,
+		registry:                 shardContext.GetNamespaceRegistry(),
 		cache:                    workflowCache,
-		archivalClient:           archivalClient,
 		logger:                   logger,
 		metricHandler:            metricHandler,
 		historyRawClient:         historyRawClient,
 		matchingRawClient:        matchingRawClient,
-		config:                   shard.GetConfig(),
-		searchAttributesProvider: shard.GetSearchAttributesProvider(),
+		config:                   shardContext.GetConfig(),
+		searchAttributesProvider: shardContext.GetSearchAttributesProvider(),
 		visibilityManager:        visibilityManager,
 		workflowDeleteManager: deletemanager.NewDeleteManager(
-			shard,
+			shardContext,
 			workflowCache,
-			shard.GetConfig(),
-			archivalClient,
-			shard.GetTimeSource(),
+			shardContext.GetConfig(),
+			shardContext.GetTimeSource(),
 			visibilityManager,
 		),
 	}
@@ -136,7 +130,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		},
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
@@ -164,7 +158,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		TaskQueue:              taskqueue,
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
@@ -172,71 +166,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
 	}
-
-	return err
-}
-
-func (t *transferQueueTaskExecutorBase) archiveVisibility(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTime time.Time,
-	executionTime time.Time,
-	endTime time.Time,
-	status enumspb.WorkflowExecutionStatus,
-	historyLength int64,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	clusterConfiguredForVisibilityArchival := t.shard.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForVisibilityArchival := namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
-	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
-
-	if !archiveVisibility {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
-	defer cancel()
-
-	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.visibilityManager.GetIndexName(), false)
-	if err != nil {
-		return err
-	}
-
-	// Setting search attributes types here because archival client needs to stringify them
-	// and it might not have access to type map (i.e. type needs to be embedded).
-	searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-
-	_, err = t.archivalClient.Archive(ctx, &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			ShardID:          t.shard.GetShardID(),
-			NamespaceID:      namespaceID.String(),
-			Namespace:        namespaceEntry.Name().String(),
-			WorkflowID:       workflowID,
-			RunID:            runID,
-			WorkflowTypeName: workflowTypeName,
-			StartTime:        startTime,
-			ExecutionTime:    executionTime,
-			CloseTime:        endTime,
-			Status:           status,
-			HistoryLength:    historyLength,
-			Memo:             visibilityMemo,
-			SearchAttributes: searchAttributes,
-			VisibilityURI:    namespaceEntry.VisibilityArchivalState().URI,
-			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
-			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
-		},
-		CallerService:        string(primitives.HistoryService),
-		AttemptArchiveInline: true, // archive visibility inline by default
-	})
 
 	return err
 }
@@ -266,6 +195,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 
 	weCtx, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
+		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		workflow.LockPriorityLow,
@@ -275,7 +205,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -304,7 +234,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 		if err != nil {
 			return err
 		}
@@ -328,7 +258,7 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 		return false
 	}
 	// check if close execution transfer task is completed
-	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
+	transferQueueState, ok := t.shardContext.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
 		return true
 	}

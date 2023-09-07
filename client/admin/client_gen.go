@@ -193,6 +193,16 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
+func (c *clientImpl) ImportWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ImportWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListClusterMembers(
 	ctx context.Context,
 	request *adminservice.ListClusterMembersRequest,

@@ -116,10 +116,10 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	workflowCache := wcache.NewCache(mockShard)
+	workflowCache := wcache.NewCache(mockShard.GetConfig())
 	h := &historyEngineImpl{
 		currentClusterName: mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              mockShard,
+		shardContext:       mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
@@ -172,7 +172,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -202,7 +202,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -230,7 +230,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -254,7 +254,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,

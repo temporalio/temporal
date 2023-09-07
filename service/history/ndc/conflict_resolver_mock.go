@@ -59,18 +59,34 @@ func (m *MockConflictResolver) EXPECT() *MockConflictResolverMockRecorder {
 	return m.recorder
 }
 
-// prepareMutableState mocks base method.
-func (m *MockConflictResolver) prepareMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (workflow.MutableState, bool, error) {
+// GetOrRebuildCurrentMutableState mocks base method.
+func (m *MockConflictResolver) GetOrRebuildCurrentMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (workflow.MutableState, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "prepareMutableState", ctx, branchIndex, incomingVersion)
+	ret := m.ctrl.Call(m, "GetOrRebuildCurrentMutableState", ctx, branchIndex, incomingVersion)
 	ret0, _ := ret[0].(workflow.MutableState)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// prepareMutableState indicates an expected call of prepareMutableState.
-func (mr *MockConflictResolverMockRecorder) prepareMutableState(ctx, branchIndex, incomingVersion interface{}) *gomock.Call {
+// GetOrRebuildCurrentMutableState indicates an expected call of GetOrRebuildCurrentMutableState.
+func (mr *MockConflictResolverMockRecorder) GetOrRebuildCurrentMutableState(ctx, branchIndex, incomingVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "prepareMutableState", reflect.TypeOf((*MockConflictResolver)(nil).prepareMutableState), ctx, branchIndex, incomingVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrRebuildCurrentMutableState", reflect.TypeOf((*MockConflictResolver)(nil).GetOrRebuildCurrentMutableState), ctx, branchIndex, incomingVersion)
+}
+
+// GetOrRebuildMutableState mocks base method.
+func (m *MockConflictResolver) GetOrRebuildMutableState(ctx context.Context, branchIndex int32) (workflow.MutableState, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOrRebuildMutableState", ctx, branchIndex)
+	ret0, _ := ret[0].(workflow.MutableState)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetOrRebuildMutableState indicates an expected call of GetOrRebuildMutableState.
+func (mr *MockConflictResolverMockRecorder) GetOrRebuildMutableState(ctx, branchIndex interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrRebuildMutableState", reflect.TypeOf((*MockConflictResolver)(nil).GetOrRebuildMutableState), ctx, branchIndex)
 }

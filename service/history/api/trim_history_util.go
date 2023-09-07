@@ -28,6 +28,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -38,33 +39,39 @@ import (
 
 func TrimHistoryNode(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) {
-	response, err := GetOrPollMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
+	response, err := GetOrPollMutableState(
+		ctx,
+		shardContext,
+		&historyservice.GetMutableStateRequest{
+			NamespaceId: namespaceID,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
 		},
-	}, shard, workflowConsistencyChecker, eventNotifier)
+		workflowConsistencyChecker,
+		eventNotifier,
+	)
 	if err != nil {
 		return // abort
 	}
 
-	_, err = shard.GetExecutionManager().TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
-		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, shard.GetConfig().NumberOfShards),
+	_, err = shardContext.GetExecutionManager().TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
+		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, shardContext.GetConfig().NumberOfShards),
 		BranchToken:   response.CurrentBranchToken,
 		NodeID:        response.GetLastFirstEventId(),
 		TransactionID: response.GetLastFirstEventTxnId(),
 	})
 	if err != nil {
 		// best effort
-		shard.GetLogger().Error("unable to trim history branch",
+		shardContext.GetLogger().Error("unable to trim history branch",
 			tag.WorkflowNamespaceID(namespaceID),
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),

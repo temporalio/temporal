@@ -765,11 +765,6 @@ func ArchivalCallerServiceName(callerServiceName string) ZapTag {
 	return NewStringTag("archival-caller-service-name", callerServiceName)
 }
 
-// ArchivalArchiveAttemptedInline returns tag for whether archival is attempted inline before signal is sent.
-func ArchivalArchiveAttemptedInline(archiveInline bool) ZapTag {
-	return NewBoolTag("archival-archive-attempted-inline", archiveInline)
-}
-
 // ArchivalRequestNamespaceID returns tag for RequestNamespaceID
 func ArchivalRequestNamespaceID(requestNamespaceID string) ZapTag {
 	return NewStringTag("archival-request-namespace-id", requestNamespaceID)
@@ -828,44 +823,6 @@ func ArchivalURI(URI string) ZapTag {
 // ArchivalArchiveFailReason returns tag for ArchivalArchiveFailReason
 func ArchivalArchiveFailReason(archiveFailReason string) ZapTag {
 	return NewStringTag("archival-archive-fail-reason", archiveFailReason)
-}
-
-// ArchivalDeleteHistoryFailReason returns tag for ArchivalDeleteHistoryFailReason
-func ArchivalDeleteHistoryFailReason(deleteHistoryFailReason string) ZapTag {
-	return NewStringTag("archival-delete-history-fail-reason", deleteHistoryFailReason)
-}
-
-// ArchivalVisibilityQuery returns tag for the query for getting archived visibility record
-func ArchivalVisibilityQuery(query string) ZapTag {
-	return NewStringTag("archival-visibility-query", query)
-}
-
-// The following logger tags are only used by internal archiver implemention.
-// TODO: move them to internal repo once temporal plugin model is in place.
-
-// ArchivalBlobKey returns tag for BlobKey
-func ArchivalBlobKey(blobKey string) ZapTag {
-	return NewStringTag("archival-blob-key", blobKey)
-}
-
-// ArchivalDeterministicConstructionCheckFailReason returns tag for ArchivalDeterministicConstructionCheckFailReason
-func ArchivalDeterministicConstructionCheckFailReason(deterministicConstructionCheckFailReason string) ZapTag {
-	return NewStringTag("archival-deterministic-construction-check-fail-reason", deterministicConstructionCheckFailReason)
-}
-
-// ArchivalNonDeterministicBlobKey returns tag for randomly generated NonDeterministicBlobKey
-func ArchivalNonDeterministicBlobKey(nondeterministicBlobKey string) ZapTag {
-	return NewStringTag("archival-non-deterministic-blob-key", nondeterministicBlobKey)
-}
-
-// ArchivalBlobIntegrityCheckFailReason returns tag for ArchivalBlobIntegrityCheckFailReason
-func ArchivalBlobIntegrityCheckFailReason(blobIntegrityCheckFailReason string) ZapTag {
-	return NewStringTag("archival-blob-integrity-check-fail-reason", blobIntegrityCheckFailReason)
-}
-
-// ArchivalBlobstoreContextTimeout returns tag for ArchivalBlobstoreContextTimeout
-func ArchivalBlobstoreContextTimeout(blobstoreContextTimeout time.Duration) ZapTag {
-	return NewDurationTag("archival-blobstore-context-timeout", blobstoreContextTimeout)
 }
 
 // TransportType returns tag for transportType
