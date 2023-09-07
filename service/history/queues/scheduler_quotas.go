@@ -39,7 +39,8 @@ func NewSchedulerRateLimiter(
 	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	persistenceHostMaxQPS dynamicconfig.IntPropertyFn,
 	startupDelay dynamicconfig.DurationPropertyFn,
-) SchedulerRateLimiter {
+	timeSource clock.TimeSource,
+) (SchedulerRateLimiter, error) {
 	hostRateFn := func() float64 {
 		hostMaxQPS := float64(hostMaxQPS())
 		if hostMaxQPS > 0 {
@@ -79,12 +80,10 @@ func NewSchedulerRateLimiter(
 
 	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
 
-	delayedLimiter, err := quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), clock.NewRealTimeSource())
-	if err == nil {
-		return delayedLimiter
+	if startupDelay != nil {
+		return quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), timeSource)
 	}
-
-	return priorityLimiter
+	return priorityLimiter, nil
 }
 
 func newHighPriorityTaskRequestRateLimiter(

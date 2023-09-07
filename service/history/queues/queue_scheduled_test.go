@@ -83,19 +83,22 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
+	rateLimiter, _ := NewSchedulerRateLimiter(
+		s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
+		s.mockShard.GetConfig().TaskSchedulerMaxQPS,
+		s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
+		s.mockShard.GetConfig().PersistenceMaxQPS,
+		s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
+		s.mockShard.GetTimeSource(),
+	)
+
 	scheduler := NewPriorityScheduler(
 		PrioritySchedulerOptions{
 			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
 			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
 		},
-		NewSchedulerRateLimiter(
-			s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
-			s.mockShard.GetConfig().TaskSchedulerMaxQPS,
-			s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
-			s.mockShard.GetConfig().PersistenceMaxQPS,
-			s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
-		),
+		rateLimiter,
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
