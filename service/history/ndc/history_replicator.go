@@ -63,12 +63,6 @@ type (
 		logger log.Logger,
 	) workflow.MutableStateRebuilder
 
-	mutableStateProvider func(
-		namespaceEntry *namespace.Namespace,
-		startTime time.Time,
-		logger log.Logger,
-	) workflow.MutableState
-
 	bufferEventFlusherProvider func(
 		wfContext workflow.Context,
 		mutableState workflow.MutableState,
@@ -308,7 +302,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 				ctx,
 				wfContext,
 				mutableState,
-				GetOrRebuildCurrentMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
+				GetOrRebuildMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
 			)
 			if err != nil {
 				return err

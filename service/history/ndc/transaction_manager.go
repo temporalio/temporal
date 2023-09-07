@@ -439,7 +439,6 @@ func (r *transactionMgrImpl) loadWorkflow(
 	runID string,
 ) (Workflow, error) {
 
-	// we need to check the current workflow execution
 	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		r.shardContext,

@@ -1,22 +1,22 @@
 - persistence:
-    dbname: integration_active
+    dbname: integration_cluster_a
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-    masterClusterName: "active"
-    currentClusterName: "active"
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-a"
     clusterInformation:
-      active:
+      cluster-a:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:7134"
-      standby:
+      cluster-b:
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:8134"
-      other:
+      cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"
@@ -30,24 +30,24 @@
     numhistoryshards: 1
     numhistoryhosts: 1
 - persistence:
-    dbname: integration_standby
+    dbname: integration_cluster_b
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-    masterClusterName: "active"
-    currentClusterName: "standby"
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-b"
     clusterInformation:
-      active:
+      cluster-a:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:7134"
-      standby:
+      cluster-b:
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:8134"
-      other:
+      cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"
@@ -65,20 +65,20 @@
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-    masterClusterName: "active"
-    currentClusterName: "other"
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-c"
     clusterInformation:
-      active:
+      cluster-a:
         enabled: true
         initialFailoverVersion: 1
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:7134"
-      standby:
+      cluster-b:
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
         rpcAddress: "127.0.0.1:8134"
-      other:
+      cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"

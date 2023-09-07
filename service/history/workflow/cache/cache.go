@@ -228,11 +228,12 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *CacheImpl) lockWorkflowExecution(ctx context.Context,
+func (c *CacheImpl) lockWorkflowExecution(
+	ctx context.Context,
 	workflowCtx workflow.Context,
 	cacheKey Key,
-	lockPriority workflow.LockPriority) error {
-
+	lockPriority workflow.LockPriority,
+) error {
 	// skip if there is no deadline
 	if deadline, ok := ctx.Deadline(); ok {
 		var cancel context.CancelFunc

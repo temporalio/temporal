@@ -114,6 +114,7 @@ type (
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCHistoryReplicator       ndc.HistoryReplicator
+		nDCHistoryBackfiller       ndc.HistoryImporter
 		nDCActivityStateReplicator ndc.ActivityStateReplicator
 		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
@@ -217,6 +218,11 @@ func NewEngineWithShardContext(
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			eventSerializer,
+			logger,
+		)
+		historyEngImpl.nDCHistoryBackfiller = ndc.NewHistoryImporter(
+			shard,
+			workflowCache,
 			logger,
 		)
 		historyEngImpl.nDCActivityStateReplicator = ndc.NewActivityStateReplicator(
@@ -641,6 +647,33 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	request *historyservice.ReplicateWorkflowStateRequest,
 ) error {
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
+}
+
+func (e *historyEngineImpl) ImportWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ImportWorkflowExecutionRequest,
+) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	historyEvents, err := ndc.DeserializeBlobs(e.eventSerializer, request.HistoryBatches)
+	if err != nil {
+		return nil, err
+	}
+	token, err := e.nDCHistoryBackfiller.ImportWorkflow(
+		ctx,
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.Execution.GetWorkflowId(),
+			request.Execution.GetRunId(),
+		),
+		request.VersionHistory.Items,
+		historyEvents,
+		request.Token,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.ImportWorkflowExecutionResponse{
+		Token: token,
+	}, nil
 }
 
 func (e *historyEngineImpl) SyncShardStatus(

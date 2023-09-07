@@ -710,6 +710,45 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	return &historyservice.RebuildMutableStateResponse{}, nil
 }
 
+// ImportWorkflowExecution attempts to workflow execution according to persisted history events
+func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest) (_ *historyservice.ImportWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	if workflowID == "" {
+		return nil, h.convertError(errWorkflowIDNotSet)
+	}
+	runID := workflowExecution.GetRunId()
+	if runID == "" {
+		return nil, h.convertError(errRunIDNotValid)
+	}
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.ImportWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return resp, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
