@@ -952,15 +952,14 @@ type (
 
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
-		BranchToken []byte
-		ForkTime    *time.Time
-		Info        string
+		BranchInfo *persistencespb.HistoryBranch
+		ForkTime   *time.Time
+		Info       string
 	}
 
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
-		// all branches of a tree
-		BranchTokens [][]byte
+		BranchInfos []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
