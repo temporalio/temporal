@@ -116,7 +116,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = mockShard.GetLogger()
 
-	workflowCache := wcache.NewCache(mockShard.GetConfig())
+	workflowCache := wcache.NewHostLevelCache(mockShard.GetConfig())
 	h := &historyEngineImpl{
 		currentClusterName: mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shardContext:       mockShard,
