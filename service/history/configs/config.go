@@ -100,7 +100,6 @@ type Config struct {
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
-	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay     dynamicconfig.DurationPropertyFn
 	TaskSchedulerThrottleDuration            dynamicconfig.DurationPropertyFn
@@ -383,7 +382,6 @@ func NewConfig(
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
-		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
 		TaskSchedulerRateLimiterStartupDelay:     dc.GetDurationProperty(dynamicconfig.TaskSchedulerRateLimiterStartupDelay, 30*time.Second),
 		TaskSchedulerThrottleDuration:            dc.GetDurationProperty(dynamicconfig.TaskSchedulerThrottleDuration, time.Second),

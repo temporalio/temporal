@@ -102,6 +102,10 @@ func newHighPriorityTaskRequestRateLimiter(
 		quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
 	)
 	namespaceRequestRateLimiterFn := func(req quotas.Request) quotas.RequestRateLimiter {
+		if len(req.Caller) == 0 {
+			return quotas.NoopRequestRateLimiter
+		}
+
 		return quotas.NewRequestRateLimiterAdapter(
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 {

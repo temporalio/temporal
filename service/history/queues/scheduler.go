@@ -71,18 +71,18 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	NamespacePrioritySchedulerOptions struct {
-		WorkerCount                 dynamicconfig.IntPropertyFn
-		ActiveNamespaceWeights      dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights     dynamicconfig.MapPropertyFnWithNamespaceFilter
-		EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		WorkerCount             dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+		// EnableRateLimiter           dynamicconfig.BoolPropertyFn
 		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
 
 	PrioritySchedulerOptions struct {
-		WorkerCount                 dynamicconfig.IntPropertyFn
-		Weight                      dynamicconfig.MapPropertyFn
-		EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		WorkerCount dynamicconfig.IntPropertyFn
+		Weight      dynamicconfig.MapPropertyFn
+		// EnableRateLimiter           dynamicconfig.BoolPropertyFn
 		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
@@ -106,6 +106,8 @@ func NewNamespacePriorityScheduler(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Scheduler {
+	var scheduler tasks.Scheduler[Executable]
+
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
 		return TaskChannelKey{
 			NamespaceID: e.GetNamespaceID(),
@@ -137,46 +139,58 @@ func NewNamespacePriorityScheduler(
 		)[key.Priority]
 	}
 	channelWeightUpdateCh := make(chan struct{}, 1)
-	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
-		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
-		if err != nil {
-			namespaceName = namespace.EmptyName
-		}
-		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], 0, "")
-	}
-	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
-		namespaceName, _ := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
-		return []metrics.Tag{
-			metrics.NamespaceTag(string(namespaceName)),
-			metrics.TaskPriorityTag(key.Priority.String()),
-		}
-	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
 	}
 
-	return &schedulerImpl{
-		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-				TaskChannelKeyFn:            taskChannelKeyFn,
-				ChannelWeightFn:             channelWeightFn,
-				ChannelWeightUpdateCh:       channelWeightUpdateCh,
-				ChannelQuotaRequestFn:       channelQuotaRequestFn,
-				TaskChannelMetricTagsFn:     taskChannelMetricsTagsFn,
-				EnableRateLimiter:           options.EnableRateLimiter,
-				EnableRateLimiterShadowMode: options.EnableRateLimiterShadowMode,
-				DispatchThrottleDuration:    options.DispatchThrottleDuration,
-			},
-			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-				fifoSchedulerOptions,
-				logger,
-			)),
-			rateLimiter,
-			timeSource,
+	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
+		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
+			TaskChannelKeyFn:      taskChannelKeyFn,
+			ChannelWeightFn:       channelWeightFn,
+			ChannelWeightUpdateCh: channelWeightUpdateCh,
+		},
+		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+			fifoSchedulerOptions,
 			logger,
-			metricsHandler,
-		),
+		)),
+		logger,
+	)
+
+	taskQuotaRequestFn := func(e Executable) quotas.Request {
+		// TODO: use 0 as token count upon shard reload
+
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+		if err != nil {
+			namespaceName = namespace.EmptyName
+		}
+		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
+	}
+	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+		if err != nil {
+			namespaceName = namespace.EmptyName
+		}
+		return []metrics.Tag{
+			metrics.NamespaceTag(string(namespaceName)),
+			metrics.TaskPriorityTag(e.GetPriority().String()),
+		}
+	}
+	scheduler = tasks.NewRateLimitedScheduler[Executable](
+		scheduler,
+		rateLimiter,
+		timeSource,
+		taskQuotaRequestFn,
+		taskMetricsTagsFn,
+		tasks.RateLimitedSchedulerOptions{
+			EnableShadowMode: options.EnableRateLimiterShadowMode(),
+		},
+		logger,
+		metricsHandler,
+	)
+
+	return &schedulerImpl{
+		Scheduler:             scheduler,
 		namespaceRegistry:     namespaceRegistry,
 		taskChannelKeyFn:      taskChannelKeyFn,
 		channelWeightFn:       channelWeightFn,
@@ -185,7 +199,6 @@ func NewNamespacePriorityScheduler(
 }
 
 // NewPriorityScheduler ignores namespace when scheduleing tasks.
-// currently only used for shard level task scheduler
 func NewPriorityScheduler(
 	options PrioritySchedulerOptions,
 	rateLimiter SchedulerRateLimiter,
@@ -193,6 +206,8 @@ func NewPriorityScheduler(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) Scheduler {
+	var scheduler tasks.Scheduler[Executable]
+
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
 		return TaskChannelKey{
 			NamespaceID: namespace.EmptyID.String(),
@@ -209,41 +224,48 @@ func NewPriorityScheduler(
 		}
 		return weight[key.Priority]
 	}
-	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
-		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], 0, "")
-	}
-	taskChannelMetricsTagsFn := func(key TaskChannelKey) []metrics.Tag {
-		return []metrics.Tag{
-			metrics.NamespaceUnknownTag(),
-			metrics.TaskPriorityTag(key.Priority.String()),
-		}
-	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
 	}
+	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
+		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
+			TaskChannelKeyFn:      taskChannelKeyFn,
+			ChannelWeightFn:       channelWeightFn,
+			ChannelWeightUpdateCh: nil,
+		},
+		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+			fifoSchedulerOptions,
+			logger,
+		)),
+		logger,
+	)
+
+	taskQuotaRequestFn := func(e Executable) quotas.Request {
+		// TODO: use 0 as token count upon shard reload
+		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[e.GetPriority()], 0, "")
+	}
+	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
+		return []metrics.Tag{
+			metrics.NamespaceUnknownTag(),
+			metrics.TaskPriorityTag(e.GetPriority().String()),
+		}
+	}
+	scheduler = tasks.NewRateLimitedScheduler[Executable](
+		scheduler,
+		rateLimiter,
+		timeSource,
+		taskQuotaRequestFn,
+		taskMetricsTagsFn,
+		tasks.RateLimitedSchedulerOptions{
+			EnableShadowMode: options.EnableRateLimiterShadowMode(),
+		},
+		logger,
+		metricsHandler,
+	)
 
 	return &schedulerImpl{
-		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-				TaskChannelKeyFn:            taskChannelKeyFn,
-				ChannelWeightFn:             channelWeightFn,
-				ChannelWeightUpdateCh:       nil,
-				ChannelQuotaRequestFn:       channelQuotaRequestFn,
-				TaskChannelMetricTagsFn:     taskChannelMetricsTagsFn,
-				EnableRateLimiter:           options.EnableRateLimiter,
-				EnableRateLimiterShadowMode: options.EnableRateLimiterShadowMode,
-				DispatchThrottleDuration:    options.DispatchThrottleDuration,
-			},
-			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-				fifoSchedulerOptions,
-				logger,
-			)),
-			rateLimiter,
-			timeSource,
-			logger,
-			metricsHandler,
-		),
+		Scheduler:             scheduler,
 		taskChannelKeyFn:      taskChannelKeyFn,
 		channelWeightFn:       channelWeightFn,
 		channelWeightUpdateCh: nil,

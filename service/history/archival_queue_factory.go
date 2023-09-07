@@ -95,7 +95,6 @@ func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 	return queues.NewPriorityScheduler(
 		queues.PrioritySchedulerOptions{
 			WorkerCount:                 params.Config.ArchivalProcessorSchedulerWorkerCount,
-			EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
 			EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
 			DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
 			Weight:                      dynamicconfig.GetMapPropertyFn(ArchivalTaskPriorities),

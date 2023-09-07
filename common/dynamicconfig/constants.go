@@ -568,8 +568,6 @@ const (
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
-	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
-	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
 	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
 	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"

@@ -103,7 +103,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 	scheduler := NewPriorityScheduler(
 		PrioritySchedulerOptions{
 			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
-			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
 		},
 		rateLimiter,
