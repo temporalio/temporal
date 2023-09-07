@@ -38,8 +38,8 @@ type (
 		id interface{}
 
 		sync.Mutex
-		taskQueue                    collection.Queue[TrackableExecutableTask]
-		lastTask                     TrackableExecutableTask
+		taskQueue                    collection.Queue[*batchedTask]
+		lastTask                     *batchedTask
 		batchedIndividualTaskHandler func(task TrackableExecutableTask)
 		logger                       log.Logger
 		metricsHandler               metrics.Handler
@@ -54,8 +54,8 @@ func NewSequentialBatchableTaskQueue(
 	return &SequentialBatchableTaskQueue{
 		id: task.QueueID(),
 
-		taskQueue: collection.NewPriorityQueue[TrackableExecutableTask](
-			SequentialTaskQueueCompareLess,
+		taskQueue: collection.NewPriorityQueue[*batchedTask](
+			sequentialBatchableTaskQueueCompareLess,
 		),
 		batchedIndividualTaskHandler: batchedIndividualTaskHandler,
 		logger:                       logger,
@@ -78,39 +78,14 @@ func (q *SequentialBatchableTaskQueue) Peek() TrackableExecutableTask {
 func (q *SequentialBatchableTaskQueue) Add(task TrackableExecutableTask) {
 	q.Lock()
 	defer q.Unlock()
-	q.updateLastTask(task)
 
-	batchableTask, isBatchableTask := task.(BatchableTask)
-
-	// TODO: Once POC approved, will add unit test to test following cases thoroughly
-	// case: input task is not a batchable task or input task does not want to be batched: simply add task into the queue
-	if !isBatchableTask || !batchableTask.CanBatch() {
-		q.updateLastTask(task)
-		q.taskQueue.Add(task)
+	if q.lastTask != nil && q.lastTask.AddTask(task) {
 		return
 	}
 
-	// case: If last task is nil, create a batchedTask and put into the queue
-	if q.lastTask == nil {
-		task = q.createBatchedTask(batchableTask)
-		q.taskQueue.Add(task)
-		q.lastTask = task
-		return
-	}
-
-	// case: lastTask is a batchedTask, try to AddTask
-	lastTask, lastTaskIsBatchedTask := q.lastTask.(*batchedTask)
-	if lastTaskIsBatchedTask && lastTask.AddTask(batchableTask) {
-		return
-	}
-
-	// case: If the incoming task will be the last task, create a new batchedTask
-	if SequentialTaskQueueCompareLess(q.lastTask, task) {
-		task = q.createBatchedTask(batchableTask)
-	}
-
-	q.taskQueue.Add(task)
-	q.updateLastTask(task)
+	incomingTask := q.createBatchedTask(task)
+	q.taskQueue.Add(incomingTask)
+	q.updateLastTask(incomingTask)
 }
 
 func (q *SequentialBatchableTaskQueue) Remove() (task TrackableExecutableTask) {
@@ -135,17 +110,21 @@ func (q *SequentialBatchableTaskQueue) Len() int {
 	return q.taskQueue.Len()
 }
 
-func (q *SequentialBatchableTaskQueue) updateLastTask(task TrackableExecutableTask) {
-	if q.lastTask == nil || SequentialTaskQueueCompareLess(q.lastTask, task) {
+func (q *SequentialBatchableTaskQueue) updateLastTask(task *batchedTask) {
+	if q.lastTask == nil || sequentialBatchableTaskQueueCompareLess(q.lastTask, task) {
 		q.lastTask = task
 	}
 }
 
-func (q *SequentialBatchableTaskQueue) createBatchedTask(task BatchableTask) *batchedTask {
+func (q *SequentialBatchableTaskQueue) createBatchedTask(task TrackableExecutableTask) *batchedTask {
 	return &batchedTask{
 		batchedTask:           task,
-		individualTasks:       append([]BatchableTask{}, task),
+		individualTasks:       append([]TrackableExecutableTask{}, task),
 		state:                 batchStateOpen,
 		individualTaskHandler: q.batchedIndividualTaskHandler,
 	}
+}
+
+func sequentialBatchableTaskQueueCompareLess(this *batchedTask, that *batchedTask) bool {
+	return SequentialTaskQueueCompareLess(this, that)
 }

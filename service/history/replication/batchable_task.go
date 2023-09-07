@@ -22,8 +22,8 @@ type (
 	}
 
 	batchedTask struct {
-		batchedTask     BatchableTask
-		individualTasks []BatchableTask
+		batchedTask     TrackableExecutableTask
+		individualTasks []TrackableExecutableTask
 		lock            sync.Mutex
 		state           batchState
 		// individualTaskHandler will be called when batched task was Nack, Reschedule, MarkPoisonPill
@@ -64,7 +64,7 @@ func (w *batchedTask) MarkPoisonPill() error {
 
 func (w *batchedTask) Ack() {
 	// TODO: emit metrics
-	w.callIndividual(BatchableTask.Ack)
+	w.callIndividual(TrackableExecutableTask.Ack)
 }
 
 func (w *batchedTask) Execute() error {
@@ -87,11 +87,11 @@ func (w *batchedTask) RetryPolicy() backoff.RetryPolicy {
 }
 
 func (w *batchedTask) Abort() {
-	w.callIndividual(BatchableTask.Abort)
+	w.callIndividual(TrackableExecutableTask.Abort)
 }
 
 func (w *batchedTask) Cancel() {
-	w.callIndividual(BatchableTask.Cancel)
+	w.callIndividual(TrackableExecutableTask.Cancel)
 }
 
 func (w *batchedTask) Nack(err error) {
@@ -115,33 +115,43 @@ func (w *batchedTask) State() ctasks.State {
 	return w.batchedTask.State()
 }
 
-func (w *batchedTask) callIndividual(f func(task BatchableTask)) {
+func (w *batchedTask) callIndividual(f func(task TrackableExecutableTask)) {
 	for _, task := range w.individualTasks {
 		f(task)
 	}
 }
 
 func (w *batchedTask) handleIndividualTasks() {
-	w.callIndividual(func(t BatchableTask) {
-		t.MarkUnbatchable()
+	w.callIndividual(func(t TrackableExecutableTask) {
+		batchableTask, isBatchable := t.(BatchableTask)
+		if isBatchable {
+			batchableTask.MarkUnbatchable()
+		}
 		w.individualTaskHandler(t)
 	})
 }
 
-func (w *batchedTask) AddTask(task BatchableTask) bool {
+func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	// This is to make sure no task can be added into this batch after it starts executing
 	if w.state != batchStateOpen {
 		return false
 	}
-	newTask, err := w.batchedTask.BatchWith(task)
-	if err != nil {
-		w.logger.Info("Failed to batch task", tag.Error(err))
+
+	incomingBatchableTask, isIncomingTaskBatchable := incomingTask.(BatchableTask)
+	currentBatchableTask, isCurrentTaskBatchable := w.batchedTask.(BatchableTask)
+
+	if !isIncomingTaskBatchable || !isCurrentTaskBatchable || !incomingBatchableTask.CanBatch() || currentBatchableTask.CanBatch() {
 		return false
 	}
-	w.batchedTask = newTask
-	w.individualTasks = append(w.individualTasks, task)
+
+	newBatchedTask, err := currentBatchableTask.BatchWith(incomingBatchableTask)
+	if err != nil {
+		w.logger.Info("Failed to batch incomingTask", tag.Error(err))
+		return false
+	}
+	w.batchedTask = newBatchedTask
+	w.individualTasks = append(w.individualTasks, incomingTask)
 	return true
 }
