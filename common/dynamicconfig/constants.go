@@ -499,6 +499,10 @@ const (
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
 	// will wait on workflow lock acquisition. Requires service restart to take effect.
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
+	// EnableHostHistoryCache controls if the history cache is host level
+	EnableHostHistoryCache = "history.enableHostHistoryCache"
+	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
+	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"

@@ -1075,7 +1075,7 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
 
-	started := make(chan struct{}, 2)
+	started := make(chan struct{}, 10)
 
 	wf1 := func(ctx workflow.Context) error {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil }); err != nil {
@@ -1097,7 +1097,6 @@ func (s *versioningIntegSuite) dispatchQuery() {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil }); err != nil {
 			return err
 		}
-		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}
 
@@ -1157,8 +1156,30 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	s.NoError(val.Get(&out))
 	s.Equal("v1.1", out)
 
-	// let the workflow exit
+	// let the workflow complete
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait for completion
+	s.NoError(run.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v1.1", out)
+
+	// start another wf on v2. should complete immediately.
+	run2, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// wait for completion
+	s.NoError(run2.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run2.GetID(), run2.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v2", out)
 }
 
 func (s *versioningIntegSuite) TestDispatchContinueAsNew() {

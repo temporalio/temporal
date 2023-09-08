@@ -57,11 +57,12 @@ func generateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 			x509.KeyUsageDigitalSignature,
 	}
 
-	if ip := net.ParseIP(commonName).To4(); ip != nil {
-		template.IPAddresses = []net.IP{ip}
-
+	if ip := net.ParseIP(commonName); ip != nil {
 		if ip.IsLoopback() {
+			template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
 			template.DNSNames = []string{"localhost"}
+		} else {
+			template.IPAddresses = []net.IP{ip}
 		}
 	} else {
 		template.DNSNames = []string{commonName}
@@ -111,11 +112,12 @@ func generateServerX509UsingCAAndSerialNumber(commonName string, serialNumber in
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 	}
 
-	if ip := net.ParseIP(commonName).To4(); ip != nil {
-		template.IPAddresses = []net.IP{ip}
-
+	if ip := net.ParseIP(commonName); ip != nil {
 		if ip.IsLoopback() {
+			template.IPAddresses = []net.IP{net.IPv6loopback, net.IPv4(127, 0, 0, 1)}
 			template.DNSNames = []string{"localhost"}
+		} else {
+			template.IPAddresses = []net.IP{ip}
 		}
 	} else {
 		template.DNSNames = []string{commonName}

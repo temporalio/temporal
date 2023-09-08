@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,24 +20,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cache
+package environment
 
 import (
-	"go.uber.org/fx"
+	"net"
+	"testing"
 
-	"go.temporal.io/server/service/history/configs"
+	"github.com/stretchr/testify/assert"
 )
 
-var Module = fx.Options(
-	fx.Provide(func(config *configs.Config) Cache {
-		return NewHostLevelCache(config)
-	}),
-	fx.Provide(NewCacheFnProvider),
-)
+func TestLookupLocalhostIPSuccess(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("localhost")
+	ip := net.ParseIP(ipString)
+	// localhost needs to resolve to a loopback address
+	// whether it's ipv4 or ipv6 - the result depends on
+	// the system running this test
+	a.True(ip.IsLoopback())
+}
 
-// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewCacheFn {
-	return func(config *configs.Config) Cache {
-		return NewShardLevelCache(config)
-	}
+func TestLookupLocalhostIPMissingHostname(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("")
+	ip := net.ParseIP(ipString)
+	a.True(ip.IsLoopback())
+	// if host can't be found, use ipv4 loopback
+	a.Equal(ip.String(), LocalhostIPDefault)
+}
+
+func TestLookupLocalhostIPWithIPv6(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("::1")
+	ip := net.ParseIP(ipString)
+	a.True(ip.IsLoopback())
+	// return ipv6 if only ipv6 is available
+	a.Equal(ip, net.ParseIP("::1"))
 }
