@@ -85,7 +85,7 @@ func NewLoadBalancer(
 		nReadPartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
 		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
 		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
-		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
+		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
 	}
 	return lb
 }
