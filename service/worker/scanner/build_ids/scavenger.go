@@ -34,11 +34,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -280,14 +279,6 @@ func (a *Activities) findBuildIdsToRemove(
 	// still processing tasks or data that hasn't made it to visibility yet.
 	removableBuildIdDurationSinceDefault := a.removableBuildIdDurationSinceDefault()
 
-	since := func(c *clock.HybridLogicalClock) time.Duration {
-		var t time.Time
-		if c != nil {
-			t = hybrid_logical_clock.UTC(*c)
-		}
-		return time.Since(t)
-	}
-
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
@@ -308,10 +299,10 @@ func (a *Activities) findBuildIdsToRemove(
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if since(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if since(buildId.StateUpdateTimestamp) < retention {
+			if hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
 				continue
 			}
 

@@ -68,7 +68,7 @@ func sign[T int64 | int32](x T) int {
 	return 0
 }
 
-// Compare 2 clocks, returns 0 if a == b, -1 if a > b, 1 if a < b
+// Compare 2 Clocks, returns 0 if a == b, -1 if a > b, 1 if a < b
 func Compare(a Clock, b Clock) int {
 	if a.WallClock == b.WallClock {
 		if a.Version == b.Version {
@@ -89,7 +89,7 @@ func Less(a Clock, b Clock) bool {
 	return Compare(a, b) > 0
 }
 
-// Max returns the maximum of two clocks
+// Max returns the maximum of two Clocks
 func Max(a Clock, b Clock) Clock {
 	if Compare(a, b) > 0 {
 		return b
@@ -97,7 +97,7 @@ func Max(a Clock, b Clock) Clock {
 	return a
 }
 
-// Min returns the minimum of two clocks
+// Min returns the minimum of two Clocks
 func Min(a Clock, b Clock) Clock {
 	if Compare(a, b) > 0 {
 		return a
@@ -105,17 +105,36 @@ func Min(a Clock, b Clock) Clock {
 	return b
 }
 
-// Equal returns whether two clocks are equal
+// Equal returns whether two Clocks are equal
 func Equal(a Clock, b Clock) bool {
 	return Compare(a, b) == 0
 }
 
-// Ptr returns a pointer to a clock (to ease inlining the APIs in this package).
+// Ptr returns a pointer to a Clock (to ease inlining the APIs in this package).
 func Ptr(c Clock) *Clock {
 	return &c
 }
 
-// UTC returns UTC time of a clock in millisecond resolution.
+// UTC returns a Time from a Clock in millisecond resolution. The Time's Location is set to UTC.
 func UTC(c Clock) time.Time {
 	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
+}
+
+// UTC returns a Time from a *Clock in millisecond resolution. The Time's Location is set to UTC.
+// If the argument is nil, it returns the Unix epoch.
+func UTCPtr(c *Clock) time.Time {
+	if c == nil {
+		return time.Unix(0, 0).UTC()
+	}
+	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
+}
+
+// Since returns time.Since(UTC(c))
+func Since(c Clock) time.Duration {
+	return time.Since(UTC(c))
+}
+
+// SincePtr returns time.Since(UTCFromPtr(c))
+func SincePtr(c *Clock) time.Duration {
+	return time.Since(UTCPtr(c))
 }
