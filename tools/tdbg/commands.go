@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -173,7 +172,7 @@ func AdminImportWorkflow(c *cli.Context) error {
 		return fmt.Errorf("unable to deserialize History data: %s", err)
 	}
 
-	versionHistory := &historyspb.VersionHistory{}
+	versionHistory := &history.VersionHistory{}
 	for _, historyBatch := range historyBatches {
 		for _, event := range historyBatch.Events {
 			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
