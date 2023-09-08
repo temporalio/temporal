@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -67,22 +66,22 @@ type (
 	}
 
 	ActivityStateReplicatorImpl struct {
-		workflowCache   wcache.Cache
-		clusterMetadata cluster.Metadata
-		logger          log.Logger
+		shardContext  shard.Context
+		workflowCache wcache.Cache
+		logger        log.Logger
 	}
 )
 
 func NewActivityStateReplicator(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *ActivityStateReplicatorImpl {
 
 	return &ActivityStateReplicatorImpl{
-		workflowCache:   workflowCache,
-		clusterMetadata: shard.GetClusterMetadata(),
-		logger:          log.With(logger, tag.ComponentHistoryReplicator),
+		shardContext:  shardContext,
+		workflowCache: workflowCache,
+		logger:        log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }
 
@@ -104,6 +103,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 
 	executionContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		namespaceID,
 		execution,
 		workflow.LockPriorityHigh,
@@ -115,7 +115,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := executionContext.LoadMutableState(ctx)
+	mutableState, err := executionContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// this can happen if the workflow start event and this sync activity task are out of order
@@ -205,6 +205,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 
 	return executionContext.UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
@@ -223,7 +224,7 @@ func (r *ActivityStateReplicatorImpl) testRefreshActivityTimerTaskMask(
 	// reset timer task status bits if
 	// 1. same source cluster & attempt changes
 	// 2. different source cluster
-	if !r.clusterMetadata.IsVersionFromSameCluster(version, activityInfo.Version) {
+	if !r.shardContext.GetClusterMetadata().IsVersionFromSameCluster(version, activityInfo.Version) {
 		return true
 	} else if activityInfo.Attempt != attempt {
 		return true

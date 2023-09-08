@@ -107,13 +107,15 @@ func (s *resetterSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.newContext = workflow.NewContext(
-		s.mockShard,
+		s.mockShard.GetConfig(),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
 			s.newRunID,
 		),
 		s.logger,
+		s.mockShard.GetThrottledLogger(),
+		s.mockShard.GetMetricsHandler(),
 	)
 	s.newRunID = uuid.New()
 

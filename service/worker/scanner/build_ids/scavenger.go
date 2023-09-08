@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -207,12 +208,17 @@ func (a *Activities) processNamespaceEntry(
 			return err
 		}
 		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
 			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
-				// Intentionally don't fail the activity on single entry.
+				if common.IsContextDeadlineExceededErr(err) {
+					// This is either a real DeadlineExceeded from the context, or the rate limiter
+					// thinks there's not enough time left until the deadline. Either way, we're done.
+					return err
+				} else if ctx.Err() != nil {
+					// Also return on context.Canceled.
+					return ctx.Err()
+				}
+				// Intentionally don't fail the activity on other single entry errors.
 				a.logger.Error("Failed to update task queue user data",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),
@@ -310,11 +316,11 @@ func (a *Activities) findBuildIdsToRemove(
 			}
 
 			if err := rateLimiter.Wait(ctx); err != nil {
-				return buildIdsToRemove, err
+				return nil, context.DeadlineExceeded
 			}
 			exists, err := worker_versioning.WorkflowsExistForBuildId(ctx, a.visibilityManager, ns, entry.TaskQueue, buildId.Id)
 			if err != nil {
-				return buildIdsToRemove, err
+				return nil, err
 			}
 			a.recordHeartbeat(ctx, heartbeat)
 			if !exists {

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/environment"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
@@ -162,7 +163,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	}
 
 	if cfg.BindOnLocalHost {
-		return net.IPv4(127, 0, 0, 1)
+		return net.ParseIP(environment.GetLocalhostIP())
 	}
 
 	if len(cfg.BindOnIP) > 0 {

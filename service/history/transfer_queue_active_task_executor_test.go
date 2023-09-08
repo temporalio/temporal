@@ -208,12 +208,12 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
 
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
@@ -2456,11 +2456,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 
 			mockWorkflowContext := workflow.NewMockContext(ctrl)
+			mockShard := shard.NewMockContext(ctrl)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
-			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil)
 
 			mockWorkflowCache := wcache.NewMockCache(ctrl)
-			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
+
+			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
 				gomock.Any(),
 			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
 			}), nil)
@@ -2468,7 +2470,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
-			mockShard := shard.NewMockContext(ctrl)
 			mockShard.EXPECT().GetConfig().Return(&configs.Config{
 				TransferProcessorEnsureCloseBeforeDelete: func() bool {
 					return c.EnsureCloseBeforeDelete
@@ -2505,7 +2506,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					cache:                 mockWorkflowCache,
 					config:                mockShard.GetConfig(),
 					metricHandler:         metrics.NoopMetricsHandler,
-					shard:                 mockShard,
+					shardContext:          mockShard,
 					workflowDeleteManager: mockWorkflowDeleteManager,
 				},
 			}

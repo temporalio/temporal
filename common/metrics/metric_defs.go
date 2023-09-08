@@ -1078,6 +1078,8 @@ var (
 	VisibilityPersistenceFailures          = NewCounterDef("visibility_persistence_errors")
 	VisibilityPersistenceResourceExhausted = NewCounterDef("visibility_persistence_resource_exhausted")
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
+	CassandraInitSessionLatency            = NewTimerDef("cassandra_init_session_latency")
+	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
 )
 
 // DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration

@@ -47,6 +47,7 @@ var (
 		"GetDLQReplicationMessages":              1,
 		"GetMutableState":                        1,
 		"GetReplicationMessages":                 1,
+		"ImportWorkflowExecution":                1,
 		"IsActivityTaskValid":                    1,
 		"IsWorkflowTaskValid":                    1,
 		"MergeDLQMessages":                       1,

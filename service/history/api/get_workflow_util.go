@@ -48,8 +48,8 @@ import (
 
 func GetOrPollMutableState(
 	ctx context.Context,
+	shardContext shard.Context,
 	request *historyservice.GetMutableStateRequest,
-	shard shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
@@ -75,7 +75,7 @@ func GetOrPollMutableState(
 		request.Execution.WorkflowId,
 		request.Execution.RunId,
 	)
-	response, err := GetMutableState(ctx, workflowKey, workflowConsistencyChecker)
+	response, err := GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func GetOrPollMutableState(
 		}
 		defer func() { _ = eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
-		response, err = GetMutableState(ctx, workflowKey, workflowConsistencyChecker)
+		response, err = GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
 		if err != nil {
 			return nil, err
 		}
@@ -113,11 +113,11 @@ func GetOrPollMutableState(
 			return response, nil
 		}
 
-		namespaceRegistry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+		namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(shard.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
+		timer := time.NewTimer(shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
 		defer timer.Stop()
 		for {
 			select {
@@ -150,6 +150,7 @@ func GetOrPollMutableState(
 
 func GetMutableState(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
@@ -172,7 +173,7 @@ func GetMutableState(
 	}
 	defer func() { weCtx.GetReleaseFn()(retError) }()
 
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

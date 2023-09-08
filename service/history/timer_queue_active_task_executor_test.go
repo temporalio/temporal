@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/service/history/consts"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -161,13 +162,13 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
-	s.workflowCache = wcache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
 	s.logger = s.mockShard.GetLogger()
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
+		shardContext:       s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
@@ -1590,9 +1591,11 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	workflowID string,
 	runID string,
 ) workflow.MutableState {
-	return s.workflowCache.(*wcache.CacheImpl).Get(
-		definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-	).(*workflow.ContextImpl).MutableState
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
+	return s.workflowCache.(*wcache.CacheImpl).Get(key).(*workflow.ContextImpl).MutableState
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(

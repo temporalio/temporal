@@ -67,7 +67,7 @@ var (
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
-		shard                    shard.Context
+		shardContext             shard.Context
 		registry                 namespace.Registry
 		cache                    wcache.Cache
 		logger                   log.Logger
@@ -82,7 +82,7 @@ type (
 )
 
 func newTransferQueueTaskExecutorBase(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 	metricHandler metrics.Handler,
@@ -91,22 +91,22 @@ func newTransferQueueTaskExecutorBase(
 	visibilityManager manager.VisibilityManager,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
-		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                    shard,
-		registry:                 shard.GetNamespaceRegistry(),
+		currentClusterName:       shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:             shardContext,
+		registry:                 shardContext.GetNamespaceRegistry(),
 		cache:                    workflowCache,
 		logger:                   logger,
 		metricHandler:            metricHandler,
 		historyRawClient:         historyRawClient,
 		matchingRawClient:        matchingRawClient,
-		config:                   shard.GetConfig(),
-		searchAttributesProvider: shard.GetSearchAttributesProvider(),
+		config:                   shardContext.GetConfig(),
+		searchAttributesProvider: shardContext.GetSearchAttributesProvider(),
 		visibilityManager:        visibilityManager,
 		workflowDeleteManager: deletemanager.NewDeleteManager(
-			shard,
+			shardContext,
 			workflowCache,
-			shard.GetConfig(),
-			shard.GetTimeSource(),
+			shardContext.GetConfig(),
+			shardContext.GetTimeSource(),
 			visibilityManager,
 		),
 	}
@@ -130,7 +130,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		},
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
@@ -158,7 +158,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		TaskQueue:              taskqueue,
 		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
-		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
@@ -195,6 +195,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 
 	weCtx, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
+		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		workflow.LockPriorityLow,
@@ -204,7 +205,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -233,7 +234,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 		if err != nil {
 			return err
 		}
@@ -257,7 +258,7 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 		return false
 	}
 	// check if close execution transfer task is completed
-	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
+	transferQueueState, ok := t.shardContext.GetQueueState(tasks.CategoryTransfer)
 	if !ok {
 		return true
 	}

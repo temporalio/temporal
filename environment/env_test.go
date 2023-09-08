@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +20,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ndc
+package environment
 
-import replicationpb "go.temporal.io/api/replication/v1"
+import (
+	"net"
+	"testing"
 
-var (
-	clusterName              = []string{"cluster-a", "cluster-b", "cluster-c"}
-	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
-		{ClusterName: clusterName[0]},
-		{ClusterName: clusterName[1]},
-		{ClusterName: clusterName[2]},
-	}
+	"github.com/stretchr/testify/assert"
 )
+
+func TestLookupLocalhostIPSuccess(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("localhost")
+	ip := net.ParseIP(ipString)
+	// localhost needs to resolve to a loopback address
+	// whether it's ipv4 or ipv6 - the result depends on
+	// the system running this test
+	a.True(ip.IsLoopback())
+}
+
+func TestLookupLocalhostIPMissingHostname(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("")
+	ip := net.ParseIP(ipString)
+	a.True(ip.IsLoopback())
+	// if host can't be found, use ipv4 loopback
+	a.Equal(ip.String(), LocalhostIPDefault)
+}
+
+func TestLookupLocalhostIPWithIPv6(t *testing.T) {
+	t.Parallel()
+	a := assert.New(t)
+	ipString := lookupLocalhostIP("::1")
+	ip := net.ParseIP(ipString)
+	a.True(ip.IsLoopback())
+	// return ipv6 if only ipv6 is available
+	a.Equal(ip, net.ParseIP("::1"))
+}

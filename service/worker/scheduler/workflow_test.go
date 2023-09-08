@@ -544,7 +544,7 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				end:    time.Date(2022, 6, 1, 0, 29, 0, 0, time.UTC),
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
-			// skipped over :15, :20
+			// skipped over :15, :20, :25
 			{
 				id:     "myid-2022-06-01T00:30:00Z",
 				start:  time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC),
@@ -557,9 +557,33 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
 			},
+			{at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(0), s.describe().Info.OverlapSkipped)
+				},
+			},
+			{at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
+				},
+			},
+			{at: time.Date(2022, 6, 1, 0, 26, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+				},
+			},
 			{
 				at: time.Date(2022, 6, 1, 0, 31, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:30:00Z"}, s.runningWorkflows()) },
+			},
+			{at: time.Date(2022, 6, 1, 0, 32, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+				},
 			},
 		},
 		&schedpb.Schedule{
@@ -635,6 +659,81 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 			},
 		},
 		9,
+	)
+}
+
+func (s *workflowSuite) TestBufferLimit() {
+	originalMaxBufferSize := currentTweakablePolicies.MaxBufferSize
+	currentTweakablePolicies.MaxBufferSize = 2
+	defer func() { currentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T00:05:00Z",
+				start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 22, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// first buffered one:
+			{
+				id:     "myid-2022-06-01T00:10:00Z",
+				start:  time.Date(2022, 6, 1, 0, 22, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// next buffered one, and also one more gets buffered:
+			{
+				id:     "myid-2022-06-01T00:15:00Z",
+				start:  time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 24, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// run :20 does not fit in the buffer. finally back on track for :25
+			{
+				id:     "myid-2022-06-01T00:25:00Z",
+				start:  time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 20, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows())
+					s.Equal(int64(2), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 23, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 25, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:25:00Z"}, s.runningWorkflows())
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(5 * time.Minute),
+				}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			},
+		},
+		8,
 	)
 }
 
