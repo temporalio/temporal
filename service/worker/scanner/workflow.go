@@ -46,17 +46,20 @@ const (
 	tqScannerWFID                  = "temporal-sys-tq-scanner"
 	tqScannerWFTypeName            = "temporal-sys-tq-scanner-workflow"
 	tqScannerTaskQueueName         = "temporal-sys-tq-scanner-taskqueue-0"
+	tqScannerActivityTaskQueueName = "temporal-sys-tq-scanner-activity-taskqueue-0"
 	taskQueueScavengerActivityName = "temporal-sys-tq-scanner-scvg-activity"
 
-	historyScannerWFID           = "temporal-sys-history-scanner"
-	historyScannerWFTypeName     = "temporal-sys-history-scanner-workflow"
-	historyScannerTaskQueueName  = "temporal-sys-history-scanner-taskqueue-0"
-	historyScavengerActivityName = "temporal-sys-history-scanner-scvg-activity"
+	historyScannerWFID                  = "temporal-sys-history-scanner"
+	historyScannerWFTypeName            = "temporal-sys-history-scanner-workflow"
+	historyScannerTaskQueueName         = "temporal-sys-history-scanner-taskqueue-0"
+	historyScannerActivityTaskQueueName = "temporal-sys-history-scanner-activity-taskqueue-0"
+	historyScavengerActivityName        = "temporal-sys-history-scanner-scvg-activity"
 
-	executionsScannerWFID           = "temporal-sys-executions-scanner"
-	executionsScannerWFTypeName     = "temporal-sys-executions-scanner-workflow"
-	executionsScannerTaskQueueName  = "temporal-sys-executions-scanner-taskqueue-0"
-	executionsScavengerActivityName = "temporal-sys-executions-scanner-scvg-activity"
+	executionsScannerWFID                  = "temporal-sys-executions-scanner"
+	executionsScannerWFTypeName            = "temporal-sys-executions-scanner-workflow"
+	executionsScannerTaskQueueName         = "temporal-sys-executions-scanner-taskqueue-0"
+	executionsScannerActivityTaskQueueName = "temporal-sys-executions-scanner-activity-taskqueue-0"
+	executionsScavengerActivityName        = "temporal-sys-executions-scanner-scvg-activity"
 )
 
 type (

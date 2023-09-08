@@ -91,22 +91,34 @@ func New(params *BootstrapParams) *Processor {
 // Start starts the scanner
 func (s *Processor) Start() error {
 	svcClient := s.sdkClientFactory.GetSystemClient()
+
 	processorWorker := s.sdkClientFactory.NewWorker(svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
-	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
+	if err := processorWorker.Start(); err != nil {
+		return err
+	}
 
-	return processorWorker.Start()
+	activityWorker := s.sdkClientFactory.NewWorker(svcClient, processorActivityTaskQueueName, getActivityWorkerOptions(s))
+	activityWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
+
+	return activityWorker.Start()
 }
 
 func getWorkerOptions(p *Processor) worker.Options {
+	return worker.Options{
+		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
+	}
+}
+
+func getActivityWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerType(ctx, headers.CallerTypeAPI)
 
 	return worker.Options{
-		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
-		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
-		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
-		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
-		BackgroundActivityContext:              ctx,
+		MaxConcurrentActivityExecutionSize: p.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentActivityTaskPollers:   p.cfg.MaxConcurrentActivityTaskPollers(),
+		BackgroundActivityContext:          ctx,
+		DisableWorkflowWorker:              true,
 	}
 }

@@ -52,8 +52,9 @@ const (
 	BuildIdScavangerWorkflowName = "build-id-scavenger"
 	BuildIdScavangerActivityName = "scavenge-build-ids"
 
-	BuildIdScavengerWFID          = "temporal-sys-build-id-scavenger"
-	BuildIdScavengerTaskQueueName = "temporal-sys-build-id-scavenger-taskqueue-0"
+	BuildIdScavengerWFID                  = "temporal-sys-build-id-scavenger"
+	BuildIdScavengerTaskQueueName         = "temporal-sys-build-id-scavenger-taskqueue-0"
+	BuildIdScavengerActivityTaskQueueName = "temporal-sys-build-id-scavenger-activity-taskqueue-0"
 )
 
 var (

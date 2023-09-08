@@ -167,35 +167,62 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
-		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),
 		MaxConcurrentWorkflowTaskPollers:       s.context.cfg.MaxConcurrentWorkflowTaskPollers(),
-
-		BackgroundActivityContext: ctx,
 	}
 
-	var workerTaskQueueNames []string
+	activityWorkerOpts := worker.Options{
+		MaxConcurrentActivityExecutionSize: s.context.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentActivityTaskPollers:   s.context.cfg.MaxConcurrentActivityTaskPollers(),
+		BackgroundActivityContext:          ctx,
+		DisableWorkflowWorker:              true,
+	}
+
+	sdkClient := s.context.sdkClientFactory.GetSystemClient()
+
+	var workers []worker.Worker
+
 	if s.context.cfg.ExecutionsScannerEnabled() {
 		s.wg.Add(1)
 		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName)
-		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
+
+		wfWorker := s.context.sdkClientFactory.NewWorker(sdkClient, executionsScannerTaskQueueName, workerOpts)
+		wfWorker.RegisterWorkflowWithOptions(ExecutionsScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
+
+		atWorker := s.context.sdkClientFactory.NewWorker(sdkClient, executionsScannerActivityTaskQueueName, activityWorkerOpts)
+		atWorker.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
+
+		workers = append(workers, wfWorker, atWorker)
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
 		s.wg.Add(1)
 		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName)
-		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
+
+		wfWorker := s.context.sdkClientFactory.NewWorker(sdkClient, tqScannerTaskQueueName, workerOpts)
+		wfWorker.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
+
+		atWorker := s.context.sdkClientFactory.NewWorker(sdkClient, tqScannerActivityTaskQueueName, activityWorkerOpts)
+		atWorker.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
+
+		workers = append(workers, wfWorker, atWorker)
 	}
 
 	if s.context.cfg.HistoryScannerEnabled() {
 		s.wg.Add(1)
 		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName)
-		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
+
+		wfWorker := s.context.sdkClientFactory.NewWorker(sdkClient, historyScannerTaskQueueName, workerOpts)
+		wfWorker.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
+
+		atWorker := s.context.sdkClientFactory.NewWorker(sdkClient, historyScannerActivityTaskQueueName, activityWorkerOpts)
+		atWorker.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
+
+		workers = append(workers, wfWorker, atWorker)
 	}
 
 	if s.context.cfg.BuildIdScavengerEnabled() {
@@ -214,27 +241,16 @@ func (s *Scanner) Start() error {
 			s.context.cfg.BuildIdScavengerVisibilityRPS,
 		)
 
-		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
-		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
-		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
+		wfWorker := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
+		wfWorker.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-		if err := work.Start(); err != nil {
-			return err
-		}
+		atWorker := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerActivityTaskQueueName, activityWorkerOpts)
+		atWorker.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
+
+		workers = append(workers, wfWorker, atWorker)
 	}
 
-	// TODO: There's no reason to register all activities and workflows on every task queue.
-	for _, tl := range workerTaskQueueNames {
-		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
-
-		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
-		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
-		work.RegisterWorkflowWithOptions(ExecutionsScannerWorkflow, workflow.RegisterOptions{Name: executionsScannerWFTypeName})
-		work.RegisterActivityWithOptions(TaskQueueScavengerActivity, activity.RegisterOptions{Name: taskQueueScavengerActivityName})
-		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
-		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
-
+	for _, work := range workers {
 		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {
 			return err

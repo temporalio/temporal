@@ -50,8 +50,10 @@ import (
 )
 
 const (
-	// processorTaskQueueName is the taskqueue name
+	// processorTaskQueueName is the task queue name for workflow tasks
 	processorTaskQueueName = "temporal-sys-processor-parent-close-policy"
+	// processorActivityTaskQueueName is the task queue name for activity tasks
+	processorActivityTaskQueueName = "temporal-sys-processor-parent-close-policy-activity"
 	// processorWFTypeName is the workflow type
 	processorWFTypeName   = "temporal-sys-parent-close-policy-workflow"
 	processorActivityName = "temporal-sys-parent-close-policy-activity"
