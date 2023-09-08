@@ -128,9 +128,9 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
 	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history count exceeds limit
 	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
 	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
