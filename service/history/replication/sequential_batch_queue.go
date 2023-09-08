@@ -50,7 +50,8 @@ func NewSequentialBatchableTaskQueue(
 	task TrackableExecutableTask,
 	batchedIndividualTaskHandler func(task TrackableExecutableTask),
 	logger log.Logger,
-	metricsHandler metrics.Handler) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+	metricsHandler metrics.Handler,
+) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialBatchableTaskQueue{
 		id: task.QueueID(),
 

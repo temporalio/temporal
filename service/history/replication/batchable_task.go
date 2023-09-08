@@ -11,11 +11,13 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination batchable_task_mock.go
+
 type (
 	BatchableTask interface {
 		TrackableExecutableTask
 		// BatchWith task and return a new BatchableTask
-		BatchWith(task BatchableTask) (BatchableTask, error)
+		BatchWith(task BatchableTask) (TrackableExecutableTask, error)
 		CanBatch() bool
 		// MarkUnbatchable will mark current task not batchable, so CanBatch() will return false
 		MarkUnbatchable()
@@ -98,7 +100,7 @@ func (w *batchedTask) Nack(err error) {
 	if len(w.individualTasks) == 1 {
 		w.batchedTask.Nack(err)
 	} else {
-		w.logger.Info("Failed to process batched replication task", tag.Error(err))
+		w.logger.Warn("Failed to process batched replication task", tag.Error(err))
 		w.handleIndividualTasks()
 	}
 }
@@ -142,7 +144,7 @@ func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
 	incomingBatchableTask, isIncomingTaskBatchable := incomingTask.(BatchableTask)
 	currentBatchableTask, isCurrentTaskBatchable := w.batchedTask.(BatchableTask)
 
-	if !isIncomingTaskBatchable || !isCurrentTaskBatchable || !incomingBatchableTask.CanBatch() || currentBatchableTask.CanBatch() {
+	if !isIncomingTaskBatchable || !isCurrentTaskBatchable || !incomingBatchableTask.CanBatch() || !currentBatchableTask.CanBatch() {
 		return false
 	}
 
