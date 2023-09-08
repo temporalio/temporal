@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
-
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -114,7 +113,7 @@ type (
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCHistoryReplicator       ndc.HistoryReplicator
-		nDCHistoryBackfiller       ndc.HistoryImporter
+		nDCHistoryImporter         ndc.HistoryImporter
 		nDCActivityStateReplicator ndc.ActivityStateReplicator
 		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
@@ -220,7 +219,7 @@ func NewEngineWithShardContext(
 			eventSerializer,
 			logger,
 		)
-		historyEngImpl.nDCHistoryBackfiller = ndc.NewHistoryImporter(
+		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
 			shard,
 			workflowCache,
 			logger,
@@ -657,7 +656,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	token, err := e.nDCHistoryBackfiller.ImportWorkflow(
+	token, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
