@@ -76,10 +76,10 @@ func TestSizeLimitIntegrationSuite(t *testing.T) {
 	suite.Run(t, new(sizeLimitIntegrationSuite))
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
-	id := "integration-terminate-workflow-by-history-size-limit-test"
-	wt := "integration-terminate-workflow-by-history-size-limit-test-type"
-	tq := "integration-terminate-workflow-by-history-size-limit-test-taskqueue"
+func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+	id := "integration-terminate-workflow-by-history-count-limit-test"
+	wt := "integration-terminate-workflow-by-history-count-limit-test-type"
+	tq := "integration-terminate-workflow-by-history-count-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -198,7 +198,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, "Workflow history size / count exceeds limit.")
+	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
@@ -451,6 +451,101 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.IsType(&serviceerror.NotFound{}, signalErr)
+
+	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.GetRunId(),
+	})
+
+	// verify last event is terminated event
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	history := historyResponse.History
+	lastEvent := history.Events[len(history.Events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+
+	// verify visibility is correctly processed from open to close
+	isCloseCorrect := false
+	for i := 0; i < 10; i++ {
+		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 100,
+			StartTimeFilter: &filterpb.StartTimeFilter{
+				EarliestTime: timestamp.TimePtr(time.Time{}),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			},
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		s.NoError(err1)
+		if len(resp.Executions) == 1 {
+			isCloseCorrect = true
+			break
+		}
+		s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.True(isCloseCorrect)
+}
+
+func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
+	id := "integration-terminate-workflow-by-history-size-limit-test"
+	wt := "integration-terminate-workflow-by-history-size-limit-test-type"
+	tq := "integration-terminate-workflow-by-history-size-limit-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	var signalErr error
+	// Send signals until workflow is force terminated
+	largePayload := make([]byte, 900)
+SignalLoop:
+	for i := 0; i < 10; i++ {
+		// Send another signal without RunID
+		signalName := "another signal"
+		signalInput, err := payloads.Encode(largePayload)
+		s.NoError(err)
+		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+			},
+			SignalName: signalName,
+			Input:      signalInput,
+			Identity:   identity,
+		})
+
+		if signalErr != nil {
+			break SignalLoop
+		}
+	}
+	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
+	// error. InvalidArgument is returned by the client.
+	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
+	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,

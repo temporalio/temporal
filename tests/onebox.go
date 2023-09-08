@@ -139,6 +139,8 @@ type (
 		NumHistoryHosts            int
 		HistoryCountLimitError     int
 		HistoryCountLimitWarn      int
+		HistorySizeLimitError      int
+		HistorySizeLimitWarn       int
 		BlobSizeLimitError         int
 		BlobSizeLimitWarn          int
 		MutableStateSizeLimitError int
@@ -794,6 +796,12 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+	}
+	if c.historyConfig.HistorySizeLimitWarn != 0 {
+		client.OverrideValue(dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
+	}
+	if c.historyConfig.HistorySizeLimitError != 0 {
+		client.OverrideValue(dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
 		client.OverrideValue(dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
