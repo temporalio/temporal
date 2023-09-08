@@ -76,18 +76,24 @@ func newComponent(
 		}}
 }
 
-func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
+func (wc *deleteNamespaceComponent) RegisterWorkflow(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
-	worker.RegisterActivity(wc.deleteNamespaceActivities())
-
 	worker.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
-	worker.RegisterActivity(wc.reclaimResourcesActivities())
-
 	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
+}
+
+func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	// use default worker
+	return nil
+}
+
+func (wc *deleteNamespaceComponent) RegisterActivities(worker sdkworker.Worker) {
+	worker.RegisterActivity(wc.deleteNamespaceActivities())
+	worker.RegisterActivity(wc.reclaimResourcesActivities())
 	worker.RegisterActivity(wc.deleteExecutionsActivities())
 }
 
-func (wc *deleteNamespaceComponent) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	// use default worker
 	return nil
 }

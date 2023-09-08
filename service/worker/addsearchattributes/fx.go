@@ -69,12 +69,20 @@ func NewResult(params initParams) fxResult {
 	}
 }
 
-func (wc *addSearchAttributes) Register(worker sdkworker.Worker) {
+func (wc *addSearchAttributes) RegisterWorkflow(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+}
+
+func (wc *addSearchAttributes) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	// use default worker
+	return nil
+}
+
+func (wc *addSearchAttributes) RegisterActivities(worker sdkworker.Worker) {
 	worker.RegisterActivity(wc.activities())
 }
 
-func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	// use default worker
 	return nil
 }

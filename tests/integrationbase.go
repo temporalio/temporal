@@ -335,7 +335,7 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 	}
 	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
 
-	s.Logger.Info("Register namespace succeeded",
+	s.Logger.Info("RegisterWorkflow namespace succeeded",
 		tag.WorkflowNamespace(archivalNamespace),
 		tag.WorkflowNamespaceID(response.ID),
 	)

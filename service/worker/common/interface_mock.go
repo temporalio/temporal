@@ -59,30 +59,56 @@ func (m *MockWorkerComponent) EXPECT() *MockWorkerComponentMockRecorder {
 	return m.recorder
 }
 
-// DedicatedWorkerOptions mocks base method.
-func (m *MockWorkerComponent) DedicatedWorkerOptions() *DedicatedWorkerOptions {
+// DedicatedActivityWorkerOptions mocks base method.
+func (m *MockWorkerComponent) DedicatedActivityWorkerOptions() *DedicatedWorkerOptions {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DedicatedWorkerOptions")
+	ret := m.ctrl.Call(m, "DedicatedActivityWorkerOptions")
 	ret0, _ := ret[0].(*DedicatedWorkerOptions)
 	return ret0
 }
 
-// DedicatedWorkerOptions indicates an expected call of DedicatedWorkerOptions.
-func (mr *MockWorkerComponentMockRecorder) DedicatedWorkerOptions() *gomock.Call {
+// DedicatedActivityWorkerOptions indicates an expected call of DedicatedActivityWorkerOptions.
+func (mr *MockWorkerComponentMockRecorder) DedicatedActivityWorkerOptions() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DedicatedWorkerOptions", reflect.TypeOf((*MockWorkerComponent)(nil).DedicatedWorkerOptions))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DedicatedActivityWorkerOptions", reflect.TypeOf((*MockWorkerComponent)(nil).DedicatedActivityWorkerOptions))
 }
 
-// Register mocks base method.
-func (m *MockWorkerComponent) Register(arg0 worker.Worker) {
+// DedicatedWorkflowWorkerOptions mocks base method.
+func (m *MockWorkerComponent) DedicatedWorkflowWorkerOptions() *DedicatedWorkerOptions {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Register", arg0)
+	ret := m.ctrl.Call(m, "DedicatedWorkflowWorkerOptions")
+	ret0, _ := ret[0].(*DedicatedWorkerOptions)
+	return ret0
 }
 
-// Register indicates an expected call of Register.
-func (mr *MockWorkerComponentMockRecorder) Register(arg0 interface{}) *gomock.Call {
+// DedicatedWorkflowWorkerOptions indicates an expected call of DedicatedWorkflowWorkerOptions.
+func (mr *MockWorkerComponentMockRecorder) DedicatedWorkflowWorkerOptions() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockWorkerComponent)(nil).Register), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DedicatedWorkflowWorkerOptions", reflect.TypeOf((*MockWorkerComponent)(nil).DedicatedWorkflowWorkerOptions))
+}
+
+// RegisterActivities mocks base method.
+func (m *MockWorkerComponent) RegisterActivities(arg0 worker.Worker) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterActivities", arg0)
+}
+
+// RegisterActivities indicates an expected call of RegisterActivities.
+func (mr *MockWorkerComponentMockRecorder) RegisterActivities(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivities", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterActivities), arg0)
+}
+
+// RegisterWorkflow mocks base method.
+func (m *MockWorkerComponent) RegisterWorkflow(arg0 worker.Worker) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterWorkflow", arg0)
+}
+
+// RegisterWorkflow indicates an expected call of RegisterWorkflow.
+func (mr *MockWorkerComponentMockRecorder) RegisterWorkflow(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflow", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterWorkflow), arg0)
 }
 
 // MockPerNSWorkerComponent is a mock of PerNSWorkerComponent interface.

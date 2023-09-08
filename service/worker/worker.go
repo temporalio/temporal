@@ -85,15 +85,26 @@ func (wm *workerManager) Start() {
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {
-		workerOptions := wc.DedicatedWorkerOptions()
-		if workerOptions == nil {
+		wfWorkerOptions := wc.DedicatedWorkflowWorkerOptions()
+		if wfWorkerOptions == nil {
 			// use default worker
-			wc.Register(defaultWorker)
+			wc.RegisterWorkflow(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker
-			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
-			wc.Register(dedicatedWorker)
+			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
+			wc.RegisterWorkflow(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
+		}
+
+		activityWorkerOptions := wc.DedicatedActivityWorkerOptions()
+		if activityWorkerOptions == nil {
+			// use default worker
+			wc.RegisterActivities(defaultWorker)
+		} else {
+			// this worker component requires a dedicated worker for activities
+			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
+			wc.RegisterActivities(activityWorker)
+			wm.workers = append(wm.workers, activityWorker)
 		}
 	}
 
