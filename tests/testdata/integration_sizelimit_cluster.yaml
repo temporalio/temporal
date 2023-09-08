@@ -5,6 +5,8 @@ historyconfig:
   numhistoryhosts: 1
   historycountlimiterror: 20
   historycountlimitwarn: 10
+  historysizelimiterror: 9000
+  historysizelimitwarn: 5000
   blobsizelimiterror: 1000
   blobsizelimitwarn: 1
   mutablestatesizelimiterror: 1100
