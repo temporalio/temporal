@@ -156,12 +156,15 @@ func getOptionalQueueFactories(
 
 func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,
-) queues.SchedulerRateLimiter {
+	timeSource clock.TimeSource,
+) (queues.SchedulerRateLimiter, error) {
 	return queues.NewSchedulerRateLimiter(
 		config.TaskSchedulerNamespaceMaxQPS,
 		config.TaskSchedulerMaxQPS,
 		config.PersistenceNamespaceMaxQPS,
 		config.PersistenceMaxQPS,
+		config.TaskSchedulerRateLimiterStartupDelay,
+		timeSource,
 	)
 }
 

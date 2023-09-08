@@ -159,6 +159,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		fx.Annotate(archivalMetadata, fx.As(new(carchiver.ArchivalMetadata))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
+		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
 	)
 }
 
@@ -168,7 +169,6 @@ type compileTimeDependencies struct {
 	fx.Out
 
 	namespace.Registry
-	clock.TimeSource
 	log.SnTaggedLogger
 	client.Bean
 	sdk.ClientFactory
