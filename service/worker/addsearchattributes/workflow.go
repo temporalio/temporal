@@ -48,6 +48,8 @@ import (
 const (
 	// WorkflowName is workflowId of the system workflow performing addition of search attributes
 	WorkflowName = "temporal-sys-add-search-attributes-workflow"
+	// ActivityTQName is task queue name for add search attributes activities
+	activityTQName = "temporal-sys-add-search-attributes-activity-tq"
 )
 
 type (

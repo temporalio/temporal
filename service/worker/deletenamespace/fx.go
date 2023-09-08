@@ -25,8 +25,11 @@
 package deletenamespace
 
 import (
+	"context"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/headers"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/log"
@@ -94,8 +97,13 @@ func (wc *deleteNamespaceComponent) RegisterActivities(worker sdkworker.Worker) 
 }
 
 func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
-	// use default worker
-	return nil
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: activityTQName,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			DisableWorkflowWorker:     true,
+		},
+	}
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {

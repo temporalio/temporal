@@ -40,7 +40,8 @@ import (
 )
 
 const (
-	WorkflowName = "temporal-sys-delete-namespace-workflow"
+	WorkflowName   = "temporal-sys-delete-namespace-workflow"
+	activityTQName = "temporal-sys-delete-namespace-activity-tq"
 )
 
 type (
