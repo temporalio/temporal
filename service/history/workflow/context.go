@@ -873,7 +873,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (bool, error) {
-	// Hard terminate workflow if still running and breached history size or history count limits
+	// Hard terminate workflow if still running and breached history size limit
 	if c.maxHistorySizeExceeded(shardContext) {
 		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistorySizeExceedsLimit); err != nil {
 			return false, err
@@ -917,7 +917,7 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (bool, error) {
-	// Hard terminate workflow if still running and breached history size or history count limits
+	// Hard terminate workflow if still running and breached history count limit
 	if c.maxHistoryCountExceeded(shardContext) {
 		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistoryCountExceedsLimit); err != nil {
 			return false, err
@@ -928,8 +928,8 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 	return false, nil
 }
 
-// Returns true if the workflow is running and history size or event count should trigger a forced termination
-// Prints a log message if history size or history event count are over the error or warn limits
+// Returns true if the workflow is running and history event count should trigger a forced termination
+// Prints a log message if history event count is over the error or warn limits
 func (c *ContextImpl) maxHistoryCountExceeded(shardContext shard.Context) bool {
 	namespaceName := c.GetNamespace(shardContext).String()
 	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
@@ -937,7 +937,7 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext shard.Context) bool {
 	historyCount := int(c.MutableState.GetNextEventID() - 1)
 
 	if historyCount > historyCountLimitError && c.MutableState.IsWorkflowExecutionRunning() {
-		c.logger.Warn("history size exceeds error limit.",
+		c.logger.Warn("history count exceeds error limit.",
 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
 			tag.WorkflowID(c.workflowKey.WorkflowID),
 			tag.WorkflowRunID(c.workflowKey.RunID),
@@ -947,7 +947,7 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext shard.Context) bool {
 	}
 
 	if historyCount > historyCountLimitWarn {
-		c.throttledLogger.Warn("history size exceeds warn limit.",
+		c.throttledLogger.Warn("history count exceeds warn limit.",
 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
 			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
