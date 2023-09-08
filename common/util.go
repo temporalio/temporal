@@ -129,7 +129,9 @@ const (
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
 	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonHistorySizeExceedsLimit = "Workflow history size / count exceeds limit."
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
+	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
 	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit

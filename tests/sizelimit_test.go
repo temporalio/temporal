@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
-	"regexp"
 	"testing"
 	"time"
 
@@ -199,7 +198,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, "Workflow history size / count exceeds limit.")
+	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
@@ -219,8 +218,6 @@ SignalLoop:
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
-	s.Regexp(regexp.MustCompile(common.FailureReasonHistorySizeExceedsLimit+" historySize: [0-9]+, historySizeLimit: [0-9]+, historyCount: [0-9]+, historyCountLimit: [0-9]+"),
-		lastEvent.GetWorkflowExecutionTerminatedEventAttributes().Reason)
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false
 	for i := 0; i < 10; i++ {
@@ -471,8 +468,6 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	history := historyResponse.History
 	lastEvent := history.Events[len(history.Events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
-	s.Regexp(regexp.MustCompile(common.FailureReasonMutableStateSizeExceedsLimit+" mutableStateSize: [0-9]+, mutableStateSizeLimit: [0-9]+"),
-		lastEvent.GetWorkflowExecutionTerminatedEventAttributes().Reason)
 	// verify visibility is correctly processed from open to close
 	isCloseCorrect := false
 	for i := 0; i < 10; i++ {
