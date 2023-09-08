@@ -100,7 +100,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 		token = resp.NextPageToken
 	}
 
-	allEvents := &historypb.History{}
+	var historyBatches []*historypb.History
 	totalSize := 0
 	for idx, b := range histories {
 		totalSize += len(b.Data)
@@ -109,7 +109,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("unable to deserialize Events: %s", err)
 		}
-		allEvents.Events = append(allEvents.Events, historyBatch...)
+		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
@@ -121,7 +121,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
-		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
+		data, err := encoder.EncodeHistories(historyBatches)
 		if err != nil {
 			return fmt.Errorf("unable to serialize History data: %s", err)
 		}
