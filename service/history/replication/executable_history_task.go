@@ -59,7 +59,6 @@ type (
 
 var _ ctasks.Task = (*ExecutableHistoryTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableHistoryTask)(nil)
-var _ BatchableTask = (*ExecutableHistoryTask)(nil)
 
 func NewExecutableHistoryTask(
 	processToolBox ProcessToolBox,
@@ -230,17 +229,4 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
-}
-
-func (e *ExecutableHistoryTask) BatchWith(task BatchableTask) (TrackableExecutableTask, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (e *ExecutableHistoryTask) CanBatch() bool {
-	return e.canBatch
-}
-
-func (e *ExecutableHistoryTask) MarkUnbatchable() {
-
 }
