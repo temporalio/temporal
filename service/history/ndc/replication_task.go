@@ -133,6 +133,32 @@ func newReplicationTaskFromRequest(
 	)
 }
 
+func newReplicationTaskFromReplicateHistoryEventsRequest(
+	clusterMetadata cluster.Metadata,
+	logger log.Logger,
+	request *historyservice.ReplicateHistoryEventsRequest,
+) (*replicationTaskImpl, error) {
+
+	err := validateReplicateHistoryEventsRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return newReplicationTask(
+		clusterMetadata,
+		logger,
+		definition.NewWorkflowKey(
+			request.GetNamespaceId(),
+			request.WorkflowExecution.WorkflowId,
+			request.WorkflowExecution.RunId,
+		),
+		request.BaseExecutionInfo,
+		request.VersionHistoryItems,
+		[][]*historypb.HistoryEvent{request.Events},
+		request.NewRunEvents,
+	)
+}
+
 func newReplicationTaskFromBatch(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
@@ -437,6 +463,41 @@ func validateReplicateEventsRequest(
 		return nil, nil, ErrEventVersionMismatch
 	}
 	return events, newRunEvents, nil
+}
+
+func validateReplicateHistoryEventsRequest(
+	request *historyservice.ReplicateHistoryEventsRequest,
+) error {
+
+	// TODO add validation on version history
+
+	if valid := validateUUID(request.GetNamespaceId()); !valid {
+		return ErrInvalidNamespaceID
+	}
+	if request.WorkflowExecution == nil {
+		return ErrInvalidExecution
+	}
+	if valid := validateUUID(request.WorkflowExecution.GetRunId()); !valid {
+		return ErrInvalidRunID
+	}
+
+	if len(request.Events) == 0 {
+		return consts.ErrEmptyHistoryRawEventBatch
+	}
+
+	version, err := validateEvents(request.Events)
+	if err != nil {
+		return err
+	}
+
+	newRunVersion, err := validateEvents(request.NewRunEvents)
+	if err != nil {
+		return err
+	}
+	if version != newRunVersion {
+		return ErrEventVersionMismatch
+	}
+	return nil
 }
 
 func validateUUID(input string) bool {

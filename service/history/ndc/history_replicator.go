@@ -100,6 +100,11 @@ type (
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
 		) error
+
+		ApplyHistoryEvents(
+			ctx context.Context,
+			request *historyservice.ReplicateHistoryEventsRequest,
+		) error
 		// ApplyEventBlobs is the batch version of ApplyEvents
 		// NOTE:
 		//  1. all history events should have the same version
@@ -214,6 +219,23 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	task, err := newReplicationTaskFromRequest(
 		r.clusterMetadata,
 		r.historySerializer,
+		r.logger,
+		request,
+	)
+	if err != nil {
+		return err
+	}
+
+	return r.doApplyEvents(ctx, task)
+}
+
+func (r *HistoryReplicatorImpl) ApplyHistoryEvents(
+	ctx context.Context,
+	request *historyservice.ReplicateHistoryEventsRequest,
+) (retError error) {
+
+	task, err := newReplicationTaskFromReplicateHistoryEventsRequest(
+		r.clusterMetadata,
 		r.logger,
 		request,
 	)

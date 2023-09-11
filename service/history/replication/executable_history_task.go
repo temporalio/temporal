@@ -52,12 +52,14 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req *historyservice.ReplicateEventsV2Request
+		req      *historyservice.ReplicateEventsV2Request
+		canBatch bool
 	}
 )
 
 var _ ctasks.Task = (*ExecutableHistoryTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableHistoryTask)(nil)
+var _ BatchableTask = (*ExecutableHistoryTask)(nil)
 
 func NewExecutableHistoryTask(
 	processToolBox ProcessToolBox,
@@ -90,6 +92,7 @@ func NewExecutableHistoryTask(
 			// new run events does not need version history since there is no prior events
 			NewRunEvents: task.NewRunEvents,
 		},
+		canBatch: false,
 	}
 }
 
@@ -227,4 +230,17 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+}
+
+func (e *ExecutableHistoryTask) BatchWith(task BatchableTask) (TrackableExecutableTask, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *ExecutableHistoryTask) CanBatch() bool {
+	return e.canBatch
+}
+
+func (e *ExecutableHistoryTask) MarkUnbatchable() {
+
 }

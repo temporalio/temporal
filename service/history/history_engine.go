@@ -634,6 +634,13 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	return e.nDCHistoryReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
+func (e *historyEngineImpl) ReplicationHistoryEvents(
+	ctx context.Context,
+	request *historyservice.ReplicateHistoryEventsRequest,
+) error {
+	return e.nDCHistoryReplicator.ApplyHistoryEvents(ctx, request)
+}
+
 func (e *historyEngineImpl) SyncActivity(
 	ctx context.Context,
 	request *historyservice.SyncActivityRequest,
