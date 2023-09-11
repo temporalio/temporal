@@ -52,8 +52,7 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req      *historyservice.ReplicateEventsV2Request
-		canBatch bool
+		req *historyservice.ReplicateEventsV2Request
 	}
 )
 
@@ -91,7 +90,6 @@ func NewExecutableHistoryTask(
 			// new run events does not need version history since there is no prior events
 			NewRunEvents: task.NewRunEvents,
 		},
-		canBatch: false,
 	}
 }
 
