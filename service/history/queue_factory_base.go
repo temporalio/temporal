@@ -174,16 +174,12 @@ func QueueSchedulerRateLimiterProvider(
 		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 			MemberCounter:    serviceResolver,
 			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
-			// TODO: use dynamic config after persistence global namespace quota is implemented
-			// GlobalQuota: config.PersistenceGlobalNamespaceMaxQPS,
-			GlobalQuota: func(_ string) int { return 0 },
+			GlobalQuota:      config.PersistenceGlobalNamespaceMaxQPS,
 		}.GetQuota,
 		quotas.ClusterAwareQuotaCalculator{
 			MemberCounter:    serviceResolver,
 			PerInstanceQuota: config.PersistenceMaxQPS,
-			// TODO: use dynamic config after persistence global quota is implemented
-			// GlobalQuota: config.PersistenceGlobalMaxQPS,
-			GlobalQuota: func() int { return 0 },
+			GlobalQuota:      config.PersistenceGlobalMaxQPS,
 		}.GetQuota,
 		config.TaskSchedulerRateLimiterStartupDelay,
 		timeSource,
