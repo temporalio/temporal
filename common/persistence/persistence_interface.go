@@ -726,4 +726,51 @@ type (
 		ClusterMember
 		RecordExpiry time.Time
 	}
+
+	// QueueV2 is an interface for a generic FIFO queue. It should eventually supersede the Queue interface.
+	QueueV2 interface {
+		// EnqueueMessage adds a message to the back of the queue.
+		EnqueueMessage(
+			ctx context.Context,
+			request *InternalEnqueueMessageRequest,
+		) (*InternalEnqueueMessageResponse, error)
+		// ReadMessages returns messages in order of increasing message ID.
+		ReadMessages(
+			ctx context.Context,
+			request *InternalReadMessagesRequest,
+		) (*InternalReadMessagesResponse, error)
+	}
+
+	QueueV2Type int
+
+	MessageMetadata struct {
+		ID int64
+	}
+
+	QueueV2Message struct {
+		MetaData MessageMetadata
+		Data     commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+		Blob      commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageResponse struct {
+		Metadata MessageMetadata
+	}
+
+	InternalReadMessagesRequest struct {
+		QueueType     QueueV2Type
+		QueueName     string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalReadMessagesResponse struct {
+		Messages      []QueueV2Message
+		NextPageToken []byte
+	}
 )
