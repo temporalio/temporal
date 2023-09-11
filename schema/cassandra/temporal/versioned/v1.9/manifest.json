@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "1.9",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Add queues and queue_messages tables for Queue V2 (supersedes the queue_metadata and queue tables).",
+  "SchemaUpdateCqlFiles": ["queues.cql"]
+}
