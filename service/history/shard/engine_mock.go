@@ -578,6 +578,20 @@ func (mr *MockEngineMockRecorder) ReplicateWorkflowState(ctx, request interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowState", reflect.TypeOf((*MockEngine)(nil).ReplicateWorkflowState), ctx, request)
 }
 
+// ReplicationHistoryEvents mocks base method.
+func (m *MockEngine) ReplicationHistoryEvents(ctx context.Context, request *historyservice.ReplicateHistoryEventsRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicationHistoryEvents", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicationHistoryEvents indicates an expected call of ReplicationHistoryEvents.
+func (mr *MockEngineMockRecorder) ReplicationHistoryEvents(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicationHistoryEvents), ctx, request)
+}
+
 // RequestCancelWorkflowExecution mocks base method.
 func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
