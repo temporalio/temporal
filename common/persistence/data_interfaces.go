@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1203,6 +1204,53 @@ type (
 		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
+	}
+
+	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. It is currently unused,
+	// but we plan on using this to implement a DLQ for history tasks. This is called a history task queue manager, but
+	// the actual history task queues are not managed by this object. Instead, this object is responsible for managing
+	// a generic queue of history tasks (which is what the history task DLQ will be).
+	// TODO: make this an interface and add wrapper classes like retryable client, metrics client, etc.
+	HistoryTaskQueueManager struct {
+		queue            QueueV2
+		serializer       *serialization.TaskSerializer
+		numHistoryShards int
+	}
+
+	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.
+	QueueKey struct {
+		QueueType     QueueV2Type
+		Category      tasks.Category
+		SourceCluster string
+		// TargetCluster is only used for cross-cluster replication tasks.
+		TargetCluster string
+	}
+
+	EnqueueTaskRequest struct {
+		QueueKey QueueKey
+		Task     tasks.Task
+	}
+
+	EnqueueTaskResponse struct {
+		Metadata MessageMetadata
+	}
+
+	ReadTasksRequest struct {
+		QueueKey      QueueKey
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ReadTasksResponse struct {
+		Tasks         []tasks.Task
+		NextPageToken []byte
+	}
+
+	ReadRawTasksRequest = ReadTasksRequest
+
+	ReadRawTasksResponse struct {
+		Tasks         []persistencespb.HistoryTask
+		NextPageToken []byte
 	}
 )
 
