@@ -106,6 +106,8 @@ type (
 			newMutableState MutableState,
 			currentContext Context,
 			currentMutableState MutableState,
+			resetWorkflowTransactionPolicy TransactionPolicy,
+			newWorkflowTransactionPolicy *TransactionPolicy,
 			currentTransactionPolicy *TransactionPolicy,
 		) error
 		UpdateWorkflowExecutionAsActive(
@@ -134,7 +136,7 @@ type (
 			updateMode persistence.UpdateWorkflowMode,
 			newContext Context,
 			newMutableState MutableState,
-			currentWorkflowTransactionPolicy TransactionPolicy,
+			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
 		SetWorkflowExecution(
@@ -366,6 +368,8 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	newMutableState MutableState,
 	currentContext Context,
 	currentMutableState MutableState,
+	resetWorkflowTransactionPolicy TransactionPolicy,
+	newWorkflowTransactionPolicy *TransactionPolicy,
 	currentTransactionPolicy *TransactionPolicy,
 ) (retError error) {
 
@@ -376,7 +380,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
-		TransactionPolicyPassive,
+		resetWorkflowTransactionPolicy,
 	)
 	if err != nil {
 		return err
@@ -384,7 +388,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	var newWorkflowEventsSeq []*persistence.WorkflowEvents
-	if newContext != nil && newMutableState != nil {
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 
 		defer func() {
 			if retError != nil {
@@ -393,7 +397,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
-			TransactionPolicyPassive,
+			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
 			return err
@@ -564,7 +568,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	updateMode persistence.UpdateWorkflowMode,
 	newContext Context,
 	newMutableState MutableState,
-	currentWorkflowTransactionPolicy TransactionPolicy,
+	updateWorkflowTransactionPolicy TransactionPolicy,
 	newWorkflowTransactionPolicy *TransactionPolicy,
 ) (retError error) {
 
@@ -574,8 +578,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
-	currentWorkflow, currentWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
-		currentWorkflowTransactionPolicy,
+	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
 		return err
@@ -600,7 +604,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	if err := c.mergeContinueAsNewReplicationTasks(
 		updateMode,
-		currentWorkflow,
+		updateWorkflow,
 		newWorkflow,
 	); err != nil {
 		return err
@@ -610,7 +614,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
 		updateMode,
-		currentWorkflowEventsSeq,
+		updateWorkflowEventsSeq,
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -620,8 +624,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		ctx,
 		updateMode,
 		c.MutableState.GetCurrentVersion(),
-		currentWorkflow,
-		currentWorkflowEventsSeq,
+		updateWorkflow,
+		updateWorkflowEventsSeq,
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,

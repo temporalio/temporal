@@ -42,8 +42,8 @@ import (
 )
 
 var (
-	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
-	workflowTerminationIdentity = "worker-service"
+	WorkflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
+	WorkflowTerminationIdentity = "history-service"
 )
 
 type (
@@ -294,9 +294,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
-		workflowTerminationReason,
+		WorkflowTerminationReason,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
-		workflowTerminationIdentity,
+		WorkflowTerminationIdentity,
 		false,
 	)
 

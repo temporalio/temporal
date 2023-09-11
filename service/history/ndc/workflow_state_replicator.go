@@ -91,7 +91,7 @@ func NewWorkflowStateReplicator(
 		clusterMetadata:   shardContext.GetClusterMetadata(),
 		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
-		transactionMgr:    newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger),
+		transactionMgr:    newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger, false),
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }

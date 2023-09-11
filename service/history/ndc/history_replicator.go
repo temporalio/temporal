@@ -145,7 +145,7 @@ func NewHistoryReplicator(
 	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
-	transactionMgr := newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger)
+	transactionMgr := newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger, false)
 	replicator := &HistoryReplicatorImpl{
 		shardContext:      shardContext,
 		clusterMetadata:   shardContext.GetClusterMetadata(),
