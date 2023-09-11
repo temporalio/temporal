@@ -1,4 +1,8 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,33 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package persistence
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+import "errors"
 
-import "temporal/server/api/persistence/v1/predicates.proto";
-import "temporal/server/api/persistence/v1/tasks.proto";
+const (
+	QueueTypeUnspecified   QueueV2Type = 0
+	QueueTypeHistoryNormal QueueV2Type = 1
+	QueueTypeHistoryDLQ    QueueV2Type = 2
 
-message QueueState {
-    map<int64, QueueReaderState> reader_states = 1;
-    TaskKey exclusive_reader_high_watermark = 2;
-}
+	// FirstQueueMessageID is the ID of the first message written to a queue partition.
+	FirstQueueMessageID = 0
+)
 
-message QueueReaderState {
-    repeated QueueSliceScope scopes = 1;
-}
-
-message QueueSliceScope {
-    QueueSliceRange range = 1;
-    Predicate predicate = 2;
-}
-
-message QueueSliceRange {
-    TaskKey inclusive_min = 1;
-    TaskKey exclusive_max = 2;
-}
-
-message ReadQueueMessagesNextPageToken {
-    int64 last_read_message_id = 1;
-}
+var (
+	ErrInvalidReadQueueMessagesNextPageToken = errors.New("invalid next-page token for reading queue messages")
+	ErrNonPositiveReadQueueMessagesPageSize  = errors.New("non-positive page size for reading queue messages")
+)
