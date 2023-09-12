@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
@@ -33,17 +34,28 @@ import (
 type SchedulerRateLimiter quotas.RequestRateLimiter
 
 func NewSchedulerRateLimiter(
-	namespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	hostMaxQPS dynamicconfig.IntPropertyFn,
-	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	persistenceHostMaxQPS dynamicconfig.IntPropertyFn,
-) SchedulerRateLimiter {
-	hostRateFn := func() float64 {
-		hostMaxQPS := float64(hostMaxQPS())
-		if hostMaxQPS > 0 {
-			return hostMaxQPS
+	namespaceRateFn quotas.NamespaceRateFn,
+	hostRateFn quotas.RateFn,
+	persistenceNamespaceRateFn quotas.NamespaceRateFn,
+	persistenceHostRateFn quotas.RateFn,
+	startupDelay dynamicconfig.DurationPropertyFn,
+	timeSource clock.TimeSource,
+) (SchedulerRateLimiter, error) {
+
+	namespaceRateFnWithFallback := func(namespace string) float64 {
+		if rate := namespaceRateFn(namespace); rate > 0 {
+			return rate
 		}
-		return float64(persistenceHostMaxQPS())
+
+		return persistenceNamespaceRateFn(namespace)
+	}
+
+	hostRateFnWithFallback := func() float64 {
+		if rate := hostRateFn(); rate > 0 {
+			return rate
+		}
+
+		return persistenceHostRateFn()
 	}
 
 	requestPriorityFn := func(req quotas.Request) int {
@@ -63,27 +75,27 @@ func NewSchedulerRateLimiter(
 		var requestRateLimiter quotas.RequestRateLimiter
 		if priority == tasks.PriorityHigh {
 			requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
-				namespaceMaxQPS,
-				persistenceNamespaceMaxQPS,
-				hostRateFn,
+				namespaceRateFnWithFallback,
+				hostRateFnWithFallback,
 			)
 		} else {
 			requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
+				quotas.NewDefaultOutgoingRateLimiter(hostRateFnWithFallback),
 			)
 		}
 		priorityToRateLimiters[int(priority)] = requestRateLimiter
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		priorityToRateLimiters,
-	)
+	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
+
+	if startupDelay != nil {
+		return quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), timeSource)
+	}
+	return priorityLimiter, nil
 }
 
 func newHighPriorityTaskRequestRateLimiter(
-	namespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	namespaceRateFn quotas.NamespaceRateFn,
 	hostRateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
@@ -91,17 +103,15 @@ func newHighPriorityTaskRequestRateLimiter(
 	)
 	namespaceRequestRateLimiterFn := func(req quotas.Request) quotas.RequestRateLimiter {
 		return quotas.NewRequestRateLimiterAdapter(
-			quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-				if namespaceQPS := float64(namespaceMaxQPS(req.Caller)); namespaceQPS > 0 {
-					return namespaceQPS
-				}
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 {
+					if rate := namespaceRateFn(req.Caller); rate > 0 {
+						return rate
+					}
 
-				if persistenceNamespaceQPS := float64(persistenceNamespaceMaxQPS(req.Caller)); persistenceNamespaceQPS > 0 {
-					return persistenceNamespaceQPS
-				}
-
-				return hostRateFn()
-			}),
+					return hostRateFn()
+				},
+			),
 		)
 	}
 

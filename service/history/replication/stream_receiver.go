@@ -58,6 +58,7 @@ type (
 		shutdownChan   channel.ShutdownOnce
 		logger         log.Logger
 		stream         Stream
+		taskConverter  ExecutableTaskConverter
 	}
 )
 
@@ -73,6 +74,7 @@ func NewClusterShardKey(
 
 func NewStreamReceiver(
 	processToolBox ProcessToolBox,
+	taskConverter ExecutableTaskConverter,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 ) *StreamReceiverImpl {
@@ -92,6 +94,7 @@ func NewStreamReceiver(
 			clientShardKey,
 			serverShardKey,
 		),
+		taskConverter: taskConverter,
 	}
 }
 
@@ -217,7 +220,7 @@ func (r *StreamReceiverImpl) processMessages(
 			r.logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
 			return streamResp.Err
 		}
-		tasks := r.ConvertTasks(
+		tasks := r.taskConverter.Convert(
 			clusterName,
 			r.clientShardKey,
 			r.serverShardKey,
