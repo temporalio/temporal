@@ -71,18 +71,16 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	NamespacePrioritySchedulerOptions struct {
-		WorkerCount             dynamicconfig.IntPropertyFn
-		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
-		// EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		WorkerCount                 dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights      dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights     dynamicconfig.MapPropertyFnWithNamespaceFilter
 		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
 
 	PrioritySchedulerOptions struct {
-		WorkerCount dynamicconfig.IntPropertyFn
-		Weight      dynamicconfig.MapPropertyFn
-		// EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		WorkerCount                 dynamicconfig.IntPropertyFn
+		Weight                      dynamicconfig.MapPropertyFn
 		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
 	}
