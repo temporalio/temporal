@@ -139,7 +139,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 	return nil
 }
 
-// AdminImportWorkflow shows history
+// AdminImportWorkflow imports history
 func AdminImportWorkflow(c *cli.Context) error {
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
