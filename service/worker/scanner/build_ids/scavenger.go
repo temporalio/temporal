@@ -67,9 +67,9 @@ var (
 
 type (
 	BuildIdScavangerInput struct {
-		NamespaceListPageSize  int
-		TaskQueueListPageSize  int
-		OverrideTimeForTesting *time.Time
+		NamespaceListPageSize int
+		TaskQueueListPageSize int
+		IgnoreRetentionTime   bool // If true, consider build ids added since retention time also
 	}
 
 	Activities struct {
@@ -282,13 +282,6 @@ func (a *Activities) findBuildIdsToRemove(
 	// still processing tasks or data that hasn't made it to visibility yet.
 	removableBuildIdDurationSinceDefault := a.removableBuildIdDurationSinceDefault()
 
-	now := func() time.Time {
-		if input.OverrideTimeForTesting != nil {
-			return *input.OverrideTimeForTesting
-		}
-		return time.Now()
-	}
-
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
@@ -309,10 +302,10 @@ func (a *Activities) findBuildIdsToRemove(
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if now().Sub(hlc.UTCPtr(buildId.BecameDefaultTimestamp)) < removableBuildIdDurationSinceDefault {
+			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if now().Sub(hlc.UTCPtr(buildId.StateUpdateTimestamp)) < retention {
+			if !input.IgnoreRetentionTime && hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
 				continue
 			}
 

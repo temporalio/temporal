@@ -128,3 +128,13 @@ func UTCPtr(c *Clock) time.Time {
 	}
 	return UTC(*c)
 }
+
+// Since returns time.Since(UTC(c))
+func Since(c Clock) time.Duration {
+	return time.Since(UTC(c))
+}
+
+// SincePtr returns time.Since(UTCFromPtr(c))
+func SincePtr(c *Clock) time.Duration {
+	return time.Since(UTCPtr(c))
+}
