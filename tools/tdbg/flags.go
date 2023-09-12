@@ -49,6 +49,7 @@ var (
 	FlagPrintFullyDetail           = "print-full"
 	FlagPrintJSON                  = "print-json"
 	FlagHeartbeatedWithin          = "heartbeated-within"
+	FlagInputFilename              = "input-filename"
 	FlagOutputFilename             = "output-filename"
 	FlagClusterMembershipRole      = "role"
 	FlagSkipErrorMode              = "skip-errors"

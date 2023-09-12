@@ -71,59 +71,59 @@ const (
 )
 
 type varSpec struct {
-	Name    string
-	Default func() string
+	name       string
+	getDefault func() string
 }
 
 var envVars = []varSpec{
 	{
-		Name:    LocalhostIP,
-		Default: func() string { return lookupLocalhostIP("localhost") },
+		name:       LocalhostIP,
+		getDefault: func() string { return lookupLocalhostIP("localhost") },
 	},
 	{
-		Name:    CassandraSeeds,
-		Default: GetLocalhostIP,
+		name:       CassandraSeeds,
+		getDefault: GetLocalhostIP,
 	},
 	{
-		Name:    CassandraPort,
-		Default: func() string { return strconv.Itoa(CassandraDefaultPort) },
+		name:       CassandraPort,
+		getDefault: func() string { return strconv.Itoa(CassandraDefaultPort) },
 	},
 	{
-		Name:    MySQLSeeds,
-		Default: GetLocalhostIP,
+		name:       MySQLSeeds,
+		getDefault: GetLocalhostIP,
 	},
 	{
-		Name:    MySQLPort,
-		Default: func() string { return strconv.Itoa(MySQLDefaultPort) },
+		name:       MySQLPort,
+		getDefault: func() string { return strconv.Itoa(MySQLDefaultPort) },
 	},
 	{
-		Name:    PostgresSeeds,
-		Default: GetLocalhostIP,
+		name:       PostgresSeeds,
+		getDefault: GetLocalhostIP,
 	},
 	{
-		Name:    PostgresPort,
-		Default: func() string { return strconv.Itoa(PostgresDefaultPort) },
+		name:       PostgresPort,
+		getDefault: func() string { return strconv.Itoa(PostgresDefaultPort) },
 	},
 	{
-		Name:    ESSeeds,
-		Default: GetLocalhostIP,
+		name:       ESSeeds,
+		getDefault: GetLocalhostIP,
 	},
 	{
-		Name:    ESPort,
-		Default: func() string { return strconv.Itoa(ESDefaultPort) },
+		name:       ESPort,
+		getDefault: func() string { return strconv.Itoa(ESDefaultPort) },
 	},
 	{
-		Name:    ESVersion,
-		Default: func() string { return ESDefaultVersion },
+		name:       ESVersion,
+		getDefault: func() string { return ESDefaultVersion },
 	},
 }
 
 // SetupEnv setup the necessary env
 func SetupEnv() {
 	for _, envVar := range envVars {
-		if os.Getenv(envVar.Name) == "" {
-			if err := os.Setenv(envVar.Name, envVar.Default()); err != nil {
-				panic(fmt.Sprintf("error setting env var %s: %s", envVar.Name, err))
+		if os.Getenv(envVar.name) == "" {
+			if err := os.Setenv(envVar.name, envVar.getDefault()); err != nil {
+				panic(fmt.Sprintf("error setting env var %s: %s", envVar.name, err))
 			}
 		}
 	}

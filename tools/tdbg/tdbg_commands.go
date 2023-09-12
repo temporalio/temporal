@@ -74,6 +74,28 @@ var commands = []*cli.Command{
 func newAdminWorkflowCommands() []*cli.Command {
 	return []*cli.Command{
 		{
+			Name:  "import",
+			Usage: "import workflow history to database",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+				&cli.StringFlag{
+					Name:  FlagInputFilename,
+					Usage: "input file",
+				}},
+			Action: func(c *cli.Context) error {
+				return AdminImportWorkflow(c)
+			},
+		},
+		{
 			Name:  "show",
 			Usage: "show workflow history from database",
 			Flags: []cli.Flag{
