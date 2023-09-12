@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -348,28 +349,73 @@ func (s *executableSuite) TestTaskAck() {
 	s.Equal(ctasks.TaskStateAcked, executable.State())
 }
 
-func (s *executableSuite) TestTaskNack_Resubmit() {
+func (s *executableSuite) TestTaskNack_Resubmit_Success() {
 	executable := s.newTestExecutable()
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	s.mockScheduler.EXPECT().TrySubmit(executable).DoAndReturn(func(_ Executable) bool {
+		s.Equal(ctasks.TaskStatePending, executable.State())
+
+		go func() {
+			// access internal state in a separate goroutine to check if there's any race condition
+			// between reschdule and nack.
+			s.accessInternalState(executable)
+		}()
+		return true
+	})
 
 	executable.Nack(errors.New("some random error"))
-	s.Equal(ctasks.TaskStatePending, executable.State())
+}
+
+func (s *executableSuite) TestTaskNack_Resubmit_Fail() {
+	executable := s.newTestExecutable()
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+		s.Equal(ctasks.TaskStatePending, executable.State())
+
+		go func() {
+			// access internal state in a separate goroutine to check if there's any race condition
+			// between reschdule and nack.
+			s.accessInternalState(executable)
+		}()
+	}).Times(1)
+
+	executable.Nack(errors.New("some random error"))
 }
 
 func (s *executableSuite) TestTaskNack_Reschedule() {
-	executable := s.newTestExecutable()
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).MinTimes(1)
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{
+			name:    "ErrTaskRetry",
+			taskErr: consts.ErrTaskRetry, // this error won't trigger re-submit
+		},
+		{
+			name:    "ErrDeleteOpenExecErr",
+			taskErr: consts.ErrDependencyTaskNotCompleted, // this error won't trigger re-submit
+		},
+	}
 
-	s.Run("ErrTaskRetry", func() {
-		executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
-		s.Equal(ctasks.TaskStatePending, executable.State())
-	})
-	s.Run("ErrDeleteOpenExecErr", func() {
-		executable.Nack(consts.ErrDependencyTaskNotCompleted) // this error won't trigger re-submit
-		s.Equal(ctasks.TaskStatePending, executable.State())
-	})
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+
+			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+				s.Equal(ctasks.TaskStatePending, executable.State())
+
+				go func() {
+					// access internal state in a separate goroutine to check if there's any race condition
+					// between reschdule and nack.
+					s.accessInternalState(executable)
+				}()
+			}).Times(1)
+
+			executable.Nack(tc.taskErr)
+		})
+	}
 }
 
 func (s *executableSuite) TestTaskAbort() {
@@ -430,4 +476,8 @@ func (s *executableSuite) newTestExecutable() Executable {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
+}
+
+func (s *executableSuite) accessInternalState(executable Executable) {
+	_ = fmt.Sprintf("%v", executable)
 }

@@ -65,7 +65,7 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
 	s.mockShard = shard.NewMockContext(s.controller)
 
-	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr)
+	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TearDownTest() {
@@ -191,9 +191,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.mockTransactionMgr.EXPECT().loadWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
-	currentWorkflowPolicy := workflow.TransactionPolicyPassive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 	targetWorkflow.EXPECT().Revive().Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
@@ -205,7 +204,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 		currentContext,
 		currentMutableState,
-		currentWorkflowPolicy.Ptr(),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
+		workflow.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -266,9 +267,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.mockTransactionMgr.EXPECT().loadWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
-	currentWorkflowPolicy := workflow.TransactionPolicyPassive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
-	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(0)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(workflow.TransactionPolicyPassive, nil).Times(0)
 	targetWorkflow.EXPECT().Revive().Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
@@ -280,7 +280,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 		currentContext,
 		currentMutableState,
-		currentWorkflowPolicy.Ptr(),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
+		workflow.TransactionPolicyPassive.Ptr(),
 	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -486,6 +488,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 		(workflow.Context)(nil),
 		(workflow.MutableState)(nil),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
 		(*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
@@ -545,9 +549,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.mockTransactionMgr.EXPECT().loadWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().HappensAfter(currentWorkflow).Return(true, nil)
-	currentWorkflowPolicy := workflow.TransactionPolicyActive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
+	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(workflow.TransactionPolicyActive, nil)
 	targetWorkflow.EXPECT().Revive().Return(nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(
@@ -559,7 +562,9 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 		currentContext,
 		currentMutableState,
-		currentWorkflowPolicy.Ptr(),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
+		workflow.TransactionPolicyActive.Ptr(),
 	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
@@ -635,6 +640,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		newMutableState,
 		(workflow.Context)(nil),
 		(workflow.MutableState)(nil),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
 		(*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
@@ -711,6 +718,8 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 		(workflow.MutableState)(nil),
 		(workflow.Context)(nil),
 		(workflow.MutableState)(nil),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyPassive.Ptr(),
 		(*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 

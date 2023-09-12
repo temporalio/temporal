@@ -68,7 +68,7 @@ func (s *transactionMgrForNewWorkflowSuite) SetupTest() {
 	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
 	s.mockShard = shard.NewMockContext(s.controller)
 
-	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr)
+	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr, false)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TearDownTest() {

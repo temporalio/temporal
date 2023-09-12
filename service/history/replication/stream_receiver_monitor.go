@@ -47,7 +47,8 @@ type (
 	}
 	StreamReceiverMonitorImpl struct {
 		ProcessToolBox
-		enableStreaming bool
+		executableTaskConverter ExecutableTaskConverter
+		enableStreaming         bool
 
 		status       int32
 		shutdownOnce channel.ShutdownOnce
@@ -60,11 +61,13 @@ type (
 
 func NewStreamReceiverMonitor(
 	processToolBox ProcessToolBox,
+	executableTaskConverter ExecutableTaskConverter,
 	enableStreaming bool,
 ) *StreamReceiverMonitorImpl {
 	return &StreamReceiverMonitorImpl{
-		ProcessToolBox:  processToolBox,
-		enableStreaming: enableStreaming,
+		ProcessToolBox:          processToolBox,
+		executableTaskConverter: executableTaskConverter,
+		enableStreaming:         enableStreaming,
 
 		status:       streamStatusInitialized,
 		shutdownOnce: channel.NewShutdownOnce(),
@@ -284,6 +287,7 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 		if _, ok := m.outboundStreams[streamKey]; !ok {
 			stream := NewStreamReceiver(
 				m.ProcessToolBox,
+				m.executableTaskConverter,
 				streamKey.Client,
 				streamKey.Server,
 			)

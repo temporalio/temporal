@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
@@ -37,7 +38,9 @@ func NewSchedulerRateLimiter(
 	hostMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	persistenceHostMaxQPS dynamicconfig.IntPropertyFn,
-) SchedulerRateLimiter {
+	startupDelay dynamicconfig.DurationPropertyFn,
+	timeSource clock.TimeSource,
+) (SchedulerRateLimiter, error) {
 	hostRateFn := func() float64 {
 		hostMaxQPS := float64(hostMaxQPS())
 		if hostMaxQPS > 0 {
@@ -75,10 +78,12 @@ func NewSchedulerRateLimiter(
 		priorityToRateLimiters[int(priority)] = requestRateLimiter
 	}
 
-	return quotas.NewPriorityRateLimiter(
-		requestPriorityFn,
-		priorityToRateLimiters,
-	)
+	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
+
+	if startupDelay != nil {
+		return quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), timeSource)
+	}
+	return priorityLimiter, nil
 }
 
 func newHighPriorityTaskRequestRateLimiter(
