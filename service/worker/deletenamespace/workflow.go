@@ -67,6 +67,7 @@ var (
 	localRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval: 1 * time.Second,
 		MaximumInterval: 10 * time.Second,
+		MaximumAttempts: 3,
 	}
 
 	reclaimResourcesWorkflowRetryPolicy = &temporal.RetryPolicy{
