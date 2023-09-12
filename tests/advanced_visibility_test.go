@@ -2665,7 +2665,10 @@ func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
 		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		// in the future, for the retention time check
+		OverrideTimeForTesting: timestamp.TimePtr(time.Now().Add(2 * 24 * time.Hour)),
+	})
 	s.Require().NoError(err)
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)

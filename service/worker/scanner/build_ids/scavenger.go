@@ -67,8 +67,9 @@ var (
 
 type (
 	BuildIdScavangerInput struct {
-		NamespaceListPageSize int
-		TaskQueueListPageSize int
+		NamespaceListPageSize  int
+		TaskQueueListPageSize  int
+		OverrideTimeForTesting *time.Time
 	}
 
 	Activities struct {
@@ -208,7 +209,7 @@ func (a *Activities) processNamespaceEntry(
 		}
 		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
+			if err := a.processUserDataEntry(ctx, rateLimiter, input, *heartbeat, ns, entry); err != nil {
 				if common.IsContextDeadlineExceededErr(err) {
 					// This is either a real DeadlineExceeded from the context, or the rate limiter
 					// thinks there's not enough time left until the deadline. Either way, we're done.
@@ -239,11 +240,12 @@ func (a *Activities) processNamespaceEntry(
 func (a *Activities) processUserDataEntry(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
+	input BuildIdScavangerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
 ) error {
-	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
+	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, input, heartbeat, ns, entry)
 	if err != nil {
 		return err
 	}
@@ -267,6 +269,7 @@ func (a *Activities) processUserDataEntry(
 func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
+	input BuildIdScavangerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
@@ -278,6 +281,13 @@ func (a *Activities) findBuildIdsToRemove(
 	// Don't consider build ids that were recently the default, since there may be workers
 	// still processing tasks or data that hasn't made it to visibility yet.
 	removableBuildIdDurationSinceDefault := a.removableBuildIdDurationSinceDefault()
+
+	now := func() time.Time {
+		if input.OverrideTimeForTesting != nil {
+			return *input.OverrideTimeForTesting
+		}
+		return time.Now()
+	}
 
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
@@ -299,10 +309,10 @@ func (a *Activities) findBuildIdsToRemove(
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+			if now().Sub(hlc.UTCPtr(buildId.BecameDefaultTimestamp)) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
+			if now().Sub(hlc.UTCPtr(buildId.StateUpdateTimestamp)) < retention {
 				continue
 			}
 

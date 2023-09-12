@@ -67,13 +67,20 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 		VersioningData: nil,
 	}
 
-	buildIdsRemoved, err := a.findBuildIdsToRemove(ctx, nil, heartbeatDetails{}, namespace.NewNamespaceForTest(nil, nil, false, nil, 0), &persistence.TaskQueueUserDataEntry{
-		TaskQueue: "test",
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Version: 0,
-			Data:    userData,
+	buildIdsRemoved, err := a.findBuildIdsToRemove(
+		ctx,
+		nil,
+		BuildIdScavangerInput{},
+		heartbeatDetails{},
+		namespace.NewNamespaceForTest(nil, nil, false, nil, 0),
+		&persistence.TaskQueueUserDataEntry{
+			TaskQueue: "test",
+			UserData: &persistencespb.VersionedTaskQueueUserData{
+				Version: 0,
+				Data:    userData,
+			},
 		},
-	})
+	)
 	require.NoError(t, err)
 	require.Equal(t, []string(nil), buildIdsRemoved)
 	require.True(t, hlc.Equal(c0, *userData.Clock))
@@ -220,13 +227,20 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 		Retention: timestamp.DurationPtr(24 * time.Hour),
 	}, false, nil, 0)
 	act := func(ctx context.Context) ([]string, error) {
-		return a.findBuildIdsToRemove(ctx, rateLimiter, heartbeatDetails{}, ns, &persistence.TaskQueueUserDataEntry{
-			TaskQueue: "test",
-			UserData: &persistencespb.VersionedTaskQueueUserData{
-				Version: 0,
-				Data:    userData,
+		return a.findBuildIdsToRemove(
+			ctx,
+			rateLimiter,
+			BuildIdScavangerInput{},
+			heartbeatDetails{},
+			ns,
+			&persistence.TaskQueueUserDataEntry{
+				TaskQueue: "test",
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Version: 0,
+					Data:    userData,
+				},
 			},
-		})
+		)
 	}
 	env.RegisterActivity(act)
 	removedBuildIDsEncoded, err := env.ExecuteActivity(act)

@@ -124,17 +124,7 @@ func UTC(c Clock) time.Time {
 // If the argument is nil, it returns the Unix epoch.
 func UTCPtr(c *Clock) time.Time {
 	if c == nil {
-		return time.Unix(0, 0).UTC()
+		return UTC(Clock{})
 	}
-	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
-}
-
-// Since returns time.Since(UTC(c))
-func Since(c Clock) time.Duration {
-	return time.Since(UTC(c))
-}
-
-// SincePtr returns time.Since(UTCFromPtr(c))
-func SincePtr(c *Clock) time.Duration {
-	return time.Since(UTCPtr(c))
+	return UTC(*c)
 }
