@@ -134,7 +134,7 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 
 	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
 		suffix := fmt.Sprintf("-deleted-%s", nsID.String()[:suffixLength])
-		if strings.HasSuffix(string(nsName), suffix) {
+		if strings.HasSuffix(nsName.String(), suffix) {
 			a.logger.Info("Namespace is already renamed for deletion")
 			return nsName, nil
 		}
@@ -160,11 +160,11 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 }
 
 func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
-	ctx = headers.SetCallerName(ctx, previousName.String())
-
 	if newName == previousName {
 		return nil
 	}
+
+	ctx = headers.SetCallerName(ctx, previousName.String())
 
 	renameNamespaceRequest := &persistence.RenameNamespaceRequest{
 		PreviousName: previousName.String(),

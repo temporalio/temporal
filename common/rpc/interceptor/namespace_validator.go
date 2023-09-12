@@ -252,15 +252,15 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 		return nil, nil
 	case *operatorservice.DeleteNamespaceRequest:
 		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
-		namespaceId := namespace.ID(request.GetNamespaceId())
-		if namespaceId == "" && namespaceName.IsEmpty() {
+		namespaceID := namespace.ID(request.GetNamespaceId())
+		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
 			return nil, errNamespaceNotSet
 		}
-		if namespaceId != "" && !namespaceName.IsEmpty() {
+		if !namespaceID.IsEmpty() && !namespaceName.IsEmpty() {
 			return nil, errBothNamespaceIDAndNameSet
 		}
-		if namespaceId != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespaceId)
+		if namespaceID != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
 		}
 		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	case *adminservice.AddSearchAttributesRequest,

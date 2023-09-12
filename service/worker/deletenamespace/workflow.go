@@ -67,7 +67,6 @@ var (
 	localRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval: 1 * time.Second,
 		MaximumInterval: 10 * time.Second,
-		MaximumAttempts: 3,
 	}
 
 	reclaimResourcesWorkflowRetryPolicy = &temporal.RetryPolicy{
@@ -86,7 +85,8 @@ var (
 	reclaimResourcesWorkflowOptions = workflow.ChildWorkflowOptions{
 		RetryPolicy: reclaimResourcesWorkflowRetryPolicy,
 		// Important: this is required to make sure the child workflow is not terminated when delete namespace workflow is completed.
-		ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_ABANDON,
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+		// If the client is calling DeleteNamespace API again while ReclaimResourcesWorkflow is running, it might want to terminate existing run and start a new run.
 		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 )
