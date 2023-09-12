@@ -123,6 +123,12 @@ func Invoke(
 		return nil, consts.ErrWorkflowTaskNotScheduled
 	}
 
+	if _, status := mutableState.GetWorkflowStateStatus(); status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
+		mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+		// Workflow has terminated before WorkflowTaskStarted event. In this case query will fail.
+		return nil, consts.ErrWorkflowTerminatedBeforeWorkflowTaskStarted
+	}
+
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
