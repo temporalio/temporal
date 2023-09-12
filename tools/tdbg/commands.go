@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	historyImportBlobSize = 16         // 256K
+	historyImportBlobSize = 16
 	historyImportPageSize = 256 * 1024 // 256K
 )
 
