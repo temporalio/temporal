@@ -43,12 +43,6 @@ type (
 		sync.Mutex
 		taskQueue collection.Queue[TrackableExecutableTask]
 	}
-
-	nwrKey interface {
-		GetNamespaceId() string
-		GetWorkflowId() string
-		GetRunId() string
-	}
 )
 
 func NewSequentialTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
@@ -123,11 +117,14 @@ func TaskWorkflowKey(
 
 	switch attr := replicationTask.Attributes.(type) {
 	case *replicationspb.ReplicationTask_HistoryTaskAttributes:
-		return getWorkflowKeyPtr(attr.HistoryTaskAttributes)
+		key := definition.CreateWorkflowKey(attr.HistoryTaskAttributes)
+		return &key
 	case *replicationspb.ReplicationTask_SyncActivityTaskAttributes:
-		return getWorkflowKeyPtr(attr.SyncActivityTaskAttributes)
+		key := definition.CreateWorkflowKey(attr.SyncActivityTaskAttributes)
+		return &key
 	case *replicationspb.ReplicationTask_RawAttributes:
-		return getWorkflowKeyPtr(attr.RawAttributes)
+		key := definition.CreateWorkflowKey(attr.RawAttributes)
+		return &key
 	case *replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes:
 		workflowState := attr.SyncWorkflowStateTaskAttributes.GetWorkflowState()
 		workflowKey := definition.NewWorkflowKey(
@@ -139,13 +136,4 @@ func TaskWorkflowKey(
 	default:
 		return nil
 	}
-}
-
-func getWorkflowKeyPtr(key nwrKey) *definition.WorkflowKey {
-	wfKey := definition.NewWorkflowKey(
-		key.GetNamespaceId(),
-		key.GetWorkflowId(),
-		key.GetRunId(),
-	)
-	return &wfKey
 }
