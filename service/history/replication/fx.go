@@ -29,6 +29,9 @@ import (
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -46,9 +49,11 @@ var Module = fx.Options(
 	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
+	fx.Provide(ExecutableTaskConverterProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
 	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
+	fx.Provide(EagerNamespaceRefresherProvider),
 )
 
 func ReplicationTaskFetcherFactoryProvider(
@@ -62,6 +67,29 @@ func ReplicationTaskFetcherFactoryProvider(
 		config,
 		clusterMetadata,
 		clientBean,
+	)
+}
+
+func EagerNamespaceRefresherProvider(
+	metadataManager persistence.MetadataManager,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	clientBean client.Bean,
+	clusterMetadata cluster.Metadata,
+	metricsHandler metrics.Handler,
+) EagerNamespaceRefresher {
+	return NewEagerNamespaceRefresher(
+		metadataManager,
+		namespaceRegistry,
+		logger,
+		clientBean,
+		namespace.NewReplicationTaskExecutor(
+			clusterMetadata.GetCurrentClusterName(),
+			metadataManager,
+			logger,
+		),
+		clusterMetadata.GetCurrentClusterName(),
+		metricsHandler,
 	)
 }
 
@@ -121,11 +149,19 @@ func ReplicationStreamSchedulerLifetimeHooks(
 	)
 }
 
+func ExecutableTaskConverterProvider(
+	processToolBox ProcessToolBox,
+) ExecutableTaskConverter {
+	return NewExecutableTaskConverter(processToolBox)
+}
+
 func StreamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
+	taskConverter ExecutableTaskConverter,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
+		taskConverter,
 		processToolBox.Config.EnableReplicationStream(),
 	)
 }

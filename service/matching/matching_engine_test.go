@@ -44,6 +44,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -59,7 +60,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -157,7 +158,7 @@ func newMatchingEngine(
 		logger:            logger,
 		throttledLogger:   log.ThrottledLogger(logger),
 		metricsHandler:    metrics.NoopMetricsHandler,
-		matchingClient:    mockMatchingClient,
+		matchingRawClient: mockMatchingClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
@@ -297,7 +298,6 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		queueID, // same queueID as above
 		normalStickyInfo,
 		s.matchingEngine.config,
-		s.matchingEngine.clusterMeta,
 	)
 	s.Require().NoError(err)
 
@@ -365,8 +365,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 
 	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
 	// fail due to no sticky worker
-	s.Error(err)
-	s.ErrorContains(err, "sticky worker unavailable")
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
 	// poll the sticky queue, should get no result
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
@@ -647,6 +646,40 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	}
 }
 
+func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            uuid.New(),
+		Execution:              &commonpb.WorkflowExecution{RunId: uuid.New(), WorkflowId: "wf1"},
+		ScheduledEventId:       0,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+	// check loaded queues
+	s.matchingEngine.taskQueuesLock.RLock()
+	defer s.matchingEngine.taskQueuesLock.RUnlock()
+	s.Equal(0, len(s.matchingEngine.taskQueues))
+}
+
+func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
+	query := matchingservice.QueryWorkflowRequest{
+		NamespaceId: uuid.New(),
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Namespace: "ns",
+			Execution: &commonpb.WorkflowExecution{RunId: uuid.New(), WorkflowId: "wf1"},
+			Query:     &querypb.WorkflowQuery{QueryType: "q"},
+		},
+	}
+	_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+	// check loaded queues
+	s.matchingEngine.taskQueuesLock.RLock()
+	defer s.matchingEngine.taskQueuesLock.RUnlock()
+	s.Equal(0, len(s.matchingEngine.taskQueues))
+}
+
 func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -826,7 +859,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
 
 	mgrImpl, ok := mgr.(*taskQueueManagerImpl)
@@ -1044,7 +1077,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	var err error
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config, s.matchingEngine.clusterMeta)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, s.matchingEngine.config)
 	s.NoError(err)
 
 	mgrImpl := mgr.(*taskQueueManagerImpl)
@@ -1791,7 +1824,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	const maxReadLevel = int64(120)
 	config := defaultTestConfig()
 	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
+	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config)
 	s.NoError(err)
 
 	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
@@ -1828,7 +1861,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	for i := 0; i < 4; i++ {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(tlID)
 
-		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config, s.matchingEngine.clusterMeta)
+		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, normalStickyInfo, config)
 		s.NoError(err)
 
 		tlMgr.Start()
@@ -2161,7 +2194,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	defer cancel()
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -2213,7 +2246,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	defer cancel()
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
@@ -2242,8 +2275,34 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	})
 	s.NoError(err)
 	s.True(res.TaskQueueHasUserData)
-	s.True(hybrid_logical_clock.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
+	s.True(hlc.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
+}
+
+func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = s.matchingEngine.ForceUnloadTaskQueue(context.Background(), &matchingservice.ForceUnloadTaskQueueRequest{
+			NamespaceId:   namespaceID.String(),
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+	}()
+
+	_, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     tq,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		WaitNewData:   true,
+	})
+	s.ErrorAs(err, new(*serviceerror.Unavailable))
+
 }
 
 func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
@@ -2325,8 +2384,8 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 
 func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	namespaceId := namespace.ID(uuid.New())
-	tl := "makeToast"
-	tlID := newTestTaskQueueID(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tq := "makeToast"
+	tqId := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
@@ -2334,7 +2393,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	_, err := s.matchingEngine.getTask(ctx, tlID, normalStickyInfo, &pollMetadata{
+	_, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "unknown",
 			UseVersioning: true,
@@ -2348,7 +2407,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 
 func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 	namespaceId := namespace.ID(uuid.New())
-	tl := "makeToast"
+	tq := "makeToast"
 
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
@@ -2358,7 +2417,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 
 	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceId.String(),
-		TaskQueue:   tl,
+		TaskQueue:   tq,
 		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 			PersistUnknownBuildId: "unknown",
 		},
@@ -2368,7 +2427,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 		NamespaceId:            namespaceId.String(),
 		Execution:              &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
 		ScheduledEventId:       0,
-		TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 		ForwardedSource:        "somewhere", // force sync match only
 		VersionDirective: &taskqueue.TaskVersionDirective{
@@ -2385,17 +2444,14 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Add() {
 
 func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	namespaceId := namespace.ID(uuid.New())
-	tl := "makeToast"
-
-	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope)
+	tq := "makeToast"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceId.String(),
-		TaskQueue:   tl,
+		TaskQueue:   tq,
 		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
 			PersistUnknownBuildId: "unknown",
 		},
@@ -2409,7 +2465,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 			NamespaceId:            namespaceId.String(),
 			Execution:              &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
 			ScheduledEventId:       123,
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			// do not set ForwardedSource, allow to go to db
 			VersionDirective: &taskqueue.TaskVersionDirective{
@@ -2423,8 +2479,8 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	}()
 
 	go func() {
-		tlID := newTestTaskQueueID(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		task, err := s.matchingEngine.getTask(ctx, tlID, normalStickyInfo, &pollMetadata{
+		tqId := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		task, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "unknown",
 				UseVersioning: true,
@@ -2438,6 +2494,100 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 	}()
 
 	wg.Wait()
+}
+
+func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
+	namespaceId := namespace.ID(uuid.New())
+	tq := "makeToast"
+	unknown := "unknown"
+	build1 := "build1"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.mockMatchingClient.EXPECT().UpdateWorkerBuildIdCompatibility(gomock.Any(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue:   tq,
+		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId{
+			PersistUnknownBuildId: unknown,
+		},
+	}).Return(&matchingservice.UpdateWorkerBuildIdCompatibilityResponse{}, nil).MinTimes(1) // might get called again on dispatch from spooled
+
+	// add a task for an unknown build id, will get redirected to guessed set
+	_, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:      namespaceId.String(),
+		Execution:        &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
+		ScheduledEventId: 123,
+		TaskQueue:        &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		VersionDirective: &taskqueue.TaskVersionDirective{
+			Value: &taskqueue.TaskVersionDirective_BuildId{
+				BuildId: unknown,
+			},
+		},
+	})
+	s.NoError(err)
+	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
+	time.Sleep(10 * time.Millisecond)
+
+	// unload base and versioned tqm. note: unload versioned first since versioned taskReader
+	// tries to load base for dispatching.
+	id := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	verId := newTaskQueueIDWithVersionSet(id, hashBuildId(unknown))
+	verTqm, err := s.matchingEngine.getTaskQueueManager(ctx, verId, normalStickyInfo, false)
+	s.NoError(err)
+	s.NotNil(verTqm)
+	s.matchingEngine.unloadTaskQueue(verTqm)
+	// wait for taskReader goroutines to exit
+	verTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+
+	// unload base
+	baseTqm, err := s.matchingEngine.getTaskQueueManager(ctx, id, normalStickyInfo, false)
+	s.NoError(err)
+	s.NotNil(baseTqm)
+	s.matchingEngine.unloadTaskQueue(baseTqm)
+	// wait for taskReader goroutines to exit
+	baseTqm.(*taskQueueManagerImpl).taskReader.gorogrp.Wait()
+
+	// both are now unloaded. change versioning data to merge unknown into another set.
+	clock := hlc.Zero(1)
+	userData := &persistencespb.TaskQueueUserData{
+		Clock: &clock,
+		VersioningData: &persistencespb.VersioningData{
+			VersionSets: []*persistencespb.CompatibleVersionSet{
+				{
+					// make "unknown" the demoted one to test demoted set loading.
+					// it works the other way too but doesn't test anything new.
+					SetIds: []string{hashBuildId(build1), hashBuildId(unknown)},
+					BuildIds: []*persistencespb.BuildId{
+						mkBuildId(unknown, clock),
+						mkBuildId(build1, clock),
+					},
+					BecameDefaultTimestamp: &clock,
+				},
+			},
+		},
+	}
+	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: namespaceId.String(),
+		TaskQueue:   tq,
+		UserData: &persistencespb.VersionedTaskQueueUserData{
+			Data:    userData,
+			Version: 34,
+		},
+	})
+	s.NoError(err)
+
+	// now poll for the task
+	task, err := s.matchingEngine.getTask(ctx, id, normalStickyInfo, &pollMetadata{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       build1,
+			UseVersioning: true,
+		},
+	})
+	s.Require().NoError(err)
+	s.Equal("wf", task.event.Data.WorkflowId)
+	s.Equal(int64(123), task.event.Data.ScheduledEventId)
+	task.finish(nil)
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
@@ -2911,9 +3061,9 @@ type (
 	}
 )
 
-func (d *dynamicRateBurstWrapper) SetRate(rate float64) {
-	d.MutableRateBurst.SetRate(rate)
-	d.RateLimiterImpl.SetRate(rate)
+func (d *dynamicRateBurstWrapper) SetRPS(rps float64) {
+	d.MutableRateBurst.SetRPS(rps)
+	d.RateLimiterImpl.SetRPS(rps)
 }
 
 func (d *dynamicRateBurstWrapper) SetBurst(burst int) {

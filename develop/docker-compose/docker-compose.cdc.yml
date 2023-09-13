@@ -5,7 +5,7 @@ version: "3.5"
 
 services:
   temporal-ui-standby:
-    image: temporalio/ui:2.11.2
+    image: temporalio/ui:2.17.1
     container_name: temporal-dev-ui-standby
     environment:
       - TEMPORAL_UI_PORT=8081
@@ -13,7 +13,7 @@ services:
       - no-new-privileges:true
 
   temporal-ui-other:
-    image: temporalio/ui:2.11.2
+    image: temporalio/ui:2.17.1
     container_name: temporal-dev-ui-other
     environment:
       - TEMPORAL_UI_PORT=8082

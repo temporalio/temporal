@@ -180,7 +180,35 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())
 }
 
-func (s *conflictResolverSuite) TestPrepareMutableState_NoRebuild() {
+func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_NotCurrent() {
+	branchToken0 := []byte("some random branch token")
+	lastEventID0 := int64(2)
+	version0 := int64(12)
+	versionHistoryItem0 := versionhistory.NewVersionHistoryItem(lastEventID0, version0)
+	versionHistory0 := versionhistory.NewVersionHistory(
+		branchToken0,
+		[]*historyspb.VersionHistoryItem{versionHistoryItem0},
+	)
+	branchToken1 := []byte("another random branch token")
+	lastEventID1 := lastEventID0 + 1
+	version1 := version0 + 1
+	versionHistoryItem1 := versionhistory.NewVersionHistoryItem(lastEventID1, version1)
+	versionHistory1 := versionhistory.NewVersionHistory(
+		branchToken1,
+		[]*historyspb.VersionHistoryItem{versionHistoryItem0, versionHistoryItem1},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
+	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	s.Nil(err)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(context.Background(), 0, version0)
+	s.NoError(err)
+	s.False(isRebuilt)
+	s.Equal(s.mockMutableState, rebuiltMutableState)
+}
+
+func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_SameIndex() {
 	branchToken := []byte("some random branch token")
 	lastEventID := int64(2)
 	version := int64(12)
@@ -192,13 +220,13 @@ func (s *conflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
-	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(context.Background(), 0, version)
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(context.Background(), 0, version)
 	s.NoError(err)
 	s.False(isRebuilt)
 	s.Equal(s.mockMutableState, rebuiltMutableState)
 }
 
-func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
+func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	ctx := context.Background()
 	updateCondition := int64(59)
 	dbVersion := int64(1444)
@@ -272,7 +300,104 @@ func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	).Return(mockRebuildMutableState, rand.Int63(), nil)
 
 	s.mockContext.EXPECT().Clear()
-	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(ctx, 1, incomingVersion)
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildCurrentMutableState(ctx, 1, incomingVersion)
+	s.NoError(err)
+	s.NotNil(rebuiltMutableState)
+	s.True(isRebuilt)
+}
+
+func (s *conflictResolverSuite) TestGetOrRebuildMutableState_NoRebuild_SameIndex() {
+	branchToken := []byte("some random branch token")
+	lastEventID := int64(2)
+	version := int64(12)
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(lastEventID, version)
+	versionHistory := versionhistory.NewVersionHistory(
+		branchToken,
+		[]*historyspb.VersionHistoryItem{versionHistoryItem},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildMutableState(context.Background(), 0)
+	s.NoError(err)
+	s.False(isRebuilt)
+	s.Equal(s.mockMutableState, rebuiltMutableState)
+}
+
+func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
+	ctx := context.Background()
+	updateCondition := int64(59)
+	dbVersion := int64(1444)
+	version := int64(12)
+	historySize := int64(12345)
+
+	// current branch
+	branchToken0 := []byte("some random branch token")
+	lastEventID0 := int64(2)
+
+	versionHistoryItem0 := versionhistory.NewVersionHistoryItem(lastEventID0, version)
+	versionHistory0 := versionhistory.NewVersionHistory(
+		branchToken0,
+		[]*historyspb.VersionHistoryItem{versionHistoryItem0},
+	)
+
+	// stale branch, used for Rebuild
+	branchToken1 := []byte("other random branch token")
+	lastEventID1 := lastEventID0 - 1
+	versionHistoryItem1 := versionhistory.NewVersionHistoryItem(lastEventID1, version)
+	versionHistory1 := versionhistory.NewVersionHistory(
+		branchToken1,
+		[]*historyspb.VersionHistoryItem{versionHistoryItem1},
+	)
+
+	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
+	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	s.Nil(err)
+
+	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       s.workflowID,
+		VersionHistories: versionHistories,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: s.runID,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
+
+	workflowKey := definition.NewWorkflowKey(
+		s.namespaceID,
+		s.workflowID,
+		s.runID,
+	)
+	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
+		&persistencespb.WorkflowExecutionInfo{
+			VersionHistories: versionhistory.NewVersionHistories(
+				versionhistory.NewVersionHistory(
+					branchToken1,
+					[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
+				),
+			),
+		},
+	).AnyTimes()
+	mockRebuildMutableState.EXPECT().AddHistorySize(historySize)
+	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
+
+	s.mockStateBuilder.EXPECT().Rebuild(
+		ctx,
+		gomock.Any(),
+		workflowKey,
+		branchToken1,
+		lastEventID1,
+		convert.Int64Ptr(version),
+		workflowKey,
+		branchToken1,
+		gomock.Any(),
+	).Return(mockRebuildMutableState, rand.Int63(), nil)
+
+	s.mockContext.EXPECT().Clear()
+	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.GetOrRebuildMutableState(ctx, 1)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.True(isRebuilt)

@@ -42,6 +42,7 @@ type (
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
@@ -63,9 +64,9 @@ type (
 		ForwarderMaxOutstandingTasks      dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxRatePerSecond         dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode       dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFn
-		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFn
-		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFn
+		VersionCompatibleSetLimitPerQueue dynamicconfig.IntPropertyFnWithNamespaceFilter
+		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFnWithNamespaceFilter
+		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
@@ -158,6 +159,7 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.MatchingPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
@@ -183,9 +185,9 @@ func NewConfig(
 		ForwarderMaxRatePerSecond:             dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
-		VersionCompatibleSetLimitPerQueue:     dc.GetIntProperty(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
-		VersionBuildIdLimitPerQueue:           dc.GetIntProperty(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
-		TaskQueueLimitPerBuildId:              dc.GetIntProperty(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
+		VersionCompatibleSetLimitPerQueue:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionCompatibleSetLimitPerQueue, 10),
+		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
+		TaskQueueLimitPerBuildId:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),

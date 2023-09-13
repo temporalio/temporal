@@ -28,10 +28,12 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -57,6 +59,7 @@ type Config struct {
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
@@ -75,7 +78,8 @@ type Config struct {
 	NamespaceReplicationInducingAPIsRPS                          dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceCountPerInstance                                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentLongRunningRequestsPerInstance                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxGlobalConcurrentLongRunningRequests                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -119,6 +123,7 @@ type Config struct {
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
+	// DEPRECATED
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
@@ -179,6 +184,9 @@ type Config struct {
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// AccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+	AccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -193,6 +201,7 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
@@ -212,7 +221,8 @@ func NewConfig(
 
 		MaxNamespaceRPSPerInstance:                                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
-		MaxNamespaceCountPerInstance:                                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
+		MaxConcurrentLongRunningRequestsPerInstance:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
+		MaxGlobalConcurrentLongRunningRequests:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
 		MaxNamespaceVisibilityRPSPerInstance:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
@@ -272,6 +282,8 @@ func NewConfig(
 
 		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
+
+		AccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 }
 
@@ -286,6 +298,7 @@ type Service struct {
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
+	httpAPIServer     *HTTPAPIServer
 
 	logger                         log.Logger
 	grpcListener                   net.Listener
@@ -298,6 +311,7 @@ func NewService(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -313,6 +327,7 @@ func NewService(
 		config:                         serviceConfig,
 		server:                         server,
 		healthServer:                   healthServer,
+		httpAPIServer:                  httpAPIServer,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
 		operatorHandler:                operatorHandler,
@@ -353,6 +368,14 @@ func (s *Service) Start() {
 		}
 	}()
 
+	if s.httpAPIServer != nil {
+		go func() {
+			if err := s.httpAPIServer.Serve(); err != nil {
+				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
+			}
+		}()
+	}
+
 	go s.membershipMonitor.Start()
 }
 
@@ -381,18 +404,42 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	s.logger.Info("ShutdownHandler: Draining traffic")
-	t := time.AfterFunc(requestDrainTime, func() {
-		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
-		s.server.Stop()
-	})
-	s.server.GracefulStop()
-	t.Stop()
+	// Gracefully stop gRPC server and HTTP API server concurrently
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.AfterFunc(requestDrainTime, func() {
+			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+			s.server.Stop()
+		})
+		s.server.GracefulStop()
+		t.Stop()
+	}()
+	if s.httpAPIServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.httpAPIServer.GracefulStop(requestDrainTime)
+		}()
+	}
+	wg.Wait()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)
 	}
 
 	s.logger.Info("frontend stopped")
+}
+
+// DEPRECATED: remove interim dynamic config helper for dialing fraction of FE->History calls
+func (c *Config) accessHistory(metricsHandler metrics.Handler) bool {
+	if rand.Float64() < c.AccessHistoryFraction() {
+		metricsHandler.Counter(metrics.AccessHistoryNew).Record(1)
+		return true
+	}
+	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
+	return false
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

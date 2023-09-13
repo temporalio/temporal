@@ -39,12 +39,12 @@ const (
 
 var (
 	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes from their
-	// corresponding quota, which is determined by dynamicconfig.FrontendMaxNamespaceCountPerInstance. If the value is
-	// not set, then the method is not considered a long-running request and the number of concurrent requests will not
-	// be throttled. The Poll* methods here are long-running because they block until there is a task available. The
-	// GetWorkflowExecutionHistory method is blocking only if WaitNewEvent is true, otherwise it is not long-running.
-	// The QueryWorkflow and UpdateWorkflowExecution methods are long-running because they both block until a background
-	// WFT is complete.
+	// corresponding quota, which is determined by dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If
+	// the value is not set, then the method is not considered a long-running request and the number of concurrent
+	// requests will not be throttled. The Poll* methods here are long-running because they block until there is a task
+	// available. The GetWorkflowExecutionHistory method is blocking only if WaitNewEvent is true, otherwise it is not
+	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because they both block
+	// until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"PollActivityTaskQueue":       1,
 		"PollWorkflowTaskQueue":       1,
@@ -62,7 +62,6 @@ var (
 		"TerminateWorkflowExecution":       1,
 		"GetWorkflowExecutionHistory":      1,
 		"UpdateWorkflowExecution":          1,
-		"PollWorkflowExecutionUpdate":      1,
 
 		// priority 2
 		"RecordActivityTaskHeartbeat":      2,
@@ -74,15 +73,16 @@ var (
 		"RespondActivityTaskCompleted":     2,
 		"RespondActivityTaskCompletedById": 2,
 		"RespondWorkflowTaskCompleted":     2,
+		"RespondWorkflowTaskFailed":        2,
+		"RespondQueryTaskCompleted":        2,
 
 		// priority 3
 		"ResetWorkflowExecution":             3,
 		"DescribeWorkflowExecution":          3,
-		"RespondWorkflowTaskFailed":          3,
 		"QueryWorkflow":                      3,
-		"RespondQueryTaskCompleted":          3,
 		"PollWorkflowTaskQueue":              3,
 		"PollActivityTaskQueue":              3,
+		"PollWorkflowExecutionUpdate":        3,
 		"GetWorkflowExecutionHistoryReverse": 3,
 		"GetWorkerBuildIdCompatibility":      3,
 		"GetWorkerTaskReachability":          3,

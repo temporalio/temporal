@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1073,7 +1075,7 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
 
-	started := make(chan struct{}, 2)
+	started := make(chan struct{}, 10)
 
 	wf1 := func(ctx workflow.Context) error {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil }); err != nil {
@@ -1095,7 +1097,6 @@ func (s *versioningIntegSuite) dispatchQuery() {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil }); err != nil {
 			return err
 		}
-		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}
 
@@ -1155,8 +1156,30 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	s.NoError(val.Get(&out))
 	s.Equal("v1.1", out)
 
-	// let the workflow exit
+	// let the workflow complete
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait for completion
+	s.NoError(run.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v1.1", out)
+
+	// start another wf on v2. should complete immediately.
+	run2, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// wait for completion
+	s.NoError(run2.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run2.GetID(), run2.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v2", out)
 }
 
 func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
@@ -1648,6 +1671,158 @@ func (s *versioningIntegSuite) TestDisableUserData_QueryFails() {
 	s.Equal(int32(0), runs.Load())
 }
 
+func (s *versioningIntegSuite) TestDisableUserData_DLQ() {
+	// force one partition so we can unload easily
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	started := make(chan struct{}, 1)
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return "done!", nil
+	}
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.waitForPropagation(ctx, tq, v1)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:           tq,
+		WorkflowTaskTimeout: 1 * time.Minute, // don't let this interfere
+	}, "wf")
+	s.NoError(err)
+	s.waitForChan(ctx, started)
+	time.Sleep(100 * time.Millisecond) // wait for worker to respond
+
+	// disable user data and unload so it picks it up
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	s.unloadTaskQueue(ctx, tq)
+	s.unloadTaskQueue(ctx, s.getStickyQueueName(ctx, run.GetID()))
+
+	// unblock the workflow. the sticky task will get kicked back to the regular queue and then
+	// get redirected to the dlq.
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// workflow is blocked for > 2s
+	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer waitCancel()
+	s.Error(run.Get(waitCtx, nil))
+
+	// enable user data. task can be dispatched from dlq immediately since dlq is still loaded.
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, true)
+	s.unloadTaskQueue(ctx, tq)
+
+	// workflow can finish
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
+func (s *versioningIntegSuite) TestDisableUserData_DLQ_WithUnload() {
+	// force one partition so we can unload easily
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	started := make(chan struct{}, 1)
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		return "done!", nil
+	}
+
+	s.addNewDefaultBuildId(ctx, tq, v1)
+	s.waitForPropagation(ctx, tq, v1)
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{
+		BuildID:                          v1,
+		UseBuildIDForVersioning:          true,
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue:           tq,
+		WorkflowTaskTimeout: 1 * time.Minute, // don't let this interfere
+	}, "wf")
+	s.NoError(err)
+	s.waitForChan(ctx, started)
+	time.Sleep(100 * time.Millisecond) // wait for worker to respond
+
+	// disable user data and unload so it picks it up
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, false)
+	defer dc.RemoveOverride(dynamicconfig.MatchingLoadUserData)
+	s.unloadTaskQueue(ctx, tq)
+	s.unloadTaskQueue(ctx, s.getStickyQueueName(ctx, run.GetID()))
+
+	// unblock the workflow. the sticky task will get kicked back to the regular queue and then
+	// get redirected to the dlq.
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// workflow is blocked for > 2s
+	waitCtx, waitCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer waitCancel()
+	s.Error(run.Get(waitCtx, nil))
+
+	// force unload dlq to test what would happen if it idled out
+	dlqName, err := tqname.Parse(tq)
+	s.NoError(err)
+	dlqName = dlqName.WithVersionSet("dlq")
+	s.unloadTaskQueue(ctx, dlqName.FullName())
+
+	// enable user data
+	dc.OverrideValue(dynamicconfig.MatchingLoadUserData, true)
+	s.unloadTaskQueue(ctx, tq)
+
+	// workflow is still stuck because dlq is unloaded
+	waitCtx, waitCancel = context.WithTimeout(ctx, 2*time.Second)
+	defer waitCancel()
+	s.Error(run.Get(waitCtx, nil))
+
+	// force dlq to get loaded
+	_, _ = s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: dlqName.FullName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	})
+
+	// now workflow can finish
+	var out string
+	s.NoError(run.Get(ctx, &out))
+	s.Equal("done!", out)
+}
+
 func (s *versioningIntegSuite) TestDescribeTaskQueue() {
 	// force one partition since DescribeTaskQueue only goes to the root
 	dc := s.testCluster.host.dcClient
@@ -1892,6 +2067,15 @@ func (s *versioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
 	s.Require().NoError(err)
+}
+
+func (s *versioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
+	ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	s.NoError(err)
+	return ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
 }
 
 func containsBuildId(data *persistencespb.VersioningData, buildId string) bool {

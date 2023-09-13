@@ -32,13 +32,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 // TestQueueModule_ArchivalQueueCreated tests that the archival queue is created if and only if the static config for
@@ -155,12 +154,16 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	archivalMetadata := getArchivalMetadata(controller, c)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()
+	serviceResolver := membership.NewMockServiceResolver(controller)
+	serviceResolver.EXPECT().MemberCount().Return(1).AnyTimes()
 	return fx.Supply(
 		compileTimeDependencies{},
 		cfg,
 		fx.Annotate(archivalMetadata, fx.As(new(carchiver.ArchivalMetadata))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
+		fx.Annotate(serviceResolver, fx.As(new(membership.ServiceResolver))),
+		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
 	)
 }
 
@@ -170,13 +173,11 @@ type compileTimeDependencies struct {
 	fx.Out
 
 	namespace.Registry
-	clock.TimeSource
 	log.SnTaggedLogger
 	client.Bean
-	archiver.Client
 	sdk.ClientFactory
-	resource.MatchingClient
-	historyservice.HistoryServiceClient
+	resource.MatchingRawClient
+	resource.HistoryRawClient
 	manager.VisibilityManager
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher

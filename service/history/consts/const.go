@@ -69,18 +69,20 @@ var (
 	ErrDeserializingToken = serviceerror.NewInvalidArgument("error deserializing task token")
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewInvalidArgument("exceeded workflow execution limit for signal events")
-	// ErrWorkflowClosing is the error indicating requests to workflow got rejected due to workflow is closing
-	ErrWorkflowClosing = serviceerror.NewWorkflowNotReady("workflow operation rejected because workflow is closing")
+	// ErrWorkflowClosing is the error indicating requests to workflow can not be applied as workflow is closing
+	ErrWorkflowClosing = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow operation can not be applied because workflow is closing")
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
-	ErrConsistentQueryBufferExceeded = serviceerror.NewWorkflowNotReady("consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
+	ErrConsistentQueryBufferExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
 	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistorySizeExceedsLimit)
+	// ErrHistoryCountExceedsLimit is error indicating workflow execution has exceeded system defined history count limit
+	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistoryCountExceedsLimit)
 	// ErrMutableStateSizeExceedsLimit is error indicating workflow execution has exceeded system defined mutable state size limit
 	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonMutableStateSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster
@@ -99,6 +101,20 @@ var (
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
 	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
+	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
+	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
+
+	ErrWorkflowIDNotSet                 = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	ErrInvalidRunID                     = serviceerror.NewInvalidArgument("Invalid RunId.")
+	ErrInvalidNextPageToken             = serviceerror.NewInvalidArgument("Invalid NextPageToken.")
+	ErrNextPageTokenRunIDMismatch       = serviceerror.NewInvalidArgument("RunId in the request does not match the NextPageToken.")
+	ErrInvalidPageSize                  = serviceerror.NewInvalidArgument("Invalid PageSize.")
+	ErrInvalidPaginationToken           = serviceerror.NewInvalidArgument("Invalid pagination token.")
+	ErrInvalidFirstNextEventCombination = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
+	ErrInvalidVersionHistories          = serviceerror.NewInvalidArgument("Invalid version histories.")
+	ErrInvalidEventQueryRange           = serviceerror.NewInvalidArgument("Invalid event query range.")
+
+	ErrUnableToGetSearchAttributesMessage = "Unable to get search attributes: %v."
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

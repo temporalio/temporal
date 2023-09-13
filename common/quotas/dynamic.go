@@ -32,8 +32,14 @@ type (
 	// RateFn returns a float64 as the RPS
 	RateFn func() float64
 
+	// NamespaceRateFn returns a float64 as the RPS for the given namespace
+	NamespaceRateFn func(namespace string) float64
+
 	// BurstFn returns an int as the burst / bucket size
 	BurstFn func() int
+
+	// NamespaceBurstFn returns an int as the burst / bucket size for the given namespace
+	NamespaceBurstFn func(namespace string) float64
 
 	// RateBurst returns rate & burst for rate limiter
 	RateBurst interface {
@@ -53,7 +59,7 @@ type (
 	}
 
 	MutableRateBurst interface {
-		SetRate(rate float64)
+		SetRPS(rps float64)
 		SetBurst(burst int)
 		RateBurst
 	}
@@ -120,7 +126,7 @@ func NewMutableRateBurst(
 	}
 }
 
-func (d *MutableRateBurstImpl) SetRate(rate float64) {
+func (d *MutableRateBurstImpl) SetRPS(rate float64) {
 	d.rate.Store(rate)
 }
 

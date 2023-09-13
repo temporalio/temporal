@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -49,6 +50,7 @@ type (
 
 		controller         *gomock.Controller
 		mockTransactionMgr *MocktransactionMgr
+		mockShard          *shard.MockContext
 
 		createMgr *nDCTransactionMgrForNewWorkflowImpl
 	}
@@ -64,8 +66,9 @@ func (s *transactionMgrForNewWorkflowSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
+	s.mockShard = shard.NewMockContext(s.controller)
 
-	s.createMgr = newTransactionMgrForNewWorkflow(s.mockTransactionMgr)
+	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr, false)
 }
 
 func (s *transactionMgrForNewWorkflowSuite) TearDownTest() {
@@ -137,6 +140,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
 		int64(0),
@@ -209,6 +213,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -276,6 +281,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -283,7 +289,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(nil)
-	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
 	s.NoError(err)
@@ -344,6 +350,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
@@ -351,7 +358,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	).Return(&persistence.WorkflowConditionFailedError{})
-	targetContext.EXPECT().ReapplyEvents(gomock.Any(), targetWorkflowEventsSeq).Return(nil)
+	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, targetWorkflow)
 	s.NoError(err)
@@ -405,6 +412,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
+		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetContext,
 		targetMutableState,

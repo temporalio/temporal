@@ -205,3 +205,16 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 func IsEmptyVersionHistory(v *historyspb.VersionHistory) bool {
 	return len(v.Items) == 0
 }
+
+// CompareVersionHistory compares 2 version history items
+func CompareVersionHistory(v1 *historyspb.VersionHistory, v2 *historyspb.VersionHistory) (int, error) {
+	lastItem1, err := GetLastVersionHistoryItem(v1)
+	if err != nil {
+		return 0, err
+	}
+	lastItem2, err := GetLastVersionHistoryItem(v2)
+	if err != nil {
+		return 0, err
+	}
+	return CompareVersionHistoryItem(lastItem1, lastItem2), nil
+}

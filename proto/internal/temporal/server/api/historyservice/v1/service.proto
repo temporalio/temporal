@@ -278,7 +278,13 @@ service HistoryService {
     }
 
     // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+    // NOTE: this is experimental API
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    }
+
+    // ImportWorkflowExecution attempts to import workflow according to persisted history events.
+    // NOTE: this is experimental API
+    rpc ImportWorkflowExecution (ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
     }
 
     // DeleteWorkflowVisibilityRecord force delete a workflow's visibility record.
@@ -298,5 +304,17 @@ service HistoryService {
     }
 
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
+    }
+
+    rpc GetWorkflowExecutionHistory(GetWorkflowExecutionHistoryRequest) returns (GetWorkflowExecutionHistoryResponse) {
+    }
+
+    rpc GetWorkflowExecutionHistoryReverse(GetWorkflowExecutionHistoryReverseRequest) returns (GetWorkflowExecutionHistoryReverseResponse) {
+    }
+
+    rpc GetWorkflowExecutionRawHistoryV2(GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
     }
 }

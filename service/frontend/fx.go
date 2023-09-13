@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -87,13 +87,15 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
+	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -102,6 +104,7 @@ func NewServiceProvider(
 	serviceConfig *Config,
 	server *grpc.Server,
 	healthServer *health.Server,
+	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -117,6 +120,7 @@ func NewServiceProvider(
 		serviceConfig,
 		server,
 		healthServer,
+		httpAPIServer,
 		handler,
 		adminHandler,
 		operatorHandler,
@@ -128,6 +132,13 @@ func NewServiceProvider(
 		faultInjectionDataStoreFactory,
 		membershipMonitor,
 	)
+}
+
+// GrpcServerOptions are the options to build the frontend gRPC server along
+// with the interceptors that are already set in the options.
+type GrpcServerOptions struct {
+	Options           []grpc.ServerOption
+	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
 func GrpcServerOptionsProvider(
@@ -151,7 +162,7 @@ func GrpcServerOptionsProvider(
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-) []grpc.ServerOption {
+) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
@@ -210,13 +221,14 @@ func GrpcServerOptionsProvider(
 		telemetryInterceptor.StreamIntercept,
 	}
 
-	return append(
+	grpcServerOptions = append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
 
 func ConfigProvider(
@@ -364,12 +376,15 @@ func NamespaceRateLimitInterceptorProvider(
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
+	serviceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
 ) *interceptor.ConcurrentRequestLimitInterceptor {
 	return interceptor.NewConcurrentRequestLimitInterceptor(
 		namespaceRegistry,
+		serviceResolver,
 		logger,
-		serviceConfig.MaxNamespaceCountPerInstance,
+		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
@@ -397,15 +412,18 @@ func CallerInfoInterceptorProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
+		persistenceLazyLoadedServiceResolver,
 	)
 }
 
@@ -470,17 +488,15 @@ func AdminHandlerProvider(
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
-	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	clusterMetadata cluster.Metadata,
-	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
@@ -493,7 +509,6 @@ func AdminHandlerProvider(
 		esClient,
 		visibilityMrg,
 		logger,
-		persistenceExecutionManager,
 		taskManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
@@ -503,16 +518,15 @@ func AdminHandlerProvider(
 		sdkClientFactory,
 		membershipMonitor,
 		hostInfoProvider,
-		archiverProvider,
 		metricsHandler,
 		namespaceRegistry,
 		saProvider,
 		saManager,
 		clusterMetadata,
-		archivalMetadata,
 		healthServer,
 		eventSerializer,
 		timeSource,
+		persistenceExecutionManager,
 	}
 	return NewAdminHandler(args)
 }
@@ -527,7 +541,7 @@ func OperatorHandlerProvider(
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
@@ -562,7 +576,7 @@ func HandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
@@ -599,6 +613,42 @@ func HandlerProvider(
 		membershipMonitor,
 	)
 	return wfHandler
+}
+
+// HTTPAPIServerProvider provides an HTTP API server if enabled or nil
+// otherwise.
+func HTTPAPIServerProvider(
+	cfg *config.Config,
+	serviceName primitives.ServiceName,
+	serviceConfig *Config,
+	grpcListener net.Listener,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	handler Handler,
+	grpcServerOptions GrpcServerOptions,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+) (*HTTPAPIServer, error) {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return nil, nil
+	}
+	// If HTTP API port is 0, it is disabled
+	rpcConfig := cfg.Services[string(serviceName)].RPC
+	if rpcConfig.HTTPPort == 0 {
+		return nil, nil
+	}
+	return NewHTTPAPIServer(
+		serviceConfig,
+		rpcConfig,
+		grpcListener,
+		tlsConfigProvider,
+		handler,
+		grpcServerOptions.UnaryInterceptors,
+		metricsHandler,
+		namespaceRegistry,
+		logger,
+	)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

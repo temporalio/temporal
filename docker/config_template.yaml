@@ -304,6 +304,7 @@ services:
             grpcPort: {{ $temporalGrpcPort }}
             membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
             bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            httpPort: {{ default .Env.FRONTEND_HTTP_PORT "7243" }}
 
     {{- if .Env.USE_INTERNAL_FRONTEND }}
     internal-frontend:

@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -709,6 +710,48 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	return &historyservice.RebuildMutableStateResponse{}, nil
 }
 
+// ImportWorkflowExecution attempts to workflow execution according to persisted history events
+func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest) (_ *historyservice.ImportWorkflowExecutionResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	if workflowID == "" {
+		return nil, h.convertError(errWorkflowIDNotSet)
+	}
+	runID := workflowExecution.GetRunId()
+	if runID == "" {
+		return nil, h.convertError(errRunIDNotValid)
+	}
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	if !shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+		return nil, serviceerror.NewUnimplemented("ImportWorkflowExecution must be used in global namespace mode")
+	}
+	resp, err := engine.ImportWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return resp, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
@@ -1229,13 +1272,11 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.WorkflowExecution == nil {
+	if request.GetParentExecution() == nil {
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetParentExecution().WorkflowId)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -2000,6 +2041,111 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	defer streamSender.Stop()
 	streamSender.Wait()
 	return nil
+}
+
+func (h *Handler) GetWorkflowExecutionHistory(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.Request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionHistory(ctx, request)
+}
+
+func (h *Handler) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
+) (_ *historyservice.GetWorkflowExecutionHistoryReverseResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionHistoryReverse(ctx, request)
+}
+
+func (h *Handler) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.GetWorkflowExecutionRawHistoryV2(ctx, request)
+}
+
+func (h *Handler) ForceDeleteWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ForceDeleteWorkflowExecutionRequest,
+) (_ *historyservice.ForceDeleteWorkflowExecutionResponse, retErr error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID.String(),
+		request.Request.Execution.WorkflowId,
+		h.config.NumberOfShards,
+	)
+	return forcedeleteworkflowexecution.Invoke(
+		ctx,
+		request,
+		shardID,
+		h.persistenceExecutionManager,
+		h.persistenceVisibilityManager,
+		h.logger,
+	)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

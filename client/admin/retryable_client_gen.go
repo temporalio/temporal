@@ -170,6 +170,21 @@ func (c *retryableClient) GetDLQReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetNamespace(
+	ctx context.Context,
+	request *adminservice.GetNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetNamespaceResponse, error) {
+	var resp *adminservice.GetNamespaceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,
@@ -254,6 +269,21 @@ func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ImportWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	var resp *adminservice.ImportWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ImportWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

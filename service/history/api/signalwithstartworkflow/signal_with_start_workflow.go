@@ -202,7 +202,7 @@ func startAndSignalWithCurrentWorkflow(
 
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	casPredicate *api.CreateWorkflowCASPredicate,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
@@ -224,12 +224,13 @@ func startAndSignalWithoutCurrentWorkflow(
 		createMode = persistence.CreateWorkflowModeUpdateCurrent
 		prevRunID = casPredicate.RunID
 		prevLastWriteVersion = casPredicate.LastWriteVersion
-		if err := api.NewWorkflowVersionCheck(shard, casPredicate.LastWriteVersion, newWorkflowContext.GetMutableState()); err != nil {
+		if err := api.NewWorkflowVersionCheck(shardContext, casPredicate.LastWriteVersion, newWorkflowContext.GetMutableState()); err != nil {
 			return "", err
 		}
 	}
 	err = newWorkflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
+		shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -252,14 +253,14 @@ func startAndSignalWithoutCurrentWorkflow(
 
 func signalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowContext api.WorkflowContext,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
 	mutableState := workflowContext.GetMutableState()
 	if err := api.ValidateSignal(
 		ctx,
-		shard,
+		shardContext,
 		workflowContext.GetMutableState(),
 		request.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
@@ -302,5 +303,6 @@ func signalWorkflow(
 	// the history and try the operation again.
 	return workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
+		shardContext,
 	)
 }

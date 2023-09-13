@@ -125,7 +125,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm.taskReader.gorogrp.Wait()
 }
 
-func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testing.T) {
+func TestDeliverBufferTasks_DisableUserData_SendsVersionedToDlq(t *testing.T) {
 	t.Parallel()
 
 	controller := gomock.NewController(t)
@@ -149,12 +149,13 @@ func TestDeliverBufferTasks_DisableUserData_SendsVersionedToUnversioned(t *testi
 	tlm.SetUserDataState(userDataDisabled, nil)
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 
-	time.Sleep(3 * taskReaderOfferThrottleWait)
+	time.Sleep(taskReaderOfferThrottleWait)
 
-	// count retries with this metric
+	// should be no retries
+	// TODO: this test could eventually be improved to check which tqm the task got redirected to.
+	// for now, this is tested better by integration tests.
 	errCount := scope.Snapshot().Counters()["test.buffer_throttle_count+"]
-	require.NotNil(t, errCount, "nil counter probably means dispatch did not get error and blocked trying to load new tqm")
-	require.GreaterOrEqual(t, errCount.Value(), int64(2))
+	require.Nil(t, errCount)
 
 	tlm.taskReader.gorogrp.Cancel()
 	tlm.taskReader.gorogrp.Wait()
@@ -429,9 +430,8 @@ func createTestTaskQueueManagerWithConfig(
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	mockHistoryClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsWorkflowTaskValidResponse{IsValid: true}, nil).AnyTimes()
 	mockHistoryClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil).AnyTimes()
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(testOpts.config, tm, mockHistoryClient, logger, mockNamespaceCache, testOpts.matchingClientMock, mockVisibilityManager)
-	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, normalStickyInfo, testOpts.config, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1307,12 +1307,11 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	me := newMatchingEngine(tqCfg.config, tm, nil, logger, mockNamespaceCache, tqCfg.matchingClientMock, mockVisibilityManager)
-	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	stickyInfo := stickyInfo{
 		kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		normalName: normalName,
 	}
-	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config, cmeta)
+	tlMgr, err := newTaskQueueManager(me, tqCfg.tqId, stickyInfo, tqCfg.config)
 	require.NoError(t, err)
 	tq := tlMgr.(*taskQueueManagerImpl)
 

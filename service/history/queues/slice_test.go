@@ -337,8 +337,8 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 	slice.iterators = s.randomIteratorsInRange(r, rand.Intn(2), nil)
 
 	executables := s.randomExecutablesInRange(r, 5)
-	slices.SortFunc(executables, func(a, b Executable) bool {
-		return a.GetKey().CompareTo(b.GetKey()) < 0
+	slices.SortFunc(executables, func(a, b Executable) int {
+		return a.GetKey().CompareTo(b.GetKey())
 	})
 
 	firstPendingIdx := len(executables)
@@ -386,8 +386,8 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	slice.iterators = []Iterator{} // manually set iterators to be empty to trigger predicate update
 
 	executables := s.randomExecutablesInRange(r, 100)
-	slices.SortFunc(executables, func(a, b Executable) bool {
-		return a.GetKey().CompareTo(b.GetKey()) < 0
+	slices.SortFunc(executables, func(a, b Executable) int {
+		return a.GetKey().CompareTo(b.GetKey())
 	})
 
 	pendingNamespaceID := []string{uuid.New(), uuid.New()}
@@ -442,8 +442,8 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 				mockTasks = append(mockTasks, mockTask)
 			}
 
-			slices.SortFunc(mockTasks, func(a, b tasks.Task) bool {
-				return a.GetKey().CompareTo(b.GetKey()) < 0
+			slices.SortFunc(mockTasks, func(a, b tasks.Task) int {
+				return a.GetKey().CompareTo(b.GetKey())
 			})
 
 			return mockTasks, nil, nil
@@ -491,8 +491,8 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 				mockTasks = append(mockTasks, mockTask)
 			}
 
-			slices.SortFunc(mockTasks, func(a, b tasks.Task) bool {
-				return a.GetKey().CompareTo(b.GetKey()) < 0
+			slices.SortFunc(mockTasks, func(a, b tasks.Task) int {
+				return a.GetKey().CompareTo(b.GetKey())
 			})
 
 			return mockTasks, nil, nil
@@ -534,8 +534,8 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 				mockTasks = append(mockTasks, mockTask)
 			}
 
-			slices.SortFunc(mockTasks, func(a, b tasks.Task) bool {
-				return a.GetKey().CompareTo(b.GetKey()) < 0
+			slices.SortFunc(mockTasks, func(a, b tasks.Task) int {
+				return a.GetKey().CompareTo(b.GetKey())
 			})
 
 			return mockTasks, []byte{1, 2, 3}, nil

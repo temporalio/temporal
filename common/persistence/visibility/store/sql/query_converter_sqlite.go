@@ -108,7 +108,7 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 				sqlparser.String(expr.Right),
 			)
 		}
-		ftsQuery = fmt.Sprintf(`%s:"%s"`, saColNameExpr.dbColName.Name, valueExpr.Val)
+		ftsQuery = buildFtsQueryString(saColNameExpr.dbColName.Name, valueExpr.Val)
 
 	case sqlparser.InStr, sqlparser.NotInStr:
 		valTupleExpr, isValTuple := expr.Right.(sqlparser.ValTuple)
@@ -123,10 +123,7 @@ func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 		if err != nil {
 			return nil, err
 		}
-		for i := range values {
-			values[i] = fmt.Sprintf(`"%s"`, values[i])
-		}
-		ftsQuery = fmt.Sprintf("%s:(%s)", saColNameExpr.dbColName.Name, strings.Join(values, " OR "))
+		ftsQuery = buildFtsQueryString(saColNameExpr.dbColName.Name, values...)
 
 	default:
 		// this should never happen since isSupportedKeywordListOperator should already fail
@@ -201,7 +198,6 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 			sqlparser.String(expr.Right),
 		)
 	}
-	ftsQuery := fmt.Sprintf("%s:(%s)", saColNameExpr.dbColName.Name, strings.Join(tokens, " OR "))
 
 	var oper string
 	switch expr.Operator {
@@ -219,6 +215,7 @@ func (c *sqliteQueryConverter) convertTextComparisonExpr(
 		)
 	}
 
+	ftsQuery := buildFtsQueryString(saColNameExpr.dbColName.Name, tokens...)
 	newExpr := sqlparser.ComparisonExpr{
 		Operator: oper,
 		Left:     newColName("rowid"),
@@ -348,4 +345,9 @@ func (c *sqliteQueryConverter) buildCountStmt(
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
 	), queryArgs
+}
+
+func buildFtsQueryString(colname string, values ...string) string {
+	// FTS query format: 'colname : ("token1" OR "token2" OR ...)'
+	return fmt.Sprintf(`%s : ("%s")`, colname, strings.Join(values, `" OR "`))
 }

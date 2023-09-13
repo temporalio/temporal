@@ -41,7 +41,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -50,7 +49,13 @@ const (
 
 type (
 	BranchMgr interface {
-		prepareVersionHistory(
+		GetOrCreate(
+			ctx context.Context,
+			incomingVersionHistory *historyspb.VersionHistory,
+			incomingFirstEventID int64,
+			incomingFirstEventVersion int64,
+		) (bool, int32, error)
+		Create(
 			ctx context.Context,
 			incomingVersionHistory *historyspb.VersionHistory,
 			incomingFirstEventID int64,
@@ -91,26 +96,47 @@ func NewBranchMgr(
 	}
 }
 
-func (r *BranchMgrImpl) prepareVersionHistory(
+func (r *BranchMgrImpl) GetOrCreate(
 	ctx context.Context,
 	incomingVersionHistory *historyspb.VersionHistory,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
 ) (bool, int32, error) {
+	return r.prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion, true)
+}
 
-	lcaVersionHistoryItem, versionHistoryIndex, err := r.flushBufferedEvents(ctx, incomingVersionHistory)
+func (r *BranchMgrImpl) Create(
+	ctx context.Context,
+	incomingVersionHistory *historyspb.VersionHistory,
+	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
+) (bool, int32, error) {
+	return r.prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion, false)
+}
+
+func (r *BranchMgrImpl) prepareBranch(
+	ctx context.Context,
+	incomingVersionHistory *historyspb.VersionHistory,
+	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
+	reuseBranch bool,
+) (bool, int32, error) {
+
+	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
+	lcaVersionHistoryItem, versionHistoryIndex, err := versionhistory.FindLCAVersionHistoryItemAndIndex(
+		localVersionHistories,
+		incomingVersionHistory,
+	)
 	if err != nil {
 		return false, 0, err
 	}
-
-	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	versionHistory, err := versionhistory.GetVersionHistory(localVersionHistories, versionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
 
 	// if can directly append to a branch
-	if versionhistory.IsLCAVersionHistoryItemAppendable(versionHistory, lcaVersionHistoryItem) {
+	if reuseBranch && versionhistory.IsLCAVersionHistoryItemAppendable(versionHistory, lcaVersionHistoryItem) {
 		doContinue, err := r.verifyEventsOrder(
 			ctx,
 			versionHistory,
@@ -150,59 +176,6 @@ func (r *BranchMgrImpl) prepareVersionHistory(
 	}
 
 	return true, newVersionHistoryIndex, nil
-}
-
-func (r *BranchMgrImpl) flushBufferedEvents(
-	ctx context.Context,
-	incomingVersionHistory *historyspb.VersionHistory,
-) (*historyspb.VersionHistoryItem, int32, error) {
-
-	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
-
-	lcaVersionHistoryItem, versionHistoryIndex, err := versionhistory.FindLCAVersionHistoryItemAndIndex(
-		localVersionHistories,
-		incomingVersionHistory,
-	)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// check whether there are buffered events, if so, flush it
-	// NOTE: buffered events does not show in version history or next event id
-	if !r.mutableState.HasBufferedEvents() {
-		if r.mutableState.HasStartedWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
-			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
-				return nil, 0, err
-			}
-			// now transient task is gone
-		}
-		return lcaVersionHistoryItem, versionHistoryIndex, nil
-	}
-
-	targetWorkflow := NewWorkflow(
-		ctx,
-		r.namespaceRegistry,
-		r.clusterMetadata,
-		r.context,
-		r.mutableState,
-		wcache.NoopReleaseFn,
-	)
-	if err := targetWorkflow.FlushBufferedEvents(); err != nil {
-		return nil, 0, err
-	}
-
-	// the workflow must be updated as active, to send out replication tasks
-	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
-		ctx,
-	); err != nil {
-		return nil, 0, err
-	}
-
-	r.context = targetWorkflow.GetContext()
-	r.mutableState = targetWorkflow.GetMutableState()
-
-	localVersionHistories = r.mutableState.GetExecutionInfo().GetVersionHistories()
-	return versionhistory.FindLCAVersionHistoryItemAndIndex(localVersionHistories, incomingVersionHistory)
 }
 
 func (r *BranchMgrImpl) verifyEventsOrder(

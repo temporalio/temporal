@@ -69,7 +69,7 @@ const (
 
 	frontendHandlerRetryInitialInterval = 200 * time.Millisecond
 	frontendHandlerRetryMaxInterval     = time.Second
-	frontendHandlerRetryMaxAttempts     = 5
+	frontendHandlerRetryMaxAttempts     = 2
 
 	historyHandlerRetryInitialInterval = 50 * time.Millisecond
 	historyHandlerRetryMaxAttempts     = 2
@@ -128,8 +128,10 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonHistorySizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history count exceeds limit
+	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
 	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit

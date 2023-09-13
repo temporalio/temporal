@@ -60,10 +60,12 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqname"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -260,7 +262,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
 			var err error
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -274,7 +276,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 
@@ -286,7 +288,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -296,7 +298,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 				return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.mutableState.checksum)
@@ -460,14 +462,25 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
 
+	name, err := tqname.FromBaseName("tq")
+	s.NoError(err)
+
 	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		s.mutableState.GetNextEventID(),
 		uuid.New(),
-		&taskqueuepb.TaskQueue{},
+		&taskqueuepb.TaskQueue{Name: name.WithPartition(5).FullName()},
 		"random identity",
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.NumBufferedEvents())
+
+	mutation, err := s.mutableState.hBuilder.Finish(true)
+	s.NoError(err)
+	s.Equal(1, len(mutation.DBEventsBatches))
+	s.Equal(2, len(mutation.DBEventsBatches[0]))
+	attrs := mutation.DBEventsBatches[0][0].GetWorkflowTaskScheduledEventAttributes()
+	s.NotNil(attrs)
+	s.Equal("tq", attrs.TaskQueue.Name)
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {
@@ -815,7 +828,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
 	dbstate := s.buildWorkflowMutableState()
 	var err error
-	s.mutableState, err = newMutableStateFromDB(
+	s.mutableState, err = NewMutableStateFromDB(
 		s.mockShard,
 		NewMapEventCache(s.T(), cacheStore),
 		s.logger,
@@ -888,7 +901,7 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	state := s.buildWorkflowMutableState()
 
 	var err error
-	s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
 
 	var scheduledEventID int64
@@ -1040,7 +1053,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			}
 
 			var err error
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 
 			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = s.mutableState.GetNextEventID()
@@ -1157,7 +1170,7 @@ func (s *mutableStateSuite) TestTrackBuildIdFromCompletion() {
 		s.T().Run(c.name, func(t *testing.T) {
 			dbState := s.buildWorkflowMutableState()
 			var err error
-			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 
 			// Max 0
@@ -1215,4 +1228,29 @@ func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []st
 		binaryChecksums[i] = point.GetBinaryChecksum()
 	}
 	return binaryChecksums
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_CollapseUpsert() {
+	ms := s.mutableState
+
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	ms.taskGenerator.GenerateUpsertVisibilityTask()
+	s.Equal(3, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(1, len(ms.InsertTasks[tasks.CategoryVisibility]))
+}
+
+func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_DontCollapseOthers() {
+	ms := s.mutableState
+
+	// it doesn't make any sense to have two start tasks, but just for testing logic
+	startEvent := &historypb.HistoryEvent{Version: 1}
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
+
+	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
 }

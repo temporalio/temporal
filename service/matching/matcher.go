@@ -297,37 +297,37 @@ forLoop:
 
 // Poll blocks until a task is found or context deadline is exceeded
 // On success, the returned task could be a query task or a regular task
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, false)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
-// Returns ErrNoTasks when context deadline is exceeded
+// Returns errNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	return tm.poll(ctx, pollMetadata, true)
 }
 
 // UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
-	if rps == nil {
+func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
+	if rpsPtr == nil {
 		return
 	}
 
-	rate := *rps
+	rps := *rpsPtr
 	nPartitions := float64(tm.numPartitions())
 	if nPartitions > 0 {
 		// divide the rate equally across all partitions
-		rate = rate / nPartitions
+		rps = rps / nPartitions
 	}
-	burst := int(math.Ceil(rate))
+	burst := int(math.Ceil(rps))
 
 	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
 	if burst < minTaskThrottlingBurstSize {
 		burst = minTaskThrottlingBurstSize
 	}
 
-	tm.dynamicRateBurst.SetRate(rate)
+	tm.dynamicRateBurst.SetRPS(rps)
 	tm.dynamicRateBurst.SetBurst(burst)
 	tm.forceRefreshRateOnce.Do(func() {
 		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
@@ -363,7 +363,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	default:
 	}
 
@@ -386,7 +386,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
@@ -409,7 +409,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, pollMetadata *pollMetadata, que
 	select {
 	case <-ctx.Done():
 		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, ErrNoTasks
+		return nil, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)

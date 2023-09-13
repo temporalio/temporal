@@ -78,7 +78,7 @@ type (
 	stateRebuilderProvider func() StateRebuilder
 
 	workflowResetterImpl struct {
-		shard             shard.Context
+		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
@@ -92,20 +92,20 @@ type (
 var _ WorkflowResetter = (*workflowResetterImpl)(nil)
 
 func NewWorkflowResetter(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		executionMgr:      shardContext.GetExecutionManager(),
 		workflowCache:     workflowCache,
 		newStateRebuilder: func() StateRebuilder {
-			return NewStateRebuilder(shard, logger)
+			return NewStateRebuilder(shardContext, logger)
 		},
-		transaction: workflow.NewTransaction(shard),
+		transaction: workflow.NewTransaction(shardContext),
 		logger:      logger,
 	}
 }
@@ -372,6 +372,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	return resetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
@@ -406,17 +407,19 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	}
 
 	resetContext := workflow.NewContext(
-		r.shard,
+		r.shardContext.GetConfig(),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			resetRunID,
 		),
 		r.logger,
+		r.shardContext.GetLogger(),
+		r.shardContext.GetMetricsHandler(),
 	)
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().Rebuild(
 		ctx,
-		r.shard.GetTimeSource().Now(),
+		r.shardContext.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -444,8 +447,6 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	)
 	resetMutableState.AddHistorySize(resetHistorySize)
 	return NewWorkflow(
-		ctx,
-		r.namespaceRegistry,
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,
@@ -545,7 +546,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	resetRunID string,
 ) ([]byte, error) {
 	// fork a new history branch
-	shardID := r.shard.GetShardID()
+	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
@@ -612,6 +613,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
 		context, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 			ctx,
+			r.shardContext,
 			namespaceID,
 			commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -624,7 +626,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		}
 		defer func() { release(retError) }()
 
-		mutableState, err := context.LoadMutableState(ctx)
+		mutableState, err := context.LoadMutableState(ctx, r.shardContext)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err
@@ -749,7 +751,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			MaxEventID:    nextEventID,
 			PageSize:      defaultPageSize,
 			NextPageToken: paginationToken,
-			ShardID:       r.shard.GetShardID(),
+			ShardID:       r.shardContext.GetShardID(),
 		})
 		if err != nil {
 			return nil, nil, err

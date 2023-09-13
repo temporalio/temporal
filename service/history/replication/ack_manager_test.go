@@ -119,7 +119,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewCache(s.mockShard)
+	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig())
 
 	s.replicationAckManager = NewAckManager(
 		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
@@ -307,7 +307,6 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
@@ -359,7 +358,6 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
@@ -411,7 +409,6 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),
@@ -500,7 +497,6 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
 		s.mockShard.GetExecutionManager(),

@@ -27,7 +27,6 @@ package matching
 import (
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -54,6 +53,7 @@ var Module = fx.Options(
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -114,19 +114,24 @@ func RateLimitInterceptorProvider(
 // if-case comes from resourceImpl.New.
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
+		persistenceLazyLoadedServiceResolver,
 	)
 }
 
-func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
+func ServiceResolverProvider(
+	membershipMonitor membership.Monitor,
+) (membership.ServiceResolver, error) {
 	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
@@ -179,7 +184,7 @@ func HandlerProvider(
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	taskManager persistence.TaskManager,
-	historyClient historyservice.HistoryServiceClient,
+	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,

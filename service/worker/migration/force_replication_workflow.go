@@ -61,8 +61,8 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
-		TargetClusterEndpoint   string `validate:"required"`
-		VerifyIntervalInSeconds int    `validate:"gte=0"`
+		TargetClusterEndpoint   string
+		VerifyIntervalInSeconds int `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
 		LastCloseTime                      time.Time
@@ -109,6 +109,8 @@ type (
 		VerifyInterval        time.Duration `validate:"gte=0"`
 		Executions            []commonpb.WorkflowExecution
 	}
+
+	verifyReplicationTasksResponse struct{}
 
 	metadataRequest struct {
 		Namespace string
@@ -272,6 +274,10 @@ func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params Task
 func validateAndSetForceReplicationParams(params *ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
+	}
+
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint is required with verification enabled", "InvalidArgument", nil)
 	}
 
 	if params.ConcurrentActivityCount <= 0 {

@@ -98,8 +98,8 @@ func NewRandomOrderedRangesInRange(
 		ranges = append(ranges[1:], left, right)
 	}
 
-	slices.SortFunc(ranges, func(a, b Range) bool {
-		return a.InclusiveMin.CompareTo(b.InclusiveMin) < 0
+	slices.SortFunc(ranges, func(a, b Range) int {
+		return a.InclusiveMin.CompareTo(b.InclusiveMin)
 	})
 
 	return ranges

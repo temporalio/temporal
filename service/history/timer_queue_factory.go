@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -56,8 +55,7 @@ type (
 		QueueFactoryBaseParams
 
 		ClientBean        client.Bean
-		ArchivalClient    archiver.Client
-		MatchingClient    resource.MatchingClient
+		MatchingRawClient resource.MatchingRawClient
 		VisibilityManager manager.VisibilityManager
 	}
 
@@ -114,7 +112,6 @@ func (f *timerQueueFactory) CreateQueue(
 		shard,
 		workflowCache,
 		f.Config,
-		f.ArchivalClient,
 		shard.GetTimeSource(),
 		f.VisibilityManager,
 	)
@@ -133,7 +130,7 @@ func (f *timerQueueFactory) CreateQueue(
 		logger,
 		f.MetricsHandler,
 		f.Config,
-		f.MatchingClient,
+		f.MatchingRawClient,
 	)
 
 	standbyExecutor := newTimerQueueStandbyTaskExecutor(
@@ -154,7 +151,7 @@ func (f *timerQueueFactory) CreateQueue(
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
 		),
-		f.MatchingClient,
+		f.MatchingRawClient,
 		logger,
 		f.MetricsHandler,
 		// note: the cluster name is for calculating time for standby tasks,
@@ -165,13 +162,16 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 	)
 
-	executor := queues.NewExecutorWrapper(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
 	)
+	if f.ExecutorWrapper != nil {
+		executor = f.ExecutorWrapper.Wrap(executor)
+	}
 
 	return queues.NewScheduledQueue(
 		shard,

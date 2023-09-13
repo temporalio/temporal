@@ -50,11 +50,9 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -85,6 +83,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -115,7 +114,6 @@ type (
 		visibilityMrg                   manager.VisibilityManager
 		logger                          log.Logger
 		throttledLogger                 log.Logger
-		persistenceExecutionManager     persistence.ExecutionManager
 		clusterMetadataManager          persistence.ClusterMetadataManager
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
@@ -129,6 +127,9 @@ type (
 		healthServer                    *health.Server
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
+
+		// DEPRECATED
+		persistenceExecutionManager persistence.ExecutionManager
 	}
 )
 
@@ -139,7 +140,7 @@ func NewWorkflowHandler(
 	visibilityMrg manager.VisibilityManager,
 	logger log.Logger,
 	throttledLogger log.Logger,
-	persistenceExecutionManager persistence.ExecutionManager,
+	persistenceExecutionManager persistence.ExecutionManager, // TODO: remove
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -360,7 +361,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -369,7 +370,9 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	if request.GetRequestId() == "" {
-		return nil, errRequestIDNotSet
+		// For easy direct API use, we default the request ID here but expect all
+		// SDKs and other auto-retrying clients to set it
+		request.RequestId = uuid.New()
 	}
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
@@ -443,247 +446,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	// this function returns the following 7 things,
-	// 1. the current branch token (to use to retrieve history events)
-	// 2. the workflow run ID
-	// 3. the last first event ID (the event ID of the last batch of events in the history)
-	// 4. the last first event transaction id
-	// 5. the next event ID
-	// 6. whether the workflow is running
-	// 7. error if any
-	queryHistory := func(
-		namespaceUUID namespace.ID,
-		execution *commonpb.WorkflowExecution,
-		expectedNextEventID int64,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
-
-		if err != nil {
-			return nil, "", 0, 0, false, err
-		}
-		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventId(),
-			response.GetNextEventId(),
-			isWorkflowRunning,
-			nil
-	}
-
-	isLongPoll := request.GetWaitNewEvent()
-	isCloseEventOnly := request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-	execution := request.Execution
-	var continuationToken *tokenspb.HistoryContinuation
-
-	var runID string
-	lastFirstEventID := common.FirstEventID
-	var nextEventID int64
-	var isWorkflowRunning bool
-
-	// process the token for paging
-	queryNextEventID := common.EndEventID
-	if request.NextPageToken != nil {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, errInvalidNextPageToken
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
-		}
-
-		execution.RunId = continuationToken.GetRunId()
-
-		// we need to update the current next event ID and whether workflow is running
-		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
-			if !isCloseEventOnly {
-				queryNextEventID = continuationToken.GetNextEventId()
-			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
-			if err != nil {
-				return nil, err
-			}
-			continuationToken.FirstEventId = continuationToken.GetNextEventId()
-			continuationToken.NextEventId = nextEventID
-			continuationToken.IsWorkflowRunning = isWorkflowRunning
-		}
-	} else {
-		continuationToken = &tokenspb.HistoryContinuation{}
-		if !isCloseEventOnly {
-			queryNextEventID = common.FirstEventID
-		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
+		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
+			&historyservice.GetWorkflowExecutionHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Request:     request,
+			})
 		if err != nil {
 			return nil, err
 		}
-
-		execution.RunId = runID
-
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = nextEventID
-		continuationToken.IsWorkflowRunning = isWorkflowRunning
-		continuationToken.PersistenceToken = nil
+		return response.Response, nil
 	}
-
-	// TODO below is a temporal solution to guard against invalid event batch
-	//  when data inconsistency occurs
-	//  long term solution should check event batch pointing backwards within history store
-	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-		}
-	}()
-
-	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
-
-	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
-	var historyBlob []*commonpb.DataBlob
-	if isCloseEventOnly {
-		if !isWorkflowRunning {
-			if rawHistoryQueryEnabled {
-				historyBlob, _, err = wh.getRawHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				// since getHistory func will not return empty history, so the below is safe
-				historyBlob = historyBlob[len(historyBlob)-1:]
-			} else {
-				history, _, err = wh.getHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					namespace.Name(request.GetNamespace()),
-					*execution,
-					lastFirstEventID,
-					nextEventID,
-					request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-				if err != nil {
-					return nil, err
-				}
-				// since getHistory func will not return empty history, so the below is safe
-				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
-			}
-			continuationToken = nil
-		} else if isLongPoll {
-			// set the persistence token to be nil so next time we will query history for updates
-			continuationToken.PersistenceToken = nil
-		} else {
-			continuationToken = nil
-		}
-	} else {
-		// return all events
-		if continuationToken.FirstEventId >= continuationToken.NextEventId {
-			// currently there is no new event
-			history.Events = []*historypb.HistoryEvent{}
-			if !isWorkflowRunning {
-				continuationToken = nil
-			}
-		} else {
-			if rawHistoryQueryEnabled {
-				historyBlob, continuationToken.PersistenceToken, err = wh.getRawHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					*execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-			} else {
-				history, continuationToken.PersistenceToken, err = wh.getHistory(
-					ctx,
-					wh.metricsScope(ctx),
-					namespaceID,
-					namespace.Name(request.GetNamespace()),
-					*execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-
-			// here, for long pull on history events, we need to intercept the paging token from cassandra
-			// and do something clever
-			if len(continuationToken.PersistenceToken) == 0 && (!continuationToken.IsWorkflowRunning || !isLongPoll) {
-				// meaning, there is no more history to be returned
-				continuationToken = nil
-			}
-		}
-	}
-
-	nextToken, err := serializeHistoryToken(continuationToken)
-	if err != nil {
-		return nil, err
-	}
-
-	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
-	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
-	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
-	// workflow isn't really sensible.)
-	//
-	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
-	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
-	// completion event, and not when it's getting the history to display for other purposes. The best signal
-	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
-	// versions of the Java SDK don't set that flag.)
-	//
-	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
-	// Revisit this once we have an SDK deprecation policy.
-	if isCloseEventOnly &&
-		!wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID) &&
-		len(history.Events) > 0 {
-		lastEvent := history.Events[len(history.Events)-1]
-		fakeEvent, err := wh.makeFakeContinuedAsNewEvent(ctx, lastEvent)
-		if err != nil {
-			return nil, err
-		}
-		if fakeEvent != nil {
-			history.Events[len(history.Events)-1] = fakeEvent
-		}
-	}
-
-	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		RawHistory:    historyBlob,
-		NextPageToken: nextToken,
-		Archived:      false,
-	}, nil
+	return wh.getWorkflowExecutionHistory(ctx, request)
 }
 
 // GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
@@ -717,102 +491,18 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
-	queryMutableState := func(
-		namespaceUUID namespace.ID,
-		execution *commonpb.WorkflowExecution,
-		expectedNextEventID int64,
-		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
-		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
-			NamespaceId:         namespaceUUID.String(),
-			Execution:           execution,
-			ExpectedNextEventId: expectedNextEventID,
-			CurrentBranchToken:  currentBranchToken,
-		})
-
-		if err != nil {
-			return nil, "", 0, err
-		}
-
-		return response.CurrentBranchToken,
-			response.Execution.GetRunId(),
-			response.GetLastFirstEventTxnId(),
-			nil
-	}
-
-	execution := request.Execution
-	var continuationToken *tokenspb.HistoryContinuation
-
-	var runID string
-	var lastFirstTxnID int64
-
-	if request.NextPageToken == nil {
-		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, err =
-			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
+		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
+			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+				NamespaceId: namespaceID.String(),
+				Request:     request,
+			})
 		if err != nil {
 			return nil, err
 		}
-
-		execution.RunId = runID
-		continuationToken.RunId = runID
-		continuationToken.FirstEventId = common.FirstEventID
-		continuationToken.NextEventId = common.EmptyEventID
-		continuationToken.PersistenceToken = nil
-	} else {
-		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
-		if err != nil {
-			return nil, errInvalidNextPageToken
-		}
-		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
-			return nil, errNextPageTokenRunIDMismatch
-		}
-
-		execution.RunId = continuationToken.GetRunId()
+		return response.Response, nil
 	}
-
-	// TODO below is a temporal solution to guard against invalid event batch
-	//  when data inconsistency occurs
-	//  long term solution should check event batch pointing backwards within history store
-	defer func() {
-		if _, ok := retError.(*serviceerror.DataLoss); ok {
-			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-		}
-	}()
-
-	history := &historypb.History{}
-	history.Events = []*historypb.HistoryEvent{}
-	// return all events
-	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
-		ctx,
-		wh.metricsScope(ctx),
-		namespaceID,
-		namespace.Name(request.GetNamespace()),
-		*execution,
-		continuationToken.NextEventId,
-		lastFirstTxnID,
-		request.GetMaximumPageSize(),
-		continuationToken.PersistenceToken,
-		continuationToken.BranchToken,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if continuationToken.NextEventId < continuationToken.FirstEventId {
-		continuationToken = nil
-	}
-
-	nextToken, err := serializeHistoryToken(continuationToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
-		History:       history,
-		NextPageToken: nextToken,
-	}, nil
+	return wh.getWorkflowExecutionHistoryReverse(ctx, request)
 }
 
 // PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
@@ -822,9 +512,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 // application worker.
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	callTime := time.Now().UTC()
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -846,64 +533,11 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
-	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
-		return nil, err
-	}
-
-	if contextNearDeadline(ctx, longPollTailRoom) {
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
-
-	pollerID := uuid.New()
-	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID.String(),
-		PollerId:    pollerID,
-		PollRequest: request,
-	})
-	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		if contextWasCanceled {
-			// Clear error as we don't want to report context cancellation error to count against our SLA.
-			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
-			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-		}
-
-		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
-		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
-		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
-			return nil, err
-		}
-
-		// For all other errors log an error and return it back to client.
-		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxTimeout = ctxDeadline.Sub(callTime).String()
-		}
-		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-			tag.Timeout(ctxTimeout),
-			tag.Error(err))
-		return nil, err
-	}
-
-	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceID, matchingResp, matchingResp.GetBranchToken())
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return wh.pollWorkflowTaskQueue(ctx, request)
 }
 
 func contextNearDeadline(ctx context.Context, tailroom time.Duration) bool {
@@ -941,56 +575,31 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
-	if err != nil {
-		return nil, err
-	}
-	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId:     namespaceId.String(),
-		CompleteRequest: request},
-	)
-	if err != nil {
-		return nil, err
-	}
+	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
+		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+		if err != nil {
+			return nil, err
+		}
 
-	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{
-		ActivityTasks:       histResp.ActivityTasks,
-		ResetHistoryEventId: histResp.ResetHistoryEventId,
-	}
-	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
-		taskToken := tasktoken.NewWorkflowTaskToken(
-			taskToken.GetNamespaceId(),
-			taskToken.GetWorkflowId(),
-			taskToken.GetRunId(),
-			histResp.StartedResponse.GetScheduledEventId(),
-			histResp.StartedResponse.GetStartedEventId(),
-			histResp.StartedResponse.GetStartedTime(),
-			histResp.StartedResponse.GetAttempt(),
-			histResp.StartedResponse.GetClock(),
-			histResp.StartedResponse.GetVersion(),
+		response, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx,
+			&historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId:     namespaceID.String(),
+				CompleteRequest: request,
+			},
 		)
-		token, err := wh.tokenSerializer.Serialize(taskToken)
 		if err != nil {
 			return nil, err
 		}
-		workflowExecution := &commonpb.WorkflowExecution{
-			WorkflowId: taskToken.GetWorkflowId(),
-			RunId:      taskToken.GetRunId(),
-		}
-		matchingResp := common.CreateMatchingPollWorkflowTaskQueueResponse(histResp.StartedResponse, workflowExecution, token)
 
-		newWorkflowTask, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceId, matchingResp, matchingResp.GetBranchToken())
-		if err != nil {
-			return nil, err
-		}
-		completedResp.WorkflowTask = newWorkflowTask
+		return &workflowservice.RespondWorkflowTaskCompletedResponse{
+			WorkflowTask:        response.NewWorkflowTask,
+			ActivityTasks:       response.ActivityTasks,
+			ResetHistoryEventId: response.ResetHistoryEventId,
+		}, nil
 	}
-
-	return completedResp, nil
+	return wh.respondWorkflowTaskCompleted(ctx, request)
 }
 
 // RespondWorkflowTaskFailed is called by application worker to indicate failure.  This results in
@@ -1086,7 +695,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1097,7 +707,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -1967,7 +1577,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -1979,7 +1590,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
 	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
@@ -2477,7 +2087,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	}
 
 	resp := &workflowservice.CountWorkflowExecutionsResponse{
-		Count: persistenceResp.Count,
+		Count:  persistenceResp.Count,
 		Groups: persistenceResp.Groups,
 	}
 	return resp, nil
@@ -2710,13 +2320,18 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
+	}
+
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	}
 
 	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
@@ -2777,6 +2392,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			EagerWorkflowStart:              true,
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
+			CountGroupByExecutionStatus:     true,
 		},
 	}, nil
 }
@@ -2789,11 +2405,12 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2940,7 +2557,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
+	if err := wh.validateTaskQueue(startWorkflow.TaskQueue, namespaceName); err != nil {
 		return err
 	}
 
@@ -3580,7 +3197,9 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdCompatibility(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3617,7 +3236,9 @@ func (wh *WorkflowHandler) GetWorkerBuildIdCompatibility(ctx context.Context, re
 		return nil, errWorkerVersioningNotAllowed
 	}
 
-	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -3667,9 +3288,11 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 	if gotUnversionedRequest && len(request.GetTaskQueues()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("Cannot get reachability of an unversioned worker without specifying at least one task queue (empty build id is interpereted as unversioned)")
 	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
 	for _, taskQueue := range request.GetTaskQueues() {
 		taskQueue := &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-		if err := wh.validateTaskQueue(taskQueue); err != nil {
+		if err := wh.validateTaskQueue(taskQueue, namespaceName); err != nil {
 			return nil, err
 		}
 	}
@@ -4063,234 +3686,6 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}, nil
 }
 
-func (wh *WorkflowHandler) getRawHistory(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
-	firstEventID int64,
-	nextEventID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
-	branchToken []byte,
-) ([]*commonpb.DataBlob, []byte, error) {
-	var rawHistory []*commonpb.DataBlob
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
-
-	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
-		NextPageToken: nextPageToken,
-		ShardID:       shardID,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.EncodingType,
-			Data:         data.Data,
-		})
-	}
-
-	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-			wh.logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
-			return nil, nil, err
-		}
-
-		for _, event := range transientWorkflowTaskInfo.HistorySuffix {
-			blob, err := wh.payloadSerializer.SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return nil, nil, err
-			}
-			rawHistory = append(rawHistory, &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         blob.Data,
-			})
-		}
-	}
-
-	return rawHistory, resp.NextPageToken, nil
-}
-
-func (wh *WorkflowHandler) getHistory(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	namespace namespace.Name,
-	execution commonpb.WorkflowExecution,
-	firstEventID int64,
-	nextEventID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
-	branchToken []byte,
-) (*historypb.History, []byte, error) {
-
-	var size int
-	isFirstPage := len(nextPageToken) == 0
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
-	var err error
-	var historyEvents []*historypb.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
-		NextPageToken: nextPageToken,
-		ShardID:       shardID,
-	})
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, err
-	default:
-		return nil, nil, err
-	}
-
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
-
-	isLastPage := len(nextPageToken) == 0
-	if err := wh.verifyHistoryIsComplete(
-		historyEvents,
-		firstEventID,
-		nextEventID-1,
-		isFirstPage,
-		isLastPage,
-		int(pageSize)); err != nil {
-		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-		wh.logger.Error("getHistory: incomplete history",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err))
-	}
-
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
-		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.GetMetricName()).Record(1)
-			wh.logger.Error("getHistory error",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
-		}
-		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
-	}
-
-	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
-		return nil, nil, err
-	}
-
-	executionHistory := &historypb.History{
-		Events: historyEvents,
-	}
-	return executionHistory, nextPageToken, nil
-}
-
-func (wh *WorkflowHandler) getHistoryReverse(
-	ctx context.Context,
-	metricsHandler metrics.Handler,
-	namespaceID namespace.ID,
-	namespace namespace.Name,
-	execution commonpb.WorkflowExecution,
-	nextEventID int64,
-	lastFirstTxnID int64,
-	pageSize int32,
-	nextPageToken []byte,
-	branchToken []byte,
-) (*historypb.History, []byte, int64, error) {
-	var size int
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
-	var err error
-	var historyEvents []*historypb.HistoryEvent
-
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
-		BranchToken:            branchToken,
-		MaxEventID:             nextEventID,
-		LastFirstTransactionID: lastFirstTxnID,
-		PageSize:               int(pageSize),
-		NextPageToken:          nextPageToken,
-		ShardID:                shardID,
-	})
-
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
-		return nil, nil, 0, err
-	default:
-		return nil, nil, 0, err
-	}
-
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
-
-	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
-		return nil, nil, 0, err
-	}
-
-	executionHistory := &historypb.History{
-		Events: historyEvents,
-	}
-
-	var newNextEventID int64
-	if len(historyEvents) > 0 {
-		newNextEventID = historyEvents[len(historyEvents)-1].EventId - 1
-	} else {
-		newNextEventID = nextEventID
-	}
-
-	return executionHistory, nextPageToken, newNextEventID, nil
-}
-
-func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
-	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMrg.GetIndexName(), false)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-	for _, event := range events {
-		var searchAttributes *commonpb.SearchAttributes
-		switch event.EventType {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-			searchAttributes = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-			searchAttributes = event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			searchAttributes = event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
-		}
-		if searchAttributes != nil {
-			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, searchAttributes, namespace.String())
-			if err != nil {
-				return err
-			}
-			if aliasedSas != nil {
-				searchAttributes.IndexedFields = aliasedSas.IndexedFields
-			}
-		}
-	}
-
-	return nil
-}
-
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
@@ -4298,31 +3693,18 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
-func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
-	eventIDOffset int64,
-	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
-) error {
-	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
-		expectedEventID := eventIDOffset + int64(i)
-		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternal(
-				fmt.Sprintf(
-					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-					i,
-					expectedEventID,
-					event.GetEventId()))
-		}
-	}
-
-	return nil
-}
-
-func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
+func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue, namespaceName namespace.Name) error {
 	if t == nil || t.GetName() == "" {
 		return errTaskQueueNotSet
 	}
 	if len(t.GetName()) > wh.config.MaxIDLengthLimit() {
 		return errTaskQueueTooLong
+	}
+
+	if t.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		wh.logger.Warn("Unspecified task queue kind",
+			tag.WorkflowTaskQueueName(t.GetName()), tag.WorkflowNamespace(namespaceName.String()),
+		)
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
@@ -4404,165 +3786,6 @@ func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 		return serviceerror.NewInvalidArgument(strings.Join(errDeets, ", "))
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
-	branchToken []byte,
-) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-
-	if matchingResp.WorkflowExecution == nil {
-		// this will happen if there is no workflow task to be send to worker / caller
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
-
-	var history *historypb.History
-	var continuation []byte
-	var err error
-
-	if matchingResp.GetStickyExecutionEnabled() && matchingResp.Query != nil {
-		// meaning sticky query, we should not return any events to worker
-		// since query task only check the current status
-		history = &historypb.History{
-			Events: []*historypb.HistoryEvent{},
-		}
-	} else {
-		// here we have 3 cases:
-		// 1. sticky && non query task
-		// 2. non sticky &&  non query task
-		// 3. non sticky && query task
-		// for 1, partial history have to be send back
-		// for 2 and 3, full history have to be send back
-
-		var persistenceToken []byte
-
-		firstEventID := common.FirstEventID
-		nextEventID := matchingResp.GetNextEventId()
-		if matchingResp.GetStickyExecutionEnabled() {
-			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
-		}
-		namespaceEntry, dErr := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
-		if dErr != nil {
-			return nil, dErr
-		}
-
-		// TODO below is a temporal solution to guard against invalid event batch
-		//  when data inconsistency occurs
-		//  long term solution should check event batch pointing backwards within history store
-		defer func() {
-			if _, ok := retError.(*serviceerror.DataLoss); ok {
-				wh.trimHistoryNode(ctx, namespaceID.String(), matchingResp.WorkflowExecution.GetWorkflowId(), matchingResp.WorkflowExecution.GetRunId())
-			}
-		}()
-		history, persistenceToken, err = wh.getHistory(
-			ctx,
-			wh.metricsScope(ctx),
-			namespaceID,
-			namespaceEntry.Name(),
-			*matchingResp.GetWorkflowExecution(),
-			firstEventID,
-			nextEventID,
-			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
-			nil,
-			matchingResp.GetTransientWorkflowTask(),
-			branchToken,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(persistenceToken) != 0 {
-			continuation, err = serializeHistoryToken(&tokenspb.HistoryContinuation{
-				RunId:                 matchingResp.WorkflowExecution.GetRunId(),
-				FirstEventId:          firstEventID,
-				NextEventId:           nextEventID,
-				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
-				BranchToken:           branchToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	resp := &workflowservice.PollWorkflowTaskQueueResponse{
-		TaskToken:                  matchingResp.TaskToken,
-		WorkflowExecution:          matchingResp.WorkflowExecution,
-		WorkflowType:               matchingResp.WorkflowType,
-		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
-		StartedEventId:             matchingResp.StartedEventId,
-		Query:                      matchingResp.Query,
-		BacklogCountHint:           matchingResp.BacklogCountHint,
-		Attempt:                    matchingResp.Attempt,
-		History:                    history,
-		NextPageToken:              continuation,
-		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
-		ScheduledTime:              matchingResp.ScheduledTime,
-		StartedTime:                matchingResp.StartedTime,
-		Queries:                    matchingResp.Queries,
-		Messages:                   matchingResp.Messages,
-	}
-
-	return resp, nil
-}
-
-func (wh *WorkflowHandler) verifyHistoryIsComplete(
-	events []*historypb.HistoryEvent,
-	expectedFirstEventID int64,
-	expectedLastEventID int64,
-	isFirstPage bool,
-	isLastPage bool,
-	pageSize int,
-) error {
-
-	nEvents := len(events)
-	if nEvents == 0 {
-		if isLastPage {
-			// we seem to be returning a non-nil pageToken on the lastPage which
-			// in turn cases the client to call getHistory again - only to find
-			// there are no more events to consume - bail out if this is the case here
-			return nil
-		}
-		return serviceerror.NewDataLoss("History contains zero events.")
-	}
-
-	firstEventID := events[0].GetEventId()
-	lastEventID := events[nEvents-1].GetEventId()
-
-	if !isFirstPage { // at least one page of history has been read previously
-		if firstEventID <= expectedFirstEventID {
-			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
-		}
-		expectedFirstEventID = firstEventID
-	}
-
-	if !isLastPage {
-		// estimate lastEventID based on pageSize. This is a lower bound
-		// since the persistence layer counts "batch of events" as a single page
-		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
-	}
-
-	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
-
-	if firstEventID == expectedFirstEventID &&
-		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
-			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
-		return nil
-	}
-
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents,
-		isFirstPage,
-		isLastPage,
-		pageSize))
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {
@@ -4685,15 +3908,15 @@ func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, ret
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4703,15 +3926,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -4726,7 +3949,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if timestamp.DurationValue(startDelay) < 0 {
+	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
 		return errInvalidWorkflowStartDelaySeconds
 	}
 
@@ -4735,59 +3958,6 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 
 func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Handler {
 	return interceptor.GetMetricsHandlerFromContext(ctx, wh.logger)
-}
-
-func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
-	_ context.Context,
-	lastEvent *historypb.HistoryEvent,
-) (*historypb.HistoryEvent, error) {
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
-			return nil, nil
-		}
-	default:
-		return nil, nil
-	}
-
-	// We need to replace the last event with a continued-as-new event that has at least the
-	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
-	// the client looks at in this case, but copy the last result or failure from the real completed
-	// event just so it's clear what the result was.
-	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
-	switch lastEvent.EventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.LastCompletionResult = attrs.Result
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = attrs.Failure
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
-		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
-	}
-
-	return &historypb.HistoryEvent{
-		EventId:   lastEvent.EventId,
-		EventTime: lastEvent.EventTime,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		Version:   lastEvent.Version,
-		TaskId:    lastEvent.TaskId,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
-			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
-		},
-	}, nil
 }
 
 func (wh *WorkflowHandler) validateNamespace(
@@ -4824,40 +3994,6 @@ func (wh *WorkflowHandler) validateUTF8String(
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid UTF-8 string", str))
 	}
 	return nil
-}
-
-func (wh *WorkflowHandler) trimHistoryNode(
-	ctx context.Context,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) {
-	response, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	if err != nil {
-		return // abort
-	}
-
-	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
-		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
-		BranchToken:   response.CurrentBranchToken,
-		NodeID:        response.GetLastFirstEventId(),
-		TransactionID: response.GetLastFirstEventTxnId(),
-	})
-	if err != nil {
-		// best effort
-		wh.logger.Error("unable to trim history branch",
-			tag.WorkflowNamespaceID(namespaceID),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.Error(err),
-		)
-	}
 }
 
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) error {

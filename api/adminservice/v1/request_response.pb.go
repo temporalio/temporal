@@ -44,13 +44,15 @@ import (
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	v1 "go.temporal.io/api/common/v1"
 	v16 "go.temporal.io/api/enums/v1"
+	v110 "go.temporal.io/api/namespace/v1"
+	v111 "go.temporal.io/api/replication/v1"
 	v19 "go.temporal.io/api/version/v1"
 	v17 "go.temporal.io/api/workflow/v1"
 	v18 "go.temporal.io/server/api/cluster/v1"
-	v13 "go.temporal.io/server/api/enums/v1"
-	v14 "go.temporal.io/server/api/history/v1"
-	v12 "go.temporal.io/server/api/namespace/v1"
-	v11 "go.temporal.io/server/api/persistence/v1"
+	v14 "go.temporal.io/server/api/enums/v1"
+	v11 "go.temporal.io/server/api/history/v1"
+	v13 "go.temporal.io/server/api/namespace/v1"
+	v12 "go.temporal.io/server/api/persistence/v1"
 	v15 "go.temporal.io/server/api/replication/v1"
 )
 
@@ -152,6 +154,124 @@ func (m *RebuildMutableStateResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RebuildMutableStateResponse proto.InternalMessageInfo
 
+type ImportWorkflowExecutionRequest struct {
+	Namespace      string                `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution      *v1.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	HistoryBatches []*v1.DataBlob        `protobuf:"bytes,3,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
+	VersionHistory *v11.VersionHistory   `protobuf:"bytes,4,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
+	Token          []byte                `protobuf:"bytes,5,opt,name=token,proto3" json:"token,omitempty"`
+}
+
+func (m *ImportWorkflowExecutionRequest) Reset()      { *m = ImportWorkflowExecutionRequest{} }
+func (*ImportWorkflowExecutionRequest) ProtoMessage() {}
+func (*ImportWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{2}
+}
+func (m *ImportWorkflowExecutionRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ImportWorkflowExecutionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ImportWorkflowExecutionRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ImportWorkflowExecutionRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ImportWorkflowExecutionRequest.Merge(m, src)
+}
+func (m *ImportWorkflowExecutionRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ImportWorkflowExecutionRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ImportWorkflowExecutionRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ImportWorkflowExecutionRequest proto.InternalMessageInfo
+
+func (m *ImportWorkflowExecutionRequest) GetNamespace() string {
+	if m != nil {
+		return m.Namespace
+	}
+	return ""
+}
+
+func (m *ImportWorkflowExecutionRequest) GetExecution() *v1.WorkflowExecution {
+	if m != nil {
+		return m.Execution
+	}
+	return nil
+}
+
+func (m *ImportWorkflowExecutionRequest) GetHistoryBatches() []*v1.DataBlob {
+	if m != nil {
+		return m.HistoryBatches
+	}
+	return nil
+}
+
+func (m *ImportWorkflowExecutionRequest) GetVersionHistory() *v11.VersionHistory {
+	if m != nil {
+		return m.VersionHistory
+	}
+	return nil
+}
+
+func (m *ImportWorkflowExecutionRequest) GetToken() []byte {
+	if m != nil {
+		return m.Token
+	}
+	return nil
+}
+
+type ImportWorkflowExecutionResponse struct {
+	Token []byte `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+}
+
+func (m *ImportWorkflowExecutionResponse) Reset()      { *m = ImportWorkflowExecutionResponse{} }
+func (*ImportWorkflowExecutionResponse) ProtoMessage() {}
+func (*ImportWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{3}
+}
+func (m *ImportWorkflowExecutionResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ImportWorkflowExecutionResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ImportWorkflowExecutionResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ImportWorkflowExecutionResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ImportWorkflowExecutionResponse.Merge(m, src)
+}
+func (m *ImportWorkflowExecutionResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ImportWorkflowExecutionResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ImportWorkflowExecutionResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ImportWorkflowExecutionResponse proto.InternalMessageInfo
+
+func (m *ImportWorkflowExecutionResponse) GetToken() []byte {
+	if m != nil {
+		return m.Token
+	}
+	return nil
+}
+
 type DescribeMutableStateRequest struct {
 	Namespace string                `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Execution *v1.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
@@ -160,7 +280,7 @@ type DescribeMutableStateRequest struct {
 func (m *DescribeMutableStateRequest) Reset()      { *m = DescribeMutableStateRequest{} }
 func (*DescribeMutableStateRequest) ProtoMessage() {}
 func (*DescribeMutableStateRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{2}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{4}
 }
 func (m *DescribeMutableStateRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -206,14 +326,14 @@ func (m *DescribeMutableStateRequest) GetExecution() *v1.WorkflowExecution {
 type DescribeMutableStateResponse struct {
 	ShardId              string                    `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	HistoryAddr          string                    `protobuf:"bytes,2,opt,name=history_addr,json=historyAddr,proto3" json:"history_addr,omitempty"`
-	CacheMutableState    *v11.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
-	DatabaseMutableState *v11.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
+	CacheMutableState    *v12.WorkflowMutableState `protobuf:"bytes,3,opt,name=cache_mutable_state,json=cacheMutableState,proto3" json:"cache_mutable_state,omitempty"`
+	DatabaseMutableState *v12.WorkflowMutableState `protobuf:"bytes,4,opt,name=database_mutable_state,json=databaseMutableState,proto3" json:"database_mutable_state,omitempty"`
 }
 
 func (m *DescribeMutableStateResponse) Reset()      { *m = DescribeMutableStateResponse{} }
 func (*DescribeMutableStateResponse) ProtoMessage() {}
 func (*DescribeMutableStateResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{3}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{5}
 }
 func (m *DescribeMutableStateResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -256,14 +376,14 @@ func (m *DescribeMutableStateResponse) GetHistoryAddr() string {
 	return ""
 }
 
-func (m *DescribeMutableStateResponse) GetCacheMutableState() *v11.WorkflowMutableState {
+func (m *DescribeMutableStateResponse) GetCacheMutableState() *v12.WorkflowMutableState {
 	if m != nil {
 		return m.CacheMutableState
 	}
 	return nil
 }
 
-func (m *DescribeMutableStateResponse) GetDatabaseMutableState() *v11.WorkflowMutableState {
+func (m *DescribeMutableStateResponse) GetDatabaseMutableState() *v12.WorkflowMutableState {
 	if m != nil {
 		return m.DatabaseMutableState
 	}
@@ -282,7 +402,7 @@ type DescribeHistoryHostRequest struct {
 func (m *DescribeHistoryHostRequest) Reset()      { *m = DescribeHistoryHostRequest{} }
 func (*DescribeHistoryHostRequest) ProtoMessage() {}
 func (*DescribeHistoryHostRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{4}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{6}
 }
 func (m *DescribeHistoryHostRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -342,14 +462,14 @@ func (m *DescribeHistoryHostRequest) GetWorkflowExecution() *v1.WorkflowExecutio
 type DescribeHistoryHostResponse struct {
 	ShardsNumber   int32                   `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3" json:"shards_number,omitempty"`
 	ShardIds       []int32                 `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3" json:"shard_ids,omitempty"`
-	NamespaceCache *v12.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3" json:"namespace_cache,omitempty"`
+	NamespaceCache *v13.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3" json:"namespace_cache,omitempty"`
 	Address        string                  `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"`
 }
 
 func (m *DescribeHistoryHostResponse) Reset()      { *m = DescribeHistoryHostResponse{} }
 func (*DescribeHistoryHostResponse) ProtoMessage() {}
 func (*DescribeHistoryHostResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{5}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{7}
 }
 func (m *DescribeHistoryHostResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -392,7 +512,7 @@ func (m *DescribeHistoryHostResponse) GetShardIds() []int32 {
 	return nil
 }
 
-func (m *DescribeHistoryHostResponse) GetNamespaceCache() *v12.NamespaceCacheInfo {
+func (m *DescribeHistoryHostResponse) GetNamespaceCache() *v13.NamespaceCacheInfo {
 	if m != nil {
 		return m.NamespaceCache
 	}
@@ -413,7 +533,7 @@ type CloseShardRequest struct {
 func (m *CloseShardRequest) Reset()      { *m = CloseShardRequest{} }
 func (*CloseShardRequest) ProtoMessage() {}
 func (*CloseShardRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{6}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{8}
 }
 func (m *CloseShardRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -455,7 +575,7 @@ type CloseShardResponse struct {
 func (m *CloseShardResponse) Reset()      { *m = CloseShardResponse{} }
 func (*CloseShardResponse) ProtoMessage() {}
 func (*CloseShardResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{7}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{9}
 }
 func (m *CloseShardResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -491,7 +611,7 @@ type GetShardRequest struct {
 func (m *GetShardRequest) Reset()      { *m = GetShardRequest{} }
 func (*GetShardRequest) ProtoMessage() {}
 func (*GetShardRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{8}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{10}
 }
 func (m *GetShardRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -528,13 +648,13 @@ func (m *GetShardRequest) GetShardId() int32 {
 }
 
 type GetShardResponse struct {
-	ShardInfo *v11.ShardInfo `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
+	ShardInfo *v12.ShardInfo `protobuf:"bytes,1,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
 }
 
 func (m *GetShardResponse) Reset()      { *m = GetShardResponse{} }
 func (*GetShardResponse) ProtoMessage() {}
 func (*GetShardResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{9}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{11}
 }
 func (m *GetShardResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -563,7 +683,7 @@ func (m *GetShardResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetShardResponse proto.InternalMessageInfo
 
-func (m *GetShardResponse) GetShardInfo() *v11.ShardInfo {
+func (m *GetShardResponse) GetShardInfo() *v12.ShardInfo {
 	if m != nil {
 		return m.ShardInfo
 	}
@@ -572,8 +692,8 @@ func (m *GetShardResponse) GetShardInfo() *v11.ShardInfo {
 
 type ListHistoryTasksRequest struct {
 	ShardId       int32            `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Category      v13.TaskCategory `protobuf:"varint,2,opt,name=category,proto3,enum=temporal.server.api.enums.v1.TaskCategory" json:"category,omitempty"`
-	TaskRange     *v14.TaskRange   `protobuf:"bytes,3,opt,name=task_range,json=taskRange,proto3" json:"task_range,omitempty"`
+	Category      v14.TaskCategory `protobuf:"varint,2,opt,name=category,proto3,enum=temporal.server.api.enums.v1.TaskCategory" json:"category,omitempty"`
+	TaskRange     *v11.TaskRange   `protobuf:"bytes,3,opt,name=task_range,json=taskRange,proto3" json:"task_range,omitempty"`
 	BatchSize     int32            `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
 	NextPageToken []byte           `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
@@ -581,7 +701,7 @@ type ListHistoryTasksRequest struct {
 func (m *ListHistoryTasksRequest) Reset()      { *m = ListHistoryTasksRequest{} }
 func (*ListHistoryTasksRequest) ProtoMessage() {}
 func (*ListHistoryTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{10}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{12}
 }
 func (m *ListHistoryTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -617,14 +737,14 @@ func (m *ListHistoryTasksRequest) GetShardId() int32 {
 	return 0
 }
 
-func (m *ListHistoryTasksRequest) GetCategory() v13.TaskCategory {
+func (m *ListHistoryTasksRequest) GetCategory() v14.TaskCategory {
 	if m != nil {
 		return m.Category
 	}
-	return v13.TASK_CATEGORY_UNSPECIFIED
+	return v14.TASK_CATEGORY_UNSPECIFIED
 }
 
-func (m *ListHistoryTasksRequest) GetTaskRange() *v14.TaskRange {
+func (m *ListHistoryTasksRequest) GetTaskRange() *v11.TaskRange {
 	if m != nil {
 		return m.TaskRange
 	}
@@ -653,7 +773,7 @@ type ListHistoryTasksResponse struct {
 func (m *ListHistoryTasksResponse) Reset()      { *m = ListHistoryTasksResponse{} }
 func (*ListHistoryTasksResponse) ProtoMessage() {}
 func (*ListHistoryTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{11}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{13}
 }
 func (m *ListHistoryTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -701,7 +821,7 @@ type Task struct {
 	WorkflowId  string       `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	RunId       string       `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	TaskId      int64        `protobuf:"varint,4,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	TaskType    v13.TaskType `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
+	TaskType    v14.TaskType `protobuf:"varint,5,opt,name=task_type,json=taskType,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_type,omitempty"`
 	FireTime    *time.Time   `protobuf:"bytes,6,opt,name=fire_time,json=fireTime,proto3,stdtime" json:"fire_time,omitempty"`
 	Version     int64        `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
 }
@@ -709,7 +829,7 @@ type Task struct {
 func (m *Task) Reset()      { *m = Task{} }
 func (*Task) ProtoMessage() {}
 func (*Task) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{12}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{14}
 }
 func (m *Task) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -766,11 +886,11 @@ func (m *Task) GetTaskId() int64 {
 	return 0
 }
 
-func (m *Task) GetTaskType() v13.TaskType {
+func (m *Task) GetTaskType() v14.TaskType {
 	if m != nil {
 		return m.TaskType
 	}
-	return v13.TASK_TYPE_UNSPECIFIED
+	return v14.TASK_TYPE_UNSPECIFIED
 }
 
 func (m *Task) GetFireTime() *time.Time {
@@ -789,7 +909,7 @@ func (m *Task) GetVersion() int64 {
 
 type RemoveTaskRequest struct {
 	ShardId        int32            `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Category       v13.TaskCategory `protobuf:"varint,2,opt,name=category,proto3,enum=temporal.server.api.enums.v1.TaskCategory" json:"category,omitempty"`
+	Category       v14.TaskCategory `protobuf:"varint,2,opt,name=category,proto3,enum=temporal.server.api.enums.v1.TaskCategory" json:"category,omitempty"`
 	TaskId         int64            `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	VisibilityTime *time.Time       `protobuf:"bytes,4,opt,name=visibility_time,json=visibilityTime,proto3,stdtime" json:"visibility_time,omitempty"`
 }
@@ -797,7 +917,7 @@ type RemoveTaskRequest struct {
 func (m *RemoveTaskRequest) Reset()      { *m = RemoveTaskRequest{} }
 func (*RemoveTaskRequest) ProtoMessage() {}
 func (*RemoveTaskRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{13}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{15}
 }
 func (m *RemoveTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -833,11 +953,11 @@ func (m *RemoveTaskRequest) GetShardId() int32 {
 	return 0
 }
 
-func (m *RemoveTaskRequest) GetCategory() v13.TaskCategory {
+func (m *RemoveTaskRequest) GetCategory() v14.TaskCategory {
 	if m != nil {
 		return m.Category
 	}
-	return v13.TASK_CATEGORY_UNSPECIFIED
+	return v14.TASK_CATEGORY_UNSPECIFIED
 }
 
 func (m *RemoveTaskRequest) GetTaskId() int64 {
@@ -860,7 +980,7 @@ type RemoveTaskResponse struct {
 func (m *RemoveTaskResponse) Reset()      { *m = RemoveTaskResponse{} }
 func (*RemoveTaskResponse) ProtoMessage() {}
 func (*RemoveTaskResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{14}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{16}
 }
 func (m *RemoveTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -908,7 +1028,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Request) Reset() {
 }
 func (*GetWorkflowExecutionRawHistoryV2Request) ProtoMessage() {}
 func (*GetWorkflowExecutionRawHistoryV2Request) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{15}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{17}
 }
 func (m *GetWorkflowExecutionRawHistoryV2Request) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -996,7 +1116,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Request) GetNextPageToken() []byte {
 type GetWorkflowExecutionRawHistoryV2Response struct {
 	NextPageToken  []byte              `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	HistoryBatches []*v1.DataBlob      `protobuf:"bytes,2,rep,name=history_batches,json=historyBatches,proto3" json:"history_batches,omitempty"`
-	VersionHistory *v14.VersionHistory `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
+	VersionHistory *v11.VersionHistory `protobuf:"bytes,3,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
 	HistoryNodeIds []int64             `protobuf:"varint,4,rep,packed,name=history_node_ids,json=historyNodeIds,proto3" json:"history_node_ids,omitempty"`
 }
 
@@ -1005,7 +1125,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Response) Reset() {
 }
 func (*GetWorkflowExecutionRawHistoryV2Response) ProtoMessage() {}
 func (*GetWorkflowExecutionRawHistoryV2Response) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{16}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{18}
 }
 func (m *GetWorkflowExecutionRawHistoryV2Response) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1048,7 +1168,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Response) GetHistoryBatches() []*v1.Dat
 	return nil
 }
 
-func (m *GetWorkflowExecutionRawHistoryV2Response) GetVersionHistory() *v14.VersionHistory {
+func (m *GetWorkflowExecutionRawHistoryV2Response) GetVersionHistory() *v11.VersionHistory {
 	if m != nil {
 		return m.VersionHistory
 	}
@@ -1070,7 +1190,7 @@ type GetReplicationMessagesRequest struct {
 func (m *GetReplicationMessagesRequest) Reset()      { *m = GetReplicationMessagesRequest{} }
 func (*GetReplicationMessagesRequest) ProtoMessage() {}
 func (*GetReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{17}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{19}
 }
 func (m *GetReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1120,7 +1240,7 @@ type GetReplicationMessagesResponse struct {
 func (m *GetReplicationMessagesResponse) Reset()      { *m = GetReplicationMessagesResponse{} }
 func (*GetReplicationMessagesResponse) ProtoMessage() {}
 func (*GetReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{18}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
 }
 func (m *GetReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1171,7 +1291,7 @@ func (m *GetNamespaceReplicationMessagesRequest) Reset() {
 }
 func (*GetNamespaceReplicationMessagesRequest) ProtoMessage() {}
 func (*GetNamespaceReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{19}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
 }
 func (m *GetNamespaceReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1230,7 +1350,7 @@ func (m *GetNamespaceReplicationMessagesResponse) Reset() {
 }
 func (*GetNamespaceReplicationMessagesResponse) ProtoMessage() {}
 func (*GetNamespaceReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
 }
 func (m *GetNamespaceReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1273,7 +1393,7 @@ type GetDLQReplicationMessagesRequest struct {
 func (m *GetDLQReplicationMessagesRequest) Reset()      { *m = GetDLQReplicationMessagesRequest{} }
 func (*GetDLQReplicationMessagesRequest) ProtoMessage() {}
 func (*GetDLQReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
 }
 func (m *GetDLQReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1316,7 +1436,7 @@ type GetDLQReplicationMessagesResponse struct {
 func (m *GetDLQReplicationMessagesResponse) Reset()      { *m = GetDLQReplicationMessagesResponse{} }
 func (*GetDLQReplicationMessagesResponse) ProtoMessage() {}
 func (*GetDLQReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
 }
 func (m *GetDLQReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1362,7 +1482,7 @@ type ReapplyEventsRequest struct {
 func (m *ReapplyEventsRequest) Reset()      { *m = ReapplyEventsRequest{} }
 func (*ReapplyEventsRequest) ProtoMessage() {}
 func (*ReapplyEventsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
 }
 func (m *ReapplyEventsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1418,7 +1538,7 @@ type ReapplyEventsResponse struct {
 func (m *ReapplyEventsResponse) Reset()      { *m = ReapplyEventsResponse{} }
 func (*ReapplyEventsResponse) ProtoMessage() {}
 func (*ReapplyEventsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
 }
 func (m *ReapplyEventsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1457,7 +1577,7 @@ type AddSearchAttributesRequest struct {
 func (m *AddSearchAttributesRequest) Reset()      { *m = AddSearchAttributesRequest{} }
 func (*AddSearchAttributesRequest) ProtoMessage() {}
 func (*AddSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
 }
 func (m *AddSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1520,7 +1640,7 @@ type AddSearchAttributesResponse struct {
 func (m *AddSearchAttributesResponse) Reset()      { *m = AddSearchAttributesResponse{} }
 func (*AddSearchAttributesResponse) ProtoMessage() {}
 func (*AddSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
 }
 func (m *AddSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1558,7 +1678,7 @@ type RemoveSearchAttributesRequest struct {
 func (m *RemoveSearchAttributesRequest) Reset()      { *m = RemoveSearchAttributesRequest{} }
 func (*RemoveSearchAttributesRequest) ProtoMessage() {}
 func (*RemoveSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
 }
 func (m *RemoveSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1614,7 +1734,7 @@ type RemoveSearchAttributesResponse struct {
 func (m *RemoveSearchAttributesResponse) Reset()      { *m = RemoveSearchAttributesResponse{} }
 func (*RemoveSearchAttributesResponse) ProtoMessage() {}
 func (*RemoveSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
 }
 func (m *RemoveSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1651,7 +1771,7 @@ type GetSearchAttributesRequest struct {
 func (m *GetSearchAttributesRequest) Reset()      { *m = GetSearchAttributesRequest{} }
 func (*GetSearchAttributesRequest) ProtoMessage() {}
 func (*GetSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
 }
 func (m *GetSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1705,7 +1825,7 @@ type GetSearchAttributesResponse struct {
 func (m *GetSearchAttributesResponse) Reset()      { *m = GetSearchAttributesResponse{} }
 func (*GetSearchAttributesResponse) ProtoMessage() {}
 func (*GetSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{32}
 }
 func (m *GetSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1769,7 +1889,7 @@ type DescribeClusterRequest struct {
 func (m *DescribeClusterRequest) Reset()      { *m = DescribeClusterRequest{} }
 func (*DescribeClusterRequest) ProtoMessage() {}
 func (*DescribeClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{33}
 }
 func (m *DescribeClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1824,7 +1944,7 @@ type DescribeClusterResponse struct {
 func (m *DescribeClusterResponse) Reset()      { *m = DescribeClusterResponse{} }
 func (*DescribeClusterResponse) ProtoMessage() {}
 func (*DescribeClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{32}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{34}
 }
 func (m *DescribeClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1952,7 +2072,7 @@ type ListClustersRequest struct {
 func (m *ListClustersRequest) Reset()      { *m = ListClustersRequest{} }
 func (*ListClustersRequest) ProtoMessage() {}
 func (*ListClustersRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{33}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{35}
 }
 func (m *ListClustersRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1996,14 +2116,14 @@ func (m *ListClustersRequest) GetNextPageToken() []byte {
 }
 
 type ListClustersResponse struct {
-	Clusters      []*v11.ClusterMetadata `protobuf:"bytes,1,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	Clusters      []*v12.ClusterMetadata `protobuf:"bytes,1,rep,name=clusters,proto3" json:"clusters,omitempty"`
 	NextPageToken []byte                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
 func (m *ListClustersResponse) Reset()      { *m = ListClustersResponse{} }
 func (*ListClustersResponse) ProtoMessage() {}
 func (*ListClustersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{34}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{36}
 }
 func (m *ListClustersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2032,7 +2152,7 @@ func (m *ListClustersResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ListClustersResponse proto.InternalMessageInfo
 
-func (m *ListClustersResponse) GetClusters() []*v11.ClusterMetadata {
+func (m *ListClustersResponse) GetClusters() []*v12.ClusterMetadata {
 	if m != nil {
 		return m.Clusters
 	}
@@ -2054,7 +2174,7 @@ type AddOrUpdateRemoteClusterRequest struct {
 func (m *AddOrUpdateRemoteClusterRequest) Reset()      { *m = AddOrUpdateRemoteClusterRequest{} }
 func (*AddOrUpdateRemoteClusterRequest) ProtoMessage() {}
 func (*AddOrUpdateRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{35}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{37}
 }
 func (m *AddOrUpdateRemoteClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2103,7 +2223,7 @@ type AddOrUpdateRemoteClusterResponse struct {
 func (m *AddOrUpdateRemoteClusterResponse) Reset()      { *m = AddOrUpdateRemoteClusterResponse{} }
 func (*AddOrUpdateRemoteClusterResponse) ProtoMessage() {}
 func (*AddOrUpdateRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{36}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{38}
 }
 func (m *AddOrUpdateRemoteClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2139,7 +2259,7 @@ type RemoveRemoteClusterRequest struct {
 func (m *RemoveRemoteClusterRequest) Reset()      { *m = RemoveRemoteClusterRequest{} }
 func (*RemoveRemoteClusterRequest) ProtoMessage() {}
 func (*RemoveRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{37}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{39}
 }
 func (m *RemoveRemoteClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2181,7 +2301,7 @@ type RemoveRemoteClusterResponse struct {
 func (m *RemoveRemoteClusterResponse) Reset()      { *m = RemoveRemoteClusterResponse{} }
 func (*RemoveRemoteClusterResponse) ProtoMessage() {}
 func (*RemoveRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{38}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{40}
 }
 func (m *RemoveRemoteClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2216,7 +2336,7 @@ type ListClusterMembersRequest struct {
 	LastHeartbeatWithin *time.Duration        `protobuf:"bytes,1,opt,name=last_heartbeat_within,json=lastHeartbeatWithin,proto3,stdduration" json:"last_heartbeat_within,omitempty"`
 	RpcAddress          string                `protobuf:"bytes,2,opt,name=rpc_address,json=rpcAddress,proto3" json:"rpc_address,omitempty"`
 	HostId              string                `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	Role                v13.ClusterMemberRole `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
+	Role                v14.ClusterMemberRole `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
 	//     aip.dev/not-precedent: "after" is used to indicate a time range. --)
 	SessionStartedAfterTime *time.Time `protobuf:"bytes,5,opt,name=session_started_after_time,json=sessionStartedAfterTime,proto3,stdtime" json:"session_started_after_time,omitempty"`
@@ -2227,7 +2347,7 @@ type ListClusterMembersRequest struct {
 func (m *ListClusterMembersRequest) Reset()      { *m = ListClusterMembersRequest{} }
 func (*ListClusterMembersRequest) ProtoMessage() {}
 func (*ListClusterMembersRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{39}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{41}
 }
 func (m *ListClusterMembersRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2277,11 +2397,11 @@ func (m *ListClusterMembersRequest) GetHostId() string {
 	return ""
 }
 
-func (m *ListClusterMembersRequest) GetRole() v13.ClusterMemberRole {
+func (m *ListClusterMembersRequest) GetRole() v14.ClusterMemberRole {
 	if m != nil {
 		return m.Role
 	}
-	return v13.CLUSTER_MEMBER_ROLE_UNSPECIFIED
+	return v14.CLUSTER_MEMBER_ROLE_UNSPECIFIED
 }
 
 func (m *ListClusterMembersRequest) GetSessionStartedAfterTime() *time.Time {
@@ -2313,7 +2433,7 @@ type ListClusterMembersResponse struct {
 func (m *ListClusterMembersResponse) Reset()      { *m = ListClusterMembersResponse{} }
 func (*ListClusterMembersResponse) ProtoMessage() {}
 func (*ListClusterMembersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{40}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{42}
 }
 func (m *ListClusterMembersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2357,7 +2477,7 @@ func (m *ListClusterMembersResponse) GetNextPageToken() []byte {
 }
 
 type GetDLQMessagesRequest struct {
-	Type                  v13.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
+	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
 	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
@@ -2368,7 +2488,7 @@ type GetDLQMessagesRequest struct {
 func (m *GetDLQMessagesRequest) Reset()      { *m = GetDLQMessagesRequest{} }
 func (*GetDLQMessagesRequest) ProtoMessage() {}
 func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{41}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{43}
 }
 func (m *GetDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2397,11 +2517,11 @@ func (m *GetDLQMessagesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetDLQMessagesRequest proto.InternalMessageInfo
 
-func (m *GetDLQMessagesRequest) GetType() v13.DeadLetterQueueType {
+func (m *GetDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if m != nil {
 		return m.Type
 	}
-	return v13.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
+	return v14.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
 }
 
 func (m *GetDLQMessagesRequest) GetShardId() int32 {
@@ -2440,7 +2560,7 @@ func (m *GetDLQMessagesRequest) GetNextPageToken() []byte {
 }
 
 type GetDLQMessagesResponse struct {
-	Type                 v13.DeadLetterQueueType    `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
+	Type                 v14.DeadLetterQueueType    `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
 	ReplicationTasks     []*v15.ReplicationTask     `protobuf:"bytes,2,rep,name=replication_tasks,json=replicationTasks,proto3" json:"replication_tasks,omitempty"`
 	NextPageToken        []byte                     `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	ReplicationTasksInfo []*v15.ReplicationTaskInfo `protobuf:"bytes,4,rep,name=replication_tasks_info,json=replicationTasksInfo,proto3" json:"replication_tasks_info,omitempty"`
@@ -2449,7 +2569,7 @@ type GetDLQMessagesResponse struct {
 func (m *GetDLQMessagesResponse) Reset()      { *m = GetDLQMessagesResponse{} }
 func (*GetDLQMessagesResponse) ProtoMessage() {}
 func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{42}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{44}
 }
 func (m *GetDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2478,11 +2598,11 @@ func (m *GetDLQMessagesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetDLQMessagesResponse proto.InternalMessageInfo
 
-func (m *GetDLQMessagesResponse) GetType() v13.DeadLetterQueueType {
+func (m *GetDLQMessagesResponse) GetType() v14.DeadLetterQueueType {
 	if m != nil {
 		return m.Type
 	}
-	return v13.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
+	return v14.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
 }
 
 func (m *GetDLQMessagesResponse) GetReplicationTasks() []*v15.ReplicationTask {
@@ -2507,7 +2627,7 @@ func (m *GetDLQMessagesResponse) GetReplicationTasksInfo() []*v15.ReplicationTas
 }
 
 type PurgeDLQMessagesRequest struct {
-	Type                  v13.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
+	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
 	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
@@ -2516,7 +2636,7 @@ type PurgeDLQMessagesRequest struct {
 func (m *PurgeDLQMessagesRequest) Reset()      { *m = PurgeDLQMessagesRequest{} }
 func (*PurgeDLQMessagesRequest) ProtoMessage() {}
 func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{43}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{45}
 }
 func (m *PurgeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2545,11 +2665,11 @@ func (m *PurgeDLQMessagesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PurgeDLQMessagesRequest proto.InternalMessageInfo
 
-func (m *PurgeDLQMessagesRequest) GetType() v13.DeadLetterQueueType {
+func (m *PurgeDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if m != nil {
 		return m.Type
 	}
-	return v13.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
+	return v14.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
 }
 
 func (m *PurgeDLQMessagesRequest) GetShardId() int32 {
@@ -2579,7 +2699,7 @@ type PurgeDLQMessagesResponse struct {
 func (m *PurgeDLQMessagesResponse) Reset()      { *m = PurgeDLQMessagesResponse{} }
 func (*PurgeDLQMessagesResponse) ProtoMessage() {}
 func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{44}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{46}
 }
 func (m *PurgeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2609,7 +2729,7 @@ func (m *PurgeDLQMessagesResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_PurgeDLQMessagesResponse proto.InternalMessageInfo
 
 type MergeDLQMessagesRequest struct {
-	Type                  v13.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
+	Type                  v14.DeadLetterQueueType `protobuf:"varint,1,opt,name=type,proto3,enum=temporal.server.api.enums.v1.DeadLetterQueueType" json:"type,omitempty"`
 	ShardId               int32                   `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	SourceCluster         string                  `protobuf:"bytes,3,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	InclusiveEndMessageId int64                   `protobuf:"varint,4,opt,name=inclusive_end_message_id,json=inclusiveEndMessageId,proto3" json:"inclusive_end_message_id,omitempty"`
@@ -2620,7 +2740,7 @@ type MergeDLQMessagesRequest struct {
 func (m *MergeDLQMessagesRequest) Reset()      { *m = MergeDLQMessagesRequest{} }
 func (*MergeDLQMessagesRequest) ProtoMessage() {}
 func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{45}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{47}
 }
 func (m *MergeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2649,11 +2769,11 @@ func (m *MergeDLQMessagesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MergeDLQMessagesRequest proto.InternalMessageInfo
 
-func (m *MergeDLQMessagesRequest) GetType() v13.DeadLetterQueueType {
+func (m *MergeDLQMessagesRequest) GetType() v14.DeadLetterQueueType {
 	if m != nil {
 		return m.Type
 	}
-	return v13.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
+	return v14.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED
 }
 
 func (m *MergeDLQMessagesRequest) GetShardId() int32 {
@@ -2698,7 +2818,7 @@ type MergeDLQMessagesResponse struct {
 func (m *MergeDLQMessagesResponse) Reset()      { *m = MergeDLQMessagesResponse{} }
 func (*MergeDLQMessagesResponse) ProtoMessage() {}
 func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{46}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{48}
 }
 func (m *MergeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2742,7 +2862,7 @@ type RefreshWorkflowTasksRequest struct {
 func (m *RefreshWorkflowTasksRequest) Reset()      { *m = RefreshWorkflowTasksRequest{} }
 func (*RefreshWorkflowTasksRequest) ProtoMessage() {}
 func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{47}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{49}
 }
 func (m *RefreshWorkflowTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2791,7 +2911,7 @@ type RefreshWorkflowTasksResponse struct {
 func (m *RefreshWorkflowTasksResponse) Reset()      { *m = RefreshWorkflowTasksResponse{} }
 func (*RefreshWorkflowTasksResponse) ProtoMessage() {}
 func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{48}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{50}
 }
 func (m *RefreshWorkflowTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2834,7 +2954,7 @@ type ResendReplicationTasksRequest struct {
 func (m *ResendReplicationTasksRequest) Reset()      { *m = ResendReplicationTasksRequest{} }
 func (*ResendReplicationTasksRequest) ProtoMessage() {}
 func (*ResendReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{49}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{51}
 }
 func (m *ResendReplicationTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2925,7 +3045,7 @@ type ResendReplicationTasksResponse struct {
 func (m *ResendReplicationTasksResponse) Reset()      { *m = ResendReplicationTasksResponse{} }
 func (*ResendReplicationTasksResponse) ProtoMessage() {}
 func (*ResendReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{50}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{52}
 }
 func (m *ResendReplicationTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2967,7 +3087,7 @@ type GetTaskQueueTasksRequest struct {
 func (m *GetTaskQueueTasksRequest) Reset()      { *m = GetTaskQueueTasksRequest{} }
 func (*GetTaskQueueTasksRequest) ProtoMessage() {}
 func (*GetTaskQueueTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{51}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{53}
 }
 func (m *GetTaskQueueTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3046,14 +3166,14 @@ func (m *GetTaskQueueTasksRequest) GetNextPageToken() []byte {
 }
 
 type GetTaskQueueTasksResponse struct {
-	Tasks         []*v11.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	Tasks         []*v12.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
 	NextPageToken []byte                   `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
 func (m *GetTaskQueueTasksResponse) Reset()      { *m = GetTaskQueueTasksResponse{} }
 func (*GetTaskQueueTasksResponse) ProtoMessage() {}
 func (*GetTaskQueueTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{52}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{54}
 }
 func (m *GetTaskQueueTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3082,7 +3202,7 @@ func (m *GetTaskQueueTasksResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetTaskQueueTasksResponse proto.InternalMessageInfo
 
-func (m *GetTaskQueueTasksResponse) GetTasks() []*v11.AllocatedTaskInfo {
+func (m *GetTaskQueueTasksResponse) GetTasks() []*v12.AllocatedTaskInfo {
 	if m != nil {
 		return m.Tasks
 	}
@@ -3104,7 +3224,7 @@ type DeleteWorkflowExecutionRequest struct {
 func (m *DeleteWorkflowExecutionRequest) Reset()      { *m = DeleteWorkflowExecutionRequest{} }
 func (*DeleteWorkflowExecutionRequest) ProtoMessage() {}
 func (*DeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{53}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{55}
 }
 func (m *DeleteWorkflowExecutionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3154,7 +3274,7 @@ type DeleteWorkflowExecutionResponse struct {
 func (m *DeleteWorkflowExecutionResponse) Reset()      { *m = DeleteWorkflowExecutionResponse{} }
 func (*DeleteWorkflowExecutionResponse) ProtoMessage() {}
 func (*DeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{54}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{56}
 }
 func (m *DeleteWorkflowExecutionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3201,7 +3321,7 @@ func (m *StreamWorkflowReplicationMessagesRequest) Reset() {
 }
 func (*StreamWorkflowReplicationMessagesRequest) ProtoMessage() {}
 func (*StreamWorkflowReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{55}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{57}
 }
 func (m *StreamWorkflowReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3276,7 +3396,7 @@ func (m *StreamWorkflowReplicationMessagesResponse) Reset() {
 }
 func (*StreamWorkflowReplicationMessagesResponse) ProtoMessage() {}
 func (*StreamWorkflowReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{56}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{58}
 }
 func (m *StreamWorkflowReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3340,9 +3460,187 @@ func (*StreamWorkflowReplicationMessagesResponse) XXX_OneofWrappers() []interfac
 	}
 }
 
+type GetNamespaceRequest struct {
+	// Types that are valid to be assigned to Attributes:
+	//	*GetNamespaceRequest_Namespace
+	//	*GetNamespaceRequest_Id
+	Attributes isGetNamespaceRequest_Attributes `protobuf_oneof:"attributes"`
+}
+
+func (m *GetNamespaceRequest) Reset()      { *m = GetNamespaceRequest{} }
+func (*GetNamespaceRequest) ProtoMessage() {}
+func (*GetNamespaceRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{59}
+}
+func (m *GetNamespaceRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetNamespaceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetNamespaceRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetNamespaceRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetNamespaceRequest.Merge(m, src)
+}
+func (m *GetNamespaceRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetNamespaceRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetNamespaceRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetNamespaceRequest proto.InternalMessageInfo
+
+type isGetNamespaceRequest_Attributes interface {
+	isGetNamespaceRequest_Attributes()
+	Equal(interface{}) bool
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type GetNamespaceRequest_Namespace struct {
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3,oneof" json:"namespace,omitempty"`
+}
+type GetNamespaceRequest_Id struct {
+	Id string `protobuf:"bytes,2,opt,name=id,proto3,oneof" json:"id,omitempty"`
+}
+
+func (*GetNamespaceRequest_Namespace) isGetNamespaceRequest_Attributes() {}
+func (*GetNamespaceRequest_Id) isGetNamespaceRequest_Attributes()        {}
+
+func (m *GetNamespaceRequest) GetAttributes() isGetNamespaceRequest_Attributes {
+	if m != nil {
+		return m.Attributes
+	}
+	return nil
+}
+
+func (m *GetNamespaceRequest) GetNamespace() string {
+	if x, ok := m.GetAttributes().(*GetNamespaceRequest_Namespace); ok {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (m *GetNamespaceRequest) GetId() string {
+	if x, ok := m.GetAttributes().(*GetNamespaceRequest_Id); ok {
+		return x.Id
+	}
+	return ""
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*GetNamespaceRequest) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*GetNamespaceRequest_Namespace)(nil),
+		(*GetNamespaceRequest_Id)(nil),
+	}
+}
+
+type GetNamespaceResponse struct {
+	Info              *v110.NamespaceInfo              `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
+	Config            *v110.NamespaceConfig            `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
+	ReplicationConfig *v111.NamespaceReplicationConfig `protobuf:"bytes,5,opt,name=replication_config,json=replicationConfig,proto3" json:"replication_config,omitempty"`
+	ConfigVersion     int64                            `protobuf:"varint,6,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
+	FailoverVersion   int64                            `protobuf:"varint,7,opt,name=failover_version,json=failoverVersion,proto3" json:"failover_version,omitempty"`
+	FailoverHistory   []*v111.FailoverStatus           `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
+	IsGlobalNamespace bool                             `protobuf:"varint,9,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
+}
+
+func (m *GetNamespaceResponse) Reset()      { *m = GetNamespaceResponse{} }
+func (*GetNamespaceResponse) ProtoMessage() {}
+func (*GetNamespaceResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{60}
+}
+func (m *GetNamespaceResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetNamespaceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetNamespaceResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetNamespaceResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetNamespaceResponse.Merge(m, src)
+}
+func (m *GetNamespaceResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetNamespaceResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetNamespaceResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetNamespaceResponse proto.InternalMessageInfo
+
+func (m *GetNamespaceResponse) GetInfo() *v110.NamespaceInfo {
+	if m != nil {
+		return m.Info
+	}
+	return nil
+}
+
+func (m *GetNamespaceResponse) GetConfig() *v110.NamespaceConfig {
+	if m != nil {
+		return m.Config
+	}
+	return nil
+}
+
+func (m *GetNamespaceResponse) GetReplicationConfig() *v111.NamespaceReplicationConfig {
+	if m != nil {
+		return m.ReplicationConfig
+	}
+	return nil
+}
+
+func (m *GetNamespaceResponse) GetConfigVersion() int64 {
+	if m != nil {
+		return m.ConfigVersion
+	}
+	return 0
+}
+
+func (m *GetNamespaceResponse) GetFailoverVersion() int64 {
+	if m != nil {
+		return m.FailoverVersion
+	}
+	return 0
+}
+
+func (m *GetNamespaceResponse) GetFailoverHistory() []*v111.FailoverStatus {
+	if m != nil {
+		return m.FailoverHistory
+	}
+	return nil
+}
+
+func (m *GetNamespaceResponse) GetIsGlobalNamespace() bool {
+	if m != nil {
+		return m.IsGlobalNamespace
+	}
+	return false
+}
+
 func init() {
 	proto.RegisterType((*RebuildMutableStateRequest)(nil), "temporal.server.api.adminservice.v1.RebuildMutableStateRequest")
 	proto.RegisterType((*RebuildMutableStateResponse)(nil), "temporal.server.api.adminservice.v1.RebuildMutableStateResponse")
+	proto.RegisterType((*ImportWorkflowExecutionRequest)(nil), "temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest")
+	proto.RegisterType((*ImportWorkflowExecutionResponse)(nil), "temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse")
 	proto.RegisterType((*DescribeMutableStateRequest)(nil), "temporal.server.api.adminservice.v1.DescribeMutableStateRequest")
 	proto.RegisterType((*DescribeMutableStateResponse)(nil), "temporal.server.api.adminservice.v1.DescribeMutableStateResponse")
 	proto.RegisterType((*DescribeHistoryHostRequest)(nil), "temporal.server.api.adminservice.v1.DescribeHistoryHostRequest")
@@ -3405,6 +3703,8 @@ func init() {
 	proto.RegisterType((*DeleteWorkflowExecutionResponse)(nil), "temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse")
 	proto.RegisterType((*StreamWorkflowReplicationMessagesRequest)(nil), "temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest")
 	proto.RegisterType((*StreamWorkflowReplicationMessagesResponse)(nil), "temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse")
+	proto.RegisterType((*GetNamespaceRequest)(nil), "temporal.server.api.adminservice.v1.GetNamespaceRequest")
+	proto.RegisterType((*GetNamespaceResponse)(nil), "temporal.server.api.adminservice.v1.GetNamespaceResponse")
 }
 
 func init() {
@@ -3412,203 +3712,216 @@ func init() {
 }
 
 var fileDescriptor_cc07c1a2abe7cb51 = []byte{
-	// 3129 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x3a, 0x4d, 0x6c, 0x1b, 0xc7,
-	0xd5, 0x5a, 0xfe, 0x48, 0xe4, 0xd3, 0xff, 0x5a, 0xb2, 0x68, 0x2a, 0xa2, 0x14, 0xc6, 0x71, 0x64,
-	0x7f, 0x09, 0xf5, 0x59, 0x69, 0x1b, 0x27, 0xa9, 0x61, 0x48, 0xb2, 0x23, 0x2b, 0x95, 0xf2, 0xb3,
-	0x72, 0xec, 0x36, 0x40, 0xb0, 0x19, 0xee, 0x8e, 0xa8, 0x85, 0xc9, 0xdd, 0xcd, 0xce, 0x90, 0xb6,
-	0x02, 0xf4, 0x07, 0x4d, 0x8b, 0xa2, 0x87, 0xa2, 0x06, 0x8a, 0x02, 0x41, 0x4e, 0x3d, 0x16, 0x45,
-	0x8b, 0xde, 0x7a, 0x2c, 0xd0, 0x5b, 0x8f, 0x41, 0x7b, 0x09, 0x5a, 0xa0, 0x69, 0x94, 0x4b, 0x8f,
-	0x39, 0xf7, 0x54, 0xcc, 0xdf, 0xfe, 0x90, 0x4b, 0x8a, 0xaa, 0xed, 0x14, 0xc8, 0x8d, 0xfb, 0xe6,
-	0xbd, 0x37, 0x6f, 0xde, 0xdf, 0xbc, 0xf7, 0x86, 0xf0, 0x12, 0xc5, 0x2d, 0xdf, 0x0b, 0x50, 0x73,
-	0x8d, 0xe0, 0xa0, 0x83, 0x83, 0x35, 0xe4, 0x3b, 0x6b, 0xc8, 0x6e, 0x39, 0x2e, 0xfb, 0x76, 0x2c,
-	0xbc, 0xd6, 0xb9, 0xbc, 0x16, 0xe0, 0xf7, 0xda, 0x98, 0x50, 0x33, 0xc0, 0xc4, 0xf7, 0x5c, 0x82,
-	0x6b, 0x7e, 0xe0, 0x51, 0x4f, 0x7f, 0x4a, 0xd1, 0xd6, 0x04, 0x6d, 0x0d, 0xf9, 0x4e, 0x2d, 0x4e,
-	0x5b, 0xeb, 0x5c, 0x2e, 0x2f, 0x37, 0x3c, 0xaf, 0xd1, 0xc4, 0x6b, 0x9c, 0xa4, 0xde, 0x3e, 0x58,
-	0xa3, 0x4e, 0x0b, 0x13, 0x8a, 0x5a, 0xbe, 0xe0, 0x52, 0xae, 0x74, 0x23, 0xd8, 0xed, 0x00, 0x51,
-	0xc7, 0x73, 0xe5, 0xfa, 0x93, 0x36, 0xf6, 0xb1, 0x6b, 0x63, 0xd7, 0x72, 0x30, 0x59, 0x6b, 0x78,
-	0x0d, 0x8f, 0xc3, 0xf9, 0x2f, 0x89, 0x52, 0x0d, 0x0f, 0xc1, 0xa4, 0xc7, 0x6e, 0xbb, 0x45, 0x98,
-	0xd8, 0x96, 0xd7, 0x6a, 0x85, 0x6c, 0x2e, 0xa4, 0xe3, 0x50, 0x44, 0xee, 0x9a, 0xef, 0xb5, 0x71,
-	0x5b, 0x1e, 0xaa, 0x7c, 0x3e, 0x81, 0x27, 0x58, 0x30, 0xc4, 0x16, 0x26, 0x04, 0x35, 0x14, 0xd6,
-	0xd3, 0x09, 0xac, 0x0e, 0x0e, 0x88, 0x93, 0x86, 0x96, 0xdc, 0xf4, 0x9e, 0x17, 0xdc, 0x3d, 0x68,
-	0x7a, 0xf7, 0x7a, 0xf1, 0x9e, 0x4d, 0xb3, 0x82, 0xd5, 0x6c, 0x13, 0x8a, 0x83, 0x5e, 0xec, 0x8b,
-	0x69, 0xd8, 0xe9, 0xa7, 0xbe, 0x34, 0x18, 0x55, 0xec, 0x20, 0x71, 0x9f, 0x19, 0x88, 0xcb, 0x14,
-	0x35, 0x48, 0xda, 0x43, 0x87, 0x50, 0x2f, 0x38, 0xea, 0x95, 0xb6, 0x96, 0x86, 0xed, 0xa2, 0x16,
-	0x26, 0x3e, 0x12, 0xee, 0x95, 0xc4, 0xff, 0xff, 0x34, 0xfc, 0x00, 0xfb, 0x4d, 0xc7, 0xe2, 0x6e,
-	0xd1, 0x4b, 0xf1, 0x62, 0x1a, 0x85, 0xcf, 0x6c, 0x42, 0x28, 0x76, 0xc5, 0x1e, 0xf2, 0xa8, 0x66,
-	0x0b, 0x53, 0x64, 0x23, 0x8a, 0x24, 0xe9, 0xf3, 0x43, 0x90, 0xe2, 0xfb, 0xd8, 0x6a, 0xb3, 0x9d,
-	0x89, 0x24, 0xba, 0x36, 0x04, 0x91, 0xb2, 0xb5, 0xd9, 0x6a, 0x53, 0x54, 0x6f, 0x62, 0x93, 0x50,
-	0x44, 0x07, 0xaa, 0xa4, 0x8b, 0x01, 0xd3, 0xb7, 0xdc, 0xb0, 0xfa, 0x81, 0x06, 0x65, 0x03, 0xd7,
-	0xdb, 0x4e, 0xd3, 0xde, 0x13, 0xec, 0xf6, 0x19, 0x37, 0x43, 0x84, 0xa5, 0xfe, 0x04, 0x14, 0x43,
-	0x7d, 0x96, 0xb4, 0x15, 0x6d, 0xb5, 0x68, 0x44, 0x00, 0x7d, 0x1b, 0x8a, 0xe1, 0x09, 0x4a, 0x99,
-	0x15, 0x6d, 0x75, 0x7c, 0xfd, 0x62, 0x28, 0x00, 0x0f, 0x59, 0xe9, 0x31, 0x9d, 0xcb, 0xb5, 0x3b,
-	0x52, 0xea, 0x1b, 0x8a, 0xc0, 0x88, 0x68, 0xab, 0x4b, 0xb0, 0x98, 0x2a, 0x84, 0xc8, 0x09, 0xd5,
-	0x1f, 0x69, 0xb0, 0x78, 0x1d, 0x13, 0x2b, 0x70, 0xea, 0xf8, 0x7f, 0x28, 0xe5, 0x1f, 0x32, 0xf0,
-	0x44, 0xba, 0x18, 0x42, 0x4e, 0xfd, 0x1c, 0x14, 0xc8, 0x21, 0x0a, 0x6c, 0xd3, 0xb1, 0xa5, 0x18,
-	0x63, 0xfc, 0x7b, 0xc7, 0xd6, 0x9f, 0x84, 0x09, 0xe9, 0xc6, 0x26, 0xb2, 0xed, 0x80, 0xcb, 0x51,
-	0x34, 0xc6, 0x25, 0x6c, 0xc3, 0xb6, 0x03, 0xfd, 0x10, 0xce, 0x58, 0xc8, 0x3a, 0xc4, 0x49, 0xbb,
-	0x96, 0xb2, 0x5c, 0xe2, 0x2b, 0xb5, 0xb4, 0x8c, 0x18, 0x33, 0x6c, 0x5c, 0xfa, 0x84, 0x70, 0xb3,
-	0x9c, 0x69, 0x1c, 0xa4, 0xbb, 0x70, 0x96, 0x39, 0x6a, 0x1d, 0x91, 0xee, 0xcd, 0x72, 0x0f, 0xb9,
-	0xd9, 0x9c, 0xe2, 0x1b, 0x87, 0x56, 0xff, 0xa2, 0x41, 0x59, 0x29, 0xee, 0xa6, 0x38, 0xf1, 0x4d,
-	0x8f, 0x50, 0x65, 0x3e, 0xa6, 0x1b, 0x8f, 0x50, 0xae, 0x18, 0x4c, 0x88, 0x54, 0xdd, 0x38, 0x83,
-	0x6d, 0x08, 0x50, 0x42, 0xb3, 0x4c, 0x75, 0xf9, 0x48, 0xb3, 0x09, 0xe3, 0x67, 0xbb, 0x8d, 0xff,
-	0x6d, 0xd0, 0xc3, 0x78, 0x89, 0xbc, 0x20, 0x77, 0x5a, 0x2f, 0x98, 0xbd, 0xd7, 0x0d, 0xaa, 0xfe,
-	0x23, 0xe6, 0x94, 0x89, 0x43, 0x49, 0x67, 0x78, 0x0a, 0x26, 0xb9, 0x88, 0xc4, 0x74, 0xdb, 0xad,
-	0x3a, 0x0e, 0xf8, 0xb1, 0xf2, 0xc6, 0x84, 0x00, 0xbe, 0xc6, 0x61, 0xfa, 0x22, 0x14, 0xd5, 0xb9,
-	0x48, 0x29, 0xb3, 0x92, 0x5d, 0xcd, 0x1b, 0x05, 0x79, 0x30, 0xa2, 0xbf, 0x03, 0xd3, 0xe1, 0x41,
-	0x4c, 0x6e, 0x45, 0xe9, 0x0c, 0x5f, 0x4b, 0xb5, 0x4f, 0x88, 0xcb, 0x8e, 0xf0, 0x9a, 0xfa, 0xd8,
-	0x62, 0x74, 0x3b, 0xee, 0x81, 0x67, 0x4c, 0xb9, 0x09, 0x98, 0x5e, 0x82, 0x31, 0xa5, 0xf1, 0xbc,
-	0x70, 0x56, 0xf9, 0xf9, 0x6a, 0xae, 0x90, 0x9b, 0xc9, 0x57, 0x6b, 0x30, 0xbb, 0xd5, 0xf4, 0x08,
-	0xde, 0x67, 0xf2, 0x28, 0x5b, 0x75, 0xbb, 0x78, 0x64, 0x88, 0xea, 0x1c, 0xe8, 0x71, 0x7c, 0x19,
-	0xbb, 0xcf, 0xc2, 0xf4, 0x36, 0xa6, 0xc3, 0xf2, 0x78, 0x17, 0x66, 0x22, 0x6c, 0xa9, 0xc8, 0x5d,
-	0x00, 0x89, 0xee, 0x1e, 0x78, 0x9c, 0x60, 0x7c, 0xfd, 0xb9, 0x61, 0x3c, 0x94, 0xb3, 0xe1, 0x47,
-	0x17, 0x4a, 0x66, 0x3f, 0xab, 0x3f, 0xcb, 0xc0, 0xc2, 0xae, 0x43, 0xa8, 0x34, 0xd9, 0x2d, 0x96,
-	0x0b, 0x4f, 0x16, 0x4c, 0x7f, 0x05, 0x0a, 0x16, 0xa2, 0xb8, 0xe1, 0x05, 0x47, 0xdc, 0x01, 0xa7,
-	0xd6, 0x2f, 0xa5, 0x8a, 0xc0, 0x2f, 0x35, 0xb6, 0x39, 0x63, 0xbc, 0x25, 0x29, 0x8c, 0x90, 0x56,
-	0xbf, 0x09, 0xc0, 0xeb, 0x82, 0x00, 0xb9, 0x0d, 0x65, 0xce, 0x8b, 0xa9, 0x9c, 0x64, 0x6a, 0x50,
-	0xbc, 0x0c, 0x46, 0x60, 0x14, 0xa9, 0xfa, 0xa9, 0x2f, 0x01, 0xd4, 0x11, 0xb5, 0x0e, 0x4d, 0xe2,
-	0xbc, 0x2f, 0x02, 0x37, 0x6f, 0x14, 0x39, 0x64, 0xdf, 0x79, 0x1f, 0xeb, 0x17, 0x60, 0xda, 0xc5,
-	0xf7, 0xa9, 0xe9, 0xa3, 0x06, 0x36, 0xa9, 0x77, 0x17, 0xbb, 0xdc, 0xca, 0x13, 0xc6, 0x24, 0x03,
-	0xbf, 0x81, 0x1a, 0xf8, 0x16, 0x03, 0xb2, 0x0b, 0xa0, 0xd4, 0xab, 0x0f, 0xa9, 0xfa, 0x6b, 0x90,
-	0xe7, 0x97, 0x45, 0x49, 0x5b, 0xc9, 0xf6, 0x15, 0xb4, 0xab, 0x2c, 0x13, 0xd2, 0x0a, 0xba, 0x34,
-	0x29, 0x32, 0x69, 0x52, 0x7c, 0x98, 0x81, 0x1c, 0xa3, 0x63, 0xb9, 0x20, 0xf2, 0xf9, 0x30, 0x8d,
-	0x8e, 0x87, 0xb0, 0x1d, 0x5b, 0x5f, 0x86, 0xf1, 0x30, 0xa4, 0x65, 0x3a, 0x28, 0x1a, 0xa0, 0x40,
-	0x3b, 0xb6, 0x3e, 0x0f, 0xa3, 0x41, 0xdb, 0x65, 0x6b, 0x22, 0x1d, 0xe4, 0x83, 0xb6, 0xbb, 0x63,
-	0xeb, 0x0b, 0x30, 0xc6, 0x55, 0xef, 0xd8, 0x5c, 0x5b, 0x59, 0x63, 0x94, 0x7d, 0xee, 0xd8, 0xfa,
-	0x16, 0x70, 0xb5, 0x9a, 0xf4, 0xc8, 0xc7, 0x5c, 0x49, 0x53, 0xeb, 0x17, 0x4e, 0x36, 0xee, 0xad,
-	0x23, 0x1f, 0x1b, 0x05, 0x2a, 0x7f, 0xe9, 0x57, 0xa1, 0x78, 0xe0, 0x04, 0xd8, 0x64, 0x35, 0x68,
-	0x69, 0x94, 0xdb, 0xb5, 0x5c, 0x13, 0xf5, 0x67, 0x4d, 0xd5, 0x9f, 0xb5, 0x5b, 0xaa, 0x40, 0xdd,
-	0xcc, 0x3d, 0xf8, 0x74, 0x59, 0x33, 0x0a, 0x8c, 0x84, 0x01, 0x59, 0x30, 0xca, 0x52, 0xaf, 0x34,
-	0xc6, 0x85, 0x53, 0x9f, 0xd5, 0xbf, 0x69, 0x30, 0x6b, 0xe0, 0x96, 0xd7, 0xc1, 0x5c, 0xb1, 0x5f,
-	0x9e, 0xab, 0xc6, 0xf4, 0x95, 0x4d, 0xe8, 0x6b, 0x07, 0xa6, 0x3b, 0x0e, 0x71, 0xea, 0x4e, 0xd3,
-	0xa1, 0x47, 0xe2, 0xc0, 0xb9, 0x21, 0x0f, 0x3c, 0x15, 0x11, 0xb2, 0x25, 0x96, 0x33, 0xe2, 0x67,
-	0x93, 0x39, 0xe3, 0x17, 0x59, 0x78, 0x66, 0x1b, 0xd3, 0xde, 0x34, 0x8c, 0xee, 0x49, 0x37, 0xbd,
-	0xbd, 0x1e, 0xbb, 0x3c, 0x12, 0x0e, 0x53, 0xec, 0x75, 0x98, 0x47, 0x55, 0x00, 0xe8, 0xe7, 0x61,
-	0x8a, 0x50, 0x14, 0x50, 0x13, 0x77, 0xb0, 0x4b, 0x23, 0xc5, 0x4c, 0x70, 0xe8, 0x0d, 0x06, 0xdc,
-	0xb1, 0xf5, 0x1a, 0x9c, 0x89, 0x63, 0x29, 0xb3, 0x0a, 0x9f, 0x9b, 0x8d, 0x50, 0x6f, 0x8b, 0x05,
-	0x7d, 0x05, 0x26, 0xb0, 0x6b, 0x47, 0x3c, 0xf3, 0x1c, 0x11, 0xb0, 0x6b, 0x2b, 0x8e, 0x97, 0x60,
-	0x36, 0xc2, 0x50, 0xfc, 0x46, 0x39, 0xda, 0xb4, 0x42, 0x53, 0xdc, 0x2e, 0xc1, 0x6c, 0x0b, 0xdd,
-	0x77, 0x5a, 0xed, 0x96, 0x08, 0x3a, 0x9e, 0x1d, 0xc6, 0xb8, 0x87, 0x4c, 0xcb, 0x05, 0x16, 0x76,
-	0xfd, 0x72, 0x44, 0x21, 0x25, 0x3a, 0x5f, 0xcd, 0x15, 0xb4, 0x99, 0x4c, 0xf5, 0x57, 0x19, 0x58,
-	0x3d, 0xd9, 0x2a, 0x32, 0x73, 0xa4, 0xb0, 0xd6, 0x52, 0x58, 0x33, 0x5f, 0x52, 0x75, 0x11, 0xcf,
-	0x5d, 0x58, 0x5c, 0x83, 0xe3, 0xeb, 0x2b, 0xfd, 0x2c, 0x74, 0x1d, 0x51, 0xb4, 0xd9, 0xf4, 0xea,
-	0xc6, 0x94, 0x24, 0xdc, 0x14, 0x74, 0xfa, 0x1d, 0x98, 0x96, 0xba, 0x31, 0xe5, 0x8a, 0xcc, 0xaf,
-	0xb5, 0x93, 0xf2, 0xab, 0xd4, 0x9d, 0x3c, 0x85, 0x31, 0xd5, 0x49, 0x7c, 0xeb, 0xab, 0x30, 0xa3,
-	0x64, 0x74, 0x3d, 0x1b, 0xf3, 0xbb, 0x3a, 0xb7, 0x92, 0x5d, 0xcd, 0x86, 0x22, 0xbc, 0xe6, 0xd9,
-	0x78, 0xc7, 0x26, 0xd5, 0x07, 0x1a, 0x2c, 0x6d, 0x63, 0x6a, 0x44, 0x2d, 0xc5, 0x9e, 0x68, 0x27,
-	0xc2, 0x2b, 0x66, 0x17, 0x46, 0xb9, 0x36, 0x54, 0x4a, 0x4d, 0xbf, 0xca, 0x63, 0x3d, 0x09, 0x93,
-	0x2f, 0xc6, 0x8f, 0x6b, 0xcd, 0x90, 0x3c, 0x98, 0xf3, 0xab, 0xee, 0x83, 0x39, 0xbc, 0xaa, 0x2a,
-	0x25, 0x8c, 0xd5, 0x00, 0xd5, 0x8f, 0x32, 0x50, 0xe9, 0x27, 0x92, 0xb4, 0xd5, 0x77, 0x61, 0x4a,
-	0xe4, 0x12, 0xd9, 0xfb, 0x28, 0xd9, 0x6e, 0x0f, 0x95, 0xee, 0x07, 0x33, 0x17, 0x97, 0xb0, 0x82,
-	0xde, 0x70, 0x69, 0x70, 0x64, 0x88, 0xba, 0x48, 0xc1, 0xca, 0x47, 0xa0, 0xf7, 0x22, 0xe9, 0x33,
-	0x90, 0xbd, 0x8b, 0x8f, 0x64, 0x6e, 0x63, 0x3f, 0xf5, 0x3d, 0xc8, 0x77, 0x50, 0xb3, 0x8d, 0x65,
-	0x08, 0xbf, 0x70, 0x4a, 0xcd, 0x85, 0x92, 0x09, 0x2e, 0x2f, 0x65, 0xae, 0x68, 0xd5, 0x3f, 0x69,
-	0x70, 0x61, 0x1b, 0xd3, 0xb0, 0x58, 0x1a, 0x60, 0xb8, 0x17, 0xe1, 0x5c, 0x13, 0xf1, 0x41, 0x05,
-	0x0d, 0x1c, 0xdc, 0xc1, 0xa1, 0xb6, 0x54, 0x06, 0xce, 0x1a, 0x67, 0x19, 0x82, 0xa1, 0xd6, 0x25,
-	0x83, 0x1d, 0x3b, 0x24, 0xf5, 0x03, 0xcf, 0xc2, 0x84, 0x24, 0x49, 0x33, 0x11, 0xe9, 0x1b, 0x6a,
-	0x3d, 0x22, 0xed, 0x36, 0x70, 0xb6, 0xd7, 0xc0, 0xdf, 0xe3, 0xb9, 0x72, 0xf0, 0x11, 0xa4, 0xa1,
-	0xf7, 0xa1, 0x10, 0x33, 0xf1, 0x43, 0x29, 0x31, 0x64, 0x54, 0x7d, 0x1f, 0x56, 0xb6, 0x31, 0xbd,
-	0xbe, 0xfb, 0xe6, 0x00, 0xe5, 0xdd, 0x96, 0x55, 0x0f, 0xab, 0xe0, 0x94, 0x77, 0x9d, 0x76, 0x6b,
-	0x76, 0x43, 0x88, 0x62, 0x8e, 0xca, 0x5f, 0xa4, 0xfa, 0x63, 0x0d, 0x9e, 0x1c, 0xb0, 0xb9, 0x3c,
-	0xf6, 0xbb, 0x30, 0x1b, 0x63, 0x6b, 0xc6, 0x2b, 0x9a, 0xe7, 0xff, 0x0b, 0x21, 0x8c, 0x99, 0x20,
-	0x09, 0x20, 0xd5, 0xbf, 0x6a, 0x30, 0x67, 0x60, 0xe4, 0xfb, 0xcd, 0x23, 0x9e, 0x8c, 0x49, 0xbf,
-	0xdb, 0x29, 0xd7, 0x7b, 0x3b, 0xa5, 0x77, 0x28, 0x99, 0x87, 0xef, 0x50, 0xf4, 0x2b, 0x30, 0xca,
-	0xaf, 0x0c, 0x22, 0xf3, 0xe0, 0xc9, 0x29, 0x55, 0xe2, 0xcb, 0x84, 0xbf, 0x00, 0xf3, 0x5d, 0x87,
-	0x92, 0xf7, 0xf3, 0xbf, 0x33, 0x50, 0xde, 0xb0, 0xed, 0x7d, 0x8c, 0x02, 0xeb, 0x70, 0x83, 0xd2,
-	0xc0, 0xa9, 0xb7, 0x69, 0x64, 0xed, 0x1f, 0x6a, 0x30, 0x4b, 0xf8, 0x9a, 0x89, 0xc2, 0x45, 0xa9,
-	0xf0, 0xb7, 0x86, 0xca, 0x29, 0xfd, 0x99, 0xd7, 0xba, 0xe1, 0x22, 0xa5, 0xcc, 0x90, 0x2e, 0x30,
-	0x2b, 0x8f, 0x1d, 0xd7, 0xc6, 0xf7, 0xe3, 0x89, 0xb1, 0xc8, 0x21, 0x2c, 0x54, 0xf4, 0x67, 0x41,
-	0x27, 0x77, 0x1d, 0xdf, 0x24, 0xd6, 0x21, 0x6e, 0x21, 0xb3, 0xed, 0xdb, 0xaa, 0xd7, 0x2e, 0x18,
-	0x33, 0x6c, 0x65, 0x9f, 0x2f, 0xbc, 0xc5, 0xe1, 0xc9, 0x1e, 0x33, 0xd7, 0xd5, 0x63, 0x96, 0x9b,
-	0x30, 0x9f, 0x2a, 0x55, 0x3c, 0x87, 0x15, 0x45, 0x0e, 0xbb, 0x1a, 0xcf, 0x61, 0x53, 0xeb, 0xcf,
-	0x24, 0x2d, 0x12, 0x56, 0x64, 0x3b, 0x4c, 0x4e, 0x6c, 0xdf, 0x66, 0xa8, 0xbc, 0xce, 0x8c, 0xe5,
-	0xac, 0x25, 0x58, 0x4c, 0x55, 0x8f, 0xb4, 0xcd, 0x4f, 0x35, 0x58, 0x12, 0x25, 0x55, 0x3f, 0xf3,
-	0xfc, 0x5f, 0x3f, 0xeb, 0x14, 0x4f, 0xaf, 0xc6, 0x81, 0xcd, 0x77, 0x75, 0x05, 0x2a, 0xfd, 0x44,
-	0x91, 0xd2, 0x7e, 0x07, 0xca, 0xac, 0xdf, 0xeb, 0x23, 0x69, 0x72, 0x73, 0x6d, 0xe0, 0xe6, 0x99,
-	0xee, 0xcd, 0x3f, 0x1a, 0x85, 0xc5, 0x54, 0xde, 0x32, 0x2b, 0x7c, 0xa0, 0xc1, 0xac, 0xd5, 0x26,
-	0xd4, 0x6b, 0xf5, 0x7a, 0xe9, 0xd0, 0x37, 0x5f, 0x3f, 0xee, 0xb5, 0x2d, 0xce, 0xb9, 0xc7, 0x4d,
-	0xad, 0x2e, 0x30, 0x97, 0x82, 0x1c, 0x11, 0x8a, 0x13, 0x52, 0x64, 0x1e, 0x91, 0x14, 0xfb, 0x9c,
-	0x73, 0x6f, 0xb0, 0x74, 0x81, 0xf5, 0x06, 0x8c, 0xb5, 0x90, 0xef, 0x3b, 0x6e, 0xa3, 0x94, 0xe5,
-	0x5b, 0xef, 0x3d, 0xf4, 0xd6, 0x7b, 0x82, 0x9f, 0xd8, 0x51, 0x71, 0xd7, 0x5d, 0x58, 0x44, 0xb6,
-	0x6d, 0xf6, 0x26, 0x3c, 0xd1, 0xdc, 0x8b, 0x36, 0x62, 0x2d, 0x19, 0x15, 0x0a, 0x39, 0x35, 0xef,
-	0xf1, 0x1b, 0xa1, 0x84, 0x6c, 0x3b, 0x75, 0x85, 0x85, 0x66, 0xaa, 0x25, 0x1e, 0x4b, 0x68, 0xf2,
-	0x44, 0x90, 0xa6, 0xf1, 0xc7, 0xb3, 0xdb, 0x4b, 0x30, 0x11, 0x57, 0x72, 0xca, 0x26, 0x73, 0xf1,
-	0x4d, 0x8a, 0xf1, 0x24, 0xf2, 0x32, 0x9c, 0x55, 0xb3, 0xab, 0x2d, 0x51, 0x4b, 0xc4, 0x6e, 0xac,
-	0x44, 0xc5, 0xa1, 0xf5, 0x56, 0x1c, 0x7f, 0x1c, 0x83, 0x85, 0x1e, 0x6a, 0x19, 0x55, 0xdf, 0x87,
-	0x59, 0xd2, 0xf6, 0x7d, 0x2f, 0xa0, 0xd8, 0x36, 0xad, 0xa6, 0xc3, 0xaf, 0x1f, 0x11, 0x54, 0xc6,
-	0x50, 0x3e, 0xd5, 0x87, 0x71, 0x6d, 0x5f, 0x71, 0xdd, 0x12, 0x4c, 0x95, 0x2b, 0x77, 0x81, 0xf5,
-	0xa7, 0x61, 0x4a, 0x70, 0x0f, 0x1b, 0x25, 0x71, 0xf8, 0x49, 0x01, 0x55, 0x6d, 0xd2, 0x1d, 0x98,
-	0x6e, 0xe1, 0x56, 0x1d, 0x07, 0xe4, 0xd0, 0xf1, 0x85, 0xf3, 0x0d, 0x6a, 0x16, 0xd4, 0x73, 0x46,
-	0xe7, 0x72, 0x6d, 0x2f, 0x24, 0x13, 0x53, 0xb5, 0x56, 0xe2, 0x9b, 0xe5, 0x2c, 0xa5, 0xbf, 0xf0,
-	0xbe, 0x2f, 0x4a, 0x48, 0x4a, 0x41, 0x97, 0xef, 0x51, 0x2f, 0xeb, 0x1f, 0x55, 0xbb, 0x21, 0xca,
-	0x72, 0xcb, 0x6b, 0xbb, 0x94, 0xf7, 0x7b, 0x79, 0x63, 0x56, 0x2e, 0xf1, 0x8a, 0x79, 0x8b, 0x2d,
-	0xb0, 0x7c, 0x1e, 0x1b, 0x7c, 0x99, 0x6c, 0x59, 0x74, 0x7c, 0x45, 0x63, 0x26, 0xb6, 0xb0, 0xcf,
-	0xe0, 0xfa, 0x45, 0x98, 0x89, 0xf5, 0xee, 0x02, 0xb7, 0xc0, 0x71, 0x63, 0x3d, 0xbd, 0x40, 0xdd,
-	0x86, 0x09, 0xd5, 0x4f, 0x71, 0xfd, 0x14, 0xb9, 0x7e, 0xce, 0x27, 0x3d, 0x55, 0x62, 0xc4, 0xba,
-	0x28, 0xae, 0x95, 0xf1, 0x4e, 0xf4, 0xa1, 0x7f, 0x13, 0xca, 0x07, 0xc8, 0x69, 0x7a, 0x31, 0xa3,
-	0x98, 0x8e, 0x6b, 0x05, 0xb8, 0x85, 0x5d, 0x5a, 0x02, 0x5e, 0x00, 0x97, 0x14, 0x46, 0xc8, 0x45,
-	0xae, 0xeb, 0x57, 0xa0, 0xe4, 0xb8, 0x0e, 0x75, 0x50, 0xd3, 0xec, 0xe6, 0x52, 0x1a, 0x17, 0xc5,
-	0xb3, 0x5c, 0x7f, 0x25, 0xc9, 0x42, 0xbf, 0x0a, 0x8b, 0x0e, 0x31, 0x1b, 0x4d, 0xaf, 0x8e, 0x9a,
-	0x66, 0x54, 0x86, 0x61, 0x17, 0xd5, 0x9b, 0xd8, 0x2e, 0x4d, 0xf0, 0xcb, 0xbe, 0xe4, 0x90, 0x6d,
-	0x8e, 0x11, 0x56, 0xd0, 0x37, 0xc4, 0xba, 0xfe, 0x36, 0xe4, 0x28, 0x6a, 0x90, 0xd2, 0x24, 0xf7,
-	0xde, 0x57, 0x1e, 0xca, 0x7b, 0x6f, 0xa1, 0x86, 0xf4, 0x58, 0xce, 0xb3, 0xbc, 0x05, 0xf3, 0xa9,
-	0x0e, 0x7d, 0x9a, 0x20, 0x2e, 0xbf, 0x00, 0xc5, 0x90, 0xef, 0xa9, 0xa2, 0xff, 0x6d, 0x38, 0xb3,
-	0xeb, 0x10, 0x2a, 0x85, 0x0c, 0xaf, 0xdb, 0x45, 0x28, 0x46, 0x23, 0x03, 0xd1, 0x78, 0x15, 0xfc,
-	0x01, 0xb3, 0x82, 0xd4, 0x49, 0xde, 0xcf, 0x35, 0x98, 0x4b, 0x32, 0x97, 0x99, 0xe1, 0x75, 0x28,
-	0x48, 0x2f, 0x1f, 0x5c, 0x7c, 0x77, 0x0d, 0x71, 0x25, 0x9f, 0x3d, 0xf9, 0xb8, 0x66, 0x84, 0x4c,
-	0x86, 0x96, 0xe8, 0x97, 0x1a, 0x2c, 0x6f, 0xd8, 0xf6, 0xeb, 0x81, 0x28, 0xe6, 0x58, 0x45, 0x42,
-	0xbb, 0xb3, 0xde, 0x45, 0x98, 0x39, 0x08, 0x3c, 0x97, 0x62, 0xd7, 0xee, 0x7a, 0x86, 0x98, 0x56,
-	0x70, 0xf5, 0x14, 0xb1, 0x0d, 0x2b, 0xc2, 0x83, 0xcc, 0x80, 0x73, 0x32, 0x55, 0x3c, 0x5b, 0x9e,
-	0xeb, 0x62, 0x2b, 0xac, 0xde, 0x0b, 0xc6, 0x92, 0xc0, 0x4b, 0x6c, 0xb8, 0x15, 0x22, 0x55, 0xab,
-	0xb0, 0xd2, 0x5f, 0x2c, 0x59, 0x1f, 0x5d, 0x83, 0xb2, 0xa8, 0xa0, 0x52, 0xa5, 0x1e, 0x22, 0x57,
-	0xf3, 0x97, 0xb5, 0x14, 0x06, 0xd1, 0xa4, 0xed, 0x5c, 0xcc, 0x5a, 0x32, 0xb7, 0x29, 0xfe, 0xfb,
-	0x30, 0xcf, 0x1b, 0xd7, 0x43, 0x8c, 0x02, 0x5a, 0xc7, 0x88, 0x9a, 0xf7, 0x1c, 0x7a, 0xe8, 0xb8,
-	0xb2, 0x79, 0x3c, 0xd7, 0x33, 0xee, 0xbb, 0x2e, 0xdf, 0xd7, 0x37, 0x73, 0x1f, 0x7e, 0xba, 0xac,
-	0x19, 0x67, 0x18, 0xf5, 0x4d, 0x45, 0x7c, 0x87, 0xd3, 0xea, 0xcb, 0x30, 0x1e, 0xf8, 0x56, 0xa8,
-	0x65, 0x39, 0xbe, 0x0d, 0x7c, 0x4b, 0x29, 0x78, 0x01, 0xc6, 0xf8, 0x73, 0x50, 0x38, 0xbf, 0x1d,
-	0x65, 0x9f, 0x7c, 0x4e, 0x9b, 0x0b, 0xbc, 0xa6, 0x28, 0xc0, 0xa7, 0xe2, 0x55, 0x42, 0xda, 0x50,
-	0x33, 0x71, 0x22, 0xc3, 0x6b, 0x62, 0x83, 0x13, 0xeb, 0xef, 0x40, 0x99, 0x60, 0xc2, 0x73, 0x10,
-	0x1f, 0xc5, 0x61, 0xdb, 0x44, 0x07, 0x4c, 0x83, 0x7c, 0x8e, 0x99, 0x1f, 0x72, 0x8e, 0xb9, 0x20,
-	0x79, 0xec, 0x0b, 0x16, 0x1b, 0x8c, 0x03, 0x9f, 0xe3, 0x26, 0x62, 0x68, 0xf4, 0xe4, 0x18, 0x1a,
-	0x4b, 0xf3, 0xd8, 0x8f, 0x34, 0x28, 0xa7, 0x59, 0x45, 0x46, 0xd2, 0x2d, 0x98, 0x42, 0x16, 0x75,
-	0x3a, 0xd8, 0x94, 0x77, 0x8f, 0x8c, 0xa7, 0xe7, 0x4e, 0xba, 0xba, 0x92, 0x3a, 0x99, 0x14, 0x4c,
-	0x24, 0xf7, 0xa1, 0xc3, 0xe9, 0x77, 0x19, 0x98, 0x17, 0x3d, 0x77, 0x77, 0x97, 0x7f, 0x03, 0x72,
-	0x7c, 0x84, 0xae, 0x71, 0xfb, 0x5c, 0x1e, 0x6c, 0x9f, 0xeb, 0x18, 0xd9, 0xbb, 0x98, 0x52, 0x1c,
-	0xbc, 0xd9, 0xc6, 0xb2, 0xb8, 0xe1, 0xe4, 0x83, 0xde, 0xfa, 0xd8, 0xe5, 0xee, 0xb5, 0x03, 0x2b,
-	0x0c, 0x3a, 0xe9, 0x21, 0x93, 0x02, 0x2a, 0xcf, 0xa7, 0xbf, 0xc0, 0xae, 0x0c, 0x86, 0xc1, 0x74,
-	0xc4, 0x42, 0x3a, 0x36, 0x6f, 0x11, 0x63, 0xd8, 0xf9, 0x70, 0xfd, 0x86, 0x1b, 0x1b, 0xb7, 0xa4,
-	0x0e, 0x4f, 0xf3, 0x43, 0x0f, 0x4f, 0x47, 0xd3, 0xf4, 0xf5, 0x49, 0x06, 0xce, 0x76, 0xeb, 0x4b,
-	0x1a, 0xf2, 0x11, 0x29, 0x2c, 0x75, 0xbe, 0x91, 0x79, 0x84, 0xf3, 0x8d, 0xb4, 0xb3, 0x66, 0xd3,
-	0xa6, 0xb9, 0x2d, 0x38, 0xdb, 0x23, 0x89, 0xaa, 0xec, 0x1f, 0x6a, 0xe6, 0x33, 0xd7, 0x2d, 0x12,
-	0x7f, 0xcb, 0xfb, 0xbb, 0x06, 0x0b, 0x6f, 0xb4, 0x83, 0x06, 0xfe, 0x2a, 0x3a, 0x63, 0xb5, 0x0c,
-	0xa5, 0xde, 0xc3, 0xc9, 0xbc, 0xfd, 0xfb, 0x0c, 0x2c, 0xec, 0xe1, 0xaf, 0xe8, 0xc9, 0x1f, 0x4b,
-	0x18, 0x6e, 0x42, 0xa9, 0x57, 0x61, 0xa7, 0x7b, 0xac, 0x60, 0xb5, 0xcd, 0xa2, 0x81, 0x0f, 0x02,
-	0x4c, 0x0e, 0x55, 0xbb, 0x99, 0x78, 0x3f, 0xee, 0x9e, 0xf6, 0x65, 0x1f, 0xdf, 0x5b, 0x94, 0x1c,
-	0xd1, 0x55, 0xe0, 0x89, 0x74, 0x81, 0x22, 0x3f, 0x59, 0x32, 0x30, 0xc1, 0xae, 0xdd, 0x15, 0x55,
-	0x7d, 0x65, 0x7e, 0x84, 0x0f, 0xae, 0x4f, 0xc3, 0x54, 0xb2, 0x44, 0x92, 0xed, 0xd0, 0x64, 0x10,
-	0xaf, 0x45, 0x52, 0x5e, 0xd5, 0xf2, 0x29, 0xaf, 0x6a, 0x4f, 0xc1, 0xa4, 0xc0, 0x4a, 0xbe, 0x7f,
-	0x09, 0xa4, 0x7e, 0x4f, 0x69, 0x63, 0x3d, 0x4f, 0x69, 0xcb, 0x30, 0xce, 0x30, 0x14, 0x93, 0x42,
-	0x88, 0x20, 0x59, 0x88, 0x99, 0x55, 0xba, 0xc2, 0xa4, 0x4e, 0x7f, 0x9b, 0x81, 0xd2, 0x36, 0xa6,
-	0x0c, 0x28, 0x62, 0x26, 0xae, 0xce, 0xc1, 0x7f, 0x45, 0x5a, 0x92, 0x73, 0x70, 0xfe, 0xaf, 0x40,
-	0x35, 0xb2, 0xa2, 0x8a, 0x91, 0xbe, 0x0b, 0xd3, 0xd1, 0xb2, 0x78, 0x8e, 0xce, 0xf2, 0x20, 0x3e,
-	0xdf, 0x67, 0x3c, 0x10, 0xc9, 0xc0, 0xe2, 0x76, 0x92, 0xc6, 0x3f, 0xf5, 0x0a, 0x8c, 0xb7, 0x1c,
-	0x91, 0x84, 0xa3, 0x88, 0x2b, 0xb6, 0x1c, 0x91, 0x55, 0x6d, 0xbe, 0x8e, 0xee, 0x87, 0xeb, 0x79,
-	0xb9, 0x8e, 0xee, 0xcb, 0xf5, 0xe4, 0x1f, 0x0c, 0x46, 0x87, 0xf8, 0x83, 0x41, 0x6a, 0x31, 0xf3,
-	0x40, 0x83, 0x73, 0x29, 0xea, 0x92, 0xa1, 0xf7, 0xad, 0xe4, 0x3f, 0x0c, 0xbe, 0x3e, 0x4c, 0x4b,
-	0xb0, 0xd1, 0x6c, 0x7a, 0x16, 0xa2, 0xd8, 0x0e, 0xaf, 0x87, 0x53, 0xfe, 0xdb, 0xe0, 0x27, 0x1a,
-	0x54, 0xae, 0xe3, 0x26, 0xa6, 0xb8, 0x37, 0xc4, 0xbe, 0xdc, 0xbf, 0x94, 0x5d, 0x85, 0xe5, 0xbe,
-	0x82, 0x48, 0x0d, 0x95, 0xa1, 0x70, 0x0f, 0x05, 0xae, 0xe3, 0x36, 0xd4, 0x94, 0x36, 0xfc, 0xae,
-	0xfe, 0x46, 0x83, 0xd5, 0x7d, 0x1a, 0x60, 0xd4, 0x52, 0xf4, 0x03, 0x1e, 0x61, 0x7c, 0x38, 0x4b,
-	0x8e, 0x5c, 0xcb, 0x8c, 0xdf, 0xd0, 0xe2, 0x5f, 0x5f, 0xda, 0x80, 0x7f, 0x7d, 0x75, 0x5d, 0xce,
-	0xfb, 0x47, 0xae, 0x15, 0xdb, 0x83, 0xff, 0xbf, 0xeb, 0xe6, 0x88, 0x31, 0x47, 0x52, 0xe0, 0x9b,
-	0x13, 0x00, 0xd1, 0x50, 0xb3, 0xfa, 0xa1, 0x06, 0x17, 0x87, 0x10, 0x56, 0x1e, 0xfb, 0x9d, 0x9e,
-	0xb7, 0xaa, 0x6b, 0xc3, 0xc8, 0x37, 0x80, 0xf5, 0xcd, 0x91, 0xe8, 0xd5, 0x2a, 0x29, 0xda, 0x66,
-	0xf3, 0xe3, 0xcf, 0x2a, 0x23, 0x9f, 0x7c, 0x56, 0x19, 0xf9, 0xe2, 0xb3, 0x8a, 0xf6, 0x83, 0xe3,
-	0x8a, 0xf6, 0xeb, 0xe3, 0x8a, 0xf6, 0xe7, 0xe3, 0x8a, 0xf6, 0xf1, 0x71, 0x45, 0xfb, 0xe7, 0x71,
-	0x45, 0xfb, 0xd7, 0x71, 0x65, 0xe4, 0x8b, 0xe3, 0x8a, 0xf6, 0xe0, 0xf3, 0xca, 0xc8, 0xc7, 0x9f,
-	0x57, 0x46, 0x3e, 0xf9, 0xbc, 0x32, 0xf2, 0xf6, 0x37, 0x1a, 0x5e, 0x24, 0x92, 0xe3, 0x0d, 0xf8,
-	0x9b, 0xf3, 0xcb, 0xf1, 0xef, 0xfa, 0x28, 0x6f, 0x2b, 0x9e, 0xff, 0x4f, 0x00, 0x00, 0x00, 0xff,
-	0xff, 0x8f, 0x40, 0x4f, 0x4b, 0x21, 0x2d, 0x00, 0x00,
+	// 3337 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x1b, 0x4b, 0x6c, 0x1b, 0xc7,
+	0x55, 0xcb, 0x8f, 0x44, 0x3e, 0xfd, 0xd7, 0xb2, 0x45, 0x53, 0x11, 0xa5, 0x30, 0x8e, 0x23, 0x3b,
+	0x09, 0x55, 0x3b, 0x6d, 0xed, 0x7c, 0x0c, 0xc3, 0x92, 0x1d, 0x49, 0xa9, 0x95, 0xcf, 0xca, 0xb1,
+	0xdb, 0x00, 0xc1, 0x66, 0xb9, 0x3b, 0xa2, 0x16, 0x26, 0x77, 0x99, 0x9d, 0x21, 0x6d, 0x05, 0xe8,
+	0x07, 0x4d, 0x8b, 0xa2, 0x87, 0xa2, 0x06, 0x8a, 0x02, 0x41, 0x4e, 0x3d, 0x16, 0x45, 0x8b, 0xde,
+	0x7a, 0x2c, 0x90, 0x5b, 0x8f, 0x41, 0x7b, 0x09, 0x52, 0xa0, 0x69, 0x94, 0x4b, 0x8f, 0x39, 0xf7,
+	0x54, 0xcc, 0x6f, 0x7f, 0x1c, 0x52, 0x54, 0x2d, 0x27, 0x40, 0x6e, 0xda, 0x37, 0xef, 0xbd, 0x79,
+	0xf3, 0x7e, 0xf3, 0xde, 0x1b, 0x0a, 0x5e, 0x20, 0xa8, 0xd5, 0xf6, 0x03, 0xab, 0xb9, 0x8a, 0x51,
+	0xd0, 0x45, 0xc1, 0xaa, 0xd5, 0x76, 0x57, 0x2d, 0xa7, 0xe5, 0x7a, 0xf4, 0xdb, 0xb5, 0xd1, 0x6a,
+	0xf7, 0xc2, 0x6a, 0x80, 0xde, 0xed, 0x20, 0x4c, 0xcc, 0x00, 0xe1, 0xb6, 0xef, 0x61, 0x54, 0x6b,
+	0x07, 0x3e, 0xf1, 0xf5, 0x27, 0x24, 0x6d, 0x8d, 0xd3, 0xd6, 0xac, 0xb6, 0x5b, 0x8b, 0xd3, 0xd6,
+	0xba, 0x17, 0xca, 0x4b, 0x0d, 0xdf, 0x6f, 0x34, 0xd1, 0x2a, 0x23, 0xa9, 0x77, 0x76, 0x57, 0x89,
+	0xdb, 0x42, 0x98, 0x58, 0xad, 0x36, 0xe7, 0x52, 0xae, 0xa4, 0x11, 0x9c, 0x4e, 0x60, 0x11, 0xd7,
+	0xf7, 0xc4, 0xfa, 0xe3, 0x0e, 0x6a, 0x23, 0xcf, 0x41, 0x9e, 0xed, 0x22, 0xbc, 0xda, 0xf0, 0x1b,
+	0x3e, 0x83, 0xb3, 0xbf, 0x04, 0x4a, 0x35, 0x3c, 0x04, 0x95, 0x1e, 0x79, 0x9d, 0x16, 0xa6, 0x62,
+	0xdb, 0x7e, 0xab, 0x15, 0xb2, 0x39, 0xab, 0xc6, 0x21, 0x16, 0xbe, 0x6b, 0xbe, 0xdb, 0x41, 0x1d,
+	0x71, 0xa8, 0xf2, 0x99, 0x04, 0x1e, 0x67, 0x41, 0x11, 0x5b, 0x08, 0x63, 0xab, 0x21, 0xb1, 0x9e,
+	0x4c, 0x60, 0x75, 0x51, 0x80, 0x5d, 0x15, 0x5a, 0x72, 0xd3, 0x7b, 0x7e, 0x70, 0x77, 0xb7, 0xe9,
+	0xdf, 0xeb, 0xc5, 0x7b, 0x2a, 0x81, 0xe7, 0x59, 0x2d, 0x84, 0xdb, 0x16, 0xd7, 0x7d, 0x12, 0xf1,
+	0x5c, 0x02, 0x31, 0x40, 0xed, 0xa6, 0x6b, 0x33, 0x65, 0xf5, 0xa2, 0x3e, 0xa3, 0xb2, 0xac, 0xdd,
+	0xec, 0x60, 0x82, 0x82, 0x41, 0x8c, 0x63, 0xd8, 0x6a, 0x4d, 0x9e, 0x1f, 0x8c, 0xca, 0x77, 0xe8,
+	0x39, 0x98, 0x0a, 0x97, 0x2a, 0x7f, 0x90, 0xb4, 0x7b, 0x2e, 0x26, 0x7e, 0xb0, 0xdf, 0x2b, 0x6d,
+	0x4d, 0x85, 0x3d, 0x40, 0x6d, 0xdf, 0x52, 0xe1, 0x0f, 0xd4, 0xde, 0xf3, 0x2a, 0x8a, 0x36, 0xb5,
+	0x33, 0x26, 0xc8, 0xe3, 0x7b, 0x88, 0xa3, 0x9a, 0x2d, 0x44, 0x2c, 0xc7, 0x22, 0x96, 0x20, 0x7d,
+	0x6e, 0x08, 0x52, 0x74, 0x1f, 0xd9, 0x1d, 0xba, 0x33, 0x16, 0x44, 0x57, 0x87, 0x20, 0x92, 0xfe,
+	0x63, 0xb6, 0x3a, 0xc4, 0xaa, 0x37, 0x91, 0x89, 0x89, 0x45, 0x06, 0xaa, 0x24, 0xc5, 0x80, 0xea,
+	0x5b, 0x6c, 0x58, 0x7d, 0x5f, 0x83, 0xb2, 0x81, 0xea, 0x1d, 0xb7, 0xe9, 0x6c, 0x73, 0x76, 0x3b,
+	0x94, 0x9b, 0xc1, 0x43, 0x5d, 0x7f, 0x0c, 0x8a, 0xa1, 0x3e, 0x4b, 0xda, 0xb2, 0xb6, 0x52, 0x34,
+	0x22, 0x80, 0xbe, 0x01, 0xc5, 0xf0, 0x04, 0xa5, 0xcc, 0xb2, 0xb6, 0x32, 0x7e, 0xf1, 0x5c, 0x28,
+	0x00, 0x4b, 0x03, 0xc2, 0x63, 0xba, 0x17, 0x6a, 0x77, 0x84, 0xd4, 0x37, 0x24, 0x81, 0x11, 0xd1,
+	0x56, 0x17, 0x61, 0x41, 0x29, 0x04, 0xcf, 0x33, 0xd5, 0x8f, 0x32, 0x50, 0xd9, 0xa2, 0x5c, 0x49,
+	0x2f, 0x97, 0xaf, 0x54, 0x50, 0x7d, 0x0b, 0xa6, 0x85, 0x37, 0x9a, 0x75, 0x8b, 0xd8, 0x7b, 0x08,
+	0x97, 0xb2, 0xcb, 0xd9, 0x95, 0xf1, 0x8b, 0xcb, 0xfd, 0xd8, 0x5d, 0xb7, 0x88, 0xb5, 0xd6, 0xf4,
+	0xeb, 0xc6, 0x94, 0x20, 0x5c, 0xe3, 0x74, 0xfa, 0x1d, 0x98, 0x16, 0x09, 0xc3, 0x14, 0x2b, 0xa5,
+	0x1c, 0x93, 0xac, 0x56, 0x53, 0x25, 0x54, 0x81, 0x43, 0x59, 0xde, 0xe6, 0x64, 0x9b, 0x1c, 0x62,
+	0x4c, 0x75, 0x13, 0xdf, 0xfa, 0x1c, 0xe4, 0x89, 0x7f, 0x17, 0x79, 0xa5, 0xfc, 0xb2, 0xb6, 0x32,
+	0x61, 0xf0, 0x8f, 0xea, 0x25, 0x58, 0xea, 0xab, 0x42, 0xae, 0xe6, 0x88, 0x50, 0x8b, 0x13, 0xfe,
+	0x4c, 0x83, 0x85, 0xeb, 0x08, 0xdb, 0x81, 0x5b, 0x47, 0x5f, 0xa3, 0x8b, 0xfc, 0x25, 0x03, 0x8f,
+	0xa9, 0xc5, 0x10, 0xd2, 0x9f, 0x86, 0x02, 0xde, 0xb3, 0x02, 0xc7, 0x74, 0x1d, 0x21, 0xc6, 0x18,
+	0xfb, 0xde, 0x72, 0xf4, 0xc7, 0x61, 0x42, 0x5a, 0xcd, 0x72, 0x9c, 0x80, 0xc9, 0x51, 0x34, 0xc6,
+	0x05, 0xec, 0x9a, 0xe3, 0x04, 0xfa, 0x1e, 0x9c, 0xb0, 0x2d, 0x7b, 0x0f, 0x25, 0x83, 0xaa, 0x94,
+	0x65, 0x12, 0x5f, 0x56, 0x5a, 0x24, 0x16, 0x55, 0x71, 0xe9, 0x13, 0xc2, 0xcd, 0x32, 0xa6, 0x71,
+	0x90, 0xee, 0xc1, 0x29, 0x9a, 0x25, 0xea, 0x16, 0x4e, 0x6f, 0x96, 0x7b, 0xc8, 0xcd, 0xe6, 0x24,
+	0xdf, 0x38, 0xb4, 0xfa, 0x77, 0x0d, 0xca, 0x52, 0x71, 0xc2, 0x45, 0x36, 0x7d, 0x4c, 0xa4, 0xf9,
+	0xa8, 0x6e, 0x7c, 0x4c, 0x98, 0x62, 0x10, 0xc6, 0x42, 0x75, 0xe3, 0x14, 0x76, 0x8d, 0x83, 0x12,
+	0x9a, 0xa5, 0xaa, 0xcb, 0x47, 0x9a, 0x4d, 0x18, 0x3f, 0x9b, 0x36, 0xfe, 0xf7, 0x41, 0x0f, 0x93,
+	0x55, 0xe4, 0x05, 0xb9, 0xa3, 0x7a, 0xc1, 0xec, 0xbd, 0x34, 0xa8, 0xfa, 0xaf, 0x98, 0x53, 0x26,
+	0x0e, 0x25, 0x9c, 0xe1, 0x09, 0x98, 0x64, 0x22, 0x62, 0xd3, 0xeb, 0xb4, 0xea, 0x28, 0x60, 0xc7,
+	0xca, 0x1b, 0x13, 0x1c, 0xf8, 0x2a, 0x83, 0xe9, 0x0b, 0x50, 0x94, 0xe7, 0xc2, 0xa5, 0xcc, 0x72,
+	0x76, 0x25, 0x6f, 0x14, 0xc4, 0xc1, 0xb0, 0xfe, 0x36, 0x4c, 0x87, 0x07, 0x31, 0x99, 0x15, 0x85,
+	0x33, 0x7c, 0x5b, 0x69, 0x9f, 0x10, 0x97, 0x1e, 0xe1, 0x55, 0xf9, 0xb1, 0x4e, 0xe9, 0xb6, 0xbc,
+	0x5d, 0xdf, 0x98, 0xf2, 0x12, 0x30, 0xbd, 0x04, 0x63, 0x52, 0xe3, 0x79, 0xee, 0xac, 0xe2, 0xf3,
+	0x95, 0x5c, 0x21, 0x37, 0x93, 0xaf, 0xd6, 0x60, 0x76, 0xbd, 0xe9, 0x63, 0xb4, 0x43, 0xe5, 0x91,
+	0xb6, 0x4a, 0xbb, 0x78, 0x64, 0x88, 0xea, 0x1c, 0xe8, 0x71, 0x7c, 0x91, 0x38, 0x9f, 0x81, 0xe9,
+	0x0d, 0x44, 0x86, 0xe5, 0xf1, 0x0e, 0xcc, 0x44, 0xd8, 0x42, 0x91, 0x37, 0x01, 0x04, 0xba, 0xb7,
+	0xeb, 0x33, 0x82, 0xf1, 0x8b, 0xcf, 0x0e, 0xe3, 0xa1, 0x8c, 0x0d, 0x3b, 0x3a, 0x57, 0x32, 0xfd,
+	0xb3, 0xfa, 0xab, 0x0c, 0xcc, 0xdf, 0x74, 0x31, 0x11, 0x26, 0xbb, 0x45, 0x2f, 0xa2, 0xc3, 0x05,
+	0xd3, 0x5f, 0x86, 0x82, 0x6d, 0x11, 0xd4, 0xa0, 0x39, 0x92, 0x3a, 0xe0, 0xd4, 0xc5, 0xf3, 0x4a,
+	0x11, 0x58, 0x45, 0x41, 0x37, 0xa7, 0x8c, 0xd7, 0x05, 0x85, 0x11, 0xd2, 0xea, 0x9b, 0x00, 0xac,
+	0xd0, 0x0b, 0x2c, 0xaf, 0x21, 0xcd, 0x79, 0xee, 0xb0, 0x6c, 0x4b, 0x79, 0x19, 0x94, 0xc0, 0x28,
+	0x12, 0xf9, 0xa7, 0xbe, 0x08, 0xc0, 0xf2, 0xbf, 0x89, 0xdd, 0xf7, 0x78, 0xe0, 0xe6, 0x8d, 0x22,
+	0x83, 0xec, 0xb8, 0xef, 0x21, 0xfd, 0x2c, 0x4c, 0x7b, 0xe8, 0x3e, 0x31, 0xdb, 0x56, 0x03, 0x99,
+	0xf1, 0x64, 0x3c, 0x49, 0xc1, 0xaf, 0x5b, 0x0d, 0x74, 0x8b, 0xe5, 0xd6, 0xf7, 0x35, 0x28, 0xf5,
+	0xea, 0x43, 0xa8, 0xfe, 0x2a, 0xe4, 0xd9, 0x4d, 0x5d, 0xd2, 0xd8, 0x0d, 0xa3, 0x16, 0x34, 0x55,
+	0x67, 0x73, 0x69, 0x39, 0x9d, 0x4a, 0x8a, 0x8c, 0x4a, 0x8a, 0x0f, 0x32, 0x90, 0xa3, 0x74, 0x34,
+	0x17, 0x44, 0x3e, 0x1f, 0xa6, 0xd1, 0xf1, 0x10, 0xb6, 0xe5, 0xe8, 0x4b, 0x30, 0x1e, 0x86, 0xb4,
+	0x48, 0x07, 0x45, 0x03, 0x24, 0x68, 0xcb, 0xd1, 0x4f, 0xc2, 0x68, 0xd0, 0xf1, 0xe8, 0x1a, 0x4f,
+	0x07, 0xf9, 0xa0, 0xe3, 0x6d, 0x39, 0xfa, 0x3c, 0x8c, 0x31, 0xd5, 0xbb, 0x0e, 0xd3, 0x56, 0xd6,
+	0x18, 0xa5, 0x9f, 0x5b, 0x8e, 0xbe, 0x0e, 0x4c, 0xad, 0x26, 0xd9, 0x6f, 0x23, 0xa6, 0xa4, 0xa9,
+	0x8b, 0x67, 0x0f, 0x37, 0xee, 0xad, 0xfd, 0x36, 0x32, 0x0a, 0x44, 0xfc, 0xa5, 0x5f, 0x81, 0xe2,
+	0xae, 0x1b, 0x20, 0x93, 0x36, 0x15, 0xa5, 0x51, 0x66, 0xd7, 0x72, 0x8d, 0x37, 0x14, 0x35, 0xd9,
+	0x50, 0xd4, 0x6e, 0xc9, 0x8e, 0x63, 0x2d, 0xf7, 0xe0, 0xb3, 0x25, 0xcd, 0x28, 0x50, 0x12, 0x0a,
+	0xa4, 0xc1, 0x28, 0xee, 0xd0, 0xd2, 0x18, 0x13, 0x4e, 0x7e, 0x56, 0x3f, 0xd5, 0x60, 0xd6, 0x40,
+	0x2d, 0xbf, 0x8b, 0x98, 0x62, 0xbf, 0x3a, 0x57, 0x8d, 0xe9, 0x2b, 0x9b, 0xd0, 0xd7, 0x16, 0x4c,
+	0x77, 0x5d, 0xec, 0xd6, 0xdd, 0xa6, 0x4b, 0xf6, 0xf9, 0x81, 0x73, 0x43, 0x1e, 0x78, 0x2a, 0x22,
+	0xa4, 0x4b, 0x34, 0x67, 0xc4, 0xcf, 0x26, 0x72, 0xc6, 0x6f, 0xb2, 0xf0, 0xd4, 0x06, 0x52, 0x94,
+	0x09, 0xd6, 0x3d, 0xe1, 0xa6, 0xb7, 0x2f, 0xc6, 0x2e, 0x8f, 0x84, 0xc3, 0x14, 0x7b, 0x1d, 0xe6,
+	0xd8, 0x4a, 0xaf, 0x33, 0x30, 0x85, 0x89, 0x15, 0x10, 0x13, 0x75, 0x91, 0x47, 0x22, 0xc5, 0x4c,
+	0x30, 0xe8, 0x0d, 0x0a, 0xdc, 0x72, 0xf4, 0x1a, 0x9c, 0x88, 0x63, 0x49, 0xb3, 0x72, 0x9f, 0x9b,
+	0x8d, 0x50, 0x45, 0x0d, 0xa5, 0x2f, 0xc3, 0x04, 0xf2, 0x9c, 0x88, 0x67, 0x9e, 0x21, 0x02, 0xf2,
+	0x1c, 0xc9, 0xf1, 0x3c, 0xcc, 0x46, 0x18, 0x92, 0xdf, 0x28, 0x43, 0x9b, 0x96, 0x68, 0x92, 0xdb,
+	0x79, 0x98, 0x6d, 0x59, 0xf7, 0xdd, 0x56, 0xa7, 0xc5, 0x83, 0x8e, 0x65, 0x87, 0x31, 0xe6, 0x21,
+	0xd3, 0x62, 0x81, 0x86, 0x5d, 0xbf, 0x1c, 0x51, 0x50, 0x44, 0xe7, 0x2b, 0xb9, 0x82, 0x36, 0x93,
+	0xa9, 0xfe, 0x2e, 0x03, 0x2b, 0x87, 0x5b, 0x45, 0x64, 0x0e, 0x05, 0x6b, 0x4d, 0xc1, 0x5a, 0x55,
+	0xcd, 0x66, 0x8e, 0xaf, 0x9a, 0xcd, 0x1e, 0x4b, 0x35, 0xbb, 0x02, 0x33, 0x52, 0x46, 0xcf, 0x77,
+	0x10, 0xbb, 0xab, 0x73, 0xcb, 0xd9, 0x95, 0x6c, 0x28, 0xc2, 0xab, 0xbe, 0x83, 0xb6, 0x1c, 0x5c,
+	0x7d, 0xa0, 0xc1, 0xe2, 0x06, 0x22, 0x46, 0xd4, 0xcf, 0x6d, 0xf3, 0x5e, 0x2e, 0xbc, 0x62, 0x6e,
+	0xc2, 0x28, 0xd3, 0x86, 0x4c, 0xa9, 0xea, 0xab, 0x3c, 0xd6, 0x10, 0x52, 0xf9, 0x62, 0xfc, 0x98,
+	0xd6, 0x0c, 0xc1, 0x83, 0x3a, 0xbf, 0x6c, 0xfd, 0xa8, 0xc3, 0xcb, 0xaa, 0x52, 0xc0, 0x68, 0x0d,
+	0x50, 0xfd, 0x30, 0x03, 0x95, 0x7e, 0x22, 0x09, 0x5b, 0xfd, 0x10, 0xa6, 0x78, 0x2e, 0x11, 0x8d,
+	0xa7, 0x94, 0xed, 0xf6, 0x50, 0xe9, 0x7e, 0x30, 0x73, 0x7e, 0x09, 0x4b, 0xe8, 0x0d, 0x8f, 0x04,
+	0xfb, 0x06, 0xaf, 0x8b, 0x24, 0xac, 0xbc, 0x0f, 0x7a, 0x2f, 0x92, 0x3e, 0x03, 0xd9, 0xbb, 0x68,
+	0x5f, 0xe4, 0x36, 0xfa, 0xa7, 0xbe, 0x0d, 0xf9, 0xae, 0xd5, 0xec, 0x20, 0x11, 0xc2, 0x97, 0x8e,
+	0xa8, 0xb9, 0x50, 0x32, 0xce, 0xe5, 0x85, 0xcc, 0x65, 0xad, 0xfa, 0x91, 0x06, 0x67, 0x37, 0x10,
+	0x09, 0x8b, 0xa5, 0x01, 0x86, 0x7b, 0x1e, 0x4e, 0x37, 0x2d, 0x36, 0x79, 0x22, 0x81, 0x8b, 0xba,
+	0x28, 0xd4, 0x96, 0xcc, 0xc0, 0x59, 0xe3, 0x14, 0x45, 0x30, 0xe4, 0xba, 0x60, 0xb0, 0xe5, 0x84,
+	0xa4, 0xed, 0xc0, 0xb7, 0x11, 0xc6, 0x49, 0xd2, 0x4c, 0x44, 0xfa, 0xba, 0x5c, 0x8f, 0x48, 0xd3,
+	0x06, 0xce, 0xf6, 0x1a, 0xf8, 0x47, 0x2c, 0x57, 0x0e, 0x3e, 0x82, 0x30, 0xf4, 0x0e, 0x14, 0x62,
+	0x26, 0x7e, 0x28, 0x25, 0x86, 0x8c, 0xaa, 0xef, 0xc1, 0xf2, 0x06, 0x22, 0xd7, 0x6f, 0xbe, 0x31,
+	0x40, 0x79, 0xb7, 0x45, 0xd5, 0x43, 0x2b, 0x38, 0xe9, 0x5d, 0x47, 0xdd, 0x9a, 0xde, 0x10, 0xbc,
+	0x98, 0x23, 0xe2, 0x2f, 0x5c, 0xfd, 0xb9, 0x06, 0x8f, 0x0f, 0xd8, 0x5c, 0x1c, 0xfb, 0x1d, 0x98,
+	0x8d, 0xb1, 0x35, 0xe3, 0x15, 0xcd, 0x73, 0xff, 0x87, 0x10, 0xc6, 0x4c, 0x90, 0x04, 0xe0, 0xea,
+	0x3f, 0x34, 0x98, 0x33, 0x90, 0xd5, 0x6e, 0x37, 0xf7, 0x59, 0x32, 0xc6, 0xfd, 0x6e, 0xa7, 0x5c,
+	0xef, 0xed, 0xa4, 0xee, 0x50, 0x32, 0x0f, 0xdf, 0xa1, 0xe8, 0x97, 0x61, 0x94, 0x5d, 0x19, 0x58,
+	0xe4, 0xc1, 0xc3, 0x53, 0xaa, 0xc0, 0x17, 0x09, 0x7f, 0x1e, 0x4e, 0xa6, 0x0e, 0x25, 0xee, 0xe7,
+	0xff, 0x66, 0xa0, 0x7c, 0xcd, 0x71, 0x76, 0x90, 0x15, 0xd8, 0x7b, 0xd7, 0x08, 0x09, 0xdc, 0x7a,
+	0x87, 0x44, 0xd6, 0xfe, 0xa9, 0x06, 0xb3, 0x98, 0xad, 0x99, 0x56, 0xb8, 0x28, 0x14, 0xfe, 0xe6,
+	0x50, 0x39, 0xa5, 0x3f, 0xf3, 0x5a, 0x1a, 0xce, 0x53, 0xca, 0x0c, 0x4e, 0x81, 0x69, 0x79, 0xec,
+	0x7a, 0x0e, 0xba, 0x1f, 0x4f, 0x8c, 0x45, 0x06, 0xa1, 0xa1, 0xa2, 0x3f, 0x03, 0x3a, 0xbe, 0xeb,
+	0xb6, 0x4d, 0x6c, 0xef, 0xa1, 0x96, 0x65, 0x76, 0xda, 0x8e, 0xec, 0xb5, 0x0b, 0xc6, 0x0c, 0x5d,
+	0xd9, 0x61, 0x0b, 0x6f, 0x32, 0x78, 0xb2, 0xc7, 0xcc, 0xa5, 0x7a, 0xcc, 0x72, 0x13, 0x4e, 0x2a,
+	0xa5, 0x8a, 0xe7, 0xb0, 0x22, 0xcf, 0x61, 0x57, 0xe2, 0x39, 0x6c, 0xea, 0xe2, 0x53, 0x49, 0x8b,
+	0x84, 0x15, 0xd9, 0x16, 0x95, 0x13, 0x39, 0xb7, 0x29, 0x2a, 0xab, 0x33, 0x63, 0x39, 0x6b, 0x11,
+	0x16, 0x94, 0xea, 0x11, 0xb6, 0xf9, 0xa5, 0x06, 0x8b, 0xbc, 0xa4, 0xea, 0x67, 0x9e, 0xa7, 0xfb,
+	0x59, 0xa7, 0x78, 0x74, 0x35, 0x0e, 0x6c, 0xbe, 0xab, 0xcb, 0x50, 0xe9, 0x27, 0x8a, 0x90, 0xf6,
+	0x07, 0x50, 0xa6, 0xfd, 0x5e, 0x1f, 0x49, 0x93, 0x9b, 0x6b, 0x03, 0x37, 0xcf, 0xa4, 0x37, 0xff,
+	0x70, 0x14, 0x16, 0x94, 0xbc, 0x45, 0x56, 0x78, 0x5f, 0x83, 0x59, 0xbb, 0x83, 0x89, 0xdf, 0xea,
+	0xf5, 0xd2, 0xa1, 0x6f, 0xbe, 0x7e, 0xdc, 0x6b, 0xeb, 0x8c, 0x73, 0x8f, 0x9b, 0xda, 0x29, 0x30,
+	0x93, 0x02, 0xef, 0x63, 0x82, 0x12, 0x52, 0x64, 0x8e, 0x49, 0x8a, 0x1d, 0xc6, 0xb9, 0x37, 0x58,
+	0x52, 0x60, 0xbd, 0x01, 0x63, 0x2d, 0xab, 0xdd, 0x76, 0xbd, 0x86, 0x98, 0x25, 0x6e, 0x3f, 0xf4,
+	0xd6, 0xdb, 0x9c, 0x1f, 0xdf, 0x51, 0x72, 0xd7, 0x3d, 0x58, 0xb0, 0x1c, 0xc7, 0xec, 0x4d, 0x78,
+	0xbc, 0xb9, 0xe7, 0x6d, 0xc4, 0x6a, 0x32, 0x2a, 0x24, 0xb2, 0x32, 0xef, 0xb1, 0x1b, 0xa1, 0x64,
+	0x39, 0x8e, 0x72, 0x85, 0x86, 0xa6, 0xd2, 0x12, 0x8f, 0x24, 0x34, 0x59, 0x22, 0x50, 0x69, 0xfc,
+	0xd1, 0xec, 0xf6, 0x02, 0x4c, 0xc4, 0x95, 0xac, 0xd8, 0x64, 0x2e, 0xbe, 0x49, 0x31, 0x9e, 0x44,
+	0x5e, 0x84, 0x53, 0x72, 0x76, 0xb5, 0xce, 0x6b, 0x89, 0xd8, 0x8d, 0x95, 0xa8, 0x38, 0xb4, 0xde,
+	0x8a, 0xe3, 0xaf, 0x63, 0x30, 0xdf, 0x43, 0x2d, 0xa2, 0xea, 0xc7, 0x30, 0x8b, 0x3b, 0xed, 0xb6,
+	0x1f, 0x10, 0xe4, 0x98, 0x76, 0xd3, 0x65, 0xd7, 0x0f, 0x0f, 0x2a, 0x63, 0x28, 0x9f, 0xea, 0xc3,
+	0xb8, 0xb6, 0x23, 0xb9, 0xae, 0x73, 0xa6, 0xd2, 0x95, 0x53, 0x60, 0xfd, 0x49, 0x98, 0xe2, 0xdc,
+	0xc3, 0x46, 0x89, 0x1f, 0x7e, 0x92, 0x43, 0x65, 0x9b, 0x74, 0x07, 0xa6, 0x5b, 0xa8, 0x55, 0x47,
+	0x01, 0xde, 0x73, 0xdb, 0xdc, 0xf9, 0x06, 0x35, 0x0b, 0xf2, 0x2d, 0xa9, 0x7b, 0xa1, 0xb6, 0x1d,
+	0x92, 0xf1, 0xa9, 0x5a, 0x2b, 0xf1, 0x4d, 0x73, 0x96, 0xd4, 0x5f, 0x78, 0xdf, 0x17, 0x05, 0x44,
+	0x51, 0xd0, 0xe5, 0x7b, 0xd4, 0x4b, 0xfb, 0x47, 0xd9, 0x6e, 0xf0, 0xb2, 0xdc, 0xf6, 0x3b, 0x1e,
+	0x61, 0xfd, 0x5e, 0xde, 0x98, 0x15, 0x4b, 0xac, 0x62, 0x5e, 0xa7, 0x0b, 0x34, 0x9f, 0xc7, 0x06,
+	0x5f, 0x26, 0x5d, 0xe6, 0x1d, 0x5f, 0xd1, 0x98, 0x89, 0x2d, 0xec, 0x50, 0xb8, 0x7e, 0x0e, 0x66,
+	0x62, 0xbd, 0x3b, 0xc7, 0x2d, 0x30, 0xdc, 0x58, 0x4f, 0xcf, 0x51, 0x37, 0x60, 0x42, 0xf6, 0x53,
+	0x4c, 0x3f, 0x45, 0xa6, 0x9f, 0x33, 0x49, 0x4f, 0x15, 0x18, 0xb1, 0x2e, 0x8a, 0x69, 0x65, 0xbc,
+	0x1b, 0x7d, 0xe8, 0x2f, 0x41, 0x79, 0xd7, 0x72, 0x9b, 0x7e, 0xcc, 0x28, 0xa6, 0xeb, 0xd9, 0x01,
+	0x6a, 0x21, 0x8f, 0x94, 0x80, 0x15, 0xc0, 0x25, 0x89, 0x11, 0x72, 0x11, 0xeb, 0xfa, 0x65, 0x28,
+	0xb9, 0x9e, 0x4b, 0x5c, 0xab, 0x69, 0xa6, 0xb9, 0x94, 0xc6, 0x79, 0xf1, 0x2c, 0xd6, 0x5f, 0x4e,
+	0xb2, 0xd0, 0xaf, 0xc0, 0x82, 0x8b, 0xcd, 0x46, 0xd3, 0xaf, 0x5b, 0x4d, 0x33, 0x2a, 0xc3, 0x90,
+	0x67, 0xd5, 0x9b, 0xc8, 0x29, 0x4d, 0xb0, 0xcb, 0xbe, 0xe4, 0xe2, 0x0d, 0x86, 0x11, 0x56, 0xd0,
+	0x37, 0xf8, 0xba, 0xfe, 0x16, 0xe4, 0x88, 0xd5, 0xc0, 0xa5, 0x49, 0xe6, 0xbd, 0x2f, 0x3f, 0x94,
+	0xf7, 0xde, 0xb2, 0x1a, 0xc2, 0x63, 0x19, 0xcf, 0xf2, 0x3a, 0x9c, 0x54, 0x3a, 0xf4, 0x51, 0x82,
+	0xb8, 0x7c, 0x09, 0x8a, 0x21, 0xdf, 0x23, 0x45, 0xff, 0x5b, 0x70, 0xe2, 0xa6, 0x8b, 0x89, 0x10,
+	0x32, 0xbc, 0x6e, 0x17, 0xa0, 0x18, 0x8d, 0x0c, 0x78, 0xe3, 0x55, 0x68, 0x0f, 0x98, 0x15, 0x28,
+	0x27, 0x79, 0xbf, 0xd6, 0x60, 0x2e, 0xc9, 0x5c, 0x64, 0x86, 0xd7, 0xa0, 0x20, 0xbc, 0x7c, 0x70,
+	0xf1, 0x9d, 0x1a, 0xe2, 0x0a, 0x3e, 0xdb, 0xe2, 0x65, 0xd3, 0x08, 0x99, 0x0c, 0x2d, 0xd1, 0x6f,
+	0x35, 0x58, 0xba, 0xe6, 0x38, 0xaf, 0x05, 0xbc, 0x98, 0xa3, 0x15, 0x09, 0x49, 0x67, 0xbd, 0x73,
+	0x30, 0xb3, 0x1b, 0xf8, 0x1e, 0x41, 0x9e, 0x93, 0x7a, 0x86, 0x98, 0x96, 0x70, 0xf9, 0x14, 0xb1,
+	0x01, 0xcb, 0xdc, 0x83, 0xcc, 0x80, 0x71, 0x32, 0x65, 0x3c, 0xdb, 0xbe, 0xe7, 0x21, 0x3b, 0xac,
+	0xde, 0x0b, 0xc6, 0x22, 0xc7, 0x4b, 0x6c, 0xb8, 0x1e, 0x22, 0x55, 0xab, 0xb0, 0xdc, 0x5f, 0x2c,
+	0x51, 0x1f, 0x5d, 0x85, 0x32, 0xaf, 0xa0, 0x94, 0x52, 0x0f, 0x91, 0xab, 0xd9, 0xb3, 0xa6, 0x82,
+	0x41, 0x34, 0x69, 0x3b, 0x1d, 0xb3, 0x96, 0xc8, 0x6d, 0x92, 0xff, 0x0e, 0x9c, 0x64, 0x8d, 0xeb,
+	0x1e, 0xb2, 0x02, 0x52, 0x47, 0x16, 0x31, 0xef, 0xb9, 0x64, 0xcf, 0xf5, 0x44, 0xf3, 0x78, 0xba,
+	0x67, 0xdc, 0x77, 0x5d, 0xfc, 0x60, 0x62, 0x2d, 0xf7, 0xc1, 0x67, 0x4b, 0x9a, 0x71, 0x82, 0x52,
+	0x6f, 0x4a, 0xe2, 0x3b, 0x8c, 0x56, 0x5f, 0x82, 0xf1, 0xa0, 0x6d, 0x87, 0x5a, 0x16, 0xe3, 0xdb,
+	0xa0, 0x6d, 0x4b, 0x05, 0xcf, 0xc3, 0x18, 0x7b, 0x0e, 0x0a, 0xe7, 0xb7, 0xa3, 0xf4, 0x93, 0xcd,
+	0x69, 0x73, 0x81, 0xdf, 0xe4, 0x05, 0xf8, 0x54, 0xbc, 0x4a, 0x50, 0x0d, 0x35, 0x13, 0x27, 0x32,
+	0xfc, 0x26, 0x32, 0x18, 0xb1, 0xfe, 0x36, 0x94, 0x31, 0xc2, 0x2c, 0x07, 0xb1, 0x51, 0x1c, 0x72,
+	0x4c, 0x6b, 0x97, 0x6a, 0x90, 0xcd, 0x31, 0xf3, 0x43, 0xce, 0x31, 0xe7, 0x05, 0x8f, 0x1d, 0xce,
+	0xe2, 0x1a, 0xe5, 0xc0, 0xe6, 0xb8, 0x89, 0x18, 0x1a, 0x3d, 0x3c, 0x86, 0xc6, 0x54, 0x1e, 0xfb,
+	0xa1, 0x06, 0x65, 0x95, 0x55, 0x44, 0x24, 0xdd, 0x82, 0x29, 0xcb, 0x26, 0x6e, 0x17, 0x99, 0xe2,
+	0xee, 0x11, 0xf1, 0xf4, 0xec, 0x61, 0x57, 0x57, 0x52, 0x27, 0x93, 0x9c, 0x89, 0xe0, 0x3e, 0x74,
+	0x38, 0xfd, 0x29, 0x03, 0x27, 0x79, 0xcf, 0x9d, 0xee, 0xf2, 0x6f, 0x40, 0x8e, 0x8d, 0xd0, 0x35,
+	0x66, 0x9f, 0x0b, 0x83, 0xed, 0x73, 0x1d, 0x59, 0xce, 0x4d, 0x44, 0x08, 0x0a, 0xde, 0xe8, 0x20,
+	0x51, 0xdc, 0x30, 0xf2, 0x41, 0x6f, 0x7d, 0xf4, 0x72, 0xf7, 0x3b, 0x81, 0x1d, 0x06, 0x9d, 0xf0,
+	0x90, 0x49, 0x0e, 0x15, 0xe7, 0xd3, 0x2f, 0xd1, 0x2b, 0x83, 0x62, 0x50, 0x1d, 0xd1, 0x90, 0x8e,
+	0xcd, 0x5b, 0xf8, 0x18, 0xf6, 0x64, 0xb8, 0x7e, 0xc3, 0x8b, 0x8d, 0x5b, 0x94, 0xc3, 0xd3, 0xfc,
+	0xd0, 0xc3, 0xd3, 0x51, 0x95, 0xbe, 0x3e, 0xc9, 0xc0, 0xa9, 0xb4, 0xbe, 0x84, 0x21, 0x8f, 0x49,
+	0x61, 0xca, 0xf9, 0x46, 0xe6, 0x18, 0xe7, 0x1b, 0xaa, 0xb3, 0x66, 0x55, 0xd3, 0xdc, 0x16, 0x9c,
+	0xea, 0x91, 0x44, 0x56, 0xf6, 0x0f, 0x35, 0xf3, 0x99, 0x4b, 0x8b, 0xc4, 0xde, 0xf2, 0xfe, 0xa9,
+	0xc1, 0xfc, 0xeb, 0x9d, 0xa0, 0x81, 0xbe, 0x89, 0xce, 0x58, 0x2d, 0x43, 0xa9, 0xf7, 0x70, 0x22,
+	0x6f, 0xff, 0x39, 0x03, 0xf3, 0xdb, 0xe8, 0x1b, 0x7a, 0xf2, 0x47, 0x12, 0x86, 0x6b, 0x50, 0xea,
+	0x55, 0xd8, 0xd1, 0x1e, 0x2b, 0x68, 0x6d, 0xb3, 0x60, 0xa0, 0xdd, 0x00, 0xe1, 0x3d, 0xd9, 0x6e,
+	0x26, 0xde, 0x8f, 0xd3, 0xd3, 0xbe, 0xec, 0xa3, 0x7b, 0x8b, 0x12, 0x23, 0xba, 0x0a, 0x3c, 0xa6,
+	0x16, 0x28, 0xf2, 0x93, 0x45, 0x03, 0x61, 0xe4, 0x39, 0xa9, 0xa8, 0xea, 0x2b, 0xf3, 0x31, 0x3e,
+	0xb8, 0x3e, 0x09, 0x53, 0xc9, 0x12, 0x49, 0xb4, 0x43, 0x93, 0x41, 0xbc, 0x16, 0x51, 0xbc, 0xaa,
+	0xe5, 0x15, 0xaf, 0x6a, 0x4f, 0xc0, 0x24, 0xc7, 0x4a, 0xbe, 0x7f, 0x71, 0xa4, 0x7e, 0x4f, 0x69,
+	0x63, 0x3d, 0x4f, 0x69, 0x4b, 0x30, 0x4e, 0x31, 0x24, 0x93, 0x42, 0x88, 0x20, 0x58, 0xf0, 0x99,
+	0x95, 0x5a, 0x61, 0x42, 0xa7, 0x7f, 0xcc, 0x40, 0x69, 0x03, 0x11, 0x0a, 0xe4, 0x31, 0x13, 0x57,
+	0xe7, 0xe0, 0x9f, 0x22, 0x2d, 0x8a, 0x39, 0x38, 0xfb, 0x99, 0xa7, 0x1c, 0x59, 0x11, 0xc9, 0x48,
+	0xbf, 0x09, 0xd3, 0xd1, 0x32, 0x7f, 0x8e, 0xce, 0xb2, 0x20, 0x3e, 0xd3, 0x67, 0x3c, 0x10, 0xc9,
+	0x40, 0xe3, 0x76, 0x92, 0xc4, 0x3f, 0xf5, 0x0a, 0x8c, 0xb7, 0x5c, 0x9e, 0x84, 0xa3, 0x88, 0x2b,
+	0xb6, 0x5c, 0x9e, 0x55, 0x1d, 0xb6, 0x6e, 0xdd, 0x0f, 0xd7, 0xf3, 0x62, 0xdd, 0xba, 0x2f, 0xd6,
+	0x93, 0x3f, 0x30, 0x18, 0x1d, 0xe2, 0x07, 0x06, 0xca, 0x62, 0xe6, 0x81, 0x06, 0xa7, 0x15, 0xea,
+	0x12, 0xa1, 0xf7, 0xbd, 0xe4, 0x2f, 0x0c, 0xbe, 0x33, 0x4c, 0x4b, 0x70, 0xad, 0xd9, 0xf4, 0x6d,
+	0x8b, 0x20, 0x27, 0xbc, 0x1e, 0x8e, 0xf8, 0x6b, 0x83, 0x5f, 0x68, 0x50, 0xb9, 0x8e, 0x9a, 0x88,
+	0xa0, 0xaf, 0xf9, 0xc7, 0x7c, 0xd5, 0x2b, 0xb0, 0xd4, 0x57, 0x10, 0xa1, 0xa1, 0x32, 0x14, 0xee,
+	0x59, 0x81, 0xe7, 0x7a, 0x0d, 0x39, 0xa5, 0x0d, 0xbf, 0xab, 0x7f, 0xd0, 0x60, 0x65, 0x87, 0x04,
+	0xc8, 0x6a, 0x49, 0xfa, 0x01, 0x8f, 0x30, 0x6d, 0x38, 0x85, 0xf7, 0x3d, 0xdb, 0x8c, 0xdf, 0xd0,
+	0xfc, 0x57, 0x5f, 0xda, 0x80, 0x5f, 0x7d, 0xa5, 0x2e, 0xe7, 0x9d, 0x7d, 0xcf, 0x8e, 0xed, 0xc1,
+	0x7e, 0xdf, 0xb5, 0x39, 0x62, 0xcc, 0x61, 0x05, 0x7c, 0x6d, 0x02, 0x20, 0x1a, 0x6a, 0x56, 0x3f,
+	0xd0, 0xe0, 0xdc, 0x10, 0xc2, 0x8a, 0x63, 0xbf, 0xdd, 0xf3, 0x56, 0x75, 0x75, 0x18, 0xf9, 0x06,
+	0xb0, 0xde, 0x1c, 0x89, 0x5e, 0xad, 0x52, 0xa2, 0xbd, 0x09, 0x27, 0x92, 0x6f, 0x68, 0x5c, 0x63,
+	0x95, 0x1e, 0x27, 0xd8, 0x1c, 0x89, 0xbb, 0xc1, 0x0c, 0x64, 0x64, 0x3e, 0xdc, 0x1c, 0x31, 0x32,
+	0xae, 0x93, 0x62, 0xfb, 0x69, 0x16, 0xe6, 0x92, 0x7c, 0xc5, 0xe1, 0x5e, 0x82, 0x5c, 0x6c, 0xe4,
+	0xb4, 0x92, 0x74, 0x1d, 0xf5, 0xef, 0xb8, 0x98, 0x9f, 0x33, 0x2a, 0x7d, 0x0d, 0x46, 0x6d, 0xdf,
+	0xdb, 0x75, 0x1b, 0x62, 0x5e, 0x7a, 0x7e, 0x18, 0xfa, 0x75, 0x46, 0x61, 0x08, 0x4a, 0x7d, 0x17,
+	0xf4, 0xb8, 0x1f, 0x08, 0x7e, 0xf9, 0xf4, 0xa3, 0xa0, 0x42, 0xc3, 0xaa, 0x97, 0x46, 0xc1, 0x3c,
+	0x5e, 0x86, 0x72, 0x10, 0xbd, 0x03, 0x38, 0xef, 0x54, 0xde, 0x9e, 0xe4, 0x50, 0x99, 0xb8, 0x69,
+	0xff, 0x9d, 0x1e, 0xee, 0xf0, 0xe4, 0x3d, 0x9d, 0x1a, 0x0c, 0xe9, 0xb7, 0x63, 0xa8, 0xf2, 0x9d,
+	0xbf, 0xc0, 0x92, 0xc7, 0xd3, 0x03, 0xe5, 0x96, 0xd3, 0x21, 0xea, 0x9a, 0x1d, 0x1c, 0xf1, 0x95,
+	0xaf, 0xfc, 0x35, 0x38, 0xa1, 0x98, 0x16, 0xb1, 0xa9, 0x57, 0xc1, 0x98, 0xed, 0x99, 0x12, 0xad,
+	0x35, 0x3f, 0xfe, 0xbc, 0x32, 0xf2, 0xc9, 0xe7, 0x95, 0x91, 0x2f, 0x3f, 0xaf, 0x68, 0x3f, 0x39,
+	0xa8, 0x68, 0xbf, 0x3f, 0xa8, 0x68, 0x7f, 0x3b, 0xa8, 0x68, 0x1f, 0x1f, 0x54, 0xb4, 0x7f, 0x1f,
+	0x54, 0xb4, 0xff, 0x1c, 0x54, 0x46, 0xbe, 0x3c, 0xa8, 0x68, 0x0f, 0xbe, 0xa8, 0x8c, 0x7c, 0xfc,
+	0x45, 0x65, 0xe4, 0x93, 0x2f, 0x2a, 0x23, 0x6f, 0x7d, 0xb7, 0xe1, 0x47, 0x52, 0xba, 0xfe, 0x80,
+	0xff, 0x75, 0x78, 0x31, 0xfe, 0x5d, 0x1f, 0x65, 0xad, 0xe8, 0x73, 0xff, 0x0b, 0x00, 0x00, 0xff,
+	0xff, 0xb6, 0x97, 0xeb, 0x33, 0x26, 0x31, 0x00, 0x00,
 }
 
 func (this *RebuildMutableStateRequest) Equal(that interface{}) bool {
@@ -3655,6 +3968,71 @@ func (this *RebuildMutableStateResponse) Equal(that interface{}) bool {
 	if that1 == nil {
 		return this == nil
 	} else if this == nil {
+		return false
+	}
+	return true
+}
+func (this *ImportWorkflowExecutionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ImportWorkflowExecutionRequest)
+	if !ok {
+		that2, ok := that.(ImportWorkflowExecutionRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Namespace != that1.Namespace {
+		return false
+	}
+	if !this.Execution.Equal(that1.Execution) {
+		return false
+	}
+	if len(this.HistoryBatches) != len(that1.HistoryBatches) {
+		return false
+	}
+	for i := range this.HistoryBatches {
+		if !this.HistoryBatches[i].Equal(that1.HistoryBatches[i]) {
+			return false
+		}
+	}
+	if !this.VersionHistory.Equal(that1.VersionHistory) {
+		return false
+	}
+	if !bytes.Equal(this.Token, that1.Token) {
+		return false
+	}
+	return true
+}
+func (this *ImportWorkflowExecutionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ImportWorkflowExecutionResponse)
+	if !ok {
+		that2, ok := that.(ImportWorkflowExecutionResponse)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !bytes.Equal(this.Token, that1.Token) {
 		return false
 	}
 	return true
@@ -5438,6 +5816,131 @@ func (this *StreamWorkflowReplicationMessagesResponse_Messages) Equal(that inter
 	}
 	return true
 }
+func (this *GetNamespaceRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetNamespaceRequest)
+	if !ok {
+		that2, ok := that.(GetNamespaceRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if that1.Attributes == nil {
+		if this.Attributes != nil {
+			return false
+		}
+	} else if this.Attributes == nil {
+		return false
+	} else if !this.Attributes.Equal(that1.Attributes) {
+		return false
+	}
+	return true
+}
+func (this *GetNamespaceRequest_Namespace) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetNamespaceRequest_Namespace)
+	if !ok {
+		that2, ok := that.(GetNamespaceRequest_Namespace)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Namespace != that1.Namespace {
+		return false
+	}
+	return true
+}
+func (this *GetNamespaceRequest_Id) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetNamespaceRequest_Id)
+	if !ok {
+		that2, ok := that.(GetNamespaceRequest_Id)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Id != that1.Id {
+		return false
+	}
+	return true
+}
+func (this *GetNamespaceResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetNamespaceResponse)
+	if !ok {
+		that2, ok := that.(GetNamespaceResponse)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.Info.Equal(that1.Info) {
+		return false
+	}
+	if !this.Config.Equal(that1.Config) {
+		return false
+	}
+	if !this.ReplicationConfig.Equal(that1.ReplicationConfig) {
+		return false
+	}
+	if this.ConfigVersion != that1.ConfigVersion {
+		return false
+	}
+	if this.FailoverVersion != that1.FailoverVersion {
+		return false
+	}
+	if len(this.FailoverHistory) != len(that1.FailoverHistory) {
+		return false
+	}
+	for i := range this.FailoverHistory {
+		if !this.FailoverHistory[i].Equal(that1.FailoverHistory[i]) {
+			return false
+		}
+	}
+	if this.IsGlobalNamespace != that1.IsGlobalNamespace {
+		return false
+	}
+	return true
+}
 func (this *RebuildMutableStateRequest) GoString() string {
 	if this == nil {
 		return "nil"
@@ -5457,6 +5960,36 @@ func (this *RebuildMutableStateResponse) GoString() string {
 	}
 	s := make([]string, 0, 4)
 	s = append(s, "&adminservice.RebuildMutableStateResponse{")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ImportWorkflowExecutionRequest) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 9)
+	s = append(s, "&adminservice.ImportWorkflowExecutionRequest{")
+	s = append(s, "Namespace: "+fmt.Sprintf("%#v", this.Namespace)+",\n")
+	if this.Execution != nil {
+		s = append(s, "Execution: "+fmt.Sprintf("%#v", this.Execution)+",\n")
+	}
+	if this.HistoryBatches != nil {
+		s = append(s, "HistoryBatches: "+fmt.Sprintf("%#v", this.HistoryBatches)+",\n")
+	}
+	if this.VersionHistory != nil {
+		s = append(s, "VersionHistory: "+fmt.Sprintf("%#v", this.VersionHistory)+",\n")
+	}
+	s = append(s, "Token: "+fmt.Sprintf("%#v", this.Token)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ImportWorkflowExecutionResponse) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&adminservice.ImportWorkflowExecutionResponse{")
+	s = append(s, "Token: "+fmt.Sprintf("%#v", this.Token)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -6260,6 +6793,58 @@ func (this *StreamWorkflowReplicationMessagesResponse_Messages) GoString() strin
 		`Messages:` + fmt.Sprintf("%#v", this.Messages) + `}`}, ", ")
 	return s
 }
+func (this *GetNamespaceRequest) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&adminservice.GetNamespaceRequest{")
+	if this.Attributes != nil {
+		s = append(s, "Attributes: "+fmt.Sprintf("%#v", this.Attributes)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *GetNamespaceRequest_Namespace) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&adminservice.GetNamespaceRequest_Namespace{` +
+		`Namespace:` + fmt.Sprintf("%#v", this.Namespace) + `}`}, ", ")
+	return s
+}
+func (this *GetNamespaceRequest_Id) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&adminservice.GetNamespaceRequest_Id{` +
+		`Id:` + fmt.Sprintf("%#v", this.Id) + `}`}, ", ")
+	return s
+}
+func (this *GetNamespaceResponse) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 11)
+	s = append(s, "&adminservice.GetNamespaceResponse{")
+	if this.Info != nil {
+		s = append(s, "Info: "+fmt.Sprintf("%#v", this.Info)+",\n")
+	}
+	if this.Config != nil {
+		s = append(s, "Config: "+fmt.Sprintf("%#v", this.Config)+",\n")
+	}
+	if this.ReplicationConfig != nil {
+		s = append(s, "ReplicationConfig: "+fmt.Sprintf("%#v", this.ReplicationConfig)+",\n")
+	}
+	s = append(s, "ConfigVersion: "+fmt.Sprintf("%#v", this.ConfigVersion)+",\n")
+	s = append(s, "FailoverVersion: "+fmt.Sprintf("%#v", this.FailoverVersion)+",\n")
+	if this.FailoverHistory != nil {
+		s = append(s, "FailoverHistory: "+fmt.Sprintf("%#v", this.FailoverHistory)+",\n")
+	}
+	s = append(s, "IsGlobalNamespace: "+fmt.Sprintf("%#v", this.IsGlobalNamespace)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
 func valueToGoStringRequestResponse(v interface{}, typ string) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -6330,6 +6915,111 @@ func (m *RebuildMutableStateResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 	_ = i
 	var l int
 	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *ImportWorkflowExecutionRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ImportWorkflowExecutionRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ImportWorkflowExecutionRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Token) > 0 {
+		i -= len(m.Token)
+		copy(dAtA[i:], m.Token)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Token)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.VersionHistory != nil {
+		{
+			size, err := m.VersionHistory.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.HistoryBatches) > 0 {
+		for iNdEx := len(m.HistoryBatches) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.HistoryBatches[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if m.Execution != nil {
+		{
+			size, err := m.Execution.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Namespace) > 0 {
+		i -= len(m.Namespace)
+		copy(dAtA[i:], m.Namespace)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Namespace)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ImportWorkflowExecutionResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ImportWorkflowExecutionResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ImportWorkflowExecutionResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Token) > 0 {
+		i -= len(m.Token)
+		copy(dAtA[i:], m.Token)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Token)))
+		i--
+		dAtA[i] = 0xa
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -6530,21 +7220,21 @@ func (m *DescribeHistoryHostResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 		dAtA[i] = 0x1a
 	}
 	if len(m.ShardIds) > 0 {
-		dAtA8 := make([]byte, len(m.ShardIds)*10)
-		var j7 int
+		dAtA10 := make([]byte, len(m.ShardIds)*10)
+		var j9 int
 		for _, num1 := range m.ShardIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA8[j7] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA10[j9] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j7++
+				j9++
 			}
-			dAtA8[j7] = uint8(num)
-			j7++
+			dAtA10[j9] = uint8(num)
+			j9++
 		}
-		i -= j7
-		copy(dAtA[i:], dAtA8[:j7])
-		i = encodeVarintRequestResponse(dAtA, i, uint64(j7))
+		i -= j9
+		copy(dAtA[i:], dAtA10[:j9])
+		i = encodeVarintRequestResponse(dAtA, i, uint64(j9))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -6797,12 +7487,12 @@ func (m *Task) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x38
 	}
 	if m.FireTime != nil {
-		n11, err11 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.FireTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.FireTime):])
-		if err11 != nil {
-			return 0, err11
+		n13, err13 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.FireTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.FireTime):])
+		if err13 != nil {
+			return 0, err13
 		}
-		i -= n11
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n11))
+		i -= n13
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n13))
 		i--
 		dAtA[i] = 0x32
 	}
@@ -6861,12 +7551,12 @@ func (m *RemoveTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.VisibilityTime != nil {
-		n12, err12 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.VisibilityTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.VisibilityTime):])
-		if err12 != nil {
-			return 0, err12
+		n14, err14 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.VisibilityTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.VisibilityTime):])
+		if err14 != nil {
+			return 0, err14
 		}
-		i -= n12
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n12))
+		i -= n14
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n14))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -7006,21 +7696,21 @@ func (m *GetWorkflowExecutionRawHistoryV2Response) MarshalToSizedBuffer(dAtA []b
 	var l int
 	_ = l
 	if len(m.HistoryNodeIds) > 0 {
-		dAtA15 := make([]byte, len(m.HistoryNodeIds)*10)
-		var j14 int
+		dAtA17 := make([]byte, len(m.HistoryNodeIds)*10)
+		var j16 int
 		for _, num1 := range m.HistoryNodeIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA15[j14] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA17[j16] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j14++
+				j16++
 			}
-			dAtA15[j14] = uint8(num)
-			j14++
+			dAtA17[j16] = uint8(num)
+			j16++
 		}
-		i -= j14
-		copy(dAtA[i:], dAtA15[:j14])
-		i = encodeVarintRequestResponse(dAtA, i, uint64(j14))
+		i -= j16
+		copy(dAtA[i:], dAtA17[:j16])
+		i = encodeVarintRequestResponse(dAtA, i, uint64(j16))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -8061,12 +8751,12 @@ func (m *ListClusterMembersRequest) MarshalToSizedBuffer(dAtA []byte) (int, erro
 		dAtA[i] = 0x30
 	}
 	if m.SessionStartedAfterTime != nil {
-		n24, err24 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.SessionStartedAfterTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.SessionStartedAfterTime):])
-		if err24 != nil {
-			return 0, err24
+		n26, err26 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.SessionStartedAfterTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.SessionStartedAfterTime):])
+		if err26 != nil {
+			return 0, err26
 		}
-		i -= n24
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n24))
+		i -= n26
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n26))
 		i--
 		dAtA[i] = 0x2a
 	}
@@ -8090,12 +8780,12 @@ func (m *ListClusterMembersRequest) MarshalToSizedBuffer(dAtA []byte) (int, erro
 		dAtA[i] = 0x12
 	}
 	if m.LastHeartbeatWithin != nil {
-		n25, err25 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.LastHeartbeatWithin, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.LastHeartbeatWithin):])
-		if err25 != nil {
-			return 0, err25
+		n27, err27 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.LastHeartbeatWithin, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.LastHeartbeatWithin):])
+		if err27 != nil {
+			return 0, err27
 		}
-		i -= n25
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n25))
+		i -= n27
+		i = encodeVarintRequestResponse(dAtA, i, uint64(n27))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -8868,6 +9558,159 @@ func (m *StreamWorkflowReplicationMessagesResponse_Messages) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
+func (m *GetNamespaceRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetNamespaceRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetNamespaceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Attributes != nil {
+		{
+			size := m.Attributes.Size()
+			i -= size
+			if _, err := m.Attributes.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetNamespaceRequest_Namespace) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetNamespaceRequest_Namespace) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.Namespace)
+	copy(dAtA[i:], m.Namespace)
+	i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Namespace)))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+func (m *GetNamespaceRequest_Id) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetNamespaceRequest_Id) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.Id)
+	copy(dAtA[i:], m.Id)
+	i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Id)))
+	i--
+	dAtA[i] = 0x12
+	return len(dAtA) - i, nil
+}
+func (m *GetNamespaceResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetNamespaceResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetNamespaceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.IsGlobalNamespace {
+		i--
+		if m.IsGlobalNamespace {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x48
+	}
+	if len(m.FailoverHistory) > 0 {
+		for iNdEx := len(m.FailoverHistory) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.FailoverHistory[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x42
+		}
+	}
+	if m.FailoverVersion != 0 {
+		i = encodeVarintRequestResponse(dAtA, i, uint64(m.FailoverVersion))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.ConfigVersion != 0 {
+		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ConfigVersion))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.ReplicationConfig != nil {
+		{
+			size, err := m.ReplicationConfig.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.Config != nil {
+		{
+			size, err := m.Config.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintRequestResponse(dAtA []byte, offset int, v uint64) int {
 	offset -= sovRequestResponse(v)
 	base := offset
@@ -8902,6 +9745,50 @@ func (m *RebuildMutableStateResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
+	return n
+}
+
+func (m *ImportWorkflowExecutionRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Namespace)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if m.Execution != nil {
+		l = m.Execution.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if len(m.HistoryBatches) > 0 {
+		for _, e := range m.HistoryBatches {
+			l = e.Size()
+			n += 1 + l + sovRequestResponse(uint64(l))
+		}
+	}
+	if m.VersionHistory != nil {
+		l = m.VersionHistory.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	l = len(m.Token)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	return n
+}
+
+func (m *ImportWorkflowExecutionResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Token)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
 	return n
 }
 
@@ -10024,6 +10911,73 @@ func (m *StreamWorkflowReplicationMessagesResponse_Messages) Size() (n int) {
 	}
 	return n
 }
+func (m *GetNamespaceRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Attributes != nil {
+		n += m.Attributes.Size()
+	}
+	return n
+}
+
+func (m *GetNamespaceRequest_Namespace) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Namespace)
+	n += 1 + l + sovRequestResponse(uint64(l))
+	return n
+}
+func (m *GetNamespaceRequest_Id) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Id)
+	n += 1 + l + sovRequestResponse(uint64(l))
+	return n
+}
+func (m *GetNamespaceResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Info != nil {
+		l = m.Info.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if m.Config != nil {
+		l = m.Config.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if m.ReplicationConfig != nil {
+		l = m.ReplicationConfig.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if m.ConfigVersion != 0 {
+		n += 1 + sovRequestResponse(uint64(m.ConfigVersion))
+	}
+	if m.FailoverVersion != 0 {
+		n += 1 + sovRequestResponse(uint64(m.FailoverVersion))
+	}
+	if len(m.FailoverHistory) > 0 {
+		for _, e := range m.FailoverHistory {
+			l = e.Size()
+			n += 1 + l + sovRequestResponse(uint64(l))
+		}
+	}
+	if m.IsGlobalNamespace {
+		n += 2
+	}
+	return n
+}
 
 func sovRequestResponse(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
@@ -10051,6 +11005,35 @@ func (this *RebuildMutableStateResponse) String() string {
 	}, "")
 	return s
 }
+func (this *ImportWorkflowExecutionRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	repeatedStringForHistoryBatches := "[]*DataBlob{"
+	for _, f := range this.HistoryBatches {
+		repeatedStringForHistoryBatches += strings.Replace(fmt.Sprintf("%v", f), "DataBlob", "v1.DataBlob", 1) + ","
+	}
+	repeatedStringForHistoryBatches += "}"
+	s := strings.Join([]string{`&ImportWorkflowExecutionRequest{`,
+		`Namespace:` + fmt.Sprintf("%v", this.Namespace) + `,`,
+		`Execution:` + strings.Replace(fmt.Sprintf("%v", this.Execution), "WorkflowExecution", "v1.WorkflowExecution", 1) + `,`,
+		`HistoryBatches:` + repeatedStringForHistoryBatches + `,`,
+		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v11.VersionHistory", 1) + `,`,
+		`Token:` + fmt.Sprintf("%v", this.Token) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ImportWorkflowExecutionResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ImportWorkflowExecutionResponse{`,
+		`Token:` + fmt.Sprintf("%v", this.Token) + `,`,
+		`}`,
+	}, "")
+	return s
+}
 func (this *DescribeMutableStateRequest) String() string {
 	if this == nil {
 		return "nil"
@@ -10069,8 +11052,8 @@ func (this *DescribeMutableStateResponse) String() string {
 	s := strings.Join([]string{`&DescribeMutableStateResponse{`,
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`HistoryAddr:` + fmt.Sprintf("%v", this.HistoryAddr) + `,`,
-		`CacheMutableState:` + strings.Replace(fmt.Sprintf("%v", this.CacheMutableState), "WorkflowMutableState", "v11.WorkflowMutableState", 1) + `,`,
-		`DatabaseMutableState:` + strings.Replace(fmt.Sprintf("%v", this.DatabaseMutableState), "WorkflowMutableState", "v11.WorkflowMutableState", 1) + `,`,
+		`CacheMutableState:` + strings.Replace(fmt.Sprintf("%v", this.CacheMutableState), "WorkflowMutableState", "v12.WorkflowMutableState", 1) + `,`,
+		`DatabaseMutableState:` + strings.Replace(fmt.Sprintf("%v", this.DatabaseMutableState), "WorkflowMutableState", "v12.WorkflowMutableState", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -10095,7 +11078,7 @@ func (this *DescribeHistoryHostResponse) String() string {
 	s := strings.Join([]string{`&DescribeHistoryHostResponse{`,
 		`ShardsNumber:` + fmt.Sprintf("%v", this.ShardsNumber) + `,`,
 		`ShardIds:` + fmt.Sprintf("%v", this.ShardIds) + `,`,
-		`NamespaceCache:` + strings.Replace(fmt.Sprintf("%v", this.NamespaceCache), "NamespaceCacheInfo", "v12.NamespaceCacheInfo", 1) + `,`,
+		`NamespaceCache:` + strings.Replace(fmt.Sprintf("%v", this.NamespaceCache), "NamespaceCacheInfo", "v13.NamespaceCacheInfo", 1) + `,`,
 		`Address:` + fmt.Sprintf("%v", this.Address) + `,`,
 		`}`,
 	}, "")
@@ -10135,7 +11118,7 @@ func (this *GetShardResponse) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&GetShardResponse{`,
-		`ShardInfo:` + strings.Replace(fmt.Sprintf("%v", this.ShardInfo), "ShardInfo", "v11.ShardInfo", 1) + `,`,
+		`ShardInfo:` + strings.Replace(fmt.Sprintf("%v", this.ShardInfo), "ShardInfo", "v12.ShardInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -10147,7 +11130,7 @@ func (this *ListHistoryTasksRequest) String() string {
 	s := strings.Join([]string{`&ListHistoryTasksRequest{`,
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`Category:` + fmt.Sprintf("%v", this.Category) + `,`,
-		`TaskRange:` + strings.Replace(fmt.Sprintf("%v", this.TaskRange), "TaskRange", "v14.TaskRange", 1) + `,`,
+		`TaskRange:` + strings.Replace(fmt.Sprintf("%v", this.TaskRange), "TaskRange", "v11.TaskRange", 1) + `,`,
 		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
@@ -10237,7 +11220,7 @@ func (this *GetWorkflowExecutionRawHistoryV2Response) String() string {
 	s := strings.Join([]string{`&GetWorkflowExecutionRawHistoryV2Response{`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`HistoryBatches:` + repeatedStringForHistoryBatches + `,`,
-		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v14.VersionHistory", 1) + `,`,
+		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v11.VersionHistory", 1) + `,`,
 		`HistoryNodeIds:` + fmt.Sprintf("%v", this.HistoryNodeIds) + `,`,
 		`}`,
 	}, "")
@@ -10528,7 +11511,7 @@ func (this *ListClustersResponse) String() string {
 	}
 	repeatedStringForClusters := "[]*ClusterMetadata{"
 	for _, f := range this.Clusters {
-		repeatedStringForClusters += strings.Replace(fmt.Sprintf("%v", f), "ClusterMetadata", "v11.ClusterMetadata", 1) + ","
+		repeatedStringForClusters += strings.Replace(fmt.Sprintf("%v", f), "ClusterMetadata", "v12.ClusterMetadata", 1) + ","
 	}
 	repeatedStringForClusters += "}"
 	s := strings.Join([]string{`&ListClustersResponse{`,
@@ -10762,7 +11745,7 @@ func (this *GetTaskQueueTasksResponse) String() string {
 	}
 	repeatedStringForTasks := "[]*AllocatedTaskInfo{"
 	for _, f := range this.Tasks {
-		repeatedStringForTasks += strings.Replace(fmt.Sprintf("%v", f), "AllocatedTaskInfo", "v11.AllocatedTaskInfo", 1) + ","
+		repeatedStringForTasks += strings.Replace(fmt.Sprintf("%v", f), "AllocatedTaskInfo", "v12.AllocatedTaskInfo", 1) + ","
 	}
 	repeatedStringForTasks += "}"
 	s := strings.Join([]string{`&GetTaskQueueTasksResponse{`,
@@ -10829,6 +11812,57 @@ func (this *StreamWorkflowReplicationMessagesResponse_Messages) String() string 
 	}
 	s := strings.Join([]string{`&StreamWorkflowReplicationMessagesResponse_Messages{`,
 		`Messages:` + strings.Replace(fmt.Sprintf("%v", this.Messages), "WorkflowReplicationMessages", "v15.WorkflowReplicationMessages", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetNamespaceRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GetNamespaceRequest{`,
+		`Attributes:` + fmt.Sprintf("%v", this.Attributes) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetNamespaceRequest_Namespace) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GetNamespaceRequest_Namespace{`,
+		`Namespace:` + fmt.Sprintf("%v", this.Namespace) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetNamespaceRequest_Id) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GetNamespaceRequest_Id{`,
+		`Id:` + fmt.Sprintf("%v", this.Id) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetNamespaceResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	repeatedStringForFailoverHistory := "[]*FailoverStatus{"
+	for _, f := range this.FailoverHistory {
+		repeatedStringForFailoverHistory += strings.Replace(fmt.Sprintf("%v", f), "FailoverStatus", "v111.FailoverStatus", 1) + ","
+	}
+	repeatedStringForFailoverHistory += "}"
+	s := strings.Join([]string{`&GetNamespaceResponse{`,
+		`Info:` + strings.Replace(fmt.Sprintf("%v", this.Info), "NamespaceInfo", "v110.NamespaceInfo", 1) + `,`,
+		`Config:` + strings.Replace(fmt.Sprintf("%v", this.Config), "NamespaceConfig", "v110.NamespaceConfig", 1) + `,`,
+		`ReplicationConfig:` + strings.Replace(fmt.Sprintf("%v", this.ReplicationConfig), "NamespaceReplicationConfig", "v111.NamespaceReplicationConfig", 1) + `,`,
+		`ConfigVersion:` + fmt.Sprintf("%v", this.ConfigVersion) + `,`,
+		`FailoverVersion:` + fmt.Sprintf("%v", this.FailoverVersion) + `,`,
+		`FailoverHistory:` + repeatedStringForFailoverHistory + `,`,
+		`IsGlobalNamespace:` + fmt.Sprintf("%v", this.IsGlobalNamespace) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -10991,6 +12025,318 @@ func (m *RebuildMutableStateResponse) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: RebuildMutableStateResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ImportWorkflowExecutionRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ImportWorkflowExecutionRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ImportWorkflowExecutionRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Namespace", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Namespace = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Execution", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Execution == nil {
+				m.Execution = &v1.WorkflowExecution{}
+			}
+			if err := m.Execution.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HistoryBatches", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.HistoryBatches = append(m.HistoryBatches, &v1.DataBlob{})
+			if err := m.HistoryBatches[len(m.HistoryBatches)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VersionHistory", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.VersionHistory == nil {
+				m.VersionHistory = &v11.VersionHistory{}
+			}
+			if err := m.VersionHistory.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Token", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Token = append(m.Token[:0], dAtA[iNdEx:postIndex]...)
+			if m.Token == nil {
+				m.Token = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ImportWorkflowExecutionResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ImportWorkflowExecutionResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ImportWorkflowExecutionResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Token", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Token = append(m.Token[:0], dAtA[iNdEx:postIndex]...)
+			if m.Token == nil {
+				m.Token = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRequestResponse(dAtA[iNdEx:])
@@ -11259,7 +12605,7 @@ func (m *DescribeMutableStateResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.CacheMutableState == nil {
-				m.CacheMutableState = &v11.WorkflowMutableState{}
+				m.CacheMutableState = &v12.WorkflowMutableState{}
 			}
 			if err := m.CacheMutableState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11295,7 +12641,7 @@ func (m *DescribeMutableStateResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DatabaseMutableState == nil {
-				m.DatabaseMutableState = &v11.WorkflowMutableState{}
+				m.DatabaseMutableState = &v12.WorkflowMutableState{}
 			}
 			if err := m.DatabaseMutableState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11651,7 +12997,7 @@ func (m *DescribeHistoryHostResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.NamespaceCache == nil {
-				m.NamespaceCache = &v12.NamespaceCacheInfo{}
+				m.NamespaceCache = &v13.NamespaceCacheInfo{}
 			}
 			if err := m.NamespaceCache.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11969,7 +13315,7 @@ func (m *GetShardResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ShardInfo == nil {
-				m.ShardInfo = &v11.ShardInfo{}
+				m.ShardInfo = &v12.ShardInfo{}
 			}
 			if err := m.ShardInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -12061,7 +13407,7 @@ func (m *ListHistoryTasksRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Category |= v13.TaskCategory(b&0x7F) << shift
+				m.Category |= v14.TaskCategory(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -12096,7 +13442,7 @@ func (m *ListHistoryTasksRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TaskRange == nil {
-				m.TaskRange = &v14.TaskRange{}
+				m.TaskRange = &v11.TaskRange{}
 			}
 			if err := m.TaskRange.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -12458,7 +13804,7 @@ func (m *Task) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TaskType |= v13.TaskType(b&0x7F) << shift
+				m.TaskType |= v14.TaskType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -12604,7 +13950,7 @@ func (m *RemoveTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Category |= v13.TaskCategory(b&0x7F) << shift
+				m.Category |= v14.TaskCategory(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -13118,7 +14464,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Response) Unmarshal(dAtA []byte) error 
 				return io.ErrUnexpectedEOF
 			}
 			if m.VersionHistory == nil {
-				m.VersionHistory = &v14.VersionHistory{}
+				m.VersionHistory = &v11.VersionHistory{}
 			}
 			if err := m.VersionHistory.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -16036,7 +17382,7 @@ func (m *ListClustersResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Clusters = append(m.Clusters, &v11.ClusterMetadata{})
+			m.Clusters = append(m.Clusters, &v12.ClusterMetadata{})
 			if err := m.Clusters[len(m.Clusters)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -16538,7 +17884,7 @@ func (m *ListClusterMembersRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Role |= v13.ClusterMemberRole(b&0x7F) << shift
+				m.Role |= v14.ClusterMemberRole(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -16820,7 +18166,7 @@ func (m *GetDLQMessagesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= v13.DeadLetterQueueType(b&0x7F) << shift
+				m.Type |= v14.DeadLetterQueueType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -17015,7 +18361,7 @@ func (m *GetDLQMessagesResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= v13.DeadLetterQueueType(b&0x7F) << shift
+				m.Type |= v14.DeadLetterQueueType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -17189,7 +18535,7 @@ func (m *PurgeDLQMessagesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= v13.DeadLetterQueueType(b&0x7F) << shift
+				m.Type |= v14.DeadLetterQueueType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -17384,7 +18730,7 @@ func (m *MergeDLQMessagesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= v13.DeadLetterQueueType(b&0x7F) << shift
+				m.Type |= v14.DeadLetterQueueType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -18392,7 +19738,7 @@ func (m *GetTaskQueueTasksResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Tasks = append(m.Tasks, &v11.AllocatedTaskInfo{})
+			m.Tasks = append(m.Tasks, &v12.AllocatedTaskInfo{})
 			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -18813,6 +20159,376 @@ func (m *StreamWorkflowReplicationMessagesResponse) Unmarshal(dAtA []byte) error
 			}
 			m.Attributes = &StreamWorkflowReplicationMessagesResponse_Messages{v}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetNamespaceRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetNamespaceRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetNamespaceRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Namespace", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Attributes = &GetNamespaceRequest_Namespace{string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Attributes = &GetNamespaceRequest_Id{string(dAtA[iNdEx:postIndex])}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetNamespaceResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetNamespaceResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetNamespaceResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &v110.NamespaceInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Config", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Config == nil {
+				m.Config = &v110.NamespaceConfig{}
+			}
+			if err := m.Config.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicationConfig", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReplicationConfig == nil {
+				m.ReplicationConfig = &v111.NamespaceReplicationConfig{}
+			}
+			if err := m.ReplicationConfig.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ConfigVersion", wireType)
+			}
+			m.ConfigVersion = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ConfigVersion |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FailoverVersion", wireType)
+			}
+			m.FailoverVersion = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FailoverVersion |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FailoverHistory", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.FailoverHistory = append(m.FailoverHistory, &v111.FailoverStatus{})
+			if err := m.FailoverHistory[len(m.FailoverHistory)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsGlobalNamespace", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsGlobalNamespace = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRequestResponse(dAtA[iNdEx:])

@@ -52,6 +52,10 @@ const (
 	// MaxBackoffDelay is a maximum interval between reconnect attempts.
 	MaxBackoffDelay = 10 * time.Second
 
+	// MaxHTTPAPIRequestBytes is the maximum number of bytes an HTTP API request
+	// can have. This is currently set to the max gRPC request size.
+	MaxHTTPAPIRequestBytes = 4 * 1024 * 1024
+
 	// minConnectTimeout is the minimum amount of time we are willing to give a connection to complete.
 	minConnectTimeout = 20 * time.Second
 

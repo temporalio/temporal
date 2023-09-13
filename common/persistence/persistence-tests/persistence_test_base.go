@@ -155,7 +155,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		case postgresql.PluginName:
 			options.DBHost = environment.GetPostgreSQLAddress()
 		case sqlite.PluginName:
-			options.DBHost = environment.Localhost
+			options.DBHost = environment.GetLocalhostIP()
 		default:
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}

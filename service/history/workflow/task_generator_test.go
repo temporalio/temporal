@@ -56,7 +56,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -93,18 +92,22 @@ type testParams struct {
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
+	t.Parallel()
+
 	for _, c := range []testConfig{
 		{
-			Name: "use archival queue",
+			Name: "archival enabled",
 			ConfigFn: func(p *testParams) {
 				p.ExpectCloseExecutionVisibilityTask = true
 				p.ExpectArchiveExecutionTask = true
 			},
 		},
 		{
-			Name: "delete after close ignores durable execution flag",
+			Name: "delete after close skips archival",
 			ConfigFn: func(p *testParams) {
 				p.DeleteAfterClose = true
+				p.ExpectCloseExecutionVisibilityTask = false
+				p.ExpectArchiveExecutionTask = false
 			},
 		},
 		{
@@ -188,6 +191,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 	} {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
+			t.Parallel()
+
 			now := time.Unix(0, 0).UTC()
 			ctrl := gomock.NewController(t)
 			mockLogger := log.NewMockLogger(ctrl)
@@ -277,12 +282,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}).AnyTimes()
 
 			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata)
-			err := taskGenerator.GenerateWorkflowCloseTasks(&historypb.HistoryEvent{
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-					WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
-				},
-				EventTime: timestamp.TimePtr(p.CloseEventTime),
-			}, p.DeleteAfterClose)
+			err := taskGenerator.GenerateWorkflowCloseTasks(timestamp.TimePtr(p.CloseEventTime), p.DeleteAfterClose)
 			require.NoError(t, err)
 
 			var (
@@ -305,11 +305,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}
 			require.NotNil(t, closeExecutionTask)
 			assert.Equal(t, p.DeleteAfterClose, closeExecutionTask.DeleteAfterClose)
-			assert.Equal(
-				t,
-				p.ExpectArchiveExecutionTask,
-				closeExecutionTask.CanSkipVisibilityArchival,
-			)
 
 			if p.ExpectCloseExecutionVisibilityTask {
 				assert.NotNil(t, closeExecutionVisibilityTask)

@@ -187,15 +187,14 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		closeEvent, err := mutableState.GetCompletionEvent(ctx)
+		closeEventTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return err
 		}
 
 		return taskGenerator.GenerateWorkflowCloseTasks(
-			closeEvent,
+			closeEventTime,
 			false,
 		)
 	}
@@ -209,14 +208,14 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	taskGenerator TaskGenerator,
 ) error {
 
-	startEvent, err := mutableState.GetStartEvent(ctx)
-	if err != nil {
-		return err
-	}
-
 	executionState := mutableState.GetExecutionState()
 
 	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		startEvent, err := mutableState.GetStartEvent(ctx)
+		if err != nil {
+			return err
+		}
+
 		return taskGenerator.GenerateRecordWorkflowStartedTasks(
 			startEvent,
 		)

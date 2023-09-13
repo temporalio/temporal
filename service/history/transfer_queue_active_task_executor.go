@@ -39,7 +39,6 @@ import (
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -80,22 +79,22 @@ type (
 func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
+	historyRawClient resource.HistoryRawClient,
+	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
 ) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
 			workflowCache,
-			archivalClient,
 			logger,
 			metricProvider,
-			matchingClient,
+			historyRawClient,
+			matchingRawClient,
 			visibilityManager,
 		),
 		workflowResetter: ndc.NewWorkflowResetter(
@@ -119,7 +118,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	task := executable.GetTask()
 	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
-		t.shard.GetNamespaceRegistry(),
+		t.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
 	metricsTags := []metrics.Tag{
@@ -174,27 +173,35 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
+
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
@@ -214,13 +221,13 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, transferTask)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, transferTask)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, transferTask, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, transferTask, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -232,7 +239,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	if workflowTask == nil {
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, transferTask.Version, transferTask)
 	if err != nil {
 		return err
 	}
@@ -282,13 +289,13 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -303,7 +310,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 		if err != nil {
 			return err
 		}
@@ -314,7 +321,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		RunId:      task.GetRunID(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	var completionEvent *historypb.HistoryEvent // needed to report close event to parent workflow
 	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
 	if replyToParentWorkflow {
@@ -339,19 +345,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		)
 	}
 
-	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
-	if err != nil {
-		return err
-	}
-
-	workflowStatus := executionState.Status
-	workflowHistoryLength := mutableState.GetNextEventID() - 1
-
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	namespaceName := mutableState.GetNamespaceEntry().Name()
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
@@ -360,37 +353,17 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
 
-	if !task.CanSkipVisibilityArchival {
-		err = t.archiveVisibility(
-			ctx,
-			namespace.ID(task.NamespaceID),
-			task.WorkflowID,
-			task.RunID,
-			workflowTypeName,
-			workflowStartTime,
-			workflowExecutionTime,
-			*workflowCloseTime,
-			workflowStatus,
-			workflowHistoryLength,
-			visibilityMemo,
-			searchAttr,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
-		_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
+		_, err := t.historyRawClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
-			WorkflowExecution: &commonpb.WorkflowExecution{
+			ParentExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
 			ParentInitiatedId:      parentInitiatedID,
 			ParentInitiatedVersion: parentInitiatedVersion,
-			CompletedExecution:     &workflowExecution,
+			ChildExecution:         &workflowExecution,
 			Clock:                  parentClock,
 			CompletionEvent:        completionEvent,
 		})
@@ -437,13 +410,13 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -455,7 +428,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	if !ok {
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -557,18 +530,19 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -578,9 +552,14 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if err != nil {
 		return err
+	}
+
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowCompleted
 	}
 
 	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedEventID)
@@ -686,7 +665,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
-	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
+	_, err = t.historyRawClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: task.TargetNamespaceID,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.TargetWorkflowID,
@@ -704,25 +683,27 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
 	if mutableState == nil {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrWorkflowExecutionNotFound
 	}
 
 	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
 	if !ok {
-		return nil
+		release(nil) // release(nil) so that the mutable state is not unloaded from cache
+		return consts.ErrChildExecutionNotFound
 	}
-	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -742,12 +723,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// 1. Once workflow is closed, we can't update mutable state or record child started event.
 		// If the RPC call for scheduling first workflow task times out but the call actually succeeds on child workflow.
 		// Then the child workflow can run, complete and another unrelated workflow can reuse this workflowID.
-		// Now when the start child task retries, we can't rely on requestID to dedup the start child call. (We can use runID instead of requestID to dedup)
+		// Now when the start child task retries, we can't rely on requestID to dedupe the start child call. (We can use runID instead of requestID to dedupe)
 		// 2. No update to mutable state and child started event means we are not able to replicate the information
 		// to the standby cluster, so standby start child logic won't be able to verify the child has started.
 		// To resolve the issue above, we need to
 		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
-		// 2. Standby start child logic need to verify if child worflow actually started instead of relying on the information
+		// 2. Standby start child logic need to verify if child workflow actually started instead of relying on the information
 		// in parent mutable state.
 		return nil
 	}
@@ -770,7 +751,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
 
-		parentClock, err := t.shard.NewVectorClock()
+		parentClock, err := t.shardContext.NewVectorClock()
 		if err != nil {
 			return err
 		}
@@ -872,7 +853,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// Release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	parentClock, err := t.shard.NewVectorClock()
+	parentClock, err := t.shardContext.NewVectorClock()
 	if err != nil {
 		return err
 	}
@@ -889,13 +870,13 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	currentContext, currentRelease, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	currentContext, currentRelease, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { currentRelease(retError) }()
 
-	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricHandler, t.logger)
+	currentMutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, currentContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -913,8 +894,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
-		resp, err = t.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
+		resp, err = t.shardContext.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+			ShardID:     t.shardContext.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
 		})
@@ -937,7 +918,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return err
 	}
 
-	err = CheckTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -950,7 +931,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	logger = log.With(logger, tag.WorkflowNamespace(namespaceEntry.Name().String()))
 
-	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
+	reason, resetPoint := workflow.FindAutoResetPoint(t.shardContext.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil
@@ -972,6 +953,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	} else {
 		baseContext, baseRelease, err = getWorkflowExecutionContext(
 			ctx,
+			t.shardContext,
 			t.cache,
 			namespace.ID(task.NamespaceID),
 			commonpb.WorkflowExecution{
@@ -983,7 +965,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		defer func() { baseRelease(retError) }()
-		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricHandler, t.logger)
+		baseMutableState, err = loadMutableStateForTransferTask(ctx, t.shardContext, baseContext, task, t.metricHandler, t.logger)
 		if err != nil {
 			return err
 		}
@@ -1076,7 +1058,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	parentClock *clockspb.VectorClock,
 	childClock *clockspb.VectorClock,
 ) error {
-	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
+	_, err := t.historyRawClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
 		WorkflowExecution:   execution,
 		IsFirstWorkflowTask: true,
@@ -1224,7 +1206,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	createWorkflowTask bool,
 	action func(workflow.MutableState) error,
 ) error {
-	mutableState, err := context.LoadMutableState(ctx)
+	mutableState, err := context.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
 		return err
 	}
@@ -1241,7 +1223,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		}
 	}
 
-	return context.UpdateWorkflowExecutionAsActive(ctx)
+	return context.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
@@ -1272,7 +1254,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, request)
+	_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -1306,7 +1288,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	_, err := t.historyClient.SignalWorkflowExecution(ctx, request)
+	_, err := t.historyRawClient.SignalWorkflowExecution(ctx, request)
 	return err
 }
 
@@ -1349,14 +1331,14 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			},
 			InitiatedId:      task.InitiatedEventID,
 			InitiatedVersion: task.Version,
-			Clock:            vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		},
-		t.shard.GetTimeSource().Now(),
+		t.shardContext.GetTimeSource().Now(),
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp
 
-	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
+	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return "", nil, err
 	}
@@ -1409,9 +1391,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		resetRunID,
 		uuid.New(),
 		ndc.NewWorkflow(
-			resetWorkflowCtx,
-			t.registry,
-			t.shard.GetClusterMetadata(),
+			t.shardContext.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,
 			wcache.NoopReleaseFn, // this is fine since caller will defer on release
@@ -1454,8 +1434,8 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.TransferActiveTaskCloseExecutionScope))
 
-	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
-		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
+	if t.shardContext.GetConfig().EnableParentClosePolicyWorker() &&
+		len(childInfos) >= t.shardContext.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
@@ -1537,7 +1517,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				return err
 			}
 		}
-		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+		_, err := t.historyRawClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
@@ -1567,7 +1547,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			}
 		}
 
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+		_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),

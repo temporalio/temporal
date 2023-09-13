@@ -112,7 +112,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewCache(s.mockShard),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig()),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() StateRebuilder {
@@ -259,6 +259,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
+		s.mockShard,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
 		currentLastWriteVersion,
@@ -699,11 +700,15 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext := workflow.NewMockContext(s.controller)
 	resetContext.EXPECT().Lock(gomock.Any(), workflow.LockPriorityHigh).Return(nil)
 	resetContext.EXPECT().Unlock(workflow.LockPriorityHigh)
+	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	resetContext.EXPECT().LoadMutableState(gomock.Any()).Return(resetMutableState, nil)
+	resetContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
-	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID)
+	resetContextCacheKey := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID),
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
 	_, _ = s.workflowResetter.workflowCache.(*wcache.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)

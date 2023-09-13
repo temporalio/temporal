@@ -241,6 +241,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetDLQReplicationMessages(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetDLQReplicationMessages), varargs...)
 }
 
+// GetNamespace mocks base method.
+func (m *MockAdminServiceClient) GetNamespace(ctx context.Context, in *adminservice.GetNamespaceRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetNamespace", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespace indicates an expected call of GetNamespace.
+func (mr *MockAdminServiceClientMockRecorder) GetNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).GetNamespace), varargs...)
+}
+
 // GetNamespaceReplicationMessages mocks base method.
 func (m *MockAdminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *adminservice.GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -359,6 +379,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2(c
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
+}
+
+// ImportWorkflowExecution mocks base method.
+func (m *MockAdminServiceClient) ImportWorkflowExecution(ctx context.Context, in *adminservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockAdminServiceClientMockRecorder) ImportWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).ImportWorkflowExecution), varargs...)
 }
 
 // ListClusterMembers mocks base method.
@@ -916,6 +956,21 @@ func (mr *MockAdminServiceServerMockRecorder) GetDLQReplicationMessages(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetDLQReplicationMessages), arg0, arg1)
 }
 
+// GetNamespace mocks base method.
+func (m *MockAdminServiceServer) GetNamespace(arg0 context.Context, arg1 *adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNamespace", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNamespace indicates an expected call of GetNamespace.
+func (mr *MockAdminServiceServerMockRecorder) GetNamespace(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).GetNamespace), arg0, arg1)
+}
+
 // GetNamespaceReplicationMessages mocks base method.
 func (m *MockAdminServiceServer) GetNamespaceReplicationMessages(arg0 context.Context, arg1 *adminservice.GetNamespaceReplicationMessagesRequest) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1004,6 +1059,21 @@ func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.C
 func (mr *MockAdminServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
+}
+
+// ImportWorkflowExecution mocks base method.
+func (m *MockAdminServiceServer) ImportWorkflowExecution(arg0 context.Context, arg1 *adminservice.ImportWorkflowExecutionRequest) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockAdminServiceServerMockRecorder) ImportWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).ImportWorkflowExecution), arg0, arg1)
 }
 
 // ListClusterMembers mocks base method.
