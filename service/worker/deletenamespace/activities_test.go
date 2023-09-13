@@ -42,7 +42,7 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 
-	a := &activities{
+	a := &localActivities{
 		metadataManager: metadataManager,
 		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          log.NewNoopLogger(),

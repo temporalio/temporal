@@ -82,8 +82,13 @@ func newComponent(
 
 func (wc *deleteNamespaceComponent) RegisterWorkflow(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+	worker.RegisterActivity(wc.deleteNamespaceLocalActivities())
+
 	worker.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
+	worker.RegisterActivity(wc.reclaimResourcesLocalActivities())
+
 	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
+	worker.RegisterActivity(wc.deleteExecutionsLocalActivities())
 }
 
 func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -92,7 +97,6 @@ func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercomm
 }
 
 func (wc *deleteNamespaceComponent) RegisterActivities(worker sdkworker.Worker) {
-	worker.RegisterActivity(wc.deleteNamespaceActivities())
 	worker.RegisterActivity(wc.reclaimResourcesActivities())
 	worker.RegisterActivity(wc.deleteExecutionsActivities())
 }
@@ -107,14 +111,22 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 	}
 }
 
-func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {
-	return NewActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
+func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
+	return NewLocalActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
-	return reclaimresources.NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
+}
+
+func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimresources.LocalActivities {
+	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
 	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsHandler, wc.logger)
+}
+
+func (wc *deleteNamespaceComponent) deleteExecutionsLocalActivities() *deleteexecutions.LocalActivities {
+	return deleteexecutions.NewLocalActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
 }

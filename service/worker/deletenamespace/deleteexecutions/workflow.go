@@ -108,7 +108,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
-	var a *Activities
 	nextPageToken := params.NextPageToken
 	runningDeleteExecutionsActivityCount := 0
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
@@ -122,7 +121,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	// ConcurrentDeleteExecutionsActivities number of them and executes them concurrently on available workers.
 	for i := 0; i < params.Config.PagesPerExecution; i++ {
 		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
-		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
+		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, activityHandles.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
 			RPS:           params.Config.DeleteActivityRPS,
@@ -131,7 +130,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		})
 
 		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
+		err := workflow.ExecuteLocalActivity(ctx2, activityHandles.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
 			PageSize:      params.Config.PageSize,

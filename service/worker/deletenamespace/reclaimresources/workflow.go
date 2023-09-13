@@ -121,8 +121,6 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
-	var a *Activities
-
 	// Step 0. This workflow is started right after namespace is marked as DELETED and renamed.
 	// Wait for namespace cache refresh to make sure no new executions are created.
 	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
@@ -144,7 +142,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	// Step 3. Delete namespace from database.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx5, activityHandles.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -155,13 +153,12 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 }
 
 func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
-	var a *Activities
 	logger := workflow.GetLogger(ctx)
 	var result ReclaimResourcesResult
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	var isAdvancedVisibility bool
-	err := workflow.ExecuteLocalActivity(ctx1, a.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
+	err := workflow.ExecuteLocalActivity(ctx1, activityHandles.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
 	if err != nil {
 		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -169,7 +166,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	if isAdvancedVisibility {
 		ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 		var executionsCount int64
-		err = workflow.ExecuteLocalActivity(ctx4, a.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
+		err = workflow.ExecuteLocalActivity(ctx4, activityHandles.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
 		if err != nil {
 			return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 		}
@@ -191,10 +188,10 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 
 	if isAdvancedVisibility {
 		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
+		err = workflow.ExecuteActivity(ctx3, activityHandles.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
 	} else {
 		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
+		err = workflow.ExecuteActivity(ctx3, activityHandles.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	}
 	if err != nil {
 		var appErr *temporal.ApplicationError

@@ -116,12 +116,10 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
-	var a *activities
-
 	// Step 1. Get namespace info.
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	var namespaceInfo getNamespaceInfoResult
-	err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
+	err := workflow.ExecuteLocalActivity(ctx1, activityHandles.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
 		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 	}
@@ -130,7 +128,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx2, activityHandles.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -139,13 +137,13 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
+	err = workflow.ExecuteLocalActivity(ctx3, activityHandles.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
 		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx31, activityHandles.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}

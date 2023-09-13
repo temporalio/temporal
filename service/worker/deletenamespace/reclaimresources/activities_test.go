@@ -53,7 +53,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -78,7 +77,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -107,7 +105,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -134,7 +131,6 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -157,7 +153,6 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
