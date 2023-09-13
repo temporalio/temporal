@@ -29,8 +29,8 @@ import (
 
 	"github.com/dgryski/go-farm"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -42,6 +42,12 @@ type (
 
 		sync.Mutex
 		taskQueue collection.Queue[TrackableExecutableTask]
+	}
+
+	nwrKey interface {
+		GetNamespaceId() string
+		GetWorkflowId() string
+		GetRunId() string
 	}
 )
 
@@ -115,36 +121,31 @@ func TaskWorkflowKey(
 		return nil
 	}
 
-	switch replicationTask.GetTaskType() {
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
-		return nil
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
-		return nil
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		attr := replicationTask.GetSyncActivityTaskAttributes()
+	switch attr := replicationTask.Attributes.(type) {
+	case *replicationspb.ReplicationTask_HistoryTaskAttributes:
+		return getWorkflowKeyPtr(attr.HistoryTaskAttributes)
+	case *replicationspb.ReplicationTask_SyncActivityTaskAttributes:
+		return getWorkflowKeyPtr(attr.SyncActivityTaskAttributes)
+	case *replicationspb.ReplicationTask_RawAttributes:
+		return getWorkflowKeyPtr(attr.RawAttributes)
+	case *replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes:
+		workflowState := attr.SyncWorkflowStateTaskAttributes.GetWorkflowState()
 		workflowKey := definition.NewWorkflowKey(
-			attr.NamespaceId,
-			attr.WorkflowId,
-			attr.RunId,
-		)
-		return &workflowKey
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		attr := replicationTask.GetSyncWorkflowStateTaskAttributes()
-		workflowKey := definition.NewWorkflowKey(
-			attr.WorkflowState.ExecutionInfo.NamespaceId,
-			attr.WorkflowState.ExecutionInfo.WorkflowId,
-			attr.WorkflowState.ExecutionState.RunId,
-		)
-		return &workflowKey
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		attr := replicationTask.GetHistoryTaskAttributes()
-		workflowKey := definition.NewWorkflowKey(
-			attr.NamespaceId,
-			attr.WorkflowId,
-			attr.RunId,
+			workflowState.GetExecutionInfo().GetNamespaceId(),
+			workflowState.GetExecutionInfo().GetWorkflowId(),
+			workflowState.GetExecutionState().GetRunId(),
 		)
 		return &workflowKey
 	default:
 		return nil
 	}
+}
+
+func getWorkflowKeyPtr(key nwrKey) *definition.WorkflowKey {
+	wfKey := definition.NewWorkflowKey(
+		key.GetNamespaceId(),
+		key.GetWorkflowId(),
+		key.GetRunId(),
+	)
+	return &wfKey
 }
