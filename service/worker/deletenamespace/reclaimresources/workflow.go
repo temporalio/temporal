@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
@@ -117,6 +118,8 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	if err := validateParams(&params); err != nil {
 		return ReclaimResourcesResult{}, err
 	}
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
 	var a *Activities
 

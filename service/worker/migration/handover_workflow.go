@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	serverClient "go.temporal.io/server/client"
@@ -107,6 +108,8 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
 	}
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ)
 
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,

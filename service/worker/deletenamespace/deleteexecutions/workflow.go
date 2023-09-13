@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -104,6 +105,8 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, err
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
 	var a *Activities
 	nextPageToken := params.NextPageToken

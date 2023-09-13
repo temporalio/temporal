@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -144,6 +145,8 @@ const (
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
+	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ)
+
 	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		return ForceReplicationStatus{
 			LastCloseTime:                      params.LastCloseTime,
@@ -248,6 +251,8 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 }
 
 func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ) // children do not inherit ActivityOptions
+
 	var a *activities
 	ao := workflow.ActivityOptions{
 		// This shouldn't take "too long", just set an arbitrary long timeout here and rely on heartbeats for liveness detection.

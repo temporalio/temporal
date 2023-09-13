@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
@@ -104,6 +105,8 @@ var (
 func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.AddSearchAttributesActivityTQ)
 
 	var a *activities
 	var err error
