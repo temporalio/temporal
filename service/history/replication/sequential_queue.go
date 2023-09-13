@@ -122,8 +122,8 @@ func TaskWorkflowKey(
 	case *replicationspb.ReplicationTask_SyncActivityTaskAttributes:
 		key := definition.CreateWorkflowKey(attr.SyncActivityTaskAttributes)
 		return &key
-	case *replicationspb.ReplicationTask_RawAttributes:
-		key := definition.CreateWorkflowKey(attr.RawAttributes)
+	case *replicationspb.ReplicationTask_RawTaskAttributes:
+		key := definition.CreateWorkflowKey(attr.RawTaskAttributes)
 		return &key
 	case *replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes:
 		workflowState := attr.SyncWorkflowStateTaskAttributes.GetWorkflowState()

@@ -52,7 +52,7 @@ message ReplicationTask {
         HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
-        RawTaskAttributes raw_attributes = 12;
+        RawTaskAttributes raw_task_attributes = 12;
     }
     google.protobuf.Timestamp visibility_time = 9 [(gogoproto.stdtime) = true];
 }
@@ -167,5 +167,5 @@ message RawTaskAttributes {
     string namespace_id = 1;
     string workflow_id = 2;
     string run_id = 3;
-    bytes data = 4;
+    temporal.api.common.v1.DataBlob data = 4;
 }
