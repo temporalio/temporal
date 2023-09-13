@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock/hybrid_logical_clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -69,6 +69,7 @@ type (
 	BuildIdScavangerInput struct {
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
+		IgnoreRetentionTime   bool // If true, consider build ids added since retention time also
 	}
 
 	Activities struct {
@@ -208,7 +209,7 @@ func (a *Activities) processNamespaceEntry(
 		}
 		for heartbeat.TaskQueueIdx < len(tqResponse.Entries) {
 			entry := tqResponse.Entries[heartbeat.TaskQueueIdx]
-			if err := a.processUserDataEntry(ctx, rateLimiter, *heartbeat, ns, entry); err != nil {
+			if err := a.processUserDataEntry(ctx, rateLimiter, input, *heartbeat, ns, entry); err != nil {
 				if common.IsContextDeadlineExceededErr(err) {
 					// This is either a real DeadlineExceeded from the context, or the rate limiter
 					// thinks there's not enough time left until the deadline. Either way, we're done.
@@ -239,11 +240,12 @@ func (a *Activities) processNamespaceEntry(
 func (a *Activities) processUserDataEntry(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
+	input BuildIdScavangerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
 ) error {
-	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, heartbeat, ns, entry)
+	buildIdsToRemove, err := a.findBuildIdsToRemove(ctx, rateLimiter, input, heartbeat, ns, entry)
 	if err != nil {
 		return err
 	}
@@ -267,13 +269,25 @@ func (a *Activities) processUserDataEntry(
 func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
+	input BuildIdScavangerInput,
 	heartbeat heartbeatDetails,
 	ns *namespace.Namespace,
 	entry *persistence.TaskQueueUserDataEntry,
 ) ([]string, error) {
+	// Only consider build ids that have been active at least as long as the retention time.
+	// This assumes that when a build id is added, it's used soon afterwards.
+	// This lets us avoid making visibility queries that would probably find some workflows.
+	retention := ns.Retention()
+	// Don't consider build ids that were recently the default, since there may be workers
+	// still processing tasks or data that hasn't made it to visibility yet.
+	removableBuildIdDurationSinceDefault := a.removableBuildIdDurationSinceDefault()
+
 	versioningData := entry.UserData.Data.GetVersioningData()
 	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
+		// Note that setActive counts build ids that may have associated workflows, i.e. not
+		// just all with STATE_ACTIVE. Also note that we always examine the default build id
+		// for a set last, so setActive will be 1 + the number of active non-default build ids.
 		setActive := len(set.BuildIds)
 		for buildIdIdx, buildId := range set.BuildIds {
 			if buildId.State == persistencespb.STATE_DELETED {
@@ -282,12 +296,16 @@ func (a *Activities) findBuildIdsToRemove(
 			}
 			buildIdIsSetDefault := buildIdIdx == len(set.BuildIds)-1
 			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
-			// Don't remove if build id is the queue default of there's another active build id in this set.
+			// Don't remove if build id is the queue default or there's another active build id in
+			// this set, since we might need to dispatch new tasks to this set. But if no build ids
+			// are active for the whole set, we can remove them all.
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			timeSinceWasDefault := time.Since(hybrid_logical_clock.UTC(*buildId.BecameDefaultTimestamp))
-			if timeSinceWasDefault < a.removableBuildIdDurationSinceDefault() {
+			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+				continue
+			}
+			if !input.IgnoreRetentionTime && hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
 				continue
 			}
 
