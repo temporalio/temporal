@@ -75,8 +75,6 @@ type (
 )
 
 const (
-	activityTQName = "temporal-sys-migration-activity-tq"
-
 	reasonZombieWorkflow           = "Zombie workflow"
 	reasonWorkflowNotFound         = "Workflow not found"
 	reasonWorkflowCloseToRetention = "Workflow close to retention"

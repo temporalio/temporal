@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -63,7 +64,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
 )
@@ -2586,7 +2586,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	workflowID4 := "force-replication-wf-4"
 	run4, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID4,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -2601,7 +2601,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	workflowID5 := "namespace-handover-wf-5"
 	run5, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID5,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "namespace-handover", migration.NamespaceHandoverParams{
 		Namespace:              namespace,
@@ -2728,7 +2728,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -2867,7 +2867,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,

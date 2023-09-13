@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
@@ -38,8 +39,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
-
-const DefaultWorkerTaskQueue = "default-worker-tq"
 
 type (
 	// workerManager maintains list of SDK workers.
@@ -81,7 +80,7 @@ func (wm *workerManager) Start() {
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
-	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
+	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {

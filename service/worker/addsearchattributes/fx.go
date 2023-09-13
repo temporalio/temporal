@@ -30,6 +30,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/log"
@@ -87,7 +88,7 @@ func (wc *addSearchAttributes) RegisterActivities(worker sdkworker.Worker) {
 
 func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	return &workercommon.DedicatedWorkerOptions{
-		TaskQueue: activityTQName,
+		TaskQueue: primitives.AddSearchAttributesActivityTQ,
 		Options: sdkworker.Options{
 			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
 			DisableWorkflowWorker:     true,

@@ -31,6 +31,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
 	serverClient "go.temporal.io/server/client"
@@ -98,7 +99,7 @@ func (wc *replicationWorkerComponent) RegisterActivities(worker sdkworker.Worker
 
 func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	return &workercommon.DedicatedWorkerOptions{
-		TaskQueue: activityTQName,
+		TaskQueue: primitives.MigrationActivityTQ,
 		Options: sdkworker.Options{
 			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 			DisableWorkflowWorker:     true,

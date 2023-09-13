@@ -60,7 +60,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
@@ -233,7 +232,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: primitives.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
@@ -570,7 +569,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: primitives.DefaultWorkerTaskQueue,
 			ID:        fmt.Sprintf("%s/%s", deletenamespace.WorkflowName, request.GetNamespace()),
 		},
 		deletenamespace.WorkflowName,
