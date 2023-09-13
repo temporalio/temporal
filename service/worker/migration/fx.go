@@ -86,6 +86,8 @@ func (wc *replicationWorkerComponent) RegisterWorkflow(worker sdkworker.Worker) 
 	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
 	worker.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+
+	worker.RegisterActivity(wc.activities().GetMetadata) // may be run locally
 }
 
 func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
