@@ -81,20 +81,22 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 
+	processToolBox := ProcessToolBox{
+		Config: configs.NewConfig(
+			dynamicconfig.NewNoopCollection(),
+			1,
+			true,
+			false,
+		),
+		ClusterMetadata: s.clusterMetadata,
+		ClientBean:      s.clientBean,
+		ShardController: s.shardController,
+		MetricsHandler:  metrics.NoopMetricsHandler,
+		Logger:          log.NewNoopLogger(),
+	}
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
-		ProcessToolBox{
-			Config: configs.NewConfig(
-				dynamicconfig.NewNoopCollection(),
-				1,
-				true,
-				false,
-			),
-			ClusterMetadata: s.clusterMetadata,
-			ClientBean:      s.clientBean,
-			ShardController: s.shardController,
-			MetricsHandler:  metrics.NoopMetricsHandler,
-			Logger:          log.NewNoopLogger(),
-		},
+		processToolBox,
+		NewExecutableTaskConverter(processToolBox),
 		true,
 	)
 	streamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)

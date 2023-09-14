@@ -742,6 +742,9 @@ func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
+	if !shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+		return nil, serviceerror.NewUnimplemented("ImportWorkflowExecution must be used in global namespace mode")
+	}
 	resp, err := engine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
