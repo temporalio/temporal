@@ -74,8 +74,8 @@ type (
 		VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error)
 		VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error)
-		// ReplicationHistoryEvents is for a WIP feature. Ultimately will replace the ReplicateEventsV2 API
-		ReplicationHistoryEvents(
+		// ReplicateHistoryEvents is for a WIP feature. Ultimately will replace the ReplicateEventsV2 API
+		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 			baseExecutionInfo *workflowpb.BaseExecutionInfo,

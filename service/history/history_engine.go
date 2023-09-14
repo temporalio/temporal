@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
-	historyspb "go.temporal.io/server/api/history/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -635,7 +635,7 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	return e.nDCHistoryReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
-func (e *historyEngineImpl) ReplicationHistoryEvents(
+func (e *historyEngineImpl) ReplicateHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	baseExecutionInfo *workflowpb.BaseExecutionInfo,
