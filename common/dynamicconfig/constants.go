@@ -823,6 +823,9 @@ const (
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
+	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
+	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
