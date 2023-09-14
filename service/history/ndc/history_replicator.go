@@ -100,16 +100,11 @@ type (
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
 		) error
-
-		ApplyHistoryEvents(
-			ctx context.Context,
-			request *historyservice.ReplicateHistoryEventsRequest,
-		) error
-		// ApplyEventBlobs is the batch version of ApplyEvents
+		// ReplicateHistoryEvents is the batch version of ApplyEvents
 		// NOTE:
 		//  1. all history events should have the same version
 		//  2. all history events should share the same version history
-		ApplyEventBlobs(
+		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 			baseExecutionInfo *workflowpb.BaseExecutionInfo,
@@ -229,24 +224,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	return r.doApplyEvents(ctx, task)
 }
 
-func (r *HistoryReplicatorImpl) ApplyHistoryEvents(
-	ctx context.Context,
-	request *historyservice.ReplicateHistoryEventsRequest,
-) (retError error) {
-
-	task, err := newReplicationTaskFromReplicateHistoryEventsRequest(
-		r.clusterMetadata,
-		r.logger,
-		request,
-	)
-	if err != nil {
-		return err
-	}
-
-	return r.doApplyEvents(ctx, task)
-}
-
-func (r *HistoryReplicatorImpl) ApplyEventBlobs(
+func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	baseExecutionInfo *workflowpb.BaseExecutionInfo,

@@ -101,6 +101,10 @@ var (
 	ErrNoNewRunHistory = serviceerror.NewInvalidArgument("no new run history events")
 	// ErrLastEventIsNotContinueAsNew is returned if the last event is not continue as new
 	ErrLastEventIsNotContinueAsNew = serviceerror.NewInvalidArgument("last event is not continue as new")
+	// ErrEmptyEventSlice is returned if any of event slice is empty
+	ErrEmptyEventSlice = serviceerror.NewInvalidArgument("event slice is empty")
+	// ErrEventSlicesNotConsecutive is returned if event slices are not consecutive
+	ErrEventSlicesNotConsecutive = serviceerror.NewInvalidArgument("event slices are not consecutive")
 )
 
 func newReplicationTaskFromRequest(
@@ -130,32 +134,6 @@ func newReplicationTaskFromRequest(
 		request.VersionHistoryItems,
 		[][]*historypb.HistoryEvent{events},
 		newEvents,
-	)
-}
-
-func newReplicationTaskFromReplicateHistoryEventsRequest(
-	clusterMetadata cluster.Metadata,
-	logger log.Logger,
-	request *historyservice.ReplicateHistoryEventsRequest,
-) (*replicationTaskImpl, error) {
-
-	err := validateReplicateHistoryEventsRequest(request)
-	if err != nil {
-		return nil, err
-	}
-
-	return newReplicationTask(
-		clusterMetadata,
-		logger,
-		definition.NewWorkflowKey(
-			request.GetNamespaceId(),
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
-		),
-		request.BaseExecutionInfo,
-		request.VersionHistoryItems,
-		[][]*historypb.HistoryEvent{request.Events},
-		request.NewRunEvents,
 	)
 }
 
@@ -465,50 +443,23 @@ func validateReplicateEventsRequest(
 	return events, newRunEvents, nil
 }
 
-func validateReplicateHistoryEventsRequest(
-	request *historyservice.ReplicateHistoryEventsRequest,
-) error {
-
-	// TODO add validation on version history
-
-	if valid := validateUUID(request.GetNamespaceId()); !valid {
-		return ErrInvalidNamespaceID
-	}
-	if request.WorkflowExecution == nil {
-		return ErrInvalidExecution
-	}
-	if valid := validateUUID(request.WorkflowExecution.GetRunId()); !valid {
-		return ErrInvalidRunID
-	}
-
-	if len(request.Events) == 0 {
-		return consts.ErrEmptyHistoryRawEventBatch
-	}
-
-	version, err := validateEvents(request.Events)
-	if err != nil {
-		return err
-	}
-
-	newRunVersion, err := validateEvents(request.NewRunEvents)
-	if err != nil {
-		return err
-	}
-	if version != newRunVersion {
-		return ErrEventVersionMismatch
-	}
-	return nil
-}
-
 func validateUUID(input string) bool {
 	return uuid.Parse(input) != nil
 }
 
 func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error) {
+	for _, slice := range eventsSlice {
+		if len(slice) == 0 {
+			return 0, ErrEmptyEventSlice
+		}
+	}
+
 	version, err := validateEvents(eventsSlice[0])
 	if err != nil {
 		return 0, err
 	}
+
+	prevSliceLastEventId := eventsSlice[0][len(eventsSlice[0])-1].GetEventId()
 	for i := 1; i < len(eventsSlice); i++ {
 		v, err := validateEvents(eventsSlice[i])
 		if err != nil {
@@ -517,6 +468,10 @@ func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error
 		if v != version {
 			return 0, ErrEventVersionMismatch
 		}
+		if eventsSlice[i][0].GetEventId() != prevSliceLastEventId+1 {
+			return 0, ErrEventSlicesNotConsecutive
+		}
+		prevSliceLastEventId = eventsSlice[i][len(eventsSlice[i])-1].GetEventId()
 	}
 	return version, nil
 }

@@ -36,9 +36,12 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
+	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
+	workflow "go.temporal.io/server/api/workflow/v1"
 	collection "go.temporal.io/server/common/collection"
+	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -579,17 +582,17 @@ func (mr *MockEngineMockRecorder) ReplicateWorkflowState(ctx, request interface{
 }
 
 // ReplicationHistoryEvents mocks base method.
-func (m *MockEngine) ReplicationHistoryEvents(ctx context.Context, request *historyservice.ReplicateHistoryEventsRequest) error {
+func (m *MockEngine) ReplicationHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, events [][]*history.HistoryEvent, newEvents []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicationHistoryEvents", ctx, request)
+	ret := m.ctrl.Call(m, "ReplicationHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, events, newEvents)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicationHistoryEvents indicates an expected call of ReplicationHistoryEvents.
-func (mr *MockEngineMockRecorder) ReplicationHistoryEvents(ctx, request interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ReplicationHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, events, newEvents interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicationHistoryEvents), ctx, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicationHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicationHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, events, newEvents)
 }
 
 // RequestCancelWorkflowExecution mocks base method.
