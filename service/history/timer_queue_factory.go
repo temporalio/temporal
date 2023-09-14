@@ -173,13 +173,22 @@ func (f *timerQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := f.NewExecutableFactory(
+		executor,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewScheduledQueue(
 		shard,
 		tasks.CategoryTimer,
 		f.HostScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
+		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.TimerTaskBatchSize,

@@ -60,11 +60,9 @@ type (
 		PendingPerNamespace map[namespace.ID]int
 	}
 
-	ExecutableInitializer func(readerID int64, t tasks.Task) Executable
-
 	SliceImpl struct {
-		paginationFnProvider  PaginationFnProvider
-		executableInitializer ExecutableInitializer
+		paginationFnProvider PaginationFnProvider
+		executableFactory    ExecutableFactory
 
 		destroyed bool
 
@@ -78,14 +76,14 @@ type (
 
 func NewSlice(
 	paginationFnProvider PaginationFnProvider,
-	executableInitializer ExecutableInitializer,
+	executableFactory ExecutableFactory,
 	monitor Monitor,
 	scope Scope,
 ) *SliceImpl {
 	return &SliceImpl{
-		paginationFnProvider:  paginationFnProvider,
-		executableInitializer: executableInitializer,
-		scope:                 scope,
+		paginationFnProvider: paginationFnProvider,
+		executableFactory:    executableFactory,
+		scope:                scope,
 		iterators: []Iterator{
 			NewIterator(paginationFnProvider, scope.Range),
 		},
@@ -394,7 +392,7 @@ func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, er
 				continue
 			}
 
-			executable := s.executableInitializer(readerID, task)
+			executable := s.executableFactory.NewExecutable(task, readerID)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
@@ -451,12 +449,12 @@ func (s *SliceImpl) newSlice(
 	tracker *executableTracker,
 ) *SliceImpl {
 	slice := &SliceImpl{
-		paginationFnProvider:  s.paginationFnProvider,
-		executableInitializer: s.executableInitializer,
-		scope:                 scope,
-		iterators:             iterators,
-		executableTracker:     tracker,
-		monitor:               s.monitor,
+		paginationFnProvider: s.paginationFnProvider,
+		executableFactory:    s.executableFactory,
+		scope:                scope,
+		iterators:            iterators,
+		executableTracker:    tracker,
+		monitor:              s.monitor,
 	}
 	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
 
