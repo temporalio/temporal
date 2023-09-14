@@ -22,61 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest_test
+package history_test
 
 import (
-	"sync"
+	"context"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 )
 
-func TestPipe_Accept(t *testing.T) {
+func TestGetDLQTasks_ErrNoHosts(t *testing.T) {
 	t.Parallel()
 
-	pipe := nettest.NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
-}
-
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
-}
-
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
+	ctrl := gomock.NewController(t)
+	serviceResolver := membership.NewMockServiceResolver(ctrl)
+	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{})
+	client := history.NewClient(
+		dynamicconfig.NewNoopCollection(),
+		serviceResolver,
+		log.NewTestLogger(),
+		1,
+		nil,
+		time.Duration(0),
+	)
+	_, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{})
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr, "Should return an 'Unavailable' error when there are no"+
+		" history hosts available to serve the request")
+	assert.ErrorContains(t, err, history.ErrNoHosts.Error())
 }

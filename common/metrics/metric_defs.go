@@ -82,8 +82,6 @@ const (
 	AdminClientStreamWorkflowReplicationMessagesScope = "AdminClientStreamWorkflowReplicationMessages"
 )
 
-// Frontend Client Operations
-
 // History Client Operations
 const (
 	// HistoryClientStreamWorkflowReplicationMessagesScope tracks RPC calls to history service

@@ -241,7 +241,7 @@ func TestCassandraQueueV2Persistence(t *testing.T) {
 
 	t.Run("Generic", func(t *testing.T) {
 		t.Parallel()
-		testCassandraQueueV2Interface(t, cluster)
+		RunQueueV2TestSuite(t, cassandra.NewQueueV2Store(cluster.GetSession()))
 	})
 	t.Run("QueueMessageIDConflict", func(t *testing.T) {
 		t.Parallel()
@@ -259,20 +259,6 @@ func TestCassandraQueueV2Persistence(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrEnqueueMessageQuery(t, cluster)
 	})
-}
-
-func TestCassandraHistoryTaskQueueManager(t *testing.T) {
-	t.Parallel()
-
-	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
-	cluster.SetupTestDatabase()
-	t.Cleanup(cluster.TearDownTestDatabase)
-	RunHistoryTaskQueueManagerTestSuite(t, cassandra.NewQueueV2Store(cluster.GetSession()))
-}
-
-func testCassandraQueueV2Interface(t *testing.T, cluster *cassandra.TestCluster) {
-	q := cassandra.NewQueueV2Store(cluster.GetSession())
-	RunQueueV2TestSuite(t, q)
 }
 
 // Query checks if the query is for inserting a message, and, if so, it notifies the test and then blocks until

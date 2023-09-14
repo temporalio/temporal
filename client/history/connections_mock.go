@@ -71,6 +71,22 @@ func (mr *MockconnectionPoolMockRecorder) getAllClientConns() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAllClientConns", reflect.TypeOf((*MockconnectionPool)(nil).getAllClientConns))
 }
 
+// getAnyClientConn mocks base method.
+func (m *MockconnectionPool) getAnyClientConn() (clientConnection, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getAnyClientConn")
+	ret0, _ := ret[0].(clientConnection)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// getAnyClientConn indicates an expected call of getAnyClientConn.
+func (mr *MockconnectionPoolMockRecorder) getAnyClientConn() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAnyClientConn", reflect.TypeOf((*MockconnectionPool)(nil).getAnyClientConn))
+}
+
 // getOrCreateClientConn mocks base method.
 func (m *MockconnectionPool) getOrCreateClientConn(addr rpcAddress) clientConnection {
 	m.ctrl.T.Helper()

@@ -248,6 +248,12 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 	return d.Queue, nil
 }
 
+// NewQueueV2 just returns a queue data-access object without any fault injection.
+// TODO: implement this
+func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
+	return d.baseFactory.NewQueueV2()
+}
+
 func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.ClusterMetadataStore, error) {
 	if d.ClusterMDStore == nil {
 		baseStore, err := d.baseFactory.NewClusterMetadataStore()
