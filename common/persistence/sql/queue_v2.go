@@ -22,61 +22,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest_test
+package sql
 
 import (
-	"sync"
-	"testing"
+	"context"
+	"errors"
+	"fmt"
 
-	"github.com/stretchr/testify/assert"
-
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/persistence"
 )
 
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
+type (
+	queueV2 struct{}
+)
 
-	pipe := nettest.NewPipe()
+var (
+	ErrNotImplemented = errors.New("method is not implemented yet")
+)
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
+// NewQueueV2 returns an implementation of [persistence.QueueV2] which always returns an error because it is not
+// implemented yet.
+func NewQueueV2() persistence.QueueV2 {
+	return &queueV2{}
 }
 
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
+func (q queueV2) EnqueueMessage(
+	context.Context,
+	*persistence.InternalEnqueueMessageRequest,
+) (*persistence.InternalEnqueueMessageResponse, error) {
+	return nil, fmt.Errorf("%w: EnqueueMessage", ErrNotImplemented)
 }
 
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
+func (q queueV2) ReadMessages(
+	context.Context,
+	*persistence.InternalReadMessagesRequest,
+) (*persistence.InternalReadMessagesResponse, error) {
+	return nil, fmt.Errorf("%w: ReadMessages", ErrNotImplemented)
 }

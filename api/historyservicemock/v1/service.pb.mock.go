@@ -261,6 +261,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetDLQReplicationMessages(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetDLQReplicationMessages), varargs...)
 }
 
+// GetDLQTasks mocks base method.
+func (m *MockHistoryServiceClient) GetDLQTasks(ctx context.Context, in *historyservice.GetDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetDLQTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockHistoryServiceClientMockRecorder) GetDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetDLQTasks), varargs...)
+}
+
 // GetMutableState mocks base method.
 func (m *MockHistoryServiceClient) GetMutableState(ctx context.Context, in *historyservice.GetMutableStateRequest, opts ...grpc.CallOption) (*historyservice.GetMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1469,6 +1489,21 @@ func (m *MockHistoryServiceServer) GetDLQReplicationMessages(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) GetDLQReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetDLQReplicationMessages), arg0, arg1)
+}
+
+// GetDLQTasks mocks base method.
+func (m *MockHistoryServiceServer) GetDLQTasks(arg0 context.Context, arg1 *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockHistoryServiceServerMockRecorder) GetDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetDLQTasks), arg0, arg1)
 }
 
 // GetMutableState mocks base method.

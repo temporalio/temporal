@@ -1210,8 +1210,16 @@ type (
 	// but we plan on using this to implement a DLQ for history tasks. This is called a history task queue manager, but
 	// the actual history task queues are not managed by this object. Instead, this object is responsible for managing
 	// a generic queue of history tasks (which is what the history task DLQ will be).
-	// TODO: make this an interface and add wrapper classes like retryable client, metrics client, etc.
-	HistoryTaskQueueManager struct {
+	HistoryTaskQueueManager interface {
+		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
+		ReadRawTasks(
+			ctx context.Context,
+			request *ReadRawTasksRequest,
+		) (*ReadRawTasksResponse, error)
+		ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error)
+	}
+
+	HistoryTaskQueueManagerImpl struct {
 		queue            QueueV2
 		serializer       *serialization.TaskSerializer
 		numHistoryShards int
@@ -1226,9 +1234,13 @@ type (
 		TargetCluster string
 	}
 
+	// EnqueueTaskRequest does not include a QueueKey because it does not need the QueueKey.Category field, as that can
+	// already be inferred from the Task field.
 	EnqueueTaskRequest struct {
-		QueueKey QueueKey
-		Task     tasks.Task
+		QueueType     QueueV2Type
+		SourceCluster string
+		TargetCluster string
+		Task          tasks.Task
 	}
 
 	EnqueueTaskResponse struct {
@@ -1241,15 +1253,25 @@ type (
 		NextPageToken []byte
 	}
 
+	HistoryTask struct {
+		MessageMetadata MessageMetadata
+		Task            tasks.Task
+	}
+
 	ReadTasksResponse struct {
-		Tasks         []tasks.Task
+		Tasks         []HistoryTask
 		NextPageToken []byte
 	}
 
 	ReadRawTasksRequest = ReadTasksRequest
 
+	RawHistoryTask struct {
+		MessageMetadata MessageMetadata
+		Task            *persistencespb.HistoryTask
+	}
+
 	ReadRawTasksResponse struct {
-		Tasks         []persistencespb.HistoryTask
+		Tasks         []RawHistoryTask
 		NextPageToken []byte
 	}
 )

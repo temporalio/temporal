@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
@@ -63,21 +64,22 @@ var (
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
 )
 
-func NewTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTaskQueueManager {
-	return &HistoryTaskQueueManager{
+func NewHistoryTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTaskQueueManagerImpl {
+	return &HistoryTaskQueueManagerImpl{
 		queue:            queue,
 		serializer:       serialization.NewTaskSerializer(),
 		numHistoryShards: numHistoryShards,
 	}
 }
 
-func (m *HistoryTaskQueueManager) EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error) {
+func (m *HistoryTaskQueueManagerImpl) EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error) {
 	blob, err := m.serializer.SerializeTask(request.Task)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
 	}
 
 	shardID := tasks.GetShardIDForTask(request.Task, m.numHistoryShards)
+	taskCategory := request.Task.GetCategory()
 	task := persistencespb.HistoryTask{
 		ShardId: int32(shardID),
 		Blob:    &blob,
@@ -87,10 +89,16 @@ func (m *HistoryTaskQueueManager) EnqueueTask(ctx context.Context, request *Enqu
 		EncodingType: enums.ENCODING_TYPE_PROTO3,
 		Data:         taskBytes,
 	}
+	queueKey := QueueKey{
+		QueueType:     request.QueueType,
+		Category:      taskCategory,
+		SourceCluster: request.SourceCluster,
+		TargetCluster: request.TargetCluster,
+	}
 
 	message, err := m.queue.EnqueueMessage(ctx, &InternalEnqueueMessageRequest{
-		QueueType: request.QueueKey.QueueType,
-		QueueName: request.QueueKey.GetQueueName(),
+		QueueType: request.QueueType,
+		QueueName: queueKey.GetQueueName(),
 		Blob:      blob,
 	})
 	if err != nil {
@@ -109,7 +117,7 @@ func (m *HistoryTaskQueueManager) EnqueueTask(ctx context.Context, request *Enqu
 //     contains a shard ID and a blob of the serialized history task. This is also called a "raw" task.
 //   - [go.temporal.io/server/service/history/tasks.Task]: the interface that is implemented by all history tasks.
 //     This is the primary type used in code to represent a history task since it is the most structured.
-func (m *HistoryTaskQueueManager) ReadRawTasks(
+func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 	ctx context.Context,
 	request *ReadRawTasksRequest,
 ) (*ReadRawTasksResponse, error) {
@@ -127,12 +135,15 @@ func (m *HistoryTaskQueueManager) ReadRawTasks(
 		return nil, err
 	}
 
-	responseTasks := make([]persistencespb.HistoryTask, len(response.Messages))
+	responseTasks := make([]RawHistoryTask, len(response.Messages))
 	for i, message := range response.Messages {
-		err := serialization.Proto3Decode(message.Data.Data, message.Data.EncodingType, &responseTasks[i])
+		var task persistencespb.HistoryTask
+		err := serialization.Proto3Decode(message.Data.Data, message.Data.EncodingType, &task)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}
+		responseTasks[i].MessageMetadata = message.MetaData
+		responseTasks[i].Task = &task
 	}
 
 	return &ReadRawTasksResponse{
@@ -142,16 +153,16 @@ func (m *HistoryTaskQueueManager) ReadRawTasks(
 }
 
 // ReadTasks is a convenience method on top of ReadRawTasks that deserializes the tasks into the [tasks.Task] type.
-func (m *HistoryTaskQueueManager) ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error) {
+func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error) {
 	response, err := m.ReadRawTasks(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	resTasks := make([]tasks.Task, len(response.Tasks))
+	resTasks := make([]HistoryTask, len(response.Tasks))
 
 	for i, rawTask := range response.Tasks {
-		blob := rawTask.Blob
+		blob := rawTask.Task.Blob
 		if blob == nil {
 			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}
@@ -161,7 +172,10 @@ func (m *HistoryTaskQueueManager) ReadTasks(ctx context.Context, request *ReadTa
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeHistoryTask, err)
 		}
 
-		resTasks[i] = task
+		resTasks[i] = HistoryTask{
+			MessageMetadata: rawTask.MessageMetadata,
+			Task:            task,
+		}
 	}
 
 	return &ReadTasksResponse{

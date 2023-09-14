@@ -22,61 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest_test
+package sql_test
 
 import (
-	"sync"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/persistence/sql"
 )
 
-func TestPipe_Accept(t *testing.T) {
+func TestNewQueueV2(t *testing.T) {
 	t.Parallel()
 
-	pipe := nettest.NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
-}
-
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
-}
-
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
+	q := sql.NewQueueV2()
+	_, err := q.EnqueueMessage(context.Background(), nil)
+	assert.ErrorIs(t, err, sql.ErrNotImplemented)
+	assert.ErrorContains(t, err, "EnqueueMessage")
+	_, err = q.ReadMessages(context.Background(), nil)
+	assert.ErrorIs(t, err, sql.ErrNotImplemented)
+	assert.ErrorContains(t, err, "ReadMessages")
 }

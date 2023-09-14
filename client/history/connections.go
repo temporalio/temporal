@@ -27,6 +27,7 @@
 package history
 
 import (
+	"errors"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -57,8 +58,16 @@ type (
 	connectionPool interface {
 		getOrCreateClientConn(addr rpcAddress) clientConnection
 		getAllClientConns() []clientConnection
+		// getAnyClientConn returns a random connection from the pool. If the pool is empty, it creates a connection to
+		// the first host in the membership ring. If the membership ring is empty, it returns ErrNoHosts. The second
+		// return value indicates whether the connection is newly created.
+		getAnyClientConn() (clientConnection, bool, error)
 		resetConnectBackoff(clientConnection)
 	}
+)
+
+var (
+	ErrNoHosts = errors.New("no history hosts available to serve request")
 )
 
 func newConnectionPool(
@@ -108,6 +117,23 @@ func (c *connectionPoolImpl) getAllClientConns() []clientConnection {
 	}
 
 	return clientConns
+}
+
+func (c *connectionPoolImpl) getAnyClientConn() (clientConnection, bool, error) {
+	c.mu.RLock()
+
+	for _, conn := range c.mu.conns {
+		c.mu.RUnlock()
+		return conn, false, nil
+	}
+	c.mu.RUnlock()
+
+	members := c.historyServiceResolver.Members()
+	if len(members) == 0 {
+		return clientConnection{}, false, ErrNoHosts
+	}
+	conn := c.getOrCreateClientConn(rpcAddress(members[0].GetAddress()))
+	return conn, true, nil
 }
 
 func (c *connectionPoolImpl) resetConnectBackoff(cc clientConnection) {

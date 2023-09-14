@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
@@ -106,11 +107,8 @@ func TestHistoryTaskQueueManager_ErrSerializeTaskToEnqueue(t *testing.T) {
 	t.Parallel()
 
 	task := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.Category{}, time.Time{})
-	m := persistence.NewTaskQueueManager(nil, 1)
+	m := persistence.NewHistoryTaskQueueManager(nil, 1)
 	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
-		QueueKey: persistence.QueueKey{
-			Category: tasks.Category{}, // invalid category causes serialization error
-		},
 		Task: task,
 	})
 	assert.ErrorContains(t, err, persistence.ErrMsgSerializeTaskToEnqueue, "EnqueueTask should return "+
@@ -142,7 +140,7 @@ func (f corruptQueue) ReadMessages(
 func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewTaskQueueManager(corruptQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, 1)
 	_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 		QueueKey: persistence.QueueKey{
 			Category: tasks.CategoryTransfer,
@@ -157,7 +155,7 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testi
 func TestHistoryTaskQueueManager_ReadTasks_NonPositivePageSize(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewTaskQueueManager(corruptQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, 1)
 	for _, pageSize := range []int{0, -1} {
 		_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 			QueueKey: persistence.QueueKey{
@@ -190,7 +188,7 @@ func (q failingQueue) ReadMessages(
 func TestHistoryTaskQueueManager_ReadTasks_ErrReadQueueMessages(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewTaskQueueManager(failingQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(failingQueue{}, 1)
 	_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 		QueueKey: persistence.QueueKey{
 			Category: tasks.CategoryTransfer,
@@ -203,11 +201,8 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrReadQueueMessages(t *testing.T) {
 func TestHistoryTaskQueueManager_ReadTasks_ErrEnqueueMessage(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewTaskQueueManager(failingQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(failingQueue{}, 1)
 	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
-		QueueKey: persistence.QueueKey{
-			Category: tasks.CategoryTransfer,
-		},
 		Task: &tasks.WorkflowTask{},
 	})
 	assert.ErrorIs(t, err, assert.AnError, "EnqueueTask should propagate errors from EnqueueMessage")

@@ -171,15 +171,15 @@ func GetCategoryByID(id int32) (Category, bool) {
 	return category, ok
 }
 
-func (c *Category) ID() int32 {
+func (c Category) ID() int32 {
 	return c.id
 }
 
-func (c *Category) Name() string {
+func (c Category) Name() string {
 	return c.name
 }
 
-func (c *Category) Type() CategoryType {
+func (c Category) Type() CategoryType {
 	return c.cType
 }
 
