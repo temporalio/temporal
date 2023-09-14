@@ -33,29 +33,40 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-	persistence2 "go.temporal.io/server/api/persistence/v1"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client/history/historytest"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
+	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, 1)
 	t.Run("TestHistoryTaskQueueManagerHappyPath", func(t *testing.T) {
 		t.Parallel()
-		testHistoryTaskQueueManagerHappyPath(t, queue)
+		testHistoryTaskQueueManagerHappyPath(t, historyTaskQueueManager)
 	})
 	t.Run("TestHistoryTaskQueueManagerErrDeserializeTask", func(t *testing.T) {
 		t.Parallel()
-		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue)
+		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue, historyTaskQueueManager)
+	})
+	t.Run("GetDLQTasks", func(t *testing.T) {
+		t.Parallel()
+		getdlqtaskstest.TestGetDLQTasks(t, historyTaskQueueManager)
+	})
+	t.Run("ClientTest", func(t *testing.T) {
+		t.Parallel()
+		historytest.TestClientGetDLQTasks(t, historyTaskQueueManager)
 	})
 }
 
-func testHistoryTaskQueueManagerHappyPath(t *testing.T, queue persistence.QueueV2) {
+func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	numHistoryShards := 5
-	manager := persistence.NewTaskQueueManager(queue, numHistoryShards)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	t.Cleanup(cancel)
 
@@ -78,8 +89,9 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, queue persistence.QueueV
 			TaskID:      int64(i + 1),
 		}
 		res, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-			QueueKey: queueKey,
-			Task:     task,
+			QueueType:     queueKey.QueueType,
+			SourceCluster: queueKey.SourceCluster,
+			Task:          task,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+i), res.Metadata.ID)
@@ -96,8 +108,8 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, queue persistence.QueueV
 
 		if i < 2 {
 			require.Len(t, readRes.Tasks, 1)
-			assert.Equal(t, shardID, tasks.GetShardIDForTask(readRes.Tasks[0], numHistoryShards))
-			assert.Equal(t, int64(i+1), readRes.Tasks[0].GetTaskID())
+			assert.Equal(t, shardID, tasks.GetShardIDForTask(readRes.Tasks[0].Task, numHistoryShards))
+			assert.Equal(t, int64(i+1), readRes.Tasks[0].Task.GetTaskID())
 			nextPageToken = readRes.NextPageToken
 		} else {
 			assert.Empty(t, readRes.Tasks)
@@ -106,7 +118,11 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, queue persistence.QueueV
 	}
 }
 
-func testHistoryTaskQueueManagerErrDeserializeHistoryTask(t *testing.T, queue persistence.QueueV2) {
+func testHistoryTaskQueueManagerErrDeserializeHistoryTask(
+	t *testing.T,
+	queue persistence.QueueV2,
+	manager persistence.HistoryTaskQueueManager,
+) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	t.Cleanup(cancel)
 
@@ -132,7 +148,7 @@ func enqueueAndDeserializeBlob(ctx context.Context, t *testing.T, queue persiste
 		SourceCluster: "test-source-cluster-" + t.Name(),
 	}
 	queueName := queueKey.GetQueueName()
-	historyTask := persistence2.HistoryTask{
+	historyTask := persistencespb.HistoryTask{
 		ShardId: 1,
 		Blob:    blob,
 	}
@@ -147,7 +163,7 @@ func enqueueAndDeserializeBlob(ctx context.Context, t *testing.T, queue persiste
 	})
 	require.NoError(t, err)
 
-	manager := persistence.NewTaskQueueManager(queue, 1)
+	manager := persistence.NewHistoryTaskQueueManager(queue, 1)
 	_, err = manager.ReadTasks(ctx, &persistence.ReadTasksRequest{
 		QueueKey: queueKey,
 		PageSize: 1,

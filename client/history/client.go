@@ -33,10 +33,10 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -250,6 +250,21 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 		metadata.NewOutgoingContext(ctx, ctxMetadata),
 		opts...,
 	)
+}
+
+// GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host
+// in the connection pool (or creates one) and forwards the request to it.
+func (c *clientImpl) GetDLQTasks(
+	ctx context.Context,
+	in *historyservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetDLQTasksResponse, error) {
+	conn, _, err := c.connections.getAnyClientConn()
+	if err != nil {
+		msg := fmt.Sprintf("Failed to get a history host to send GetDLQTasks to. Error: %v", err)
+		return nil, serviceerror.NewUnavailable(msg)
+	}
+	return conn.historyClient.GetDLQTasks(ctx, in, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

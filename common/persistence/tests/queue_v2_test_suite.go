@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -73,6 +74,11 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		})
 		assert.ErrorIs(t, err, persistence.ErrNonPositiveReadQueueMessagesPageSize)
 	})
+	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
+		t.Parallel()
+		RunHistoryTaskQueueManagerTestSuite(t, queue)
+	})
+
 }
 
 func testHappyPath(

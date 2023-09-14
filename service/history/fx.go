@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -82,6 +83,7 @@ var Module = fx.Options(
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
+	fx.Provide(TaskQueueManagerProvider), // TODO: provide via persistence factory module
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -139,6 +141,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                   args.ShardController,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
+		taskQueueManager:             args.TaskQueueManager,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -277,4 +280,15 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func TaskQueueManagerProvider(
+	cfg *configs.Config,
+	factory persistenceClient.DataStoreFactory,
+) (persistence.HistoryTaskQueueManager, error) {
+	queueV2, err := factory.NewQueueV2()
+	if err != nil {
+		return nil, err
+	}
+	return persistence.NewHistoryTaskQueueManager(queueV2, int(cfg.NumberOfShards)), err
 }
