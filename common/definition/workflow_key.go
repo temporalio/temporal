@@ -25,12 +25,6 @@
 package definition
 
 type (
-	// WorkflowKey is the combinations which represent a current workflow
-	CurrentWorkflowKey struct {
-		NamespaceID string
-		WorkflowID  string
-	}
-
 	// WorkflowKey is the combinations which represent a workflow
 	WorkflowKey struct {
 		NamespaceID string
@@ -38,17 +32,6 @@ type (
 		RunID       string
 	}
 )
-
-// NewCurrentWorkflowKey create a new CurrentWorkflowKey
-func NewCurrentWorkflowKey(
-	namespaceID string,
-	workflowID string,
-) CurrentWorkflowKey {
-	return CurrentWorkflowKey{
-		NamespaceID: namespaceID,
-		WorkflowID:  workflowID,
-	}
-}
 
 // NewWorkflowKey create a new WorkflowKey
 func NewWorkflowKey(
