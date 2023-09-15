@@ -31,12 +31,6 @@ type (
 		WorkflowID  string
 		RunID       string
 	}
-
-	workflowKey interface {
-		GetNamespaceId() string
-		GetWorkflowId() string
-		GetRunId() string
-	}
 )
 
 // NewWorkflowKey create a new WorkflowKey
@@ -50,14 +44,6 @@ func NewWorkflowKey(
 		WorkflowID:  workflowID,
 		RunID:       runID,
 	}
-}
-
-// CreateWorkflowKey create a new WorkflowKey
-func CreateWorkflowKey(key workflowKey) WorkflowKey {
-	return NewWorkflowKey(
-		key.GetNamespaceId(),
-		key.GetWorkflowId(),
-		key.GetRunId())
 }
 
 func (k *WorkflowKey) GetNamespaceID() string {
