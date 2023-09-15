@@ -72,9 +72,11 @@ type ReplicationTask struct {
 	//	*ReplicationTask_HistoryTaskAttributes
 	//	*ReplicationTask_SyncWorkflowStateTaskAttributes
 	//	*ReplicationTask_TaskQueueUserDataAttributes
-	Attributes     isReplicationTask_Attributes `protobuf_oneof:"attributes"`
-	Data           *v11.DataBlob                `protobuf:"bytes,12,opt,name=data,proto3" json:"data,omitempty"`
-	VisibilityTime *time.Time                   `protobuf:"bytes,9,opt,name=visibility_time,json=visibilityTime,proto3,stdtime" json:"visibility_time,omitempty"`
+	Attributes isReplicationTask_Attributes `protobuf_oneof:"attributes"`
+	// All attributes should be deprecated and replaced by this field.
+	// The task_type + data provide more flexibility in future use cases.
+	Data           *v11.DataBlob `protobuf:"bytes,12,opt,name=data,proto3" json:"data,omitempty"`
+	VisibilityTime *time.Time    `protobuf:"bytes,9,opt,name=visibility_time,json=visibilityTime,proto3,stdtime" json:"visibility_time,omitempty"`
 }
 
 func (m *ReplicationTask) Reset()      { *m = ReplicationTask{} }
