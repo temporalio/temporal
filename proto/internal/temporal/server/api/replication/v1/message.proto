@@ -52,7 +52,6 @@ message ReplicationTask {
         HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
-
     }
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9 [(gogoproto.stdtime) = true];
