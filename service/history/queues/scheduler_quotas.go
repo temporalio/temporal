@@ -33,7 +33,7 @@ import (
 
 type SchedulerRateLimiter quotas.RequestRateLimiter
 
-func NewSchedulerRateLimiter(
+func NewPrioritySchedulerRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
 	hostRateFn quotas.RateFn,
 	persistenceNamespaceRateFn quotas.NamespaceRateFn,
@@ -72,18 +72,21 @@ func NewSchedulerRateLimiter(
 
 	priorityToRateLimiters := make(map[int]quotas.RequestRateLimiter, len(tasks.PriorityName))
 	for priority := range tasks.PriorityName {
-		var requestRateLimiter quotas.RequestRateLimiter
-		if priority == tasks.PriorityHigh {
-			requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
-				namespaceRateFnWithFallback,
-				hostRateFnWithFallback,
-			)
-		} else {
-			requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultOutgoingRateLimiter(hostRateFnWithFallback),
-			)
-		}
-		priorityToRateLimiters[int(priority)] = requestRateLimiter
+		// var requestRateLimiter quotas.RequestRateLimiter
+		// if priority == tasks.PriorityHigh {
+		// 	requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
+		// 		namespaceRateFnWithFallback,
+		// 		hostRateFnWithFallback,
+		// 	)
+		// } else {
+		// 	requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
+		// 		quotas.NewDefaultOutgoingRateLimiter(hostRateFnWithFallback),
+		// 	)
+		// }
+		priorityToRateLimiters[int(priority)] = newTaskRequestRateLimiter(
+			namespaceRateFnWithFallback,
+			hostRateFnWithFallback,
+		)
 	}
 
 	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
@@ -94,7 +97,7 @@ func NewSchedulerRateLimiter(
 	return priorityLimiter, nil
 }
 
-func newHighPriorityTaskRequestRateLimiter(
+func newTaskRequestRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
 	hostRateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {

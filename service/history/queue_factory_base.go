@@ -160,7 +160,7 @@ func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
-	return queues.NewSchedulerRateLimiter(
+	return queues.NewPrioritySchedulerRateLimiter(
 		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 			MemberCounter:    serviceResolver,
 			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,

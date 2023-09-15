@@ -209,7 +209,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
-			e.taggedMetricsHandler = e.metricsHandler.WithTags(e.estimateTaskMetricTag()...)
+			e.taggedMetricsHandler = e.metricsHandler.WithTags(EstimateTaskMetricTag(e, e.namespaceRegistry, e.clusterMetadata.GetCurrentClusterName())...)
 		}
 
 		attemptUserLatency := time.Duration(0)
@@ -554,14 +554,18 @@ func (e *executableImpl) resetAttempt() {
 	e.attempt = 1
 }
 
-func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
+func EstimateTaskMetricTag(
+	e Executable,
+	namespaceRegistry namespace.Registry,
+	currentClusterName string,
+) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
 
-	namespace, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
 	if err == nil {
 		namespaceTag = metrics.NamespaceTag(namespace.Name().String())
-		isActive = namespace.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName())
+		isActive = namespace.ActiveInCluster(currentClusterName)
 	}
 
 	taskType := getTaskTypeTagValue(e, isActive)
@@ -569,5 +573,6 @@ func (e *executableImpl) estimateTaskMetricTag() []metrics.Tag {
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+		// TODO: add task priority tag here as well
 	}
 }

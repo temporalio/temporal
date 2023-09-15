@@ -165,14 +165,7 @@ func NewNamespacePriorityScheduler(
 		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
-		if err != nil {
-			namespaceName = namespace.EmptyName
-		}
-		return []metrics.Tag{
-			metrics.NamespaceTag(string(namespaceName)),
-			metrics.TaskPriorityTag(e.GetPriority().String()),
-		}
+		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
 	}
 	scheduler = tasks.NewRateLimitedScheduler[Executable](
 		scheduler,
@@ -197,8 +190,11 @@ func NewNamespacePriorityScheduler(
 }
 
 // NewPriorityScheduler ignores namespace when scheduleing tasks.
+// TODO: deprecate this and always use NewNamespacePriorityScheduler
 func NewPriorityScheduler(
+	currentClusterName string,
 	options PrioritySchedulerOptions,
+	namespaceRegistry namespace.Registry,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	logger log.Logger,
@@ -241,13 +237,14 @@ func NewPriorityScheduler(
 
 	taskQuotaRequestFn := func(e Executable) quotas.Request {
 		// TODO: use 0 as token count upon shard reload
-		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[e.GetPriority()], 0, "")
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+		if err != nil {
+			namespaceName = namespace.EmptyName
+		}
+		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return []metrics.Tag{
-			metrics.NamespaceUnknownTag(),
-			metrics.TaskPriorityTag(e.GetPriority().String()),
-		}
+		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
 	}
 	scheduler = tasks.NewRateLimitedScheduler[Executable](
 		scheduler,

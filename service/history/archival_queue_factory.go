@@ -93,12 +93,14 @@ func NewArchivalQueueFactory(
 // newScheduler creates a new task scheduler for tasks on the archival queue.
 func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 	return queues.NewPriorityScheduler(
+		params.ClusterMetadata.GetCurrentClusterName(),
 		queues.PrioritySchedulerOptions{
 			WorkerCount:                 params.Config.ArchivalProcessorSchedulerWorkerCount,
 			EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
 			DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
 			Weight:                      dynamicconfig.GetMapPropertyFn(ArchivalTaskPriorities),
 		},
+		params.NamespaceRegistry,
 		params.SchedulerRateLimiter,
 		params.TimeSource,
 		params.Logger,

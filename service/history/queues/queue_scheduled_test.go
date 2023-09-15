@@ -83,7 +83,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	rateLimiter, _ := NewSchedulerRateLimiter(
+	rateLimiter, _ := NewPrioritySchedulerRateLimiter(
 		func(namespace string) float64 {
 			return float64(s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS(namespace))
 		},
@@ -101,10 +101,12 @@ func (s *scheduledQueueSuite) SetupTest() {
 	)
 
 	scheduler := NewPriorityScheduler(
+		s.mockShard.Resource.ClusterMetadata.GetCurrentClusterName(),
 		PrioritySchedulerOptions{
 			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
 			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
 		},
+		s.mockShard.GetNamespaceRegistry(),
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
 		log.NewTestLogger(),
