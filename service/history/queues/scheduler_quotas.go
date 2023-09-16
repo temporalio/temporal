@@ -72,17 +72,6 @@ func NewPrioritySchedulerRateLimiter(
 
 	priorityToRateLimiters := make(map[int]quotas.RequestRateLimiter, len(tasks.PriorityName))
 	for priority := range tasks.PriorityName {
-		// var requestRateLimiter quotas.RequestRateLimiter
-		// if priority == tasks.PriorityHigh {
-		// 	requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
-		// 		namespaceRateFnWithFallback,
-		// 		hostRateFnWithFallback,
-		// 	)
-		// } else {
-		// 	requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
-		// 		quotas.NewDefaultOutgoingRateLimiter(hostRateFnWithFallback),
-		// 	)
-		// }
 		priorityToRateLimiters[int(priority)] = newTaskRequestRateLimiter(
 			namespaceRateFnWithFallback,
 			hostRateFnWithFallback,
@@ -102,7 +91,7 @@ func newTaskRequestRateLimiter(
 	hostRateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
-		quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
+		quotas.NewDefaultIncomingRateLimiter(hostRateFn),
 	)
 	namespaceRequestRateLimiterFn := func(req quotas.Request) quotas.RequestRateLimiter {
 		if len(req.Caller) == 0 {
@@ -110,7 +99,7 @@ func newTaskRequestRateLimiter(
 		}
 
 		return quotas.NewRequestRateLimiterAdapter(
-			quotas.NewDefaultOutgoingRateLimiter(
+			quotas.NewDefaultIncomingRateLimiter(
 				func() float64 {
 					if rate := namespaceRateFn(req.Caller); rate > 0 {
 						return rate
