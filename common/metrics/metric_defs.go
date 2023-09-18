@@ -928,6 +928,7 @@ var (
 	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
 	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
 	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
+	PollLatencyPerTaskQueue                   = NewCounterDef("poll_latency")
 	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
 	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
@@ -950,6 +951,7 @@ var (
 	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
 	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
 
 	// Worker
 	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")

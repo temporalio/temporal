@@ -680,7 +680,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *workflowservice.PollActivityTaskQueueRequest) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	callTime := time.Now().UTC()
+	//callTime := time.Now().UTC()
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -738,15 +738,15 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		}
 
 		// For all other errors log an error and return it back to client.
-		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxTimeout = ctxDeadline.Sub(callTime).String()
-		}
-		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-			tag.Timeout(ctxTimeout),
-			tag.Error(err))
+		//ctxTimeout := "not-set"
+		//ctxDeadline, ok := ctx.Deadline()
+		//if ok {
+		//	ctxTimeout = ctxDeadline.Sub(callTime).String()
+		//}
+		//wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
+		//	tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+		//	tag.Timeout(ctxTimeout),
+		//	tag.Error(err))
 
 		return nil, err
 	}

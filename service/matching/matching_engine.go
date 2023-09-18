@@ -492,7 +492,7 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, forwarded, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
@@ -500,7 +500,9 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
+		if !forwarded {
+			e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
+		}
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -610,7 +612,7 @@ pollLoop:
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, forwarded, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
@@ -618,7 +620,9 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
+		if !forwarded {
+			e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
+		}
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -1189,10 +1193,10 @@ func (e *matchingEngineImpl) getTask(
 	origTaskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	pollMetadata *pollMetadata,
-) (*internalTask, error) {
+) (*internalTask, bool, error) {
 	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
@@ -1201,7 +1205,7 @@ func (e *matchingEngineImpl) getTask(
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is

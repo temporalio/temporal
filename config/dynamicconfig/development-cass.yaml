@@ -42,3 +42,14 @@ frontend.workerVersioningWorkflowAPIs:
   - value: true
 frontend.accessHistoryFraction:
   - value: 1.0
+
+matching.numTaskqueueWritePartitions:
+  - value: 2
+    constraints:
+      namespace: backlog_exp
+#      taskQueueName: <task queue name>
+matching.numTaskqueueReadPartitions:
+  - value: 2
+    constraints:
+      namespace: backlog_exp
+#      taskQueueName: <task queue name>
