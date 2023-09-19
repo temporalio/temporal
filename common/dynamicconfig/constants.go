@@ -569,7 +569,7 @@ const (
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
 	// TaskSchedulerEnableRateLimiter indicates if task scheduler rate limiter should be enabled
-	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiterShadowMode"
+	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
 	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
 	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
