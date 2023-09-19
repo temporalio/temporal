@@ -568,13 +568,13 @@ const (
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
+	// TaskSchedulerEnableRateLimiter indicates if task scheduler rate limiter should be enabled
+	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiterShadowMode"
 	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
 	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
 	// TaskSchedulerRateLimiterStartupDelay is the duration to wait after startup before enforcing task scheduler rate limiting
 	TaskSchedulerRateLimiterStartupDelay = "history.taskSchedulerRateLimiterStartupDelay"
-	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
-	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
 	// TaskSchedulerGlobalMaxQPS is the max qps all task schedulers in the cluster can schedule tasks
 	// If value less or equal to 0, will fall back to TaskSchedulerMaxQPS
 	TaskSchedulerGlobalMaxQPS = "history.taskSchedulerGlobalMaxQPS"

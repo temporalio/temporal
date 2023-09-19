@@ -38,7 +38,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -100,18 +99,32 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetTimeSource(),
 	)
 
-	scheduler := NewPriorityScheduler(
+	logger := log.NewTestLogger()
+
+	scheduler := NewScheduler(
 		s.mockShard.Resource.ClusterMetadata.GetCurrentClusterName(),
-		PrioritySchedulerOptions{
-			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
-			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
+		SchedulerOptions{
+			WorkerCount:             s.mockShard.GetConfig().TimerProcessorSchedulerWorkerCount,
+			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
+			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
 		},
+		s.mockShard.GetNamespaceRegistry(),
+		logger,
+	)
+	scheduler = NewRateLimitedScheduler(
+		scheduler,
+		RateLimitedSchedulerOptions{
+			EnableShadowMode: s.mockShard.GetConfig().TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
+		},
+		s.mockShard.Resource.ClusterMetadata.GetCurrentClusterName(),
 		s.mockShard.GetNamespaceRegistry(),
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
-		log.NewTestLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 	)
+
 	rescheduler := NewRescheduler(
 		scheduler,
 		s.mockShard.GetTimeSource(),

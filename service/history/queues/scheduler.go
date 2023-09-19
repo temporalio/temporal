@@ -49,17 +49,13 @@ const (
 
 type (
 	// Scheduler is the component for scheduling and processing
-	// task executables. Ack(), Nack() or Reschedule() will always
-	// be called on all executables that have been successfully submited.
-	// Reschedule() will only be called after the Scheduler has been stopped
+	// task executables, it's based on the common/tasks.Scheduler
+	// interface and provide the additional information of how
+	// tasks are grouped during scheduling.
 	Scheduler interface {
-		Submit(Executable)
-		TrySubmit(Executable) bool
+		tasks.Scheduler[Executable]
 
 		TaskChannelKeyFn() TaskChannelKeyFn
-		ChannelWeightFn() ChannelWeightFn
-		Start()
-		Stop()
 	}
 
 	TaskChannelKey struct {
@@ -70,19 +66,15 @@ type (
 	TaskChannelKeyFn = tasks.TaskChannelKeyFn[Executable, TaskChannelKey]
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
-	NamespacePrioritySchedulerOptions struct {
-		WorkerCount                 dynamicconfig.IntPropertyFn
-		ActiveNamespaceWeights      dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights     dynamicconfig.MapPropertyFnWithNamespaceFilter
-		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
-		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
+	SchedulerOptions struct {
+		WorkerCount             dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
-	PrioritySchedulerOptions struct {
-		WorkerCount                 dynamicconfig.IntPropertyFn
-		Weight                      dynamicconfig.MapPropertyFn
-		EnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
-		DispatchThrottleDuration    dynamicconfig.DurationPropertyFn
+	RateLimitedSchedulerOptions struct {
+		EnableShadowMode dynamicconfig.BoolPropertyFn
+		StartupDelay     dynamicconfig.DurationPropertyFn
 	}
 
 	schedulerImpl struct {
@@ -93,15 +85,18 @@ type (
 		channelWeightFn       ChannelWeightFn
 		channelWeightUpdateCh chan struct{}
 	}
+
+	rateLimitedSchedulerImpl struct {
+		tasks.Scheduler[Executable]
+
+		baseScheduler Scheduler
+	}
 )
 
-func NewNamespacePriorityScheduler(
+func NewScheduler(
 	currentClusterName string,
-	options NamespacePrioritySchedulerOptions,
+	options SchedulerOptions,
 	namespaceRegistry namespace.Registry,
-	rateLimiter SchedulerRateLimiter,
-	timeSource clock.TimeSource,
-	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Scheduler {
 	var scheduler tasks.Scheduler[Executable]
@@ -155,115 +150,12 @@ func NewNamespacePriorityScheduler(
 		logger,
 	)
 
-	taskQuotaRequestFn := func(e Executable) quotas.Request {
-		// TODO: use 0 as token count upon shard reload
-
-		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
-		if err != nil {
-			namespaceName = namespace.EmptyName
-		}
-		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
-	}
-	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
-	}
-	scheduler = tasks.NewRateLimitedScheduler[Executable](
-		scheduler,
-		rateLimiter,
-		timeSource,
-		taskQuotaRequestFn,
-		taskMetricsTagsFn,
-		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableRateLimiterShadowMode(),
-		},
-		logger,
-		metricsHandler,
-	)
-
 	return &schedulerImpl{
 		Scheduler:             scheduler,
 		namespaceRegistry:     namespaceRegistry,
 		taskChannelKeyFn:      taskChannelKeyFn,
 		channelWeightFn:       channelWeightFn,
 		channelWeightUpdateCh: channelWeightUpdateCh,
-	}
-}
-
-// NewPriorityScheduler ignores namespace when scheduleing tasks.
-// TODO: deprecate this and always use NewNamespacePriorityScheduler
-func NewPriorityScheduler(
-	currentClusterName string,
-	options PrioritySchedulerOptions,
-	namespaceRegistry namespace.Registry,
-	rateLimiter SchedulerRateLimiter,
-	timeSource clock.TimeSource,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) Scheduler {
-	var scheduler tasks.Scheduler[Executable]
-
-	taskChannelKeyFn := func(e Executable) TaskChannelKey {
-		return TaskChannelKey{
-			NamespaceID: namespace.EmptyID.String(),
-			Priority:    e.GetPriority(),
-		}
-	}
-	channelWeightFn := func(key TaskChannelKey) int {
-		weight := configs.DefaultActiveTaskPriorityWeight
-		if options.Weight != nil {
-			weight = configs.ConvertDynamicConfigValueToWeights(
-				options.Weight(),
-				logger,
-			)
-		}
-		return weight[key.Priority]
-	}
-	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
-		QueueSize:   prioritySchedulerProcessorQueueSize,
-		WorkerCount: options.WorkerCount,
-	}
-	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
-		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-			TaskChannelKeyFn:      taskChannelKeyFn,
-			ChannelWeightFn:       channelWeightFn,
-			ChannelWeightUpdateCh: nil,
-		},
-		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-			fifoSchedulerOptions,
-			logger,
-		)),
-		logger,
-	)
-
-	taskQuotaRequestFn := func(e Executable) quotas.Request {
-		// TODO: use 0 as token count upon shard reload
-		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
-		if err != nil {
-			namespaceName = namespace.EmptyName
-		}
-		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
-	}
-	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
-	}
-	scheduler = tasks.NewRateLimitedScheduler[Executable](
-		scheduler,
-		rateLimiter,
-		timeSource,
-		taskQuotaRequestFn,
-		taskMetricsTagsFn,
-		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableRateLimiterShadowMode(),
-		},
-		logger,
-		metricsHandler,
-	)
-
-	return &schedulerImpl{
-		Scheduler:             scheduler,
-		taskChannelKeyFn:      taskChannelKeyFn,
-		channelWeightFn:       channelWeightFn,
-		channelWeightUpdateCh: nil,
 	}
 }
 
@@ -298,6 +190,68 @@ func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
 }
 
-func (s *schedulerImpl) ChannelWeightFn() ChannelWeightFn {
-	return s.channelWeightFn
+func NewRateLimitedScheduler(
+	baseScheduler Scheduler,
+	options RateLimitedSchedulerOptions,
+	currentClusterName string,
+	namespaceRegistry namespace.Registry,
+	rateLimiter SchedulerRateLimiter,
+	timeSource clock.TimeSource,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) Scheduler {
+	if delay := options.StartupDelay(); delay > 0 {
+		delayedRateLimiter, err := quotas.NewDelayedRequestRateLimiter(
+			rateLimiter,
+			delay,
+			timeSource,
+		)
+		if err != nil {
+			logger.Error("Failed to create delayed rate limited scheduler", tag.Error(err))
+			return baseScheduler
+		}
+
+		rateLimiter = delayedRateLimiter
+	}
+
+	taskQuotaRequestFn := func(e Executable) quotas.Request {
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+		if err != nil {
+			namespaceName = namespace.EmptyName
+		}
+		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[e.GetPriority()], 0, "")
+	}
+	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
+		return append(EstimateTaskMetricTag(e, namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
+	}
+
+	rateLimitedScheduler := tasks.NewRateLimitedScheduler[Executable](
+		baseScheduler,
+		rateLimiter,
+		timeSource,
+		taskQuotaRequestFn,
+		taskMetricsTagsFn,
+		tasks.RateLimitedSchedulerOptions{
+			EnableShadowMode: options.EnableShadowMode(),
+		},
+		logger,
+		metricsHandler,
+	)
+
+	return &rateLimitedSchedulerImpl{
+		Scheduler:     rateLimitedScheduler,
+		baseScheduler: baseScheduler,
+	}
+}
+
+func (s *rateLimitedSchedulerImpl) Start() {
+	s.baseScheduler.Start()
+}
+
+func (s *rateLimitedSchedulerImpl) Stop() {
+	s.baseScheduler.Stop()
+}
+
+func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
+	return s.baseScheduler.TaskChannelKeyFn()
 }
