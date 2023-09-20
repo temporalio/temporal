@@ -25,8 +25,6 @@
 package queues
 
 import (
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
 )
@@ -38,8 +36,6 @@ func NewPrioritySchedulerRateLimiter(
 	hostRateFn quotas.RateFn,
 	persistenceNamespaceRateFn quotas.NamespaceRateFn,
 	persistenceHostRateFn quotas.RateFn,
-	startupDelay dynamicconfig.DurationPropertyFn,
-	timeSource clock.TimeSource,
 ) (SchedulerRateLimiter, error) {
 
 	namespaceRateFnWithFallback := func(namespace string) float64 {
@@ -80,9 +76,6 @@ func NewPrioritySchedulerRateLimiter(
 
 	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
 
-	if startupDelay != nil {
-		return quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), timeSource)
-	}
 	return priorityLimiter, nil
 }
 

@@ -95,8 +95,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 		func() float64 {
 			return float64(s.mockShard.GetConfig().PersistenceMaxQPS())
 		},
-		s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
-		s.mockShard.GetTimeSource(),
 	)
 
 	logger := log.NewTestLogger()
