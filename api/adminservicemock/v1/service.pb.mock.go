@@ -241,6 +241,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetDLQReplicationMessages(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetDLQReplicationMessages), varargs...)
 }
 
+// GetDLQTasks mocks base method.
+func (m *MockAdminServiceClient) GetDLQTasks(ctx context.Context, in *adminservice.GetDLQTasksRequest, opts ...grpc.CallOption) (*adminservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetDLQTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockAdminServiceClientMockRecorder) GetDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GetDLQTasks), varargs...)
+}
+
 // GetNamespace mocks base method.
 func (m *MockAdminServiceClient) GetNamespace(ctx context.Context, in *adminservice.GetNamespaceRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -954,6 +974,21 @@ func (m *MockAdminServiceServer) GetDLQReplicationMessages(arg0 context.Context,
 func (mr *MockAdminServiceServerMockRecorder) GetDLQReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetDLQReplicationMessages), arg0, arg1)
+}
+
+// GetDLQTasks mocks base method.
+func (m *MockAdminServiceServer) GetDLQTasks(arg0 context.Context, arg1 *adminservice.GetDLQTasksRequest) (*adminservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockAdminServiceServerMockRecorder) GetDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GetDLQTasks), arg0, arg1)
 }
 
 // GetNamespace mocks base method.
