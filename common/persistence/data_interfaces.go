@@ -1205,10 +1205,9 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. It is currently unused,
-	// but we plan on using this to implement a DLQ for history tasks. This is called a history task queue manager, but
-	// the actual history task queues are not managed by this object. Instead, this object is responsible for managing
-	// a generic queue of history tasks (which is what the history task DLQ will be).
+	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
+	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
+	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
 	HistoryTaskQueueManager interface {
 		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
 		ReadRawTasks(
