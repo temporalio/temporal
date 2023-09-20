@@ -27,7 +27,6 @@ package shard
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 
@@ -35,14 +34,28 @@ import (
 )
 
 type (
-	// OwnershipBasedQuotaScaler scales rate-limiting quotas linearly with the fraction of the total shards in the
+	OwnershipBasedQuotaScaler interface {
+		ScaleFactor() (float64, bool)
+	}
+
+	// OwnershipBasedQuotaScalerImpl scales rate-limiting quotas linearly with the fraction of the total shards in the
 	// cluster owned by this host. The purpose is to allocate more quota to hosts with a higher workload. This object
 	// can be obtained from the fx Module within this package.
-	OwnershipBasedQuotaScaler struct {
+	OwnershipBasedQuotaScalerImpl struct {
 		shardCounter          ShardCounter
 		totalNumShards        int
 		updateAppliedCallback chan struct{}
+
+		shardCount   atomic.Int64
+		subscription ShardCountSubscription
+		shutdownWG   sync.WaitGroup
 	}
+
+	LazyLoadedOwnershipBasedQuotaScaler struct {
+		*atomic.Value // value type is OwnershipBasedQuotaScaler
+	}
+
+	// TODO: deprecated. use OwnershipBased(Namespace)QuotaCalculator instead.
 	// OwnershipScaledRateBurst is a quotas.RateBurst implementation that scales the RPS and burst quotas linearly with
 	// the fraction of the total shards in the cluster owned by this host. The effective Rate and Burst are both
 	// multiplied by (shardCount / totalShards). Note that there is no scaling until the first shard count update is
@@ -62,6 +75,7 @@ type (
 		// wg is a wait group that is used to wait for the shard count subscription goroutine to exit.
 		wg sync.WaitGroup
 	}
+
 	// ShardCountSubscription is a subscription to a ShardCounter. It provides a channel that receives the
 	// shard count updates and an Unsubscribe method that unsubscribes from the counter.
 	ShardCountSubscription interface {
@@ -70,6 +84,7 @@ type (
 		// Unsubscribe unsubscribes from the shard counter. This closes the ShardCount channel.
 		Unsubscribe()
 	}
+
 	// ShardCounter is an observable object that emits the current shard count.
 	ShardCounter interface {
 		// SubscribeShardCount returns a ShardCountSubscription for receiving shard count updates.
@@ -93,87 +108,121 @@ func NewOwnershipBasedQuotaScaler(
 	shardCounter ShardCounter,
 	totalNumShards int,
 	updateAppliedCallback chan struct{},
-) (*OwnershipBasedQuotaScaler, error) {
+) (*OwnershipBasedQuotaScalerImpl, error) {
 	if totalNumShards <= 0 {
 		return nil, fmt.Errorf("%w: %d", ErrNonPositiveTotalNumShards, totalNumShards)
 	}
 
-	return &OwnershipBasedQuotaScaler{
+	scaler := &OwnershipBasedQuotaScalerImpl{
 		shardCounter:          shardCounter,
 		totalNumShards:        totalNumShards,
 		updateAppliedCallback: updateAppliedCallback,
-	}, nil
+		subscription:          shardCounter.SubscribeShardCount(),
+	}
+
+	scaler.shardCount.Store(shardCountNotSet)
+	scaler.shutdownWG.Add(1)
+	go func() {
+		defer scaler.shutdownWG.Done()
+
+		for count := range scaler.subscription.ShardCount() {
+			scaler.shardCount.Store(int64(count))
+		}
+	}()
+
+	return scaler, nil
+}
+
+func (s *OwnershipBasedQuotaScalerImpl) ScaleFactor() (float64, bool) {
+	shardCount := s.shardCount.Load()
+	if shardCount == shardCountNotSet {
+		return 0, false
+	}
+
+	return float64(shardCount) / float64(s.totalNumShards), true
+}
+
+func (s *OwnershipBasedQuotaScalerImpl) Close() {
+	s.subscription.Unsubscribe()
+	s.shutdownWG.Wait()
 }
 
 // ScaleRateBurst returns a new OwnershipScaledRateBurst instance which scales the rate/burst quotas of the base
 // RateBurst by the fraction of the total shards in the cluster owned by this host. You should call
 // OwnershipScaledRateBurst.StopScaling on the returned instance when you are done with it to avoid leaking resources.
-func (s *OwnershipBasedQuotaScaler) ScaleRateBurst(rb quotas.RateBurst) *OwnershipScaledRateBurst {
-	return newOwnershipScaledRateBurst(rb, s.shardCounter, s.totalNumShards, s.updateAppliedCallback)
-}
+// func (s *OwnershipBasedQuotaScalerImpl) ScaleRateBurst(rb quotas.RateBurst) *OwnershipScaledRateBurst {
+// 	return newOwnershipScaledRateBurst(rb, s.shardCounter, s.totalNumShards, s.updateAppliedCallback)
+// }
 
-func newOwnershipScaledRateBurst(
-	rb quotas.RateBurst,
-	shardCounter ShardCounter,
-	totalNumShards int,
-	updateAppliedCallback chan struct{},
-) *OwnershipScaledRateBurst {
-	subscription := shardCounter.SubscribeShardCount()
-	srb := &OwnershipScaledRateBurst{
-		rb:                    rb,
-		totalShards:           totalNumShards,
-		subscription:          subscription,
-		updateAppliedCallback: updateAppliedCallback,
+func (s LazyLoadedOwnershipBasedQuotaScaler) ScaleFactor() (float64, bool) {
+	if value := s.Load(); value != nil {
+		return value.(OwnershipBasedQuotaScaler).ScaleFactor()
 	}
-	// Initialize the shard count to the shardCountNotSet sentinel value so that we don't try to apply the scale factor
-	// until we receive the first shard count.
-	srb.shardCount.Store(shardCountNotSet)
-	srb.wg.Add(1)
-
-	go srb.startScaling()
-
-	return srb
+	return 0, false
 }
 
-// Rate returns the rate of the base rate limiter multiplied by the shard ownership share.
-func (rb *OwnershipScaledRateBurst) Rate() float64 {
-	return rb.rb.Rate() * rb.scaleFactor()
-}
+// func newOwnershipScaledRateBurst(
+// 	rb quotas.RateBurst,
+// 	shardCounter ShardCounter,
+// 	totalNumShards int,
+// 	updateAppliedCallback chan struct{},
+// ) *OwnershipScaledRateBurst {
+// 	subscription := shardCounter.SubscribeShardCount()
+// 	srb := &OwnershipScaledRateBurst{
+// 		rb:                    rb,
+// 		totalShards:           totalNumShards,
+// 		subscription:          subscription,
+// 		updateAppliedCallback: updateAppliedCallback,
+// 	}
+// 	// Initialize the shard count to the shardCountNotSet sentinel value so that we don't try to apply the scale factor
+// 	// until we receive the first shard count.
+// 	srb.shardCount.Store(shardCountNotSet)
+// 	srb.wg.Add(1)
 
-// Burst returns the burst quota of the base rate limiter multiplied by the shard ownership share, rounded up to the
-// nearest integer. We round up because we don't want to let this drop to zero unless the base burst is zero.
-func (rb *OwnershipScaledRateBurst) Burst() int {
-	return int(math.Ceil(float64(rb.rb.Burst()) * rb.scaleFactor()))
-}
+// 	go srb.startScaling()
 
-// scaleFactor returns the fraction of the total shards in the cluster owned by this host. It returns 1.0 if there
-// haven't been any shard count updates yet.
-func (rb *OwnershipScaledRateBurst) scaleFactor() float64 {
-	shardCount := rb.shardCount.Load()
-	if shardCount == shardCountNotSet {
-		// If the shard count is not set, then we haven't received the first shard count update yet. In this case, we
-		// return 1.0 so that the base rate/burst quotas are not scaled.
-		return 1.0
-	}
+// 	return srb
+// }
 
-	return float64(shardCount) / float64(rb.totalShards)
-}
+// // Rate returns the rate of the base rate limiter multiplied by the shard ownership share.
+// func (rb *OwnershipScaledRateBurst) Rate() float64 {
+// 	return rb.rb.Rate() * rb.scaleFactor()
+// }
 
-func (rb *OwnershipScaledRateBurst) startScaling() {
-	defer rb.wg.Done()
+// // Burst returns the burst quota of the base rate limiter multiplied by the shard ownership share, rounded up to the
+// // nearest integer. We round up because we don't want to let this drop to zero unless the base burst is zero.
+// func (rb *OwnershipScaledRateBurst) Burst() int {
+// 	return int(math.Ceil(float64(rb.rb.Burst()) * rb.scaleFactor()))
+// }
 
-	for shardCount := range rb.subscription.ShardCount() {
-		rb.shardCount.Store(int64(shardCount))
+// // scaleFactor returns the fraction of the total shards in the cluster owned by this host. It returns 1.0 if there
+// // haven't been any shard count updates yet.
+// func (rb *OwnershipScaledRateBurst) scaleFactor() float64 {
+// 	shardCount := rb.shardCount.Load()
+// 	if shardCount == shardCountNotSet {
+// 		// If the shard count is not set, then we haven't received the first shard count update yet. In this case, we
+// 		// return 1.0 so that the base rate/burst quotas are not scaled.
+// 		return 1.0
+// 	}
 
-		if rb.updateAppliedCallback != nil {
-			rb.updateAppliedCallback <- struct{}{}
-		}
-	}
-}
+// 	return float64(shardCount) / float64(rb.totalShards)
+// }
 
-// StopScaling unsubscribes from the shard counter and stops scaling the rate and burst quotas. This method blocks until
-// the shard count subscription goroutine exits (which should be almost immediately).
-func (rb *OwnershipScaledRateBurst) StopScaling() {
-	rb.subscription.Unsubscribe()
-	rb.wg.Wait()
-}
+// func (rb *OwnershipScaledRateBurst) startScaling() {
+// 	defer rb.wg.Done()
+
+// 	for shardCount := range rb.subscription.ShardCount() {
+// 		rb.shardCount.Store(int64(shardCount))
+
+// 		if rb.updateAppliedCallback != nil {
+// 			rb.updateAppliedCallback <- struct{}{}
+// 		}
+// 	}
+// }
+
+// // StopScaling unsubscribes from the shard counter and stops scaling the rate and burst quotas. This method blocks until
+// // the shard count subscription goroutine exits (which should be almost immediately).
+// func (rb *OwnershipScaledRateBurst) StopScaling() {
+// 	rb.subscription.Unsubscribe()
+// 	rb.wg.Wait()
+// }
