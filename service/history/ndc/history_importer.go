@@ -60,7 +60,7 @@ type (
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		taskRefresher  workflow.TaskRefresher
-		transactionMgr transactionMgr
+		transactionMgr TransactionManager
 		logger         log.Logger
 
 		mutableStateInitializer *MutableStateInitializerImpl
@@ -83,7 +83,7 @@ func NewHistoryImporter(
 			shardContext.GetNamespaceRegistry(),
 			logger,
 		),
-		transactionMgr: newTransactionMgr(shardContext, workflowCache, nil, logger, true),
+		transactionMgr: NewTransactionManager(shardContext, workflowCache, nil, logger, true),
 		logger:         logger,
 
 		mutableStateInitializer: NewMutableStateInitializer(
@@ -355,7 +355,7 @@ func (r *HistoryImporterImpl) commit(
 		memMutableState := memNDCWorkflow.GetMutableState()
 		nextEventID, _ := memMutableState.GetUpdateCondition()
 		memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
-		if err := r.transactionMgr.createWorkflow(
+		if err := r.transactionMgr.CreateWorkflow(
 			ctx,
 			memNDCWorkflow,
 		); err != nil {
@@ -366,7 +366,7 @@ func (r *HistoryImporterImpl) commit(
 	}
 
 	workflowKey := memNDCWorkflow.GetContext().GetWorkflowKey()
-	dbNDCWorkflow, err := r.transactionMgr.loadWorkflow(
+	dbNDCWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
@@ -446,7 +446,7 @@ func (r *HistoryImporterImpl) commit(
 	memMutableState := memNDCWorkflow.GetMutableState()
 	nextEventID, _ := memMutableState.GetUpdateCondition()
 	memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
-	if err := r.transactionMgr.updateWorkflow(
+	if err := r.transactionMgr.UpdateWorkflow(
 		ctx,
 		true,
 		memNDCWorkflow,
