@@ -100,11 +100,11 @@ type (
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
 		) error
-		// ApplyEventBlobs is the batch version of ApplyEvents
+		// ReplicateHistoryEvents is the batch version of ApplyEvents
 		// NOTE:
 		//  1. all history events should have the same version
 		//  2. all history events should share the same version history
-		ApplyEventBlobs(
+		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 			baseExecutionInfo *workflowpb.BaseExecutionInfo,
@@ -122,7 +122,7 @@ type (
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		eventsReapplier   EventsReapplier
-		transactionMgr    transactionMgr
+		transactionMgr    TransactionManager
 		logger            log.Logger
 
 		mutableStateMapper *MutableStateMapperImpl
@@ -145,7 +145,7 @@ func NewHistoryReplicator(
 	logger log.Logger,
 ) *HistoryReplicatorImpl {
 
-	transactionMgr := newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger, false)
+	transactionMgr := NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false)
 	replicator := &HistoryReplicatorImpl{
 		shardContext:      shardContext,
 		clusterMetadata:   shardContext.GetClusterMetadata(),
@@ -224,7 +224,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 	return r.doApplyEvents(ctx, task)
 }
 
-func (r *HistoryReplicatorImpl) ApplyEventBlobs(
+func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	baseExecutionInfo *workflowpb.BaseExecutionInfo,
@@ -356,7 +356,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		)
 	}
 
-	err = r.transactionMgr.createWorkflow(
+	err = r.transactionMgr.CreateWorkflow(
 		ctx,
 		NewWorkflow(
 			r.clusterMetadata,
@@ -419,7 +419,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		)
 	}
 
-	err = r.transactionMgr.updateWorkflow(
+	err = r.transactionMgr.UpdateWorkflow(
 		ctx,
 		isRebuilt,
 		targetWorkflow,
@@ -502,7 +502,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 			Events:      events,
 		}
 	}
-	err = r.transactionMgr.backfillWorkflow(
+	err = r.transactionMgr.BackfillWorkflow(
 		ctx,
 		NewWorkflow(
 			r.clusterMetadata,
@@ -652,7 +652,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		wcache.NoopReleaseFn,
 	)
 
-	err = r.transactionMgr.createWorkflow(
+	err = r.transactionMgr.CreateWorkflow(
 		ctx,
 		targetWorkflow,
 	)

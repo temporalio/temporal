@@ -58,7 +58,7 @@ type (
 		mockShard               *shard.ContextTest
 		mockBaseMutableState    *workflow.MockMutableState
 		mockRebuiltMutableState *workflow.MockMutableState
-		mockTransactionMgr      *MocktransactionMgr
+		mockTransactionMgr      *MockTransactionManager
 		mockStateBuilder        *MockStateRebuilder
 
 		logger          log.Logger
@@ -86,7 +86,7 @@ func (s *resetterSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockBaseMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockRebuiltMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
+	s.mockTransactionMgr = NewMockTransactionManager(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -161,7 +161,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
-	s.mockTransactionMgr.EXPECT().loadWorkflow(
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,
 		s.namespaceID,
 		s.workflowID,
@@ -236,7 +236,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
 	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
-	s.mockTransactionMgr.EXPECT().loadWorkflow(
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,
 		s.namespaceID,
 		s.workflowID,

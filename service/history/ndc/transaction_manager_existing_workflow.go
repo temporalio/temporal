@@ -50,7 +50,7 @@ type (
 
 	nDCTransactionMgrForExistingWorkflowImpl struct {
 		shardContext                shard.Context
-		transactionMgr              transactionMgr
+		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
 )
@@ -59,7 +59,7 @@ var _ transactionMgrForExistingWorkflow = (*nDCTransactionMgrForExistingWorkflow
 
 func newNDCTransactionMgrForExistingWorkflow(
 	shardContext shard.Context,
-	transactionMgr transactionMgr,
+	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForExistingWorkflowImpl {
 
@@ -102,7 +102,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 
 	// the target workflow is rebuilt
 	// we need to check the current workflow execution
-	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
+	currentRunID, err := r.transactionMgr.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -130,7 +130,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	// there exists a current workflow, need additional check
-	currentWorkflow, err := r.transactionMgr.loadWorkflow(
+	currentWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -273,7 +273,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		// since workflow resend can have already created the new workflow
 		newExecutionInfo := newWorkflow.GetMutableState().GetExecutionInfo()
 		newExecutionState := newWorkflow.GetMutableState().GetExecutionState()
-		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
+		newWorkflowExists, err := r.transactionMgr.CheckWorkflowExists(
 			ctx,
 			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
@@ -429,7 +429,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		// since workflow resend can have already created the new workflow
 		newExecutionInfo := newWorkflow.GetMutableState().GetExecutionInfo()
 		newExecutionState := newWorkflow.GetMutableState().GetExecutionState()
-		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
+		newWorkflowExists, err := r.transactionMgr.CheckWorkflowExists(
 			ctx,
 			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
