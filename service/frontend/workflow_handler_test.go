@@ -45,6 +45,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
@@ -2594,4 +2595,52 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *workflowHandlerSuite) TestPollWorkflowExecutionUpdate_FailWhenDisabled() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	req := workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: s.T().Name() + "-ns",
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: s.T().Name() + "-workflow-id",
+				RunId:      s.T().Name() + "-run-id",
+			},
+		},
+		Identity:   s.T().Name() + "-ident",
+		WaitPolicy: nil,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.T().Name()+"-nsid"), nil)
+
+	bgCtx := context.Background()
+	resp, err := wh.PollWorkflowExecutionUpdate(bgCtx, &req)
+	s.Equal(errUpdateWorkflowExecutionAPINotAllowed, err)
+	s.Nil(resp)
+}
+
+func (s *workflowHandlerSuite) TestPollWorkflowExecutionUpdate_Timeout() {
+	config := s.newConfig()
+	config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	req := workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: s.T().Name() + "-ns",
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: s.T().Name() + "-workflow-id",
+				RunId:      s.T().Name() + "-run-id",
+			},
+		},
+		Identity:   s.T().Name() + "-ident",
+		WaitPolicy: nil,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(s.T().Name()+"-nsid"), nil)
+	s.mockHistoryClient.EXPECT().PollWorkflowExecutionUpdate(gomock.Any(), gomock.Any()).Return(nil, context.DeadlineExceeded)
+
+	bgCtx := context.Background()
+	resp, err := wh.PollWorkflowExecutionUpdate(bgCtx, &req)
+	s.NoError(err)
+	s.Nil(resp)
 }

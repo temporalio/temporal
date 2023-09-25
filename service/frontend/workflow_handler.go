@@ -3176,7 +3176,10 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 			Request:     request,
 		},
 	)
-	if err != nil {
+	if errors.Is(err, context.DeadlineExceeded) {
+		// Return an empty response to match the behaviors of PollWorkflowTaskQueue and PollActivityTaskQueue
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 	return histResp.GetResponse(), nil
