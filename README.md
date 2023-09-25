@@ -18,7 +18,7 @@ It is developed by [Temporal Technologies](https://temporal.io/), a startup by t
 
 Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 
-To learn about Temporal's internal implementation see [ARCHITECTURE.md](./ARCHITECTURE.md).
+To learn about Temporal's internal implementation see [docs/](./docs/README.md).
 
 ## Getting Started
 
