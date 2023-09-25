@@ -181,8 +181,6 @@ func QueueSchedulerRateLimiterProvider(
 			PerInstanceQuota: config.PersistenceMaxQPS,
 			GlobalQuota:      config.PersistenceGlobalMaxQPS,
 		}.GetQuota,
-		config.TaskSchedulerRateLimiterStartupDelay,
-		timeSource,
 	)
 }
 

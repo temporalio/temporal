@@ -562,10 +562,10 @@ func EstimateTaskMetricTag(
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
 
-	namespace, err := namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
 	if err == nil {
-		namespaceTag = metrics.NamespaceTag(namespace.Name().String())
-		isActive = namespace.ActiveInCluster(currentClusterName)
+		namespaceTag = metrics.NamespaceTag(ns.Name().String())
+		isActive = ns.ActiveInCluster(currentClusterName)
 	}
 
 	taskType := getTaskTypeTagValue(e, isActive)
