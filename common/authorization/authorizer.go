@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -80,11 +81,13 @@ type hasNamespace interface {
 	GetNamespace() string
 }
 
-func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
+func GetAuthorizerFromConfig(config *config.Authorization, logger log.Logger) (Authorizer, error) {
 
 	switch strings.ToLower(config.Authorizer) {
 	case "":
 		return NewNoopAuthorizer(), nil
+	case "opa":
+		return NewOpaAuthorizer(config, logger), nil
 	case "default":
 		return NewDefaultAuthorizer(), nil
 	}

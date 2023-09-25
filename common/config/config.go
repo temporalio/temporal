@@ -563,6 +563,10 @@ type (
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
+		// can be "file:$path" pointing to a .rego file, "internal:$name" referencing an embedded
+		// policy (e.g. "internal:default", "internal:noop"), or an inline rego-expression.
+		// Default is ["internal:default"]
+		Policies []string `yaml:"policies""`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

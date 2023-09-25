@@ -1,5 +1,7 @@
 // The MIT License
 //
+// Copyright (c) 2023 Manetu Inc.  All rights reserved.
+//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -36,69 +38,8 @@ import (
 	"go.temporal.io/server/common/config"
 )
 
-var (
-	claimsNone           = Claims{}
-	claimsNamespaceAdmin = Claims{
-		Namespaces: map[string]Role{
-			testNamespace: RoleAdmin,
-		},
-	}
-	claimsNamespaceWriter = Claims{
-		Namespaces: map[string]Role{
-			testNamespace: RoleWriter,
-		},
-	}
-	claimsNamespaceReader = Claims{
-		Namespaces: map[string]Role{
-			testNamespace: RoleReader,
-		},
-	}
-	claimsBarAdmin = Claims{
-		Namespaces: map[string]Role{
-			"bar": RoleAdmin,
-		},
-	}
-	claimsSystemAdmin = Claims{
-		System: RoleAdmin,
-	}
-	claimsSystemWriter = Claims{
-		System: RoleWriter,
-	}
-	claimsSystemReader = Claims{
-		System: RoleReader,
-	}
-	targetNamespaceWriteBar = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
-		Namespace: "bar",
-	}
-	targetNamespaceWriteBAR = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/RespondWorkflowTaskCompleted",
-		Namespace: "BAR",
-	}
-	targetOperatorNamespaceRead = CallTarget{
-		APIName:   "/temporal.api.operatorservice.v1.OperatorService/ListSearchAttributes",
-		Namespace: testNamespace,
-	}
-	targetGrpcHealthCheck = CallTarget{
-		APIName:   "/grpc.health.v1.Health/Check",
-		Namespace: "",
-	}
-	targetGetSystemInfo = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/GetSystemInfo",
-		Namespace: "",
-	}
-	targetStartWorkflow = CallTarget{
-		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
-		Namespace: testNamespace,
-	}
-	targetAdminAPI = CallTarget{
-		APIName:   "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes",
-		Namespace: testNamespace,
-	}
-)
-
 type (
-	defaultAuthorizerSuite struct {
+	opaAuthorizerSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -107,22 +48,25 @@ type (
 	}
 )
 
-func TestDefaultAuthorizerSuite(t *testing.T) {
-	s := new(defaultAuthorizerSuite)
+func TestOpaAuthorizerSuite(t *testing.T) {
+	s := new(opaAuthorizerSuite)
 	suite.Run(t, s)
 }
 
-func (s *defaultAuthorizerSuite) SetupTest() {
+func (s *opaAuthorizerSuite) SetupTest() {
+	cfg := config.Authorization{Authorizer: "opa"}
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.authorizer = NewDefaultAuthorizer()
+	s.authorizer = NewOpaAuthorizer(&cfg, log.NewMockLogger(s.controller))
 }
 
-func (s *defaultAuthorizerSuite) TearDownTest() {
+func (s *opaAuthorizerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *defaultAuthorizerSuite) TestAuthorize() {
+// largely overlaps with the OPA level unit-tests for default.rego, but proves that the OpaAuthorizer can be a drop-in
+// replacement for the DefaultAuthorizer when the internal:default policy is loaded.
+func (s *opaAuthorizerSuite) TestAuthorize() {
 	testCases := []struct {
 		Name     string
 		Claims   Claims
@@ -179,17 +123,14 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 	}
 }
 
-func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
-	s.testGetAuthorizerFromConfig("", true, reflect.TypeOf(&noopAuthorizer{}))
+func (s *opaAuthorizerSuite) TestGetAuthorizerFromConfigDefault() {
+	s.testGetAuthorizerFromConfig("opa", true, reflect.TypeOf(&opaAuthorizer{}))
 }
-func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigDefault() {
-	s.testGetAuthorizerFromConfig("default", true, reflect.TypeOf(&defaultAuthorizer{}))
-}
-func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
+func (s *opaAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
 	s.testGetAuthorizerFromConfig("foo", false, nil)
 }
 
-func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid bool, authorizerType reflect.Type) {
+func (s *opaAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid bool, authorizerType reflect.Type) {
 
 	cfg := config.Authorization{Authorizer: name}
 	auth, err := GetAuthorizerFromConfig(&cfg, log.NewMockLogger(s.controller))
@@ -202,4 +143,34 @@ func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid 
 		s.Error(err)
 		s.Nil(auth)
 	}
+}
+
+func (s *opaAuthorizerSuite) TestInternalNoopPolicy() {
+	cfg := config.Authorization{Authorizer: "opa", Policies: []string{"internal:noop"}}
+	auth, err := GetAuthorizerFromConfig(&cfg, log.NewMockLogger(s.controller))
+	s.NoError(err)
+	s.NotNil(auth)
+}
+
+func (s *opaAuthorizerSuite) TestInvalidInternalPolicy() {
+	logger := log.NewMockLogger(s.controller)
+	cfg := config.Authorization{Authorizer: "opa", Policies: []string{"internal:invalid"}} // does not exist
+
+	logger.EXPECT().Error("Could not load internal policy", gomock.Any())
+	GetAuthorizerFromConfig(&cfg, logger)
+}
+
+func (s *opaAuthorizerSuite) TestInlinePolicy() {
+	cfg := config.Authorization{Authorizer: "opa", Policies: []string{"package temporal.authz\ndefault allow = true"}}
+	auth, err := GetAuthorizerFromConfig(&cfg, log.NewMockLogger(s.controller))
+	s.NoError(err)
+	s.NotNil(auth)
+}
+
+func (s *opaAuthorizerSuite) TestBogusPolicyDefinition() {
+	logger := log.NewMockLogger(s.controller)
+	cfg := config.Authorization{Authorizer: "opa", Policies: []string{"garbage"}}
+
+	logger.EXPECT().Error("Could not parse policy", gomock.Any())
+	GetAuthorizerFromConfig(&cfg, logger)
 }
