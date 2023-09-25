@@ -53,7 +53,10 @@ type (
 	// interface and provide the additional information of how
 	// tasks are grouped during scheduling.
 	Scheduler interface {
-		tasks.Scheduler[Executable]
+		Start()
+		Stop()
+		Submit(Executable)
+		TrySubmit(Executable) bool
 
 		TaskChannelKeyFn() TaskChannelKeyFn
 	}
