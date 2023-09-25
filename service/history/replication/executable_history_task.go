@@ -26,13 +26,15 @@ package replication
 
 import (
 	"context"
+	"sync"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
@@ -41,7 +43,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -52,7 +53,12 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req *historyservice.ReplicateEventsV2Request
+		baseExecutionInfo   *workflowpb.BaseExecutionInfo
+		versionHistoryItems []*historyspb.VersionHistoryItem
+		events              []*historypb.HistoryEvent
+		newRunEvents        []*historypb.HistoryEvent
+		canBatch            bool // indicate if current task want to be batched with other task
+		batchLock           sync.Mutex
 	}
 )
 
@@ -64,6 +70,8 @@ func NewExecutableHistoryTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	task *replicationspb.HistoryTaskAttributes,
+	events []*historypb.HistoryEvent,
+	newRunEvents []*historypb.HistoryEvent,
 	sourceClusterName string,
 ) *ExecutableHistoryTask {
 	return &ExecutableHistoryTask{
@@ -78,18 +86,13 @@ func NewExecutableHistoryTask(
 			time.Now().UTC(),
 			sourceClusterName,
 		),
-		req: &historyservice.ReplicateEventsV2Request{
-			NamespaceId: task.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowId,
-				RunId:      task.RunId,
-			},
-			BaseExecutionInfo:   task.BaseExecutionInfo,
-			VersionHistoryItems: task.VersionHistoryItems,
-			Events:              task.Events,
-			// new run events does not need version history since there is no prior events
-			NewRunEvents: task.NewRunEvents,
-		},
+
+		baseExecutionInfo:   task.BaseExecutionInfo,
+		versionHistoryItems: task.VersionHistoryItems,
+		events:              events,
+		// new run events does not need version history since there is no prior events
+		newRunEvents: newRunEvents,
+		canBatch:     true,
 	}
 }
 
@@ -130,7 +133,14 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateEventsV2(ctx, e.req)
+
+	return engine.ReplicateHistoryEvents(
+		ctx,
+		e.WorkflowKey,
+		e.baseExecutionInfo,
+		e.versionHistoryItems,
+		append([][]*historypb.HistoryEvent{}, e.events),
+		e.newRunEvents)
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
@@ -177,28 +187,6 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return err
 	}
 
-	events, err := serialization.NewSerializer().DeserializeEvents(e.req.Events)
-	if err != nil {
-		e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
-			tag.ShardID(shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
-			tag.Error(err),
-		)
-		return nil
-	} else if len(events) == 0 {
-		e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
-			tag.ShardID(shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
-		)
-		return nil
-	}
-
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardContext.GetShardID(),
@@ -209,9 +197,9 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			RunId:        e.RunID,
 			TaskId:       e.ExecutableTask.TaskID(),
 			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			FirstEventId: events[0].GetEventId(),
-			NextEventId:  events[len(events)-1].GetEventId() + 1,
-			Version:      events[0].GetVersion(),
+			FirstEventId: e.events[0].GetEventId(),
+			NextEventId:  e.events[len(e.events)-1].GetEventId() + 1,
+			Version:      e.events[0].GetVersion(),
 		},
 	}
 
