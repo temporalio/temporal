@@ -25,6 +25,8 @@
 package tdbg
 
 import (
+	"fmt"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -64,6 +66,13 @@ func getCommands(clientFactory ClientFactory) []*cli.Command {
 			Name:        "dlq",
 			Usage:       "Run admin operation on DLQ",
 			Subcommands: newAdminDLQCommands(clientFactory),
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagDLQVersion,
+					Usage: "Version of DLQ to manage, options: v1, v2",
+					Value: "v1",
+				},
+			},
 		},
 		{
 			Name:        "decode",
@@ -480,16 +489,27 @@ func newAdminDLQCommands(clientFactory ClientFactory) []*cli.Command {
 			Flags: append(
 				getDLQFlags(),
 				&cli.IntFlag{
-					Name:  FlagMaxMessageCount,
-					Usage: "Max message size to fetch",
+					Name: FlagMaxMessageCount,
+					Usage: fmt.Sprintf(
+						"Max message size to fetch, defaults to %d for v2 and nothing for v1",
+						dlqV2DefaultMaxMessageCount,
+					),
 				},
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
+				&cli.StringFlag{
+					Name:  FlagPageSize,
+					Usage: "Page size to use when reading messages from the DB, v2 only",
+				},
 			),
 			Action: func(c *cli.Context) error {
-				return AdminGetDLQMessages(c, clientFactory)
+				ac, err := GetDLQService(c, clientFactory)
+				if err != nil {
+					return err
+				}
+				return ac.ReadMessages(c)
 			},
 		},
 		{
@@ -498,7 +518,11 @@ func newAdminDLQCommands(clientFactory ClientFactory) []*cli.Command {
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(),
 			Action: func(c *cli.Context) error {
-				return AdminPurgeDLQMessages(c, clientFactory)
+				ac, err := GetDLQService(c, clientFactory)
+				if err != nil {
+					return err
+				}
+				return ac.PurgeMessages(c)
 			},
 		},
 		{
@@ -507,17 +531,25 @@ func newAdminDLQCommands(clientFactory ClientFactory) []*cli.Command {
 			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(),
 			Action: func(c *cli.Context) error {
-				return AdminMergeDLQMessages(c, clientFactory)
+				ac, err := GetDLQService(c, clientFactory)
+				if err != nil {
+					return err
+				}
+				return ac.MergeMessages(c)
 			},
 		},
 	}
 }
 
 func getDLQFlags() []cli.Flag {
+	categoriesString := getCategoriesList()
 	return []cli.Flag{
 		&cli.StringFlag{
-			Name:  FlagDLQType,
-			Usage: "Type of DLQ to manage. (options: namespace, history)",
+			Name: FlagDLQType,
+			Usage: fmt.Sprintf(
+				"Type of DLQ to manage, options: namespace, history for v1; %s for v2",
+				categoriesString,
+			),
 		},
 		&cli.StringFlag{
 			Name:  FlagCluster,
@@ -525,11 +557,15 @@ func getDLQFlags() []cli.Flag {
 		},
 		&cli.IntFlag{
 			Name:  FlagShardID,
-			Usage: "ShardId",
+			Usage: "ShardId, v1 only",
 		},
 		&cli.IntFlag{
 			Name:  FlagLastMessageID,
 			Usage: "The upper boundary of the read message",
+		},
+		&cli.StringFlag{
+			Name:  FlagTargetCluster,
+			Usage: "Target cluster, v2 only. If not provided, current cluster is used.",
 		},
 	}
 }

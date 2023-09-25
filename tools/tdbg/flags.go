@@ -44,6 +44,7 @@ var (
 	FlagContextTimeout             = "context-timeout"
 	FlagContextTimeoutAlias        = []string{"ct"}
 	FlagCluster                    = "cluster"
+	FlagTargetCluster              = "target-cluster"
 	FlagPageSize                   = "pagesize"
 	FlagFrom                       = "from"
 	FlagPrintFullyDetail           = "print-full"
@@ -72,6 +73,7 @@ var (
 	FlagMinTaskID                  = "min-task-id"
 	FlagMaxTaskID                  = "max-task-id"
 	FlagDLQType                    = "dlq-type"
+	FlagDLQVersion                 = "dlq-version"
 	FlagMaxMessageCount            = "max-message-count"
 	FlagProtoType                  = "type"
 	FlagHexData                    = "hex-data"
