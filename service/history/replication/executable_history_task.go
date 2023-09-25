@@ -26,7 +26,6 @@ package replication
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -57,8 +56,6 @@ type (
 		versionHistoryItems []*historyspb.VersionHistoryItem
 		events              []*historypb.HistoryEvent
 		newRunEvents        []*historypb.HistoryEvent
-		canBatch            bool // indicate if current task want to be batched with other task
-		batchLock           sync.Mutex
 	}
 )
 
@@ -92,7 +89,6 @@ func NewExecutableHistoryTask(
 		events:              events,
 		// new run events does not need version history since there is no prior events
 		newRunEvents: newRunEvents,
-		canBatch:     true,
 	}
 }
 
