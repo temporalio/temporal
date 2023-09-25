@@ -128,9 +128,10 @@ type (
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 
-		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock sync.RWMutex // Must be used for above callbacks
+		onGetClaims      func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize      func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock     sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	// HistoryConfig contains configs for history service
@@ -172,6 +173,8 @@ type (
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
+		// ServiceFxOptions is populated by WithFxOptionsForService.
+		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	listenHostPort string
@@ -207,6 +210,7 @@ func newTemporal(params *TemporalParams) *temporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
+		serviceFxOptions:                 params.ServiceFxOptions,
 	}
 	impl.overrideHistoryDynamicConfig(testDCClient)
 	return impl
@@ -446,6 +450,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry, &rpcFactory),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.FrontendService),
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -539,6 +544,7 @@ func (c *temporalImpl) startHistory(
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
 			temporal.FxLogAdapter,
+			c.getFxOptionsForService(primitives.HistoryService),
 		)
 		err = app.Err()
 		if err != nil {
@@ -629,6 +635,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.MatchingService),
 	)
 	err = app.Err()
 	if err != nil {
@@ -724,6 +731,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.WorkerService),
 	)
 	err = app.Err()
 	if err != nil {
@@ -740,6 +748,10 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()
+}
+
+func (c *temporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
+	return fx.Options(c.serviceFxOptions[serviceName]...)
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
