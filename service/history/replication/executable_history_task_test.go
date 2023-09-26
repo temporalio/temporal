@@ -71,12 +71,15 @@ type (
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		eventSerializer         serialization.Serializer
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
 
-		taskID int64
-		task   *ExecutableHistoryTask
+		taskID       int64
+		task         *ExecutableHistoryTask
+		events       []*historypb.HistoryEvent
+		newRunEvents []*historypb.HistoryEvent
 	}
 )
 
@@ -104,6 +107,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
+	s.eventSerializer = serialization.NewSerializer()
 
 	firstEventID := rand.Int63()
 	nextEventID := firstEventID + 1
@@ -112,12 +116,14 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EventId: firstEventID,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
-	events, _ := serialization.NewSerializer().DeserializeEvents(eventsBlob)
+	e, _ := serialization.NewSerializer().DeserializeEvents(eventsBlob)
+	s.events = e
 	newEventsBlob, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
-	newEvents, _ := serialization.NewSerializer().DeserializeEvents(newEventsBlob)
+	ne, _ := serialization.NewSerializer().DeserializeEvents(newEventsBlob)
+	s.newRunEvents = ne
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
 		NamespaceId:       uuid.NewString(),
 		WorkflowId:        uuid.NewString(),
@@ -143,12 +149,11 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			EventSerializer:         s.eventSerializer,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
-		events,
-		newEvents,
 		s.sourceClusterName,
 	)
 	s.task.ExecutableTask = s.executableTask
@@ -177,8 +182,9 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		append([][]*historypb.HistoryEvent{}, s.task.events),
-		s.task.newRunEvents).Return(nil)
+		[][]*historypb.HistoryEvent{s.events},
+		s.newRunEvents,
+	).Return(nil).Times(1)
 
 	err := s.task.Execute()
 	s.NoError(err)
@@ -227,8 +233,9 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
-		append([][]*historypb.HistoryEvent{}, s.task.events),
-		s.task.newRunEvents).Return(nil)
+		[][]*historypb.HistoryEvent{s.events},
+		s.newRunEvents,
+	).Return(nil)
 
 	err := serviceerrors.NewRetryReplication(
 		"",
@@ -276,7 +283,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
-	events := s.task.events
+	events := s.events
 
 	shardID := rand.Int31()
 	shardContext := shard.NewMockContext(s.controller)

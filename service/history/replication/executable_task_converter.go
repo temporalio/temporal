@@ -28,11 +28,8 @@ import (
 	"fmt"
 	"time"
 
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -73,11 +70,7 @@ func (e *executableTaskConverterImpl) Convert(
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTag(replicationTask)),
 		)
-		task, err := e.convertOne(taskClusterName, replicationTask)
-		if err != nil {
-			continue
-		}
-		tasks[index] = task
+		tasks[index] = e.convertOne(taskClusterName, replicationTask)
 	}
 	return tasks
 }
@@ -85,7 +78,7 @@ func (e *executableTaskConverterImpl) Convert(
 func (e *executableTaskConverterImpl) convertOne(
 	taskClusterName string,
 	replicationTask *replicationspb.ReplicationTask,
-) (TrackableExecutableTask, error) {
+) TrackableExecutableTask {
 	var taskCreationTime time.Time
 	if replicationTask.VisibilityTime != nil {
 		taskCreationTime = *replicationTask.VisibilityTime
@@ -100,14 +93,14 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			taskClusterName,
-		), nil
+		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
 			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			taskClusterName,
-		), nil
+		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		return NewExecutableActivityStateTask(
 			e.processToolBox,
@@ -115,7 +108,7 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
 			taskClusterName,
-		), nil
+		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
 			e.processToolBox,
@@ -123,30 +116,15 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			taskClusterName,
-		), nil
+		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		events, newRunEvents, err := e.deserializeHistoryEvents(replicationTask.SourceTaskId, replicationTask.GetHistoryTaskAttributes())
-		if err == nil {
-			return nil, err
-		}
-		if len(events) == 0 {
-			e.processToolBox.Logger.Error("unable to create history replication task, no events",
-				tag.WorkflowNamespaceID(replicationTask.GetHistoryTaskAttributes().GetNamespaceId()),
-				tag.WorkflowID(replicationTask.GetHistoryTaskAttributes().GetWorkflowId()),
-				tag.WorkflowRunID(replicationTask.GetHistoryTaskAttributes().GetRunId()),
-				tag.TaskID(replicationTask.SourceTaskId),
-			)
-			return nil, serviceerror.NewInvalidArgument("unable to create replication task, no events")
-		}
 		return NewExecutableHistoryTask(
 			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
-			events,
-			newRunEvents,
 			taskClusterName,
-		), nil
+		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(
@@ -154,33 +132,6 @@ func (e *executableTaskConverterImpl) convertOne(
 			replicationTask.SourceTaskId,
 			taskCreationTime,
 			replicationTask,
-		), nil
-	}
-}
-
-func (e *executableTaskConverterImpl) deserializeHistoryEvents(sourceTaskId int64, task *replicationspb.HistoryTaskAttributes) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
-	events, err := e.processToolBox.EventSerializer.DeserializeEvents(task.GetEvents())
-	if err != nil {
-		e.processToolBox.Logger.Error("unable to deserialize history events",
-			tag.WorkflowNamespaceID(task.NamespaceId),
-			tag.WorkflowID(task.WorkflowId),
-			tag.WorkflowRunID(task.RunId),
-			tag.TaskID(sourceTaskId),
-			tag.Error(err),
 		)
-		return nil, nil, err
 	}
-
-	newRunEvents, err := e.processToolBox.EventSerializer.DeserializeEvents(task.GetNewRunEvents())
-	if err != nil {
-		e.processToolBox.Logger.Error("unable to deserialize new run history events",
-			tag.WorkflowNamespaceID(task.GetNamespaceId()),
-			tag.WorkflowID(task.GetWorkflowId()),
-			tag.WorkflowRunID(task.GetRunId()),
-			tag.TaskID(sourceTaskId),
-			tag.Error(err),
-		)
-		return nil, nil, err
-	}
-	return events, newRunEvents, nil
 }

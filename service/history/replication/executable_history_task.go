@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -54,8 +55,15 @@ type (
 		ExecutableTask
 		baseExecutionInfo   *workflowpb.BaseExecutionInfo
 		versionHistoryItems []*historyspb.VersionHistoryItem
-		events              []*historypb.HistoryEvent
-		newRunEvents        []*historypb.HistoryEvent
+
+		deserializeLock   sync.Mutex
+		eventsDesResponse *eventsDeserializeResponse
+		replicationTask   *replicationspb.HistoryTaskAttributes
+	}
+	eventsDeserializeResponse struct {
+		events       []*historypb.HistoryEvent
+		newRunEvents []*historypb.HistoryEvent
+		err          error
 	}
 )
 
@@ -67,8 +75,6 @@ func NewExecutableHistoryTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	task *replicationspb.HistoryTaskAttributes,
-	events []*historypb.HistoryEvent,
-	newRunEvents []*historypb.HistoryEvent,
 	sourceClusterName string,
 ) *ExecutableHistoryTask {
 	return &ExecutableHistoryTask{
@@ -86,9 +92,7 @@ func NewExecutableHistoryTask(
 
 		baseExecutionInfo:   task.BaseExecutionInfo,
 		versionHistoryItems: task.VersionHistoryItems,
-		events:              events,
-		// new run events does not need version history since there is no prior events
-		newRunEvents: newRunEvents,
+		replicationTask:     task,
 	}
 }
 
@@ -129,14 +133,19 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
+	events, newRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
 
 	return engine.ReplicateHistoryEvents(
 		ctx,
 		e.WorkflowKey,
 		e.baseExecutionInfo,
 		e.versionHistoryItems,
-		append([][]*historypb.HistoryEvent{}, e.events),
-		e.newRunEvents)
+		[][]*historypb.HistoryEvent{events},
+		newRunEvents,
+	)
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
@@ -182,6 +191,17 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	if err != nil {
 		return err
 	}
+	events, _, _ := e.getDeserializedEvents()
+	if len(events) == 0 {
+		e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
+			tag.ShardID(shardContext.GetShardID()),
+			tag.WorkflowNamespaceID(e.GetNamespaceID()),
+			tag.WorkflowID(e.GetWorkflowID()),
+			tag.WorkflowRunID(e.GetRunID()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+		)
+		return nil
+	}
 
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 	req := &persistence.PutReplicationTaskToDLQRequest{
@@ -193,9 +213,9 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 			RunId:        e.RunID,
 			TaskId:       e.ExecutableTask.TaskID(),
 			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			FirstEventId: e.events[0].GetEventId(),
-			NextEventId:  e.events[len(e.events)-1].GetEventId() + 1,
-			Version:      e.events[0].GetVersion(),
+			FirstEventId: events[0].GetEventId(),
+			NextEventId:  events[len(events)-1].GetEventId() + 1,
+			Version:      events[0].GetVersion(),
 		},
 	}
 
@@ -211,4 +231,46 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+}
+
+func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.HistoryEvent, nre []*historypb.HistoryEvent, er error) {
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+	e.deserializeLock.Lock()
+	defer e.deserializeLock.Unlock()
+
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+
+	defer func() {
+		e.eventsDesResponse = &eventsDeserializeResponse{ev, nre, er}
+	}()
+
+	events, err := e.EventSerializer.DeserializeEvents(e.replicationTask.GetEvents())
+	if err != nil {
+		e.Logger.Error("unable to deserialize history events",
+			tag.WorkflowNamespaceID(e.replicationTask.GetNamespaceId()),
+			tag.WorkflowID(e.replicationTask.GetWorkflowId()),
+			tag.WorkflowRunID(e.replicationTask.GetRunId()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+
+		return nil, nil, err
+	}
+
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.replicationTask.GetNewRunEvents())
+	if err != nil {
+		e.Logger.Error("unable to deserialize new run history events",
+			tag.WorkflowNamespaceID(e.replicationTask.GetNamespaceId()),
+			tag.WorkflowID(e.replicationTask.GetWorkflowId()),
+			tag.WorkflowRunID(e.replicationTask.GetRunId()),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return events, nil, err
+	}
+	return events, newRunEvents, err
 }
