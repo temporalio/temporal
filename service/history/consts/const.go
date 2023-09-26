@@ -103,8 +103,8 @@ var (
 	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
 	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
 	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
-	// ErrWorkflowTerminatedBeforeWorkflowTaskStarted is an error indicating workflow execution was terminated before WorkflowTaskStarted event
-	ErrWorkflowTerminatedBeforeWorkflowTaskStarted = serviceerror.NewWorkflowNotReady("Workflow execution terminated before WorkflowTaskStarted event")
+	// ErrWorkflowClosedBeforeWorkflowTaskStarted is an error indicating workflow execution was closed before WorkflowTaskStarted event
+	ErrWorkflowClosedBeforeWorkflowTaskStarted = serviceerror.NewWorkflowNotReady("Workflow execution closed before WorkflowTaskStarted event")
 
 	ErrWorkflowIDNotSet                 = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	ErrInvalidRunID                     = serviceerror.NewInvalidArgument("Invalid RunId.")

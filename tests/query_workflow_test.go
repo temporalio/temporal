@@ -300,7 +300,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_TerminatedWithoutWorkflowTaskStarted() {
+func (s *clientIntegrationSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", nil
 	}
@@ -323,5 +323,5 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_TerminatedWithoutWorkflowTask
 
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
-	s.ErrorContains(err, consts.ErrWorkflowTerminatedBeforeWorkflowTaskStarted.Error())
+	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
 }
