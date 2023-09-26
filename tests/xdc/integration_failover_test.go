@@ -555,7 +555,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		T:                            s.T(),
 	}
 
-	_, err = poller1.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
+	_, err = poller1.PollAndProcessWorkflowTaskWithOptions(WithRespondSticky)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(firstCommandMade)
@@ -577,7 +577,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
-	_, err = poller2.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 5)
+	_, err = poller2.PollAndProcessWorkflowTaskWithOptions(WithRespondSticky)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(secondCommandMade)

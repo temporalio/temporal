@@ -1531,7 +1531,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}
 
 	// Drain existing WT from regular task queue, but respond with sticky enabled response to enable stick task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
 	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
@@ -2850,7 +2850,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 	}
 
 	// Drain first WT and respond with sticky enabled response to enable sticky task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
