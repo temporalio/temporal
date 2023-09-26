@@ -68,5 +68,5 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	require.Equal(t, "wp", record["hey.go.gg"])
 	require.Equal(t, "wow", record["msg"])
 	require.Equal(t, "corn", record["cluster-name"])
-	require.Equal(t, "slog_test.go:39", record["logging-call-at"])
+	require.Equal(t, "slog_test.go:61", record["logging-call-at"])
 }
