@@ -1408,7 +1408,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 			}
 
 			// Drain existing first WT from regular task queue, but respond with sticky queue enabled response, next WT will go to sticky queue.
-			_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithRespondSticky)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)

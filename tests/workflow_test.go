@@ -631,7 +631,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if dropWorkflowTask {
 			_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithDropTask)
 		} else {
-			_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
+			_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithAttemptCount(2))
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{

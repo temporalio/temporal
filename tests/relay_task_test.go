@@ -127,7 +127,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
