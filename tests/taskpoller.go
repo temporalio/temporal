@@ -111,38 +111,20 @@ var (
 	}
 )
 
-func WithDumpHistory(o *WorkflowTaskPollOptions) {
-	o.DumpHistory = true
-}
-func WithNoDumpCommands(o *WorkflowTaskPollOptions) {
-	o.DumpCommands = false
-}
-func WithDropTask(o *WorkflowTaskPollOptions) {
-	o.DropTask = true
-}
-func WithPollSticky(o *WorkflowTaskPollOptions) {
-	o.PollSticky = true
-}
-func WithRespondSticky(o *WorkflowTaskPollOptions) {
-	o.RespondSticky = true
-}
+func WithDumpHistory(o *WorkflowTaskPollOptions)    { o.DumpHistory = true }
+func WithNoDumpCommands(o *WorkflowTaskPollOptions) { o.DumpCommands = false }
+func WithDropTask(o *WorkflowTaskPollOptions)       { o.DropTask = true }
+func WithPollSticky(o *WorkflowTaskPollOptions)     { o.PollSticky = true }
+func WithRespondSticky(o *WorkflowTaskPollOptions)  { o.RespondSticky = true }
 func WithAttemptCount(c int) WorkflowTaskPollOptionFunc {
-	return func(o *WorkflowTaskPollOptions) {
-		o.AttemptCount = c
-	}
+	return func(o *WorkflowTaskPollOptions) { o.AttemptCount = c }
 }
 func WithRetries(c int) WorkflowTaskPollOptionFunc {
-	return func(o *WorkflowTaskPollOptions) {
-		o.Retries = c
-	}
+	return func(o *WorkflowTaskPollOptions) { o.Retries = c }
 }
-func WithForceNewWorkflowTask(o *WorkflowTaskPollOptions) {
-	o.ForceNewWorkflowTask = true
-}
+func WithForceNewWorkflowTask(o *WorkflowTaskPollOptions) { o.ForceNewWorkflowTask = true }
 func WithQueryResult(r *querypb.WorkflowQueryResult) WorkflowTaskPollOptionFunc {
-	return func(o *WorkflowTaskPollOptions) {
-		o.QueryResult = r
-	}
+	return func(o *WorkflowTaskPollOptions) { o.QueryResult = r }
 }
 
 func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...WorkflowTaskPollOptionFunc) (res WorkflowTaskPollResponse, err error) {
