@@ -131,7 +131,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -162,7 +162,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -178,7 +178,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -194,7 +194,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion
@@ -291,7 +291,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -329,7 +329,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -345,7 +345,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -361,7 +361,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion
