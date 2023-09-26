@@ -266,7 +266,7 @@ Loop:
 			}
 		}
 		if lastWorkflowTaskScheduleEvent != nil && opts.ExpectedAttemptCount > 1 {
-			require.Equal(p.T, opts.ExpectedAttemptCount, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+			require.Equal(p.T, opts.ExpectedAttemptCount, int(lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt()))
 		}
 
 		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
