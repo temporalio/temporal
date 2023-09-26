@@ -3030,108 +3030,62 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}
 
 	// then query to get current state from the workflow itself
-	// TODO: turn the refresh path into a synchronous update so we don't have to retry in a loop
-	sentRefresh := make(map[commonpb.WorkflowExecution]struct{})
-	// limit how many signals we send, separate from the retry policy (which is used to retry
-	// the query if the signal was not received or processed yet)
-	signalsLeft := 1
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: request.Namespace,
+			Execution: execution,
+			Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
+		},
+	}
+	res, err := wh.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
 	var queryResponse schedspb.DescribeResponse
+	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
+	if err != nil {
+		return nil, err
+	}
 
-	op := func(ctx context.Context) error {
-		req := &historyservice.QueryWorkflowRequest{
+	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
+
+	// for all running workflows started by the schedule, we should check that they're still running
+	origLen := len(queryResponse.Info.RunningWorkflows)
+	queryResponse.Info.RunningWorkflows = util.FilterSlice(queryResponse.Info.RunningWorkflows, func(ex *commonpb.WorkflowExecution) bool {
+		// we'll usually have just zero or one of these so we can just do them sequentially
+		msResponse, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 			NamespaceId: namespaceID.String(),
-			Request: &workflowservice.QueryWorkflowRequest{
-				Namespace: request.Namespace,
-				Execution: execution,
-				Query:     &querypb.WorkflowQuery{QueryType: scheduler.QueryNameDescribe},
-			},
-		}
-		res, err := wh.historyClient.QueryWorkflow(ctx, req)
-		if err != nil {
-			return err
-		}
-
-		queryResponse.Reset()
-		err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
-		if err != nil {
-			return err
-		}
-
-		// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
-
-		// for all running workflows started by the schedule, we should check that they're
-		// still running, and if not, poke the schedule to refresh
-		needRefresh := false
-		for _, ex := range queryResponse.GetInfo().GetRunningWorkflows() {
-			if _, ok := sentRefresh[*ex]; ok {
-				// we asked the schedule to refresh this one because it wasn't running, but
-				// it's still reporting it as running
-				return errWaitForRefresh
-			}
-
-			// we'll usually have just zero or one of these so we can just do them sequentially
-			if msResponse, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-				NamespaceId: namespaceID.String(),
-				// Note: do not send runid here so that we always get the latest one
-				Execution: &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
-			}); err != nil {
-				switch err.(type) {
-				case *serviceerror.NotFound:
-					// if it doesn't exist (past retention period?) it's certainly not running
-					needRefresh = true
-					sentRefresh[*ex] = struct{}{}
-				default:
-					return err
-				}
-			} else if msResponse.WorkflowStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-				msResponse.FirstExecutionRunId != ex.RunId {
-				// there is no running execution of this workflow id, or there is a running
-				// execution, but it's not part of the chain that we started.
-				// either way, the workflow that we started is not running.
-				needRefresh = true
-				sentRefresh[*ex] = struct{}{}
-			}
-		}
-
-		if !needRefresh || signalsLeft == 0 {
-			return nil
-		}
-		signalsLeft--
-
-		// poke to refresh
-		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
-			NamespaceId: namespaceID.String(),
-			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-				Namespace:         request.Namespace,
-				WorkflowExecution: execution,
-				SignalName:        scheduler.SignalNameRefresh,
-				Identity:          "internal refresh from describe request",
-				RequestId:         uuid.New(),
-			},
+			// Note: do not send runid here so that we always get the latest one
+			Execution: &commonpb.WorkflowExecution{WorkflowId: ex.WorkflowId},
 		})
 		if err != nil {
-			return err
+			// if it's not found, it's certainly not running, so return false. if we got
+			// another error, we don't know the state so assume it's still running.
+			return !common.IsNotFoundError(err)
 		}
+		// return true if it is still running and is part of the chain the schedule started
+		return msResponse.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+			msResponse.FirstExecutionRunId == ex.RunId
+	})
 
-		return errWaitForRefresh
-	}
-
-	// wait up to 4 seconds or rpc deadline minus 1 second, but at least 1 second
-	expiration := 4 * time.Second
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline) - 1*time.Second
-		expiration = util.Min(expiration, remaining)
-	}
-	expiration = util.Max(expiration, 1*time.Second)
-	policy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
-		WithExpirationInterval(expiration)
-	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
-
-	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
-	// if we still got errWaitForRefresh that means we used up our retries, just return
-	// whatever we have
-	if err != nil && err != errWaitForRefresh {
-		return nil, err
+	if len(queryResponse.Info.RunningWorkflows) < origLen {
+		// we noticed some "running workflows" aren't running anymore. poke the workflow to
+		// refresh, but don't wait for the state to change. ignore errors.
+		go func() {
+			disconnectedCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(request.Namespace))
+			_, _ = wh.historyClient.SignalWorkflowExecution(disconnectedCtx, &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: namespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         request.Namespace,
+					WorkflowExecution: execution,
+					SignalName:        scheduler.SignalNameRefresh,
+					Identity:          "internal refresh from describe request",
+					RequestId:         uuid.New(),
+				},
+			})
+		}()
 	}
 
 	token := make([]byte, 8)
