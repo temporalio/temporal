@@ -90,7 +90,7 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -107,7 +107,11 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		//  them during namespace handover.
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
 		//  be returned from task executor
-		return metricsTags, true, consts.ErrNamespaceHandover
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        consts.ErrNamespaceHandover,
+		}
 	}
 
 	var err error
@@ -130,7 +134,11 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = errUnknownTimerTask
 	}
 
-	return metricsTags, true, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    true,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(

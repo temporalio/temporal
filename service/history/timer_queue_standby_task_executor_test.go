@@ -265,8 +265,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
@@ -280,12 +280,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success() {
@@ -352,8 +352,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multiple() {
@@ -420,8 +420,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
@@ -486,8 +486,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
@@ -501,12 +501,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success() {
@@ -576,8 +576,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat_Noop() {
@@ -647,8 +647,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
@@ -769,8 +769,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		})
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pending() {
@@ -822,8 +822,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
@@ -837,12 +837,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_ScheduleToStartTimer() {
@@ -868,8 +868,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Sche
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(nil, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(nil, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Success() {
@@ -921,8 +921,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending() {
@@ -969,8 +969,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.fetchHistoryDuration))
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
@@ -984,12 +984,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.discardDuration))
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Success() {
@@ -1036,8 +1036,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
@@ -1087,8 +1087,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
@@ -1102,12 +1102,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskDiscarded, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success() {
@@ -1157,8 +1157,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
@@ -1200,8 +1200,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 	}
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop() {
@@ -1268,8 +1268,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 
 	timerTask = &tasks.ActivityRetryTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1283,8 +1283,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskVersionMismatch, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskVersionMismatch, resp.ExecutionErr)
 
 	timerTask = &tasks.ActivityRetryTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1298,8 +1298,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_ActivityCompleted() {
@@ -1367,8 +1367,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
 		EventID:             scheduledEvent.GetEventId(),
 	}
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pending() {
@@ -1434,8 +1434,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -1450,8 +1450,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 		int64(0),
 		int64(0),
 	).Return(nil)
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Equal(consts.ErrTaskRetry, err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.discardDuration))
@@ -1472,8 +1472,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
-	_, _, err = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
-	s.Nil(err)
+	resp = s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Nil(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) createPersistenceMutableState(

@@ -36,9 +36,12 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
+	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
+	workflow "go.temporal.io/server/api/workflow/v1"
 	collection "go.temporal.io/server/common/collection"
+	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -562,6 +565,20 @@ func (m *MockEngine) ReplicateEventsV2(ctx context.Context, request *historyserv
 func (mr *MockEngineMockRecorder) ReplicateEventsV2(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateEventsV2", reflect.TypeOf((*MockEngine)(nil).ReplicateEventsV2), ctx, request)
+}
+
+// ReplicateHistoryEvents mocks base method.
+func (m *MockEngine) ReplicateHistoryEvents(ctx context.Context, workflowKey definition.WorkflowKey, baseExecutionInfo *workflow.BaseExecutionInfo, versionHistoryItems []*history0.VersionHistoryItem, historyEvents [][]*history.HistoryEvent, newEvents []*history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateHistoryEvents", ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateHistoryEvents indicates an expected call of ReplicateHistoryEvents.
+func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents)
 }
 
 // ReplicateWorkflowState mocks base method.

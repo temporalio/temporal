@@ -48,7 +48,7 @@ type (
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
 		shardContext                shard.Context
-		transactionMgr              transactionMgr
+		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
 )
@@ -57,7 +57,7 @@ var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
 	shardContext shard.Context,
-	transactionMgr transactionMgr,
+	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForNewWorkflowImpl {
 
@@ -83,7 +83,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	targetRunID := targetExecutionState.RunId
 
 	// we need to check the current workflow execution
-	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
+	currentRunID, err := r.transactionMgr.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -104,7 +104,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	// there exists a current workflow, need additional check
-	currentWorkflow, err := r.transactionMgr.loadWorkflow(
+	currentWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,

@@ -29,8 +29,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -93,58 +91,13 @@ func SequentialTaskQueueCompareLess(this TrackableExecutableTask, that Trackable
 	return this.TaskID() < that.TaskID()
 }
 
-func TaskHashFn(
-	task interface{},
+func WorkflowKeyHashFn(
+	item interface{},
 ) uint32 {
-	workflowKey := TaskWorkflowKey(task)
-	if workflowKey == nil {
+	workflowKey, ok := item.(definition.WorkflowKey)
+	if !ok {
 		return 0
 	}
 	idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + workflowKey.RunID)
 	return farm.Fingerprint32(idBytes)
-}
-
-func TaskWorkflowKey(
-	item interface{},
-) *definition.WorkflowKey {
-	if item == nil {
-		return nil
-	}
-	replicationTask, ok := item.(*replicationspb.ReplicationTask)
-	if !ok {
-		return nil
-	}
-
-	switch replicationTask.GetTaskType() {
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
-		return nil
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK: // TODO to be deprecated
-		return nil
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		attr := replicationTask.GetSyncActivityTaskAttributes()
-		workflowKey := definition.NewWorkflowKey(
-			attr.NamespaceId,
-			attr.WorkflowId,
-			attr.RunId,
-		)
-		return &workflowKey
-	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		attr := replicationTask.GetSyncWorkflowStateTaskAttributes()
-		workflowKey := definition.NewWorkflowKey(
-			attr.WorkflowState.ExecutionInfo.NamespaceId,
-			attr.WorkflowState.ExecutionInfo.WorkflowId,
-			attr.WorkflowState.ExecutionState.RunId,
-		)
-		return &workflowKey
-	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		attr := replicationTask.GetHistoryTaskAttributes()
-		workflowKey := definition.NewWorkflowKey(
-			attr.NamespaceId,
-			attr.WorkflowId,
-			attr.RunId,
-		)
-		return &workflowKey
-	default:
-		return nil
-	}
 }
