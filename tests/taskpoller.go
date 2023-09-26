@@ -98,7 +98,7 @@ type (
 var (
 	errNoTasks = errors.New("no tasks")
 
-	defaultWorkflowTaskPollOptions = PollAndProcessWorkflowTaskOptions{
+	defaultPollAndProcessWorkflowTaskOptions = PollAndProcessWorkflowTaskOptions{
 		DumpHistory:          false,
 		DumpCommands:         true,
 		DropTask:             false,
@@ -128,14 +128,14 @@ func WithQueryResult(r *querypb.WorkflowQueryResult) PollAndProcessWorkflowTaskO
 }
 
 func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...PollAndProcessWorkflowTaskOptionFunc) (res PollAndProcessWorkflowTaskResponse, err error) {
-	opts := defaultWorkflowTaskPollOptions
+	opts := defaultPollAndProcessWorkflowTaskOptions
 	for _, f := range funcs {
 		f(&opts)
 	}
-	return p.PollAndProcessWorkflowTaskGeneric(&opts)
+	return p.PollAndProcessWorkflowTaskWithOptions(&opts)
 }
 
-func (p *TaskPoller) PollAndProcessWorkflowTaskGeneric(opts *PollAndProcessWorkflowTaskOptions) (res PollAndProcessWorkflowTaskResponse, err error) {
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(opts *PollAndProcessWorkflowTaskOptions) (res PollAndProcessWorkflowTaskResponse, err error) {
 Loop:
 	for attempt := 1; attempt <= opts.Retries; attempt++ {
 
