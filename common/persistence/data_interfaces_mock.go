@@ -1313,6 +1313,21 @@ func (m *MockHistoryTaskQueueManager) EXPECT() *MockHistoryTaskQueueManagerMockR
 	return m.recorder
 }
 
+// CreateQueue mocks base method.
+func (m *MockHistoryTaskQueueManager) CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateQueue", ctx, request)
+	ret0, _ := ret[0].(*CreateQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateQueue indicates an expected call of CreateQueue.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) CreateQueue(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQueue", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).CreateQueue), ctx, request)
+}
+
 // EnqueueTask mocks base method.
 func (m *MockHistoryTaskQueueManager) EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error) {
 	m.ctrl.T.Helper()

@@ -73,6 +73,15 @@ func TestClientGetDLQTasks(t *testing.T, historyTaskQueueManager persistence.His
 	targetCluster := "target-cluster-" + t.Name()
 	numTasks := 2
 
+	_, err := historyTaskQueueManager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     persistence.QueueTypeHistoryDLQ,
+			Category:      tasks.CategoryTransfer,
+			SourceCluster: sourceCluster,
+			TargetCluster: targetCluster,
+		},
+	})
+	require.NoError(t, err)
 	enqueueTasks(t, historyTaskQueueManager, numTasks, sourceCluster, targetCluster)
 
 	listener := nettest.NewListener(nettest.NewPipe())

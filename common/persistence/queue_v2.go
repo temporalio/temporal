@@ -24,7 +24,12 @@
 
 package persistence
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"go.temporal.io/api/serviceerror"
+)
 
 const (
 	QueueTypeUnspecified   QueueV2Type = 0
@@ -39,3 +44,11 @@ var (
 	ErrInvalidReadQueueMessagesNextPageToken = errors.New("invalid next-page token for reading queue messages")
 	ErrNonPositiveReadQueueMessagesPageSize  = errors.New("non-positive page size for reading queue messages")
 )
+
+func NewQueueNotFoundError(queueType QueueV2Type, queueName string) error {
+	return serviceerror.NewNotFound(fmt.Sprintf(
+		"queue with type %v and name %v not found",
+		queueType,
+		queueName,
+	))
+}

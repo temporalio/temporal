@@ -87,6 +87,10 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.Hist
 		Category:      category,
 		SourceCluster: "test-source-cluster-" + t.Name(),
 	}
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey,
+	})
+	require.NoError(t, err)
 
 	for i := 0; i < 2; i++ {
 		task := &tasks.WorkflowTask{
@@ -128,37 +132,49 @@ func testHistoryTaskQueueManagerErrDeserializeHistoryTask(
 	queue persistence.QueueV2,
 	manager persistence.HistoryTaskQueueManager,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	t.Cleanup(cancel)
+	ctx := context.Background()
 
 	t.Run("nil blob", func(t *testing.T) {
 		t.Parallel()
 
-		err := enqueueAndDeserializeBlob(ctx, t, queue, nil)
+		err := enqueueAndDeserializeBlob(ctx, t, queue, manager, nil)
 		assert.ErrorContains(t, err, persistence.ErrHistoryTaskBlobIsNil.Error())
 	})
 	t.Run("empty blob", func(t *testing.T) {
 		t.Parallel()
 
-		err := enqueueAndDeserializeBlob(ctx, t, queue, &commonpb.DataBlob{})
+		err := enqueueAndDeserializeBlob(ctx, t, queue, manager, &commonpb.DataBlob{})
 		assert.ErrorContains(t, err, persistence.ErrMsgDeserializeHistoryTask)
 	})
 }
 
-func enqueueAndDeserializeBlob(ctx context.Context, t *testing.T, queue persistence.QueueV2, blob *commonpb.DataBlob) error {
+func enqueueAndDeserializeBlob(
+	ctx context.Context,
+	t *testing.T,
+	queue persistence.QueueV2,
+	manager persistence.HistoryTaskQueueManager,
+	blob *commonpb.DataBlob,
+) error {
+	t.Helper()
+
 	queueType := persistence.QueueTypeHistoryNormal
 	queueKey := persistence.QueueKey{
 		QueueType:     queueType,
 		Category:      tasks.CategoryTransfer,
 		SourceCluster: "test-source-cluster-" + t.Name(),
 	}
+	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueKey.GetQueueName(),
+	})
+	require.NoError(t, err)
 	queueName := queueKey.GetQueueName()
 	historyTask := persistencespb.HistoryTask{
 		ShardId: 1,
 		Blob:    blob,
 	}
 	historyTaskBytes, _ := historyTask.Marshal()
-	_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+	_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
 		Blob: commonpb.DataBlob{
@@ -168,7 +184,6 @@ func enqueueAndDeserializeBlob(ctx context.Context, t *testing.T, queue persiste
 	})
 	require.NoError(t, err)
 
-	manager := persistence.NewHistoryTaskQueueManager(queue, 1)
 	_, err = manager.ReadTasks(ctx, &persistence.ReadTasksRequest{
 		QueueKey: queueKey,
 		PageSize: 1,

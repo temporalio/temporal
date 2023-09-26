@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
@@ -42,10 +43,12 @@ type (
 		err             error
 		enqueueRequests int
 		readRequests    int
+		createRequests  int
 	}
 	testQueueV2 struct {
 		enqueueRequests *int
 		readRequests    *int
+		createRequests  *int
 	}
 )
 
@@ -65,6 +68,14 @@ func (t *testQueueV2) ReadMessages(
 	return nil, nil
 }
 
+func (t *testQueueV2) CreateQueue(
+	context.Context,
+	*persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	*t.createRequests++
+	return nil, nil
+}
+
 func (t *testDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
 	if t.err != nil {
 		return nil, t.err
@@ -72,6 +83,7 @@ func (t *testDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
 	return &testQueueV2{
 		enqueueRequests: &t.enqueueRequests,
 		readRequests:    &t.readRequests,
+		createRequests:  &t.createRequests,
 	}, nil
 }
 
@@ -166,6 +178,7 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_MethodConfig(t *testing.T) {
 							Methods: map[string]config.FaultInjectionMethodConfig{
 								"EnqueueMessage": methodConfig,
 								"ReadMessages":   methodConfig,
+								"CreateQueue":    methodConfig,
 							},
 						},
 					},
@@ -188,24 +201,26 @@ func testFaultInjectionConfig(t *testing.T, faultInjectionConfig *config.FaultIn
 	require.NoError(t, err)
 
 	_, err = q.EnqueueMessage(context.Background(), nil)
-	if expectErr {
-		assert.Error(t, err)
-		assert.Zero(t, dataStoreFactory.enqueueRequests)
-	} else {
-		assert.NoError(t, err)
-		assert.Equal(t, 1, dataStoreFactory.enqueueRequests)
-	}
+	verifyMethod(t, expectErr, err, dataStoreFactory.enqueueRequests)
 
 	_, err = q.ReadMessages(context.Background(), nil)
-	if expectErr {
-		assert.Error(t, err)
-		assert.Zero(t, dataStoreFactory.readRequests)
-	} else {
-		assert.NoError(t, err)
-		assert.Equal(t, 1, dataStoreFactory.readRequests)
-	}
+	verifyMethod(t, expectErr, err, dataStoreFactory.readRequests)
+
+	_, err = q.CreateQueue(context.Background(), nil)
+	verifyMethod(t, expectErr, err, dataStoreFactory.createRequests)
 
 	q2, err := factory.NewQueueV2()
 	require.NoError(t, err)
 	assert.Equal(t, q, q2, "NewQueueV2 should cache previous result")
+}
+
+func verifyMethod(t *testing.T, expectErr bool, err error, requests int) {
+	t.Helper()
+	if expectErr {
+		assert.Error(t, err)
+		assert.Zero(t, requests)
+	} else {
+		assert.NoError(t, err)
+		assert.Equal(t, 1, requests)
+	}
 }

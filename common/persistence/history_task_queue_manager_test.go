@@ -185,6 +185,13 @@ func (q failingQueue) ReadMessages(
 	return nil, assert.AnError
 }
 
+func (q failingQueue) CreateQueue(
+	context.Context,
+	*persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	return nil, assert.AnError
+}
+
 func TestHistoryTaskQueueManager_ReadTasks_ErrReadQueueMessages(t *testing.T) {
 	t.Parallel()
 
@@ -206,4 +213,12 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrEnqueueMessage(t *testing.T) {
 		Task: &tasks.WorkflowTask{},
 	})
 	assert.ErrorIs(t, err, assert.AnError, "EnqueueTask should propagate errors from EnqueueMessage")
+}
+
+func TestHistoryTaskQueueManager_CreateQueue(t *testing.T) {
+	t.Parallel()
+
+	m := persistence.NewHistoryTaskQueueManager(failingQueue{}, 1)
+	_, err := m.CreateQueue(context.Background(), &persistence.CreateQueueRequest{})
+	assert.ErrorIs(t, err, assert.AnError, "CreateQueue should propagate errors from the persistence layer")
 }

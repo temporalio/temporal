@@ -37,7 +37,7 @@ type (
 )
 
 var (
-	ErrNotImplemented = errors.New("method is not implemented yet")
+	ErrNotImplemented = errors.New("method is not implemented yet for SQL")
 )
 
 // NewQueueV2 returns an implementation of [persistence.QueueV2] which always returns an error because it is not
@@ -58,4 +58,11 @@ func (q queueV2) ReadMessages(
 	*persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
 	return nil, fmt.Errorf("%w: ReadMessages", ErrNotImplemented)
+}
+
+func (q queueV2) CreateQueue(
+	context.Context,
+	*persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
 }
