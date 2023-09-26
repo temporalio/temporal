@@ -81,7 +81,7 @@ type (
 		DropTask             bool
 		PollSticky           bool
 		RespondSticky        bool
-		AttemptCount         int
+		ExpectedAttemptCount int
 		Retries              int
 		ForceNewWorkflowTask bool
 		QueryResult          *querypb.WorkflowQueryResult
@@ -104,7 +104,7 @@ var (
 		DropTask:             false,
 		PollSticky:           false,
 		RespondSticky:        false,
-		AttemptCount:         1,
+		ExpectedAttemptCount: 1,
 		Retries:              5,
 		ForceNewWorkflowTask: false,
 		QueryResult:          nil,
@@ -116,8 +116,8 @@ func WithNoDumpCommands(o *PollAndProcessWorkflowTaskOptions) { o.DumpCommands =
 func WithDropTask(o *PollAndProcessWorkflowTaskOptions)       { o.DropTask = true }
 func WithPollSticky(o *PollAndProcessWorkflowTaskOptions)     { o.PollSticky = true }
 func WithRespondSticky(o *PollAndProcessWorkflowTaskOptions)  { o.RespondSticky = true }
-func WithAttemptCount(c int) PollAndProcessWorkflowTaskOptionFunc {
-	return func(o *PollAndProcessWorkflowTaskOptions) { o.AttemptCount = c }
+func WithExpectedAttemptCount(c int) PollAndProcessWorkflowTaskOptionFunc {
+	return func(o *PollAndProcessWorkflowTaskOptions) { o.ExpectedAttemptCount = c }
 }
 func WithRetries(c int) PollAndProcessWorkflowTaskOptionFunc {
 	return func(o *PollAndProcessWorkflowTaskOptions) { o.Retries = c }
@@ -265,8 +265,8 @@ Loop:
 				lastWorkflowTaskScheduleEvent = e
 			}
 		}
-		if lastWorkflowTaskScheduleEvent != nil && opts.AttemptCount > 1 {
-			require.Equal(p.T, opts.AttemptCount, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+		if lastWorkflowTaskScheduleEvent != nil && opts.ExpectedAttemptCount > 1 {
+			require.Equal(p.T, opts.ExpectedAttemptCount, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
 		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)

@@ -525,7 +525,7 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -629,7 +629,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		if dropWorkflowTask {
 			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithDropTask)
 		} else {
-			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(2))
+			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{

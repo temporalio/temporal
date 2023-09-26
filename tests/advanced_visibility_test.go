@@ -308,7 +308,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1365,7 +1365,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1413,7 +1413,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1435,7 +1435,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1526,7 +1526,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1660,7 +1660,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1708,7 +1708,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)
@@ -1754,7 +1754,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
-		WithAttemptCount(0),
+		WithExpectedAttemptCount(0),
 		WithRetries(1),
 		WithForceNewWorkflowTask)
 	s.NoError(err)

@@ -125,7 +125,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
 	s.NoError(err)
 
 	// Now process signal and complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(2))
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -411,7 +411,7 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(1))
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

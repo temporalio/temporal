@@ -256,7 +256,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 5 times
 	for i := 1; i <= 5; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 
@@ -275,26 +275,26 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 2 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed workflow task
 	sendSignal = true
-	_, err = poller.PollAndProcessWorkflowTask(WithAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(3))
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
 	// fail workflow task 1 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
