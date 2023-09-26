@@ -146,7 +146,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	}
 
 	// Process first workflow task to schedule activities
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -156,7 +156,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.NoError(err)
 
 	// Process second workflow task which checks activity completion
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
 
@@ -193,7 +193,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
 
@@ -296,7 +296,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -305,7 +305,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
 		s.NoError(err)
 
-		_, err = poller.PollAndProcessWorkflowTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -463,11 +463,11 @@ func (s *integrationSuite) testResetWorkflowReapplyBuffer(
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err) // due to workflow termination (reset)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -590,7 +590,7 @@ func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -614,7 +614,7 @@ func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)

@@ -1906,7 +1906,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	if s.isElasticsearchEnabled {

@@ -273,7 +273,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -421,7 +421,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComple
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -687,7 +687,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 			s.NoError(err)
 
 			// Send signal to schedule new WT.
@@ -1304,7 +1304,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			go updateWorkflowFn(tc.RespondWorkflowTaskError != "")
 
 			// Process update in workflow.
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 			if tc.RespondWorkflowTaskError != "" {
 				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
 				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
@@ -1749,7 +1749,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -1866,7 +1866,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2011,7 +2011,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	}()
 
 	// Accept update1 in normal WT1.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	// Send 2nd update and create speculative WT2.
@@ -2172,7 +2172,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	}()
 
 	// Accept update1 in WT1.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	// Send 2nd update and create speculative WT2.
@@ -2338,7 +2338,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -2364,13 +2364,13 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	go updateWorkflowFn()
 
 	// Try to accept update in workflow: get malformed response.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Error(err)
 	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
@@ -2379,12 +2379,12 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	<-updateResultCh
 
 	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
 	// Complete workflow.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	s.Equal(5, wtHandlerCalls)
@@ -2479,7 +2479,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2592,7 +2592,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2736,7 +2736,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 	}
 
 	// Drain first WT.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2955,7 +2955,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3054,7 +3054,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3194,7 +3194,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan struct{})
@@ -3226,7 +3226,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 			}(tc.UpdateErrMsg)
 
 			// Complete workflow.
-			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 			s.NoError(err)
 			<-updateResultCh
 
@@ -3315,7 +3315,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3421,7 +3421,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3470,7 +3470,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	s.NoError(err)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3568,7 +3568,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3609,7 +3609,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	s.NoError(err)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3721,7 +3721,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_
 	go updateWorkflowFn()
 
 	// Process update in workflow. Update won't be found on server due to shard reload and server will fail WT.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
 	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
@@ -3729,7 +3729,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_
 	<-updateResultCh
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3820,7 +3820,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3947,7 +3947,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -4072,7 +4072,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -4081,7 +4081,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			}()
 
 			// Process update in workflow.
-			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 			s.NoError(err)
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -4119,7 +4119,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			s.NoError(err)
 
 			// Complete workflow.
-			completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+			completeWorkflowResp, err := poller.PollAndProcessWorkflowTaskWithOptions()
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 

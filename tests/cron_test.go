@@ -122,11 +122,11 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 	}
 
 	s.Logger.Info("Process first cron run which fails")
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	s.Logger.Info("Process first cron run which completes")
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	s.True(seeRetry)
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	executionInfo := resp.GetExecutions()[0]
 	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
@@ -265,10 +265,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.True(backoffDuration > targetBackoffDuration)
 	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	s.Equal(3, len(executions))

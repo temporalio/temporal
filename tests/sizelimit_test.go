@@ -165,7 +165,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistoryCountLim
 
 		// Poll workflow task only if it is running
 		if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 
@@ -304,7 +304,7 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 
 	go func() {
-		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	}()
 
@@ -431,7 +431,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	// Poll workflow task only if it is running
 	if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 
 		// Workflow should be force terminated at this point

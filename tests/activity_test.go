@@ -155,7 +155,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -164,7 +164,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(1, activityExecutedCount)
@@ -338,7 +338,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		})
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -486,7 +486,7 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(err)
 
 	for i := 0; i <= activityExecutedLimit; i++ {
@@ -587,7 +587,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -598,7 +598,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -712,7 +712,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.True(err == nil || err == errNoTasks, err)
 
 	cancelCh := make(chan struct{})
@@ -733,7 +733,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 
 		scheduleActivity = false
 		requestCancellation = true
-		_, err2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, err2 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.NoError(err2)
 		close(cancelCh)
 	}()
@@ -841,7 +841,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.True(err == nil || err == errNoTasks)
 
 	// Send signal so that worker can send an activity cancel
@@ -862,12 +862,12 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	// Process signal in workflow and send request cancellation
 	scheduleActivity = false
 	requestCancellation = true
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 
 	scheduleActivity = false
 	requestCancellation = false
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.True(err == nil || err == errNoTasks)
 }
 

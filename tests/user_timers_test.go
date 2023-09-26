@@ -107,13 +107,13 @@ func (s *integrationSuite) TestUserTimers_Sequential() {
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -179,7 +179,7 @@ func (s *integrationSuite) TestUserTimers_CapDuration() {
 	}
 
 	// poll workflow task to schedule the timer
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 

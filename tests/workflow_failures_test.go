@@ -245,7 +245,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	}
 
 	// Make first workflow task to schedule activity
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -264,7 +264,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
@@ -372,7 +372,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())

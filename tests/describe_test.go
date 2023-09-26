@@ -134,7 +134,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	}
 
 	// first workflow task to schedule new activity
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -156,7 +156,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Equal(0, len(dweResponse.PendingActivities))
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 
@@ -262,7 +262,7 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Empty(pollerInfos)
 
-	_, errWorkflowTask := poller.PollAndProcessWorkflowTask(false, false)
+	_, errWorkflowTask := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.NoError(errWorkflowTask)
 	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)

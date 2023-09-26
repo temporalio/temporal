@@ -127,14 +127,14 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	}
 
 	// first workflow task to send 101 signals, the last signal will force fail workflow task and flush buffered events.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Equal("Workflow task not found.", err.Error())
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -230,7 +230,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	}
 
 	// first workflow task, which sends signal and the signal event should be buffered to append after first workflow task closed
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -250,7 +250,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.Equal(histResp.History.Events[5].GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(signalEvent)

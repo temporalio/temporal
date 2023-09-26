@@ -183,7 +183,7 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// make progress of workflow
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

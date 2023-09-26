@@ -194,7 +194,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -210,7 +210,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
@@ -361,7 +361,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -377,7 +377,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
@@ -552,7 +552,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -569,7 +569,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTaskWithOptions()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
