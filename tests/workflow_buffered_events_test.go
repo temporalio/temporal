@@ -358,16 +358,13 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	// first workflow task, which will schedule an activity and add marker
-	_, task, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		true,
-		false,
-		false,
-		false,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+		WithDumpHistory,
+		WithAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
+	task := res.NewTask
 	s.NoError(err)
 
 	// This will cause activity start and complete to be buffered

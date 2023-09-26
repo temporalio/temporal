@@ -522,16 +522,14 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		T:                   s.T(),
 	}
 
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+		WithPollSticky,
+		WithRespondSticky,
+		WithAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
