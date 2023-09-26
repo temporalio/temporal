@@ -302,7 +302,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
