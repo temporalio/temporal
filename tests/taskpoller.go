@@ -74,20 +74,80 @@ type (
 		Logger                       log.Logger
 		T                            *testing.T
 	}
+
+	WorkflowTaskPollOptions struct {
+		DumpHistory          bool
+		DumpCommands         bool
+		DropTask             bool
+		PollSticky           bool
+		RespondSticky        bool
+		AttemptCount         int
+		RetryCount           int
+		ForceNewWorkflowTask bool
+		QueryResult          *querypb.WorkflowQueryResult
+	}
+
+	WorkflowTaskPollOptionFunc func(*WorkflowTaskPollOptions)
+
+	WorkflowTaskPollResponse struct {
+		IsQueryTask bool
+		NewTask     *workflowservice.RespondWorkflowTaskCompletedResponse
+	}
 )
 
 var (
 	errNoTasks = errors.New("no tasks")
+
+	defaultWorkflowTaskPollOptions = WorkflowTaskPollOptions{
+		DumpHistory:          false,
+		DumpCommands:         true,
+		DropTask:             false,
+		PollSticky:           false,
+		RespondSticky:        false,
+		AttemptCount:         1,
+		RetryCount:           5,
+		ForceNewWorkflowTask: false,
+		QueryResult:          nil,
+	}
 )
+
+func WithDumpHistory(o *WorkflowTaskPollOptions) {
+	o.DumpHistory = true
+}
+func WithNoDumpCommands(o *WorkflowTaskPollOptions) {
+	o.DumpCommands = false
+}
+func WithDropTask(o *WorkflowTaskPollOptions) {
+	o.DropTask = true
+}
+func WithPollSticky(o *WorkflowTaskPollOptions) {
+	o.PollSticky = true
+}
+func WithRespondSticky(o *WorkflowTaskPollOptions) {
+	o.RespondSticky = true
+}
+func WithAttemptCount(c int) WorkflowTaskPollOptionFunc {
+	return func(o *WorkflowTaskPollOptions) {
+		o.AttemptCount = c
+	}
+}
+func WithRetryCount(c int) WorkflowTaskPollOptionFunc {
+	return func(o *WorkflowTaskPollOptions) {
+		o.RetryCount = c
+	}
+}
+func WithForceNewWorkflowTask(o *WorkflowTaskPollOptions) {
+	o.ForceNewWorkflowTask = true
+}
+func WithQueryResult(r *querypb.WorkflowQueryResult) WorkflowTaskPollOptionFunc {
+	return func(o *WorkflowTaskPollOptions) {
+		o.QueryResult = r
+	}
+}
 
 // PollAndProcessWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
 	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, 1)
-}
-
-// PollAndProcessWorkflowTaskWithSticky for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, 1)
 }
 
 // PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
@@ -135,7 +195,6 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetry(
 	return isQueryTask, err
 }
 
-// PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
 	dumpHistory bool,
 	dropTask bool,
@@ -146,11 +205,34 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWor
 	forceCreateNewWorkflowTask bool,
 	queryResult *querypb.WorkflowQueryResult,
 ) (isQueryTask bool, newTask *workflowservice.RespondWorkflowTaskCompletedResponse, err error) {
+	res, err := p.PollAndProcessWorkflowTaskGeneric(&WorkflowTaskPollOptions{
+		DumpHistory:          dumpHistory,
+		DropTask:             dropTask,
+		PollSticky:           pollStickyTaskQueue,
+		RespondSticky:        respondStickyTaskQueue,
+		AttemptCount:         int(workflowTaskAttempt),
+		RetryCount:           retryCount,
+		ForceNewWorkflowTask: forceCreateNewWorkflowTask,
+		QueryResult:          queryResult,
+	})
+	return res.IsQueryTask, res.NewTask, err
+}
+
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(funcs ...WorkflowTaskPollOptionFunc) (res WorkflowTaskPollResponse, err error) {
+	opts := defaultWorkflowTaskPollOptions
+	for _, f := range funcs {
+		f(&opts)
+	}
+	return p.PollAndProcessWorkflowTaskGeneric(&opts)
+}
+
+// PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask for workflow tasks
+func (p *TaskPoller) PollAndProcessWorkflowTaskGeneric(opts *WorkflowTaskPollOptions) (res WorkflowTaskPollResponse, err error) {
 Loop:
-	for attempt := 1; attempt <= retryCount; attempt++ {
+	for attempt := 1; attempt <= opts.RetryCount; attempt++ {
 
 		taskQueue := p.TaskQueue
-		if pollStickyTaskQueue {
+		if opts.PollSticky {
 			taskQueue = p.StickyTaskQueue
 		}
 
@@ -161,7 +243,7 @@ Loop:
 		})
 
 		if !common.IsServiceTransientError(err1) {
-			return false, nil, err1
+			return WorkflowTaskPollResponse{}, err1
 		}
 
 		if err1 == consts.ErrDuplicate {
@@ -170,7 +252,7 @@ Loop:
 		}
 
 		if err1 != nil {
-			return false, nil, err1
+			return WorkflowTaskPollResponse{}, err1
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
@@ -179,19 +261,19 @@ Loop:
 		}
 
 		var events []*historypb.HistoryEvent
-		if response.Query == nil || !pollStickyTaskQueue {
+		if response.Query == nil || !opts.PollSticky {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
 			history := response.History
 			if history == nil {
 				p.Logger.Fatal("History is nil")
-				return false, nil, errors.New("history is nil")
+				return WorkflowTaskPollResponse{}, errors.New("history is nil")
 			}
 
 			events = history.Events
 			if len(events) == 0 {
 				p.Logger.Fatal("History Events are empty")
-				return false, nil, errors.New("history events are empty")
+				return WorkflowTaskPollResponse{}, errors.New("history events are empty")
 			}
 
 			nextPageToken := response.NextPageToken
@@ -203,7 +285,7 @@ Loop:
 				})
 
 				if err2 != nil {
-					return false, nil, err2
+					return WorkflowTaskPollResponse{}, err2
 				}
 
 				events = append(events, resp.History.Events...)
@@ -220,12 +302,12 @@ Loop:
 			}
 		}
 
-		if dropTask {
+		if opts.DropTask {
 			p.Logger.Info("Dropping Workflow task: ")
-			return false, nil, nil
+			return WorkflowTaskPollResponse{}, nil
 		}
 
-		if dumpHistory {
+		if opts.DumpHistory {
 			common.PrettyPrint(response.History.Events)
 		}
 
@@ -248,7 +330,7 @@ Loop:
 			}
 
 			_, err = p.Engine.RespondQueryTaskCompleted(NewContext(), completeRequest)
-			return true, nil, err
+			return WorkflowTaskPollResponse{IsQueryTask: true}, err
 		}
 
 		// Handle messages.
@@ -264,7 +346,7 @@ Loop:
 					Failure:   newApplicationFailure(err, false, nil),
 					Identity:  p.Identity,
 				})
-				return false, nil, err
+				return WorkflowTaskPollResponse{}, err
 			}
 		}
 
@@ -275,8 +357,8 @@ Loop:
 				lastWorkflowTaskScheduleEvent = e
 			}
 		}
-		if lastWorkflowTaskScheduleEvent != nil && workflowTaskAttempt > 1 {
-			require.Equal(p.T, workflowTaskAttempt, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+		if lastWorkflowTaskScheduleEvent != nil && opts.AttemptCount > 1 {
+			require.Equal(p.T, opts.AttemptCount, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
 		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
@@ -289,16 +371,18 @@ Loop:
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
-			return false, nil, err
+			return WorkflowTaskPollResponse{}, err
 		}
-		if len(commands) > 0 {
-			common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
-		}
-		if len(workerToServerMessages) > 0 {
-			common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+		if opts.DumpCommands {
+			if len(commands) > 0 {
+				common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+			}
+			if len(workerToServerMessages) > 0 {
+				common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+			}
 		}
 
-		if !respondStickyTaskQueue {
+		if !opts.RespondSticky {
 			// non sticky taskqueue
 			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Namespace:                  p.Namespace,
@@ -307,10 +391,10 @@ Loop:
 				Commands:                   commands,
 				Messages:                   workerToServerMessages,
 				ReturnNewWorkflowTask:      true,
-				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
-				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
+				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
+				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
 			})
-			return false, newTask, err
+			return WorkflowTaskPollResponse{NewTask: newTask}, err
 		}
 		// sticky taskqueue
 		newTask, err := p.Engine.RespondWorkflowTaskCompleted(
@@ -325,15 +409,15 @@ Loop:
 					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
 				},
 				ReturnNewWorkflowTask:      true,
-				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
-				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
+				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
+				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
 			},
 		)
 
-		return false, newTask, err
+		return WorkflowTaskPollResponse{NewTask: newTask}, err
 	}
 
-	return false, nil, errNoTasks
+	return WorkflowTaskPollResponse{}, errNoTasks
 }
 
 // HandlePartialWorkflowTask for workflow task
