@@ -376,7 +376,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.False(workflowComplete)
 
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
-		_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+		_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithRetries(1))
 		if err != nil {
 			s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -494,7 +494,7 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 		s.NoError(err)
 	}
 
-	_, err = poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithRetries(1))
 	s.NoError(err)
 	s.True(workflowComplete)
 }

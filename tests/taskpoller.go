@@ -82,7 +82,7 @@ type (
 		PollSticky           bool
 		RespondSticky        bool
 		AttemptCount         int
-		RetryCount           int
+		Retries              int
 		ForceNewWorkflowTask bool
 		QueryResult          *querypb.WorkflowQueryResult
 	}
@@ -105,7 +105,7 @@ var (
 		PollSticky:           false,
 		RespondSticky:        false,
 		AttemptCount:         1,
-		RetryCount:           5,
+		Retries:              5,
 		ForceNewWorkflowTask: false,
 		QueryResult:          nil,
 	}
@@ -131,9 +131,9 @@ func WithAttemptCount(c int) WorkflowTaskPollOptionFunc {
 		o.AttemptCount = c
 	}
 }
-func WithRetryCount(c int) WorkflowTaskPollOptionFunc {
+func WithRetries(c int) WorkflowTaskPollOptionFunc {
 	return func(o *WorkflowTaskPollOptions) {
-		o.RetryCount = c
+		o.Retries = c
 	}
 }
 func WithForceNewWorkflowTask(o *WorkflowTaskPollOptions) {
@@ -143,16 +143,6 @@ func WithQueryResult(r *querypb.WorkflowQueryResult) WorkflowTaskPollOptionFunc 
 	return func(o *WorkflowTaskPollOptions) {
 		o.QueryResult = r
 	}
-}
-
-// PollAndProcessWorkflowTask for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, 1)
-}
-
-// PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, 1, 1)
 }
 
 // PollAndProcessWorkflowTaskWithAttempt for workflow tasks
@@ -211,7 +201,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWor
 		PollSticky:           pollStickyTaskQueue,
 		RespondSticky:        respondStickyTaskQueue,
 		AttemptCount:         int(workflowTaskAttempt),
-		RetryCount:           retryCount,
+		Retries:              retryCount,
 		ForceNewWorkflowTask: forceCreateNewWorkflowTask,
 		QueryResult:          queryResult,
 	})
@@ -229,7 +219,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(funcs ...WorkflowTask
 // PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskGeneric(opts *WorkflowTaskPollOptions) (res WorkflowTaskPollResponse, err error) {
 Loop:
-	for attempt := 1; attempt <= opts.RetryCount; attempt++ {
+	for attempt := 1; attempt <= opts.Retries; attempt++ {
 
 		taskQueue := p.TaskQueue
 		if opts.PollSticky {
