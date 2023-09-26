@@ -2,11 +2,13 @@ At the highest level, the components of a system using Temporal fall into two ca
 
 - **User-hosted processes**
 
-  - The user's application communicates with the Temporal server using one of the [Temporal SDKs](https://docs.temporal.io/dev-guide).
+  - The User Application communicates with the Temporal server using one of the [Temporal SDKs](https://docs.temporal.io/dev-guide).
   - The user runs Temporal [Worker](https://docs.temporal.io/workers) processes. These also use one of the Temporal SDKs and host the user's [Workflow](https://docs.temporal.io/workflows) and [Activity](https://docs.temporal.io/activities) code.
 
 - **Temporal Server**<br>
-  Users can host and operate the Temporal server and its database themselves, or use [Temporal Cloud](https://temporal.io/cloud).
+  - History service shards manage individual [Workflow Executions](https://docs.temporal.io/workflows#workflow-execution). They handle RPCs originating from the User Application and the Temporal Worker, drive the Workflow Execution to completion by enqueuing Workflow and Activity Tasks in the Matching Service, and store all state required for durable execution of the workflow.
+  - Matching service shards manage the [Task Queues](https://docs.temporal.io/workers#task-queue) being polled by Temporal Worker processes. A single task queue holds tasks for multiple Workflow Executions.
+  - Users can host and operate the Temporal server and its database themselves, or use [Temporal Cloud](https://temporal.io/cloud).
 
 <!-- https://lucid.app/lucidchart/0202e4b8-5258-4cd6-a6a0-67159300532b/edit -->
 <img src="https://github.com/temporalio/temporal/assets/52205/761ed417-98d9-4b37-913f-f1d23223bb2f">
