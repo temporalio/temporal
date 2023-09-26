@@ -32,12 +32,11 @@ import (
 	"go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -194,13 +193,24 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	if err != nil {
 		return err
 	}
-	events, _, _ := e.getDeserializedEvents()
-	if len(events) == 0 {
+
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
+	if err != nil {
+		e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
+			tag.ShardID(shardContext.GetShardID()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil
+	} else if len(events) == 0 {
 		e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
 			tag.ShardID(shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(e.GetNamespaceID()),
-			tag.WorkflowID(e.GetWorkflowID()),
-			tag.WorkflowRunID(e.GetRunID()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 		)
 		return nil
@@ -236,7 +246,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
 }
 
-func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.HistoryEvent, nre []*historypb.HistoryEvent, er error) {
+func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
 	if e.eventsDesResponse != nil {
 		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
 	}
@@ -248,7 +258,13 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.History
 	}
 
 	defer func() {
-		e.eventsDesResponse = &eventsDeserializeResponse{ev, nre, er}
+		if retError != nil {
+			e.eventsDesResponse = &eventsDeserializeResponse{
+				events:       nil,
+				newRunEvents: nil,
+				err:          retError,
+			}
+		}
 	}()
 
 	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
@@ -260,7 +276,6 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.History
 			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
-
 		return nil, nil, err
 	}
 
@@ -273,7 +288,12 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.History
 			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
-		return events, nil, err
+		return nil, nil, err
+	}
+	e.eventsDesResponse = &eventsDeserializeResponse{
+		events:       events,
+		newRunEvents: newRunEvents,
+		err:          nil,
 	}
 	return events, newRunEvents, err
 }
