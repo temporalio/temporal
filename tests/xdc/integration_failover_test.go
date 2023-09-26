@@ -329,10 +329,10 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.PollAndProcessWorkflowTask()
+		res, errInner := poller.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.NoError(errInner)
-		if isQueryTask {
+		if res.IsQueryTask {
 			break
 		}
 	}
@@ -351,10 +351,10 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller2.PollAndProcessWorkflowTask()
+		res, errInner := poller2.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessQueryTask", tag.Error(err))
 		s.NoError(errInner)
-		if isQueryTask {
+		if res.IsQueryTask {
 			break
 		}
 	}
@@ -394,10 +394,10 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller.PollAndProcessWorkflowTask()
+		res, errInner := poller.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(errInner)
-		if isQueryTask {
+		if res.IsQueryTask {
 			break
 		}
 	}
@@ -413,10 +413,10 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	// process that query task, which should respond via RespondQueryTaskCompleted
 	for {
 		// loop until process the query task
-		isQueryTask, errInner := poller2.PollAndProcessWorkflowTask()
+		res, errInner := poller2.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(errInner)
-		if isQueryTask {
+		if res.IsQueryTask {
 			break
 		}
 	}
@@ -555,7 +555,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		T:                            s.T(),
 	}
 
-	_, err = poller1.PollAndProcessWorkflowTask(WithRespondSticky)
+	_, err = poller1.PollAndProcessWorkflowTask(tests.WithRespondSticky)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(firstCommandMade)
@@ -577,7 +577,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
-	_, err = poller2.PollAndProcessWorkflowTask(WithRespondSticky)
+	_, err = poller2.PollAndProcessWorkflowTask(tests.WithRespondSticky)
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(secondCommandMade)
@@ -1615,7 +1615,7 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 	}
 
 	// this will fail the workflow task
-	_, err = poller1.PollAndProcessWorkflowTask(WithDropTask)
+	_, err = poller1.PollAndProcessWorkflowTask(tests.WithDropTask)
 	s.NoError(err)
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
@@ -1792,7 +1792,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 1
 	// for details see ReplicateTransientWorkflowTaskScheduled
-	_, err = poller2.PollAndProcessWorkflowTask(WithAttemptCount(1))
+	_, err = poller2.PollAndProcessWorkflowTask(tests.WithAttemptCount(1))
 	s.NoError(err)
 	s.True(workflowFinished)
 }
