@@ -139,13 +139,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
@@ -224,7 +224,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	// process the workflow task and continue as new
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -325,7 +325,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	minTaskID := int64(0)
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
 	s.True(len(events) != 0)
@@ -334,7 +334,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		minTaskID = event.GetTaskId()
 	}
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
 	s.True(len(events) != 0)
@@ -505,7 +505,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	}
 
 	// Make first command to start child execution
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childExecutionStarted)
@@ -513,7 +513,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.Logger.Info("workflow task", tag.Counter(i))
-		_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -522,13 +522,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(definition.startedEvent)
 
 	// Process Child Execution final workflow task to complete it
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(definition.completedEvent)
@@ -588,7 +588,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	}
 
 	// Make first command to start child execution
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childExecutionStarted)
@@ -596,7 +596,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.Logger.Info("workflow task", tag.Counter(i))
-		_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}

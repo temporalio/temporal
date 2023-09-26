@@ -119,7 +119,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -257,19 +257,19 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunni
 	}
 
 	// Cancel the foreign workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Accept cancellation.
-	_, err = foreignPoller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -389,19 +389,19 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinis
 	}
 
 	// Complete target workflow
-	_, err := foreignPoller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Cancel the target workflow with this workflow task request.
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -474,14 +474,14 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFo
 	}
 
 	// Cancel the target workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -622,7 +622,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	}
 
 	s.Logger.Info("Process first workflow task which starts and request cancels child workflow")
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task.", err.Error())
@@ -632,7 +632,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	})
 
 	s.Logger.Info("Process second workflow task which observes child workflow is cancelled and completes")
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{

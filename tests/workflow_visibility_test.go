@@ -87,7 +87,7 @@ func (s *integrationSuite) TestVisibility() {
 		T:                   s.T(),
 	}
 
-	_, err1 := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err1 := poller.PollAndProcessWorkflowTask()
 	s.NoError(err1)
 
 	// wait until the start workflow is done

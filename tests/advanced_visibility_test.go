@@ -305,7 +305,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
-	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1362,7 +1362,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1410,7 +1410,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	res, err = poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1432,7 +1432,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.testListResultForUpsertSearchAttributes(listRequest)
 
 	// process 3rd workflow task and assert workflow task is handled correctly.
-	res, err = poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1523,7 +1523,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process close workflow task and assert search attributes is correct after workflow is closed
-	res, err = poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1657,7 +1657,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1705,7 +1705,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	res, err = poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1751,7 +1751,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process close workflow task and assert workflow task is handled correctly.
-	res, err = poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err = poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -1890,7 +1890,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	if s.isElasticsearchEnabled {

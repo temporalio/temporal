@@ -145,7 +145,7 @@ func WithQueryResult(r *querypb.WorkflowQueryResult) WorkflowTaskPollOptionFunc 
 	}
 }
 
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(funcs ...WorkflowTaskPollOptionFunc) (res WorkflowTaskPollResponse, err error) {
+func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...WorkflowTaskPollOptionFunc) (res WorkflowTaskPollResponse, err error) {
 	opts := defaultWorkflowTaskPollOptions
 	for _, f := range funcs {
 		f(&opts)
@@ -153,7 +153,6 @@ func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(funcs ...WorkflowTask
 	return p.PollAndProcessWorkflowTaskGeneric(&opts)
 }
 
-// PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask for workflow tasks
 func (p *TaskPoller) PollAndProcessWorkflowTaskGeneric(opts *WorkflowTaskPollOptions) (res WorkflowTaskPollResponse, err error) {
 Loop:
 	for attempt := 1; attempt <= opts.Retries; attempt++ {

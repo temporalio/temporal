@@ -160,7 +160,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -181,7 +181,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -207,7 +207,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -338,7 +338,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -361,7 +361,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -377,7 +377,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -542,11 +542,11 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -555,7 +555,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -595,7 +595,7 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -678,7 +678,7 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	}
 
 	// Make first command to schedule activity
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowTaskDelay > time.Second*2)
@@ -740,7 +740,7 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	}
 
 	// process start task
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -773,7 +773,7 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	s.NoError(err)
 
 	// process signal and complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -876,11 +876,11 @@ func (s *integrationSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -1037,11 +1037,11 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1050,7 +1050,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1089,7 +1089,7 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1183,12 +1183,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1308,12 +1308,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1463,7 +1463,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1491,7 +1491,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1527,7 +1527,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1552,7 +1552,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1696,10 +1696,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	}
 
 	// Start workflows, make some progress and complete workflow
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -1854,7 +1854,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
 		T:                   s.T(),
 	}
 
-	_, pollErr := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, pollErr := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(pollErr)
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 	s.NotNil(signalEvent)
@@ -1927,7 +1927,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	}
 
 	// process start task
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	signalName := "my signal"
@@ -1966,7 +1966,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	s.NoError(err)
 
 	// process signal and complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

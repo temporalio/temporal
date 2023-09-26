@@ -198,7 +198,7 @@ func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
 		T:                   s.T(),
 	}
 
-	_, pollErr := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, pollErr := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(pollErr)
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 
@@ -286,7 +286,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -448,7 +448,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 		if i%2 == 0 {
@@ -461,7 +461,7 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -522,7 +522,7 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		T:                   s.T(),
 	}
 
-	res, err := poller.PollAndProcessWorkflowTaskWithOptions(
+	res, err := poller.PollAndProcessWorkflowTask(
 		WithPollSticky,
 		WithRespondSticky,
 		WithAttemptCount(0),
@@ -627,9 +627,9 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		s.Logger.Info("Calling Workflow Task", tag.Counter(i))
 		var err error
 		if dropWorkflowTask {
-			_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithDropTask)
+			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithDropTask)
 		} else {
-			_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithAttemptCount(2))
+			_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(2))
 		}
 		if err != nil {
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -654,7 +654,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
@@ -736,7 +736,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	}
 
 	for i := 1; i <= maximumAttempts; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 		events := s.getHistory(s.namespace, executions[i-1])
 		if i == maximumAttempts {
@@ -882,19 +882,19 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[2])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
@@ -937,7 +937,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[0])
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())

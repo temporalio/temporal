@@ -134,20 +134,20 @@ func (s *integrationSuite) TestCancelTimer() {
 	}
 
 	// schedule the timer
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
@@ -266,20 +266,20 @@ func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	}
 
 	// schedule the timer
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 

@@ -195,17 +195,17 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
@@ -226,7 +226,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
@@ -355,20 +355,20 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
 	for i := 0; i < 3; i++ {
-		_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
 	}
@@ -383,7 +383,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Nil(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(terminatedEvent)
@@ -563,37 +563,37 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
 
 	// Process Child Execution #1
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.False(childComplete)
 
 	// Process Child Execution #2
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.False(childComplete)
 
 	// Process Child Execution #3
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Parent should see child complete
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -728,34 +728,34 @@ func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
 
 	// Process Child Execution #1
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child Execution #2
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child Execution #3
-	_, err = pollerChild.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Parent should see child complete
-	_, err = pollerParent.PollAndProcessWorkflowTaskWithOptions()
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

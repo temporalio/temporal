@@ -245,7 +245,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	}
 
 	// Make first workflow task to schedule activity
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 5 times
 	for i := 1; i <= 5; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
 		s.NoError(err)
 	}
 
@@ -264,7 +264,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
@@ -275,26 +275,26 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 2 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed workflow task
 	sendSignal = true
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(WithAttemptCount(3))
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
 	// fail workflow task 1 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithOptions(WithAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTaskWithOptions(WithDumpHistory, WithAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithAttemptCount(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -372,7 +372,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithOptions()
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())
