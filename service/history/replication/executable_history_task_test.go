@@ -116,14 +116,14 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EventId: firstEventID,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
-	e, _ := serialization.NewSerializer().DeserializeEvents(eventsBlob)
-	s.events = e
+	s.events, _ = serialization.NewSerializer().DeserializeEvents(eventsBlob)
+
 	newEventsBlob, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
-	ne, _ := serialization.NewSerializer().DeserializeEvents(newEventsBlob)
-	s.newRunEvents = ne
+	s.newRunEvents, _ = serialization.NewSerializer().DeserializeEvents(newEventsBlob)
+
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
 		NamespaceId:       uuid.NewString(),
 		WorkflowId:        uuid.NewString(),
@@ -178,7 +178,8 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(gomock.Any(),
+	engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,
@@ -229,7 +230,8 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateHistoryEvents(gomock.Any(),
+	engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
 		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
 		s.task.baseExecutionInfo,
 		s.task.versionHistoryItems,

@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -55,10 +56,11 @@ type (
 		ExecutableTask
 		baseExecutionInfo   *workflowpb.BaseExecutionInfo
 		versionHistoryItems []*historyspb.VersionHistoryItem
+		eventsBlob          *common.DataBlob
+		newRunEventsBlob    *common.DataBlob
 
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
-		replicationTask   *replicationspb.HistoryTaskAttributes
 	}
 	eventsDeserializeResponse struct {
 		events       []*historypb.HistoryEvent
@@ -92,7 +94,8 @@ func NewExecutableHistoryTask(
 
 		baseExecutionInfo:   task.BaseExecutionInfo,
 		versionHistoryItems: task.VersionHistoryItems,
-		replicationTask:     task,
+		eventsBlob:          task.GetEvents(),
+		newRunEventsBlob:    task.GetNewRunEvents(),
 	}
 }
 
@@ -248,12 +251,12 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.History
 		e.eventsDesResponse = &eventsDeserializeResponse{ev, nre, er}
 	}()
 
-	events, err := e.EventSerializer.DeserializeEvents(e.replicationTask.GetEvents())
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to deserialize history events",
-			tag.WorkflowNamespaceID(e.replicationTask.GetNamespaceId()),
-			tag.WorkflowID(e.replicationTask.GetWorkflowId()),
-			tag.WorkflowRunID(e.replicationTask.GetRunId()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
@@ -261,12 +264,12 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (ev []*historypb.History
 		return nil, nil, err
 	}
 
-	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.replicationTask.GetNewRunEvents())
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.newRunEventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to deserialize new run history events",
-			tag.WorkflowNamespaceID(e.replicationTask.GetNamespaceId()),
-			tag.WorkflowID(e.replicationTask.GetWorkflowId()),
-			tag.WorkflowRunID(e.replicationTask.GetRunId()),
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.ExecutableTask.TaskID()),
 			tag.Error(err),
 		)
