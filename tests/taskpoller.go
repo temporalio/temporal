@@ -145,29 +145,6 @@ func WithQueryResult(r *querypb.WorkflowQueryResult) WorkflowTaskPollOptionFunc 
 	}
 }
 
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-	dumpHistory bool,
-	dropTask bool,
-	pollStickyTaskQueue bool,
-	respondStickyTaskQueue bool,
-	workflowTaskAttempt int32,
-	retryCount int,
-	forceCreateNewWorkflowTask bool,
-	queryResult *querypb.WorkflowQueryResult,
-) (isQueryTask bool, newTask *workflowservice.RespondWorkflowTaskCompletedResponse, err error) {
-	res, err := p.PollAndProcessWorkflowTaskGeneric(&WorkflowTaskPollOptions{
-		DumpHistory:          dumpHistory,
-		DropTask:             dropTask,
-		PollSticky:           pollStickyTaskQueue,
-		RespondSticky:        respondStickyTaskQueue,
-		AttemptCount:         int(workflowTaskAttempt),
-		Retries:              retryCount,
-		ForceNewWorkflowTask: forceCreateNewWorkflowTask,
-		QueryResult:          queryResult,
-	})
-	return res.IsQueryTask, res.NewTask, err
-}
-
 func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(funcs ...WorkflowTaskPollOptionFunc) (res WorkflowTaskPollResponse, err error) {
 	opts := defaultWorkflowTaskPollOptions
 	for _, f := range funcs {
