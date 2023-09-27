@@ -34,22 +34,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// Min returns the minimum of two comparable values.
-func Min[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// Min returns the maximum of two comparable values.
-func Max[T constraints.Ordered](a, b T) T {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // MinTime returns the earlier of two given time.Time
 func MinTime(a, b time.Time) time.Time {
 	if a.Before(b) {
