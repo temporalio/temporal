@@ -76,9 +76,7 @@ var (
 	FlagProtoType                  = "type"
 	FlagHexData                    = "hex-data"
 	FlagHexFile                    = "hex-file"
-	FlagHexBranchToken             = "hex-branch-token"
 	FlagBinaryFile                 = "binary-file"
 	FlagBase64Data                 = "base64-data"
 	FlagBase64File                 = "base64-file"
-	FlagBase64BranchToken          = "base64-branch-token"
 )

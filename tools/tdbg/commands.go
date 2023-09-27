@@ -25,8 +25,6 @@
 package tdbg
 
 import (
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -671,25 +669,6 @@ func AdminRebuildMutableState(c *cli.Context) error {
 	}
 	rid := c.String(FlagRunID)
 
-	var branchToken []byte
-	hexBranchToken := c.String(FlagHexBranchToken)
-	base64BranchToken := c.String(FlagBase64BranchToken)
-	if len(hexBranchToken) != 0 && len(base64BranchToken) != 0 {
-		return errors.New("only one of hex or base64 branch token should be provided")
-	}
-	if len(hexBranchToken) != 0 {
-		branchToken, err = hex.DecodeString(hexBranchToken)
-		if err != nil {
-			return fmt.Errorf("unable to decode hex branch token: %s", err)
-		}
-	}
-	if len(base64BranchToken) != 0 {
-		branchToken, err = base64.StdEncoding.DecodeString(base64BranchToken)
-		if err != nil {
-			return fmt.Errorf("unable to decode base64 branch token: %s", err)
-		}
-	}
-
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -699,7 +678,6 @@ func AdminRebuildMutableState(c *cli.Context) error {
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		BranchToken: branchToken,
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild mutable state failed: %s", err)

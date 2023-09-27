@@ -654,7 +654,6 @@ func (adh *AdminHandler) RebuildMutableState(
 	if _, err := adh.historyClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
 		NamespaceId: namespaceID.String(),
 		Execution:   request.Execution,
-		BranchToken: request.BranchToken,
 	}); err != nil {
 		return nil, err
 	}

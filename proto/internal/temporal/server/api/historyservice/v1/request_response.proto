@@ -646,7 +646,6 @@ message ShardReplicationStatusPerCluster {
 message RebuildMutableStateRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
-    bytes branch_token = 3;
 }
 
 message RebuildMutableStateResponse {

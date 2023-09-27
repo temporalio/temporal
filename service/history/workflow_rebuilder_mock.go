@@ -60,15 +60,15 @@ func (m *MockworkflowRebuilder) EXPECT() *MockworkflowRebuilderMockRecorder {
 }
 
 // rebuild mocks base method.
-func (m *MockworkflowRebuilder) rebuild(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte) error {
+func (m *MockworkflowRebuilder) rebuild(ctx context.Context, workflowKey definition.WorkflowKey) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "rebuild", ctx, workflowKey, branchToken)
+	ret := m.ctrl.Call(m, "rebuild", ctx, workflowKey)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // rebuild indicates an expected call of rebuild.
-func (mr *MockworkflowRebuilderMockRecorder) rebuild(ctx, workflowKey, branchToken interface{}) *gomock.Call {
+func (mr *MockworkflowRebuilderMockRecorder) rebuild(ctx, workflowKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rebuild", reflect.TypeOf((*MockworkflowRebuilder)(nil).rebuild), ctx, workflowKey, branchToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rebuild", reflect.TypeOf((*MockworkflowRebuilder)(nil).rebuild), ctx, workflowKey)
 }
