@@ -233,6 +233,12 @@ func TestCassandraQueuePersistence(t *testing.T) {
 }
 
 func TestCassandraQueueV2Persistence(t *testing.T) {
+	// This test function is split up into two parts:
+	// 1. Test the generic queue functionality, which is independent of the database choice (Cassandra here).
+	//   This is done by calling the generic RunQueueV2TestSuite function.
+	// 2. Test the Cassandra-specific implementation of the queue. For example, things like queue message ID conflicts
+	//   can only happen in Cassandra due to its lack of transactions, so we need to test those here.
+
 	t.Parallel()
 
 	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
@@ -243,6 +249,10 @@ func TestCassandraQueueV2Persistence(t *testing.T) {
 		t.Parallel()
 		RunQueueV2TestSuite(t, cassandra.NewQueueV2Store(cluster.GetSession()))
 	})
+	runCassandraSpecificQueueV2Tests(t, cluster)
+}
+
+func runCassandraSpecificQueueV2Tests(t *testing.T, cluster *cassandra.TestCluster) {
 	t.Run("QueueMessageIDConflict", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrQueueMessageConflict(t, cluster)
