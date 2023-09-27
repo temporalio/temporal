@@ -44,6 +44,8 @@ type (
 	ExecutableWrapper   interface {
 		Wrap(e Executable) Executable
 	}
+	// ExecutableWrapperFn is a convenience type to avoid having to create a struct that implements ExecutableWrapper.
+	ExecutableWrapperFn func(e Executable) Executable
 
 	executableFactoryImpl struct {
 		executor          Executor
@@ -114,4 +116,8 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 
 func (f executableFactoryWrapper) NewExecutable(task tasks.Task, readerID int64) Executable {
 	return f.wrapper.Wrap(f.factory.NewExecutable(task, readerID))
+}
+
+func (f ExecutableWrapperFn) Wrap(e Executable) Executable {
+	return f(e)
 }
