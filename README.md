@@ -16,9 +16,11 @@ It is developed by [Temporal Technologies](https://temporal.io/), a startup by t
 
 [![image](https://user-images.githubusercontent.com/12602502/136433917-98abe0d7-4f81-4f97-9b11-62b331c76608.png)](http://www.youtube.com/watch?v=f-18XztyN6c 'Temporal')
 
-Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
+Learn more:
 
-To learn about Temporal's internal implementation see [docs/](./docs/README.md).
+- [Courses](https://learn.temporal.io/courses/temporal_101/)
+- [Docs](https://docs.temporal.io)
+- Internal architecture: [docs/](./docs/README.md)
 
 ## Getting Started
 
