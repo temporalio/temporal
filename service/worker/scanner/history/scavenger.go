@@ -241,7 +241,7 @@ func (s *Scavenger) filterTask(
 
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
-		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
+		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info), tag.Error(err))
 		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
 
 		s.Lock()
@@ -251,13 +251,9 @@ func (s *Scavenger) filterTask(
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
-	branchToken, err := serialization.HistoryBranchToBlob(&persistencepb.HistoryBranch{
-		TreeId:    branch.BranchInfo.TreeId,
-		BranchId:  branch.BranchInfo.BranchId,
-		Ancestors: branch.BranchInfo.Ancestors,
-	})
+	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
 	if err != nil {
-		s.logger.Error("unable to serialize the history cleanup branch token", tag.DetailInfo(branch.Info))
+		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
 		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
 
 		s.Lock()
