@@ -93,6 +93,7 @@ type (
 
 var QueueModule = fx.Options(
 	fx.Provide(QueueSchedulerRateLimiterProvider),
+	fx.Provide(NewExecutableDLQWrapper),
 	fx.Provide(
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
