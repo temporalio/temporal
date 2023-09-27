@@ -36,7 +36,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
-	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
 )
@@ -436,13 +435,11 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) ([]metrics.Tag, bool, error) {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) ExecuteResponse {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].([]metrics.Tag)
-	ret1, _ := ret[1].(bool)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(ExecuteResponse)
+	return ret0
 }
 
 // Execute indicates an expected call of Execute.

@@ -152,3 +152,15 @@ func ReduceSlice[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
 	}
 	return acc
 }
+
+// Coalesce returns the first non-zero value of its arguments, or the zero value for the type
+// if all are zero.
+func Coalesce[T comparable](vals ...T) T {
+	var zero T
+	for _, v := range vals {
+		if v != zero {
+			return v
+		}
+	}
+	return zero
+}
