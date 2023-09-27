@@ -38,7 +38,7 @@ import (
 type handler struct {
 	zapLogger *zap.Logger
 	logger    Logger
-	attrs     []slog.Attr
+	tags      []tag.Tag
 	group     string
 }
 
@@ -47,7 +47,7 @@ var _ slog.Handler = (*handler)(nil)
 // NewSlogLogger creates an slog.Logger from a given logger.
 func NewSlogLogger(logger Logger) *slog.Logger {
 	logger = withIncreasedSkip(logger, 3)
-	return slog.New(&handler{logger: logger, zapLogger: extractZapLogger(logger), group: "", attrs: nil})
+	return slog.New(&handler{logger: logger, zapLogger: extractZapLogger(logger), group: "", tags: nil})
 }
 
 // Enabled reports whether the handler handles records at the given level.
@@ -60,14 +60,14 @@ func (h *handler) Enabled(_ context.Context, level slog.Level) bool {
 
 // Handle implements slog.Handler.
 func (h *handler) Handle(_ context.Context, record slog.Record) error {
-	tags := make([]tag.Tag, 0, record.NumAttrs()+len(h.attrs))
+	tags := make([]tag.Tag, len(h.tags), len(h.tags)+record.NumAttrs())
+	copy(tags, h.tags)
 	record.Attrs(func(attr slog.Attr) bool {
 		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
 		return true
 	})
-	for _, attr := range h.attrs {
-		tags = append(tags, tag.NewZapTag(convertAttrToField(attr)))
-	}
+	// Not capturing the log location and stack trace here. We seem to not need this functionality since our zapLogger
+	// adds the logging-call-at tag.
 	switch record.Level {
 	case slog.LevelDebug:
 		h.logger.Debug(record.Message, tags...)
@@ -84,14 +84,12 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 
 // WithAttrs implements slog.Handler.
 func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	if h.group != "" {
-		withGroup := make([]slog.Attr, len(attrs))
-		for i, attr := range attrs {
-			withGroup[i] = h.prependGroup(attr)
-		}
-		attrs = withGroup
+	tags := make([]tag.Tag, len(h.tags), len(h.tags)+len(attrs))
+	copy(tags, h.tags)
+	for _, attr := range attrs {
+		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
 	}
-	return &handler{logger: h.logger, attrs: append(h.attrs, attrs...), group: h.group}
+	return &handler{logger: h.logger, tags: tags, group: h.group}
 }
 
 // WithGroup implements slog.Handler.
@@ -100,7 +98,7 @@ func (h *handler) WithGroup(name string) slog.Handler {
 	if h.group != "" {
 		group = h.group + "." + name
 	}
-	return &handler{logger: h.logger, attrs: h.attrs, group: group}
+	return &handler{logger: h.logger, tags: h.tags, group: group}
 }
 
 func (h *handler) prependGroup(attr slog.Attr) slog.Attr {
