@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
-	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -86,7 +85,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		HostName:          "self",
 		Config: &Config{
 			PerNamespaceWorkerCount: func(ns string) int {
-				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
 			PerNamespaceWorkerOptions: func(ns string) map[string]any {
 				switch ns {

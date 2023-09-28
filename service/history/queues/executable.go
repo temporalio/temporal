@@ -534,7 +534,7 @@ func (e *executableImpl) backoffDuration(
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
-		backoffDuration = util.Max(
+		backoffDuration = max(
 			backoffDuration,
 			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount),
 		)

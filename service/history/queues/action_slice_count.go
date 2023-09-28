@@ -27,7 +27,6 @@ package queues
 import (
 	"golang.org/x/exp/slices"
 
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -208,7 +207,7 @@ func (a *actionSliceCount) pickCompactCandidates(
 	})
 
 	sliceToCompact := make(map[Slice]struct{}, numSliceToCompact)
-	for _, candidate := range candidates[:util.Min(numSliceToCompact, len(candidates))] {
+	for _, candidate := range candidates[:min(numSliceToCompact, len(candidates))] {
 		sliceToCompact[candidate.slice] = struct{}{}
 	}
 

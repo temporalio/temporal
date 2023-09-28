@@ -35,7 +35,6 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -283,7 +282,7 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
-		maxJitter = util.Min(maxJitter, following.Sub(nominal))
+		maxJitter = min(maxJitter, following.Sub(nominal))
 	}
 	next := cs.addJitter(jitterSeed, nominal, maxJitter)
 
