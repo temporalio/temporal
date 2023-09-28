@@ -864,11 +864,10 @@ func (s *clientIntegrationSuite) TestStickyAutoReset() {
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
 	s.NoError(err)
-	if len(resp.Pollers) > 0 {
-		for _, p := range resp.Pollers {
-			s.NotNil(p.LastAccessTime)
-			s.Greater(time.Now().Sub(*p.LastAccessTime), time.Second*10)
-		}
+	s.NotNil(resp)
+	for _, p := range resp.Pollers {
+		s.NotNil(p.LastAccessTime)
+		s.Greater(time.Now().Sub(*p.LastAccessTime), time.Second*10)
 	}
 
 	startTime := time.Now()
