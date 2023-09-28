@@ -142,8 +142,13 @@ func (d *errorLogDetector) Stop() {
 }
 
 func (d *errorLogDetector) Warn(msg string, tags ...tag.Tag) {
-	if strings.Contains(msg, "error creating sdk client") {
-		return
+	for _, s := range []string{
+		"error creating sdk client",
+		"Failed to poll for task",
+	} {
+		if strings.Contains(msg, s) {
+			return
+		}
 	}
 
 	d.logUnexpected("Warn", msg, tags)
@@ -195,6 +200,7 @@ func TestErrorLogDetector(t *testing.T) {
 	d.Info("info")
 	d.Warn("error creating sdk client")
 	d.Warn("unexpected warning")
+	d.Warn("Failed to poll for task")
 	d.Error("Unable to process new range")
 	d.Error("Unable to call matching.PollActivityTaskQueue")
 	d.Error("service failures")

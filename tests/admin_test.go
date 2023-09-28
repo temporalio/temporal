@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,8 +38,6 @@ import (
 
 func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 
-	syncLock := sync.Mutex{}
-	syncLock.Lock()
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
 		err := workflow.SideEffect(
@@ -49,10 +46,7 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 		).Get(&randomUUID)
 		s.NoError(err)
 
-		_ = workflow.Sleep(ctx, 100*time.Millisecond)
-		syncLock.Unlock()
 		_ = workflow.Sleep(ctx, 10*time.Minute)
-
 		return nil
 	}
 
@@ -71,23 +65,31 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
-	// there are total 5 events
+	// there are total 6 events, 3 state transitions
 	//  1. WorkflowExecutionStarted
 	//  2. WorkflowTaskScheduled
+	//
 	//  3. WorkflowTaskStarted
+	//
 	//  4. WorkflowTaskCompleted
 	//  5. MarkerRecord
+	//  6. TimerStarted
 
-	syncLock.Lock()
-	defer syncLock.Unlock()
-	response1, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	s.NoError(err)
+	var response1 *adminservice.DescribeMutableStateResponse
+	for {
+		response1, err = s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		})
+		s.NoError(err)
+		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 
 	_, err = s.adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
 		Namespace: s.namespace,
@@ -106,7 +108,7 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.Equal(response1.DatabaseMutableState.ExecutionInfo.VersionHistories, response2.DatabaseMutableState.ExecutionInfo.VersionHistories)
+	s.Equal(response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount, response2.DatabaseMutableState.ExecutionInfo.StateTransitionCount)
 	s.Equal(response1.DatabaseMutableState.ExecutionState, response2.DatabaseMutableState.ExecutionState)
 }

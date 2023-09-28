@@ -452,14 +452,15 @@ func (w *perNamespaceWorker) startWorker(
 
 	var sdkoptions sdkworker.Options
 
-	// copy from dynamic config
-	sdkoptions.MaxConcurrentActivityExecutionSize = dcOptions.MaxConcurrentActivityExecutionSize
+	// copy from dynamic config. apply explicit defaults for some instead of using the sdk
+	// defaults so that we can multiply below.
+	sdkoptions.MaxConcurrentActivityExecutionSize = util.Coalesce(dcOptions.MaxConcurrentActivityExecutionSize, 1000)
 	sdkoptions.WorkerActivitiesPerSecond = dcOptions.WorkerActivitiesPerSecond
-	sdkoptions.MaxConcurrentLocalActivityExecutionSize = dcOptions.MaxConcurrentLocalActivityExecutionSize
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize = util.Coalesce(dcOptions.MaxConcurrentLocalActivityExecutionSize, 1000)
 	sdkoptions.WorkerLocalActivitiesPerSecond = dcOptions.WorkerLocalActivitiesPerSecond
-	sdkoptions.MaxConcurrentActivityTaskPollers = util.Max(2, dcOptions.MaxConcurrentActivityTaskPollers)
-	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = dcOptions.MaxConcurrentWorkflowTaskExecutionSize
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = util.Max(2, dcOptions.MaxConcurrentWorkflowTaskPollers)
+	sdkoptions.MaxConcurrentActivityTaskPollers = max(util.Coalesce(dcOptions.MaxConcurrentActivityTaskPollers, 2), 2)
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = util.Coalesce(dcOptions.MaxConcurrentWorkflowTaskExecutionSize, 1000)
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(util.Coalesce(dcOptions.MaxConcurrentWorkflowTaskPollers, 2), 2)
 	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeoutDuration
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
@@ -467,6 +468,9 @@ func (w *perNamespaceWorker) startWorker(
 	// increase these if we're supposed to run with more multiplicity
 	sdkoptions.MaxConcurrentWorkflowTaskPollers *= multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers *= multiplicity
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize *= multiplicity
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize *= multiplicity
+	sdkoptions.MaxConcurrentActivityExecutionSize *= multiplicity
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities

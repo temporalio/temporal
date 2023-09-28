@@ -94,8 +94,8 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
-		paginationFnProvider  PaginationFnProvider
-		executableInitializer ExecutableInitializer
+		paginationFnProvider PaginationFnProvider
+		executableFactory    ExecutableFactory
 
 		lastRangeID                    int64
 		exclusiveDeletionHighWatermark tasks.Key
@@ -129,8 +129,7 @@ func newQueueBase(
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
-	priorityAssigner PriorityAssigner,
-	executor Executor,
+	executableFactory ExecutableFactory,
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
 	completionFn ReaderCompletionFn,
@@ -154,24 +153,7 @@ func newQueueBase(
 		exclusiveReaderHighWatermark = ackLevel
 	}
 
-	timeSource := shard.GetTimeSource()
-	executableInitializer := func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(
-			readerID,
-			t,
-			executor,
-			scheduler,
-			rescheduler,
-			priorityAssigner,
-			timeSource,
-			shard.GetNamespaceRegistry(),
-			shard.GetClusterMetadata(),
-			logger,
-			metricsHandler,
-		)
-	}
-
-	monitor := newMonitor(category.Type(), timeSource, &options.MonitorOptions)
+	monitor := newMonitor(category.Type(), shard.GetTimeSource(), &options.MonitorOptions)
 	readerRateLimiter := newShardReaderRateLimiter(
 		options.MaxPollRPS,
 		hostReaderRateLimiter,
@@ -194,7 +176,7 @@ func newQueueBase(
 			&readerOptions,
 			scheduler,
 			rescheduler,
-			timeSource,
+			shard.GetTimeSource(),
 			readerRateLimiter,
 			monitor,
 			completionFn,
@@ -213,7 +195,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableInitializer, monitor, scope))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope))
 		}
 		if _, err := readerGroup.NewReader(readerID, slices...); err != nil {
 			// we are not able to re-create the scopes & readers we previously have
@@ -256,8 +238,8 @@ func newQueueBase(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
-		paginationFnProvider:  paginationFnProvider,
-		executableInitializer: executableInitializer,
+		paginationFnProvider: paginationFnProvider,
+		executableFactory:    executableFactory,
 
 		lastRangeID:                    -1, // start from an invalid rangeID
 		exclusiveDeletionHighWatermark: exclusiveDeletionHighWatermark,
@@ -332,7 +314,7 @@ func (p *queueBase) processNewRange() {
 		newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)
 		slices = append(slices, NewSlice(
 			p.paginationFnProvider,
-			p.executableInitializer,
+			p.executableFactory,
 			p.monitor,
 			newReadScope,
 		))

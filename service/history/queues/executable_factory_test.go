@@ -22,37 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package queues_test
 
 import (
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.uber.org/fx"
+	"testing"
 
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/cluster"
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	ProcessToolBox struct {
-		fx.In
-
-		Config                  *configs.Config
-		ClusterMetadata         cluster.Metadata
-		ClientBean              client.Bean
-		ShardController         shard.Controller
-		NamespaceCache          namespace.Registry
-		EagerNamespaceRefresher EagerNamespaceRefresher
-		NDCHistoryResender      xdc.NDCHistoryResender
-		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
-		MetricsHandler          metrics.Handler
-		Logger                  log.Logger
-		EventSerializer         serialization.Serializer
+	testWrapper       struct{}
+	wrappedExecutable struct {
+		queues.Executable
 	}
 )
+
+func TestNewExecutableFactoryWrapper(t *testing.T) {
+	t.Parallel()
+
+	wrapper := testWrapper{}
+	factory := queues.NewExecutableFactory(
+		nil,
+		nil,
+		nil,
+		queues.NewNoopPriorityAssigner(),
+		clock.NewEventTimeSource(),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		nil,
+	)
+	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
+	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
+	_, ok := executable.(wrappedExecutable)
+	assert.True(t, ok, "expected executable to be wrapped")
+}
+
+func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
+	return wrappedExecutable{e}
+}

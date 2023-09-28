@@ -134,7 +134,7 @@ func (wh *WorkflowHandler) getBuildIdReachability(
 		taskQueues = response.TaskQueues
 	}
 
-	numTaskQueuesToQuery := util.Min(len(taskQueues), wh.config.ReachabilityTaskQueueScanLimit())
+	numTaskQueuesToQuery := min(len(taskQueues), wh.config.ReachabilityTaskQueueScanLimit())
 	taskQueuesToQuery, taskQueuesToSkip := taskQueues[:numTaskQueuesToQuery], taskQueues[numTaskQueuesToQuery:]
 
 	taskQueueReachability, err := util.MapConcurrent(taskQueuesToQuery, func(taskQueue string) (*taskqueuepb.TaskQueueReachability, error) {

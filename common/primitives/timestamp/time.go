@@ -28,8 +28,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-
-	"go.temporal.io/server/common/util"
 )
 
 // Timestamp provides easy conversions and utility comparison functions
@@ -182,7 +180,7 @@ func DurationValue(d *time.Duration) time.Duration {
 }
 
 func MinDurationPtr(d1 *time.Duration, d2 *time.Duration) *time.Duration {
-	res := util.Min(DurationValue(d1), DurationValue(d2))
+	res := min(DurationValue(d1), DurationValue(d2))
 	return &res
 }
 
