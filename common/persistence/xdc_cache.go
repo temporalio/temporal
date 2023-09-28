@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -107,7 +106,7 @@ func NewEventsBlobCache(
 	ttl time.Duration,
 ) *XDCCacheImpl {
 	return &XDCCacheImpl{
-		cache: cache.New(util.Max(xdcMinCacheSize, maxBytes), &cache.Options{
+		cache: cache.New(max(xdcMinCacheSize, maxBytes), &cache.Options{
 			TTL: ttl,
 			Pin: false,
 		}),

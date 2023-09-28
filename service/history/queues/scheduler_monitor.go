@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/util"
 )
 
 var noopScheduleMonitor = &noopSchedulerMonitor{}
@@ -127,7 +126,7 @@ func (m *schedulerMonitor) RecordStart(executable Executable) {
 	// long after the first task is started. In that case, the
 	// latency becomes the duration between schedule to start time
 	// for the second task.
-	latency := util.Min(
+	latency := min(
 		startTime.Sub(stats.lastStartTime),
 		startTime.Sub(executable.GetScheduledTime()),
 	)

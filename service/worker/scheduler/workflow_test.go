@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -277,7 +276,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.setupMocksForWorkflows(runs, gotRuns)
 			s.setupDelayedCallbacks(startTime, cbs)
 
-			currentTweakablePolicies.IterationsBeforeContinueAsNew = util.Min(iterations, every)
+			currentTweakablePolicies.IterationsBeforeContinueAsNew = min(iterations, every)
 
 			s.T().Logf("starting workflow for %d iterations out of %d remaining, %d total, start time %s",
 				currentTweakablePolicies.IterationsBeforeContinueAsNew, iterations, maxIterations, startTime)

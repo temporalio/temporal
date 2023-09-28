@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -295,9 +294,9 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	) {
 		readerState, ok := queueStates.ReaderStates[readerID]
 		if !ok {
-			minAckedTaskID = util.Min[int64](minAckedTaskID, 0)
+			minAckedTaskID = min(minAckedTaskID, 0)
 		} else {
-			minAckedTaskID = util.Min[int64](minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
+			minAckedTaskID = min(minAckedTaskID, readerState.Scopes[0].Range.InclusiveMin.TaskId-1)
 		}
 	}
 
