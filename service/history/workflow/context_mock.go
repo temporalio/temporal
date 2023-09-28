@@ -76,17 +76,17 @@ func (mr *MockContextMockRecorder) Clear() *gomock.Call {
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, shardContext shard.Context, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState MutableState, newContext Context, newMutableState MutableState, currentContext Context, currentMutableState MutableState, currentTransactionPolicy *TransactionPolicy) error {
+func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, shardContext shard.Context, conflictResolveMode persistence.ConflictResolveWorkflowMode, resetMutableState MutableState, newContext Context, newMutableState MutableState, currentContext Context, currentMutableState MutableState, resetWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy, currentTransactionPolicy *TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, resetWorkflowTransactionPolicy, newWorkflowTransactionPolicy, currentTransactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, resetWorkflowTransactionPolicy, newWorkflowTransactionPolicy, currentTransactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, currentTransactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), ctx, shardContext, conflictResolveMode, resetMutableState, newContext, newMutableState, currentContext, currentMutableState, resetWorkflowTransactionPolicy, newWorkflowTransactionPolicy, currentTransactionPolicy)
 }
 
 // CreateWorkflowExecution mocks base method.
@@ -278,17 +278,17 @@ func (mr *MockContextMockRecorder) UpdateWorkflowExecutionAsPassive(ctx, shardCo
 }
 
 // UpdateWorkflowExecutionWithNew mocks base method.
-func (m *MockContext) UpdateWorkflowExecutionWithNew(ctx context.Context, shardContext shard.Context, updateMode persistence.UpdateWorkflowMode, newContext Context, newMutableState MutableState, currentWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy *TransactionPolicy) error {
+func (m *MockContext) UpdateWorkflowExecutionWithNew(ctx context.Context, shardContext shard.Context, updateMode persistence.UpdateWorkflowMode, newContext Context, newMutableState MutableState, updateWorkflowTransactionPolicy TransactionPolicy, newWorkflowTransactionPolicy *TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNew", ctx, shardContext, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionWithNew", ctx, shardContext, updateMode, newContext, newMutableState, updateWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateWorkflowExecutionWithNew indicates an expected call of UpdateWorkflowExecutionWithNew.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNew(ctx, shardContext, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecutionWithNew(ctx, shardContext, updateMode, newContext, newMutableState, updateWorkflowTransactionPolicy, newWorkflowTransactionPolicy interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNew", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNew), ctx, shardContext, updateMode, newContext, newMutableState, currentWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNew", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecutionWithNew), ctx, shardContext, updateMode, newContext, newMutableState, updateWorkflowTransactionPolicy, newWorkflowTransactionPolicy)
 }
 
 // UpdateWorkflowExecutionWithNewAsActive mocks base method.

@@ -305,16 +305,14 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
@@ -1364,16 +1362,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
@@ -1414,16 +1410,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1438,16 +1432,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.testListResultForUpsertSearchAttributes(listRequest)
 
 	// process 3rd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1531,16 +1523,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process close workflow task and assert search attributes is correct after workflow is closed
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
@@ -1667,16 +1657,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
@@ -1717,16 +1705,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1765,16 +1751,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process close workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
@@ -1906,7 +1890,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	if s.isElasticsearchEnabled {
@@ -2665,7 +2649,9 @@ func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
 		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		IgnoreRetentionTime: true,
+	})
 	s.Require().NoError(err)
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)

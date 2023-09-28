@@ -71,7 +71,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
-		transactionMgr    transactionMgr
+		transactionMgr    TransactionManager
 		logger            log.Logger
 	}
 )
@@ -91,7 +91,7 @@ func NewWorkflowStateReplicator(
 		clusterMetadata:   shardContext.GetClusterMetadata(),
 		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
-		transactionMgr:    newTransactionMgr(shardContext, workflowCache, eventsReapplier, logger),
+		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }
@@ -243,7 +243,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	if err != nil {
 		return err
 	}
-	return r.transactionMgr.createWorkflow(
+	return r.transactionMgr.CreateWorkflow(
 		ctx,
 		NewWorkflow(
 			r.clusterMetadata,

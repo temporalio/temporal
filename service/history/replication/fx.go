@@ -27,9 +27,10 @@ package replication
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -48,6 +49,7 @@ var Module = fx.Options(
 	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
+	fx.Provide(ExecutableTaskConverterProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
 	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
@@ -123,7 +125,7 @@ func ReplicationStreamSchedulerProvider(
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
-		TaskHashFn,
+		WorkflowKeyHashFn,
 		NewSequentialTaskQueue,
 		logger,
 	)
@@ -147,11 +149,19 @@ func ReplicationStreamSchedulerLifetimeHooks(
 	)
 }
 
+func ExecutableTaskConverterProvider(
+	processToolBox ProcessToolBox,
+) ExecutableTaskConverter {
+	return NewExecutableTaskConverter(processToolBox)
+}
+
 func StreamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
+	taskConverter ExecutableTaskConverter,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
+		taskConverter,
 		processToolBox.Config.EnableReplicationStream(),
 	)
 }

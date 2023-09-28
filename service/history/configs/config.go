@@ -47,6 +47,7 @@ type Config struct {
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
@@ -99,11 +100,15 @@ type Config struct {
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
+	TaskDLQEnabled dynamicconfig.BoolPropertyFn
+
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay     dynamicconfig.DurationPropertyFn
 	TaskSchedulerThrottleDuration            dynamicconfig.DurationPropertyFn
+	TaskSchedulerGlobalMaxQPS                dynamicconfig.IntPropertyFn
 	TaskSchedulerMaxQPS                      dynamicconfig.IntPropertyFn
+	TaskSchedulerGlobalNamespaceMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerNamespaceMaxQPS             dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// TimerQueueProcessor settings
@@ -334,6 +339,7 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.HistoryEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.HistoryPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
@@ -379,12 +385,16 @@ func NewConfig(
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
+		TaskDLQEnabled: dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, false),
+
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
 		TaskSchedulerRateLimiterStartupDelay:     dc.GetDurationProperty(dynamicconfig.TaskSchedulerRateLimiterStartupDelay, 30*time.Second),
 		TaskSchedulerThrottleDuration:            dc.GetDurationProperty(dynamicconfig.TaskSchedulerThrottleDuration, time.Second),
+		TaskSchedulerGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.TaskSchedulerGlobalMaxQPS, 0),
 		TaskSchedulerMaxQPS:                      dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
 		TaskSchedulerNamespaceMaxQPS:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
+		TaskSchedulerGlobalNamespaceMaxQPS:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS, 0),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 512),

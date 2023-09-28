@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -76,11 +77,13 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
+	fx.Provide(TaskQueueManagerProvider), // TODO: provide via persistence factory module
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -110,7 +113,9 @@ func ServiceProvider(
 	)
 }
 
-func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
+func ServiceResolverProvider(
+	membershipMonitor membership.Monitor,
+) (membership.ServiceResolver, error) {
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
@@ -136,6 +141,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                   args.ShardController,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
+		taskQueueManager:             args.TaskQueueManager,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -215,15 +221,18 @@ func ESProcessorConfigProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
+		persistenceLazyLoadedServiceResolver,
 	)
 }
 
@@ -271,4 +280,15 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func TaskQueueManagerProvider(
+	cfg *configs.Config,
+	factory persistenceClient.DataStoreFactory,
+) (persistence.HistoryTaskQueueManager, error) {
+	queueV2, err := factory.NewQueueV2()
+	if err != nil {
+		return nil, err
+	}
+	return persistence.NewHistoryTaskQueueManager(queueV2, int(cfg.NumberOfShards)), err
 }

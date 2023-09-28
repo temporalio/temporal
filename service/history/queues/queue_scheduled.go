@@ -70,8 +70,7 @@ func NewScheduledQueue(
 	category tasks.Category,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
-	priorityAssigner PriorityAssigner,
-	executor Executor,
+	executableFactory ExecutableFactory,
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
@@ -87,9 +86,12 @@ func NewScheduledQueue(
 				TaskCategory:        category,
 				ReaderID:            readerID,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-				ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
-				BatchSize:           options.BatchSize(),
-				NextPageToken:       paginationToken,
+				ExclusiveMaxTaskKey: tasks.NewKey(
+					r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision),
+					0,
+				),
+				BatchSize:     options.BatchSize(),
+				NextPageToken: paginationToken,
 			}
 
 			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
@@ -129,8 +131,7 @@ func NewScheduledQueue(
 			paginationFnProvider,
 			scheduler,
 			rescheduler,
-			priorityAssigner,
-			executor,
+			executableFactory,
 			options,
 			hostRateLimiter,
 			readerCompletionFn,

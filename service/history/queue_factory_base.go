@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -72,7 +73,8 @@ type (
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 
-		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
+		ExecutorWrapper   queues.ExecutorWrapper   `optional:"true"`
+		ExecutableWrapper queues.ExecutableWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {
@@ -91,6 +93,7 @@ type (
 
 var QueueModule = fx.Options(
 	fx.Provide(QueueSchedulerRateLimiterProvider),
+	fx.Provide(NewExecutableDLQWrapper),
 	fx.Provide(
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
@@ -155,14 +158,31 @@ func getOptionalQueueFactories(
 }
 
 func QueueSchedulerRateLimiterProvider(
+	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewSchedulerRateLimiter(
-		config.TaskSchedulerNamespaceMaxQPS,
-		config.TaskSchedulerMaxQPS,
-		config.PersistenceNamespaceMaxQPS,
-		config.PersistenceMaxQPS,
+		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
+			GlobalQuota:      config.TaskSchedulerGlobalNamespaceMaxQPS,
+		}.GetQuota,
+		quotas.ClusterAwareQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.TaskSchedulerMaxQPS,
+			GlobalQuota:      config.TaskSchedulerGlobalMaxQPS,
+		}.GetQuota,
+		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
+			GlobalQuota:      config.PersistenceGlobalNamespaceMaxQPS,
+		}.GetQuota,
+		quotas.ClusterAwareQuotaCalculator{
+			MemberCounter:    serviceResolver,
+			PerInstanceQuota: config.PersistenceMaxQPS,
+			GlobalQuota:      config.PersistenceGlobalMaxQPS,
+		}.GetQuota,
 		config.TaskSchedulerRateLimiterStartupDelay,
 		timeSource,
 	)
@@ -199,6 +219,33 @@ func (f *QueueFactoryBase) Stop() {
 	if f.HostScheduler != nil {
 		f.HostScheduler.Stop()
 	}
+}
+
+func (f *QueueFactoryBase) NewExecutableFactory(
+	executor queues.Executor,
+	rescheduler queues.Rescheduler,
+	executableWrapper queues.ExecutableWrapper,
+	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+) queues.ExecutableFactory {
+	factory := queues.NewExecutableFactory(
+		executor,
+		f.HostScheduler,
+		rescheduler,
+		f.HostPriorityAssigner,
+		timeSource,
+		namespaceRegistry,
+		clusterMetadata,
+		logger,
+		metricsHandler,
+	)
+	if executableWrapper == nil {
+		return factory
+	}
+	return queues.NewExecutableFactoryWrapper(factory, executableWrapper)
 }
 
 func NewQueueHostRateLimiter(

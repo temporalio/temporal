@@ -121,12 +121,17 @@ type (
 
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
+	logger := log.NewTestLogger()
+	testCluster := NewTestClusterForCassandra(options, logger)
+	return NewTestBaseForCluster(testCluster, logger)
+}
+
+func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewTestLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
-	return NewTestBaseForCluster(testCluster, logger)
+	return testCluster
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL

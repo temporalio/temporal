@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package nettest_test
 
 import (
 	"bytes"
@@ -32,6 +32,8 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"go.temporal.io/server/internal/nettest"
 )
 
 type (
@@ -45,7 +47,7 @@ type (
 		net.Listener
 	}
 	pipeSocket struct {
-		*Pipe
+		*nettest.Pipe
 	}
 
 	socketBenchmark struct {
@@ -225,7 +227,7 @@ func (s networkSocket) Connect() (net.Conn, error) {
 }
 
 func (f pipeSocketFactory) createSocket() (socket, error) {
-	return pipeSocket{NewPipe()}, nil
+	return pipeSocket{nettest.NewPipe()}, nil
 }
 
 func (f unixSocketFactory) createSocket() (socket, error) {

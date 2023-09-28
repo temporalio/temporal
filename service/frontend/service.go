@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/util"
 )
 
 // Config represents configuration for frontend service
@@ -59,6 +58,7 @@ type Config struct {
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
@@ -200,6 +200,7 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
@@ -386,8 +387,8 @@ func (s *Service) Stop() {
 	// 4. Wait for X second
 	// 5. Stop everything forcefully and return
 
-	requestDrainTime := util.Max(time.Second, s.config.ShutdownDrainDuration())
-	failureDetectionTime := util.Max(0, s.config.ShutdownFailHealthCheckDuration())
+	requestDrainTime := max(time.Second, s.config.ShutdownDrainDuration())
+	failureDetectionTime := max(0, s.config.ShutdownFailHealthCheckDuration())
 
 	s.logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()

@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqname"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -136,6 +135,6 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskQueue.GetName()
 	}
 
-	n := util.Max(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
+	n := max(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
 	return tqName.WithPartition(rand.Intn(n)).FullName()
 }

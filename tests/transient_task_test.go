@@ -111,7 +111,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
 	}
 
 	// First workflow task immediately fails and schedules a transient workflow task
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -120,12 +120,12 @@ func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// Drop workflow task to cause a workflow task timeout
-	_, err = poller.PollAndProcessWorkflowTask(true, true)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithDropTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Now process signal and complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -260,7 +260,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// stage 1
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -268,7 +268,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// stage 2
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -276,7 +276,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// stage 3: this one fails with a panic
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -285,7 +285,7 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -293,12 +293,12 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// drop workflow task to cause a workflow task timeout
-	_, err = poller.PollAndProcessWorkflowTask(true, true)
+	_, err = poller.PollAndProcessWorkflowTask(WithDropTask, WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// stage 5
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -403,7 +403,7 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 
 	// fist workflow task, this try to do a continue as new but there is a buffered event,
 	// so it will fail and create a new workflow task
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
@@ -411,7 +411,7 @@ func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents()
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 1)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

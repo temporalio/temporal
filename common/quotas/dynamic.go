@@ -32,8 +32,14 @@ type (
 	// RateFn returns a float64 as the RPS
 	RateFn func() float64
 
+	// NamespaceRateFn returns a float64 as the RPS for the given namespace
+	NamespaceRateFn func(namespace string) float64
+
 	// BurstFn returns an int as the burst / bucket size
 	BurstFn func() int
+
+	// NamespaceBurstFn returns an int as the burst / bucket size for the given namespace
+	NamespaceBurstFn func(namespace string) float64
 
 	// RateBurst returns rate & burst for rate limiter
 	RateBurst interface {
