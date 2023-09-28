@@ -855,7 +855,21 @@ func (s *clientIntegrationSuite) TestStickyAutoReset() {
 
 	// stop worker
 	s.worker.Stop()
-	time.Sleep(time.Second * 10) // wait 10s, after this time, matching will detect StickyWorkerUnavailable
+	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
+	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: stickyQueue,
+		},
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	})
+	s.NoError(err)
+	if len(resp.Pollers) > 0 {
+		for _, p := range resp.Pollers {
+			s.NotNil(p.LastAccessTime)
+			s.Greater(time.Now().Sub(*p.LastAccessTime), time.Second*10)
+		}
+	}
 
 	startTime := time.Now()
 	// send a signal which will trigger a new wft, and it will be pushed to original task queue
