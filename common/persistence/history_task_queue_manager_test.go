@@ -192,6 +192,13 @@ func (q failingQueue) CreateQueue(
 	return nil, assert.AnError
 }
 
+func (q failingQueue) RangeDeleteMessages(
+	context.Context,
+	*persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	return nil, assert.AnError
+}
+
 func TestHistoryTaskQueueManager_ReadTasks_ErrReadQueueMessages(t *testing.T) {
 	t.Parallel()
 

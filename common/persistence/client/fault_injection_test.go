@@ -40,15 +40,17 @@ import (
 type (
 	testDataStoreFactory struct {
 		client.DataStoreFactory
-		err             error
-		enqueueRequests int
-		readRequests    int
-		createRequests  int
+		err                 error
+		enqueueRequests     int
+		readRequests        int
+		createRequests      int
+		rangeDeleteRequests int
 	}
 	testQueueV2 struct {
-		enqueueRequests *int
-		readRequests    *int
-		createRequests  *int
+		enqueueRequests     *int
+		readRequests        *int
+		createRequests      *int
+		rangeDeleteRequests *int
 	}
 )
 
@@ -76,14 +78,23 @@ func (t *testQueueV2) CreateQueue(
 	return nil, nil
 }
 
+func (t *testQueueV2) RangeDeleteMessages(
+	context.Context,
+	*persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	*t.rangeDeleteRequests++
+	return nil, nil
+}
+
 func (t *testDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
 	return &testQueueV2{
-		enqueueRequests: &t.enqueueRequests,
-		readRequests:    &t.readRequests,
-		createRequests:  &t.createRequests,
+		enqueueRequests:     &t.enqueueRequests,
+		readRequests:        &t.readRequests,
+		createRequests:      &t.createRequests,
+		rangeDeleteRequests: &t.rangeDeleteRequests,
 	}, nil
 }
 
@@ -176,9 +187,10 @@ func TestFaultInjectionDataStoreFactory_NewQueueV2_MethodConfig(t *testing.T) {
 					DataStores: map[config.DataStoreName]config.FaultInjectionDataStoreConfig{
 						config.QueueV2Name: {
 							Methods: map[string]config.FaultInjectionMethodConfig{
-								"EnqueueMessage": methodConfig,
-								"ReadMessages":   methodConfig,
-								"CreateQueue":    methodConfig,
+								"EnqueueMessage":      methodConfig,
+								"ReadMessages":        methodConfig,
+								"CreateQueue":         methodConfig,
+								"RangeDeleteMessages": methodConfig,
 							},
 						},
 					},
@@ -208,6 +220,9 @@ func testFaultInjectionConfig(t *testing.T, faultInjectionConfig *config.FaultIn
 
 	_, err = q.CreateQueue(context.Background(), nil)
 	verifyMethod(t, expectErr, err, dataStoreFactory.createRequests)
+
+	_, err = q.RangeDeleteMessages(context.Background(), nil)
+	verifyMethod(t, expectErr, err, dataStoreFactory.rangeDeleteRequests)
 
 	q2, err := factory.NewQueueV2()
 	require.NoError(t, err)

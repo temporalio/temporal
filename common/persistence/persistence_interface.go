@@ -746,6 +746,10 @@ type (
 			ctx context.Context,
 			request *InternalCreateQueueRequest,
 		) (*InternalCreateQueueResponse, error)
+		RangeDeleteMessages(
+			ctx context.Context,
+			request *InternalRangeDeleteMessagesRequest,
+		) (*InternalRangeDeleteMessagesResponse, error)
 	}
 
 	QueueV2Type int
@@ -787,6 +791,17 @@ type (
 	}
 
 	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	// InternalRangeDeleteMessagesRequest deletes all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
 		// empty
 	}
 )
