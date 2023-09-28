@@ -2599,6 +2599,7 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 func (s *workflowHandlerSuite) TestPollWorkflowExecutionUpdate_FailWhenDisabled() {
 	config := s.newConfig()
+	config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	req := workflowservice.PollWorkflowExecutionUpdateRequest{
 		Namespace: s.T().Name() + "-ns",
