@@ -123,7 +123,7 @@ func Invoke(
 		return nil, consts.ErrWorkflowTaskNotScheduled
 	}
 
-	if mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+	if !mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
 		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
 		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
 	}
