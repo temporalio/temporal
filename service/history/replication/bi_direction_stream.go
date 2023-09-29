@@ -186,7 +186,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 			return
 		default:
 			s.logger.Error(fmt.Sprintf(
-				"BiDirectionStreamImpl encountered unexpected error, closing: %T %s",
+				"BiDirectionStream encountered unexpected error, closing: %T %s",
 				err, err,
 			))
 			var errResp Resp
