@@ -159,6 +159,20 @@ func (c *metricClient) GetDLQReplicationMessages(
 	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) GetDLQTasks(
+	ctx context.Context,
+	request *adminservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetDLQTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) GetNamespace(
 	ctx context.Context,
 	request *adminservice.GetNamespaceRequest,
