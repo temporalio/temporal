@@ -207,8 +207,9 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	request *DeleteTasksRequest,
 ) (*DeleteTasksResponse, error) {
 	_, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
-		QueueType: request.QueueKey.QueueType,
-		QueueName: request.QueueKey.GetQueueName(),
+		QueueType:                   request.QueueKey.QueueType,
+		QueueName:                   request.QueueKey.GetQueueName(),
+		InclusiveMaxMessageMetadata: request.InclusiveMaxMessageMetadata,
 	})
 	if err != nil {
 		return nil, err

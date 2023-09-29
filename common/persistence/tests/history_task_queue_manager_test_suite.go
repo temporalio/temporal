@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +39,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/persistencetest"
+	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
@@ -125,11 +126,15 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 	})
 	t.Run("GetDLQTasks", func(t *testing.T) {
 		t.Parallel()
-		getdlqtaskstest.TestGetDLQTasks(t, historyTaskQueueManager)
+		getdlqtaskstest.TestInvoke(t, historyTaskQueueManager)
+	})
+	t.Run("DeleteDLQTasks", func(t *testing.T) {
+		t.Parallel()
+		deletedlqtaskstest.TestInvoke(t, historyTaskQueueManager)
 	})
 	t.Run("ClientTest", func(t *testing.T) {
 		t.Parallel()
-		historytest.TestClientGetDLQTasks(t, historyTaskQueueManager)
+		historytest.TestClient(t, historyTaskQueueManager)
 	})
 	t.Run("ExecutableTest", func(t *testing.T) {
 		t.Parallel()
@@ -144,15 +149,14 @@ func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.Q
 		createQueueErr: retErr,
 	}, 1)
 	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
-		QueueKey: getQueueKey(t),
+		QueueKey: persistencetest.GetQueueKey(t),
 	})
 	assert.ErrorIs(t, err, retErr)
 }
 
 func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	numHistoryShards := 5
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	t.Cleanup(cancel)
+	ctx := context.Background()
 
 	namespaceID := "test-namespace"
 	workflowID := "test-workflow-id"
@@ -160,7 +164,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	shardID := 2
 	assert.Equal(t, int32(shardID), common.WorkflowIDToHistoryShard(namespaceID, workflowID, int32(numHistoryShards)))
 
-	queueKey := getQueueKey(t)
+	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -205,7 +209,7 @@ func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.
 		base:       queue,
 		enqueueErr: retErr,
 	}, 1)
-	queueKey := getQueueKey(t)
+	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -240,7 +244,7 @@ func testHistoryTaskQueueManagerErrDeserializeHistoryTask(
 func testHistoryTaskQueueManagerDeleteTasks(t *testing.T, manager *persistence.HistoryTaskQueueManagerImpl) {
 	ctx := context.Background()
 
-	queueKey := getQueueKey(t)
+	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -277,7 +281,7 @@ func enqueueAndDeserializeBlob(
 	t.Helper()
 
 	queueType := persistence.QueueTypeHistoryNormal
-	queueKey := getQueueKey(t)
+	queueKey := persistencetest.GetQueueKey(t)
 	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
@@ -314,7 +318,7 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 		base:                   queue,
 		rangeDeleteMessagesErr: retErr,
 	}, 1)
-	queueKey := getQueueKey(t)
+	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -330,15 +334,6 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 		},
 	})
 	assert.ErrorIs(t, err, retErr)
-}
-
-func getQueueKey(t *testing.T) persistence.QueueKey {
-	return persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryNormal,
-		Category:      tasks.CategoryTransfer,
-		SourceCluster: "test-source-cluster-" + t.Name(),
-		TargetCluster: "test-target-cluster-" + t.Name(),
-	}
 }
 
 func enqueueTask(
