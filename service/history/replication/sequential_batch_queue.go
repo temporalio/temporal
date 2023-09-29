@@ -41,8 +41,9 @@ type (
 		taskQueue                    collection.Queue[*batchedTask]
 		lastTask                     *batchedTask
 		batchedIndividualTaskHandler func(task TrackableExecutableTask)
-		logger                       log.Logger
-		metricsHandler               metrics.Handler
+
+		logger         log.Logger
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -119,10 +120,19 @@ func (q *SequentialBatchableTaskQueue) updateLastTask(task *batchedTask) {
 
 func (q *SequentialBatchableTaskQueue) createBatchedTask(task TrackableExecutableTask) *batchedTask {
 	return &batchedTask{
-		batchedTask:           task,
-		individualTasks:       append([]TrackableExecutableTask{}, task),
-		state:                 batchStateOpen,
-		individualTaskHandler: q.batchedIndividualTaskHandler,
+		batchedTask:     task,
+		individualTasks: []TrackableExecutableTask{task},
+		state:           batchStateOpen,
+
+		// This is to add individual task back to this queue, so it can be processed again. This is based on an assumption: only one thread is
+		// interacting with the queue. And this is a shortcut because a proper way is to resubmit the individual tasks back to scheduler.
+		// But that requires a refactor on scheduler and task lifecycle and could be risky to included in this feature implementation.
+		//
+		individualTaskHandler: func(task TrackableExecutableTask) {
+			q.Add(task)
+		},
+		logger:         q.logger,
+		metricsHandler: q.metricsHandler,
 	}
 }
 

@@ -49,6 +49,7 @@ func (s *batchedTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewTestLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func TestBatchedTaskSuite(t *testing.T) {
@@ -199,6 +200,7 @@ func (s *batchedTaskSuite) TestAck_AckIndividualTasks() {
 		individualTaskHandler: func(task TrackableExecutableTask) {
 			handlerCallCount++
 		},
+		metricsHandler: s.metricsHandler,
 	}
 	existing.EXPECT().Ack().Times(1)
 	add1.EXPECT().Ack().Times(1)

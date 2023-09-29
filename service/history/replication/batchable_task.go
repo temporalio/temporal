@@ -40,7 +40,7 @@ import (
 type (
 	BatchableTask interface {
 		TrackableExecutableTask
-		// BatchWith task and return a new BatchableTask
+		// BatchWith task and return a new TrackableExecutableTask
 		BatchWith(task BatchableTask) (TrackableExecutableTask, error)
 		CanBatch() bool
 		// MarkUnbatchable will mark current task not batchable, so CanBatch() will return false
@@ -89,7 +89,9 @@ func (w *batchedTask) MarkPoisonPill() error {
 }
 
 func (w *batchedTask) Ack() {
-	// TODO: emit metrics
+	w.metricsHandler.Counter(metrics.BatchableTaskBatchCount.GetMetricName()).Record(
+		int64(len(w.individualTasks)),
+	)
 	w.callIndividual(TrackableExecutableTask.Ack)
 }
 
@@ -109,7 +111,10 @@ func (w *batchedTask) IsRetryableError(err error) bool {
 }
 
 func (w *batchedTask) RetryPolicy() backoff.RetryPolicy {
-	return w.batchedTask.RetryPolicy()
+	if len(w.individualTasks) == 1 {
+		return w.batchedTask.RetryPolicy()
+	}
+	return backoff.DisabledRetryPolicy
 }
 
 func (w *batchedTask) Abort() {
