@@ -33,6 +33,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	historyspb "go.temporal.io/server/api/history/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common/definition"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
@@ -71,6 +75,15 @@ type (
 		VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error)
 		VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error)
+		// ReplicateHistoryEvents is for a WIP feature. Ultimately will replace the ReplicateEventsV2 API
+		ReplicateHistoryEvents(
+			ctx context.Context,
+			workflowKey definition.WorkflowKey,
+			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			versionHistoryItems []*historyspb.VersionHistoryItem,
+			historyEvents [][]*historypb.HistoryEvent,
+			newEvents []*historypb.HistoryEvent,
+		) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error

@@ -55,12 +55,11 @@ func NewImmediateQueue(
 	category tasks.Category,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
-	priorityAssigner PriorityAssigner,
-	executor Executor,
 	options *Options,
 	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	factory ExecutableFactory,
 ) *immediateQueue {
 	paginationFnProvider := func(readerID int64, r Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -93,8 +92,7 @@ func NewImmediateQueue(
 			paginationFnProvider,
 			scheduler,
 			rescheduler,
-			priorityAssigner,
-			executor,
+			factory,
 			options,
 			hostRateLimiter,
 			NoopReaderCompletionFn,

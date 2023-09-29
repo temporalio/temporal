@@ -25,6 +25,7 @@
 package tdbg
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -33,6 +34,7 @@ import (
 	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -46,6 +48,11 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+)
+
+const (
+	historyImportBlobSize = 16
+	historyImportPageSize = 256 * 1024 // 256K
 )
 
 // AdminShowWorkflow shows history
@@ -94,13 +101,13 @@ func AdminShowWorkflow(c *cli.Context) error {
 			NextPageToken:     token,
 		})
 		if err != nil {
-			return fmt.Errorf("unable to read History Branch: %s", err)
+			return fmt.Errorf("unable to recv History Branch: %s", err)
 		}
 		histories = append(histories, resp.HistoryBatches...)
 		token = resp.NextPageToken
 	}
 
-	allEvents := &historypb.History{}
+	var historyBatches []*historypb.History
 	totalSize := 0
 	for idx, b := range histories {
 		totalSize += len(b.Data)
@@ -109,7 +116,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("unable to deserialize Events: %s", err)
 		}
-		allEvents.Events = append(allEvents.Events, historyBatch...)
+		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
@@ -121,13 +128,115 @@ func AdminShowWorkflow(c *cli.Context) error {
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
-		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
+		data, err := encoder.EncodeHistories(historyBatches)
 		if err != nil {
 			return fmt.Errorf("unable to serialize History data: %s", err)
 		}
 		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
-			return fmt.Errorf("unable to export History data file: %s", err)
+			return fmt.Errorf("unable to write History data file: %s", err)
 		}
+	}
+	return nil
+}
+
+// AdminImportWorkflow imports history
+func AdminImportWorkflow(c *cli.Context) error {
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid, err := getRequiredOption(c, FlagRunID)
+	if err != nil {
+		return err
+	}
+	inputFileName := c.String(FlagInputFilename)
+
+	client := cFactory.AdminClient(c)
+
+	serializer := serialization.NewSerializer()
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	data, err := os.ReadFile(inputFileName)
+	if err != nil {
+		return fmt.Errorf("unable to read History data file: %s", err)
+	}
+	encoder := codec.NewJSONPBEncoder()
+	historyBatches, err := encoder.DecodeHistories(data)
+	if err != nil {
+		return fmt.Errorf("unable to deserialize History data: %s", err)
+	}
+
+	versionHistory := &history.VersionHistory{}
+	for _, historyBatch := range historyBatches {
+		for _, event := range historyBatch.Events {
+			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
+			if err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory, item); err != nil {
+				return fmt.Errorf("unable to generate version history: %s", err)
+			}
+		}
+	}
+
+	var token []byte
+
+	blobs := []*commonpb.DataBlob{}
+	blobSize := 0
+	for i := 0; i < len(historyBatches)+1; i++ {
+		if i < len(historyBatches) {
+			historyBatch := historyBatches[i]
+			blob, err := serializer.SerializeEvents(historyBatch.Events, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return fmt.Errorf("unable to deserialize Events: %s", err)
+			}
+			blobSize += len(blob.Data)
+			blobs = append(blobs, blob)
+		}
+		if blobSize >= historyImportBlobSize ||
+			len(blobs) >= historyImportPageSize ||
+			(i == len(historyBatches) && len(blobs) > 0) {
+			resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: wid,
+					RunId:      rid,
+				},
+				HistoryBatches: blobs,
+				VersionHistory: versionHistory,
+				Token:          token,
+			})
+			if err != nil {
+				return fmt.Errorf("unable to send History Branch: %s", err)
+			}
+			token = resp.Token
+
+			blobs = []*commonpb.DataBlob{}
+			blobSize = 0
+		}
+	}
+	if len(blobs) != 0 {
+		return errors.New("unable to import workflow events, some events are not sent")
+	}
+	// call with empty history to commit
+	resp, err := client.ImportWorkflowExecution(ctx, &adminservice.ImportWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		HistoryBatches: []*commonpb.DataBlob{},
+		VersionHistory: versionHistory,
+		Token:          token,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to import workflow events: %s", err)
+	}
+	if len(resp.Token) != 0 {
+		return errors.New("unable to import workflow events, not committed")
 	}
 	return nil
 }

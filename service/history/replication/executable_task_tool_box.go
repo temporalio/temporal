@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -52,5 +53,6 @@ type (
 		TaskScheduler           ctasks.Scheduler[TrackableExecutableTask]
 		MetricsHandler          metrics.Handler
 		Logger                  log.Logger
+		EventSerializer         serialization.Serializer
 	}
 )

@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -318,7 +317,7 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 
 	stateTransitionCount := resp.StateTransitionCount
 	for stateTransitionCount > 0 {
-		token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
+		token := min(int(stateTransitionCount), rateLimiter.Burst())
 		stateTransitionCount -= int64(token)
 		_ = rateLimiter.ReserveN(time.Now(), token)
 	}

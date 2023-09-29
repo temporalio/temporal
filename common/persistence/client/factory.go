@@ -58,6 +58,8 @@ type (
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
 		// NewClusterMetadataManager returns a new manager for cluster specific metadata
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
+		// NewHistoryTaskQueueManager returns a new manager for history task queues
+		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
 	}
 
 	factoryImpl struct {
@@ -210,6 +212,14 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	}
 	result = p.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)
+}
+
+func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error) {
+	q, err := f.dataStoreFactory.NewQueueV2()
+	if err != nil {
+		return nil, err
+	}
+	return p.NewHistoryTaskQueueManager(q, int(f.config.NumHistoryShards)), nil
 }
 
 // Close closes this factory

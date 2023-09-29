@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqname"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -751,7 +750,7 @@ func newChildContext(
 	}
 	remaining := time.Until(deadline) - tailroom
 	if remaining < timeout {
-		timeout = util.Max(0, remaining)
+		timeout = max(0, remaining)
 	}
 	return context.WithTimeout(parent, timeout)
 }
@@ -1068,7 +1067,7 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 			common.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
-			minWaitTime = util.Min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
+			minWaitTime = min(minWaitTime*2, c.config.GetUserDataLongPollTimeout()/2)
 		} else {
 			minWaitTime = c.config.GetUserDataMinWaitTime
 		}

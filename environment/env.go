@@ -70,75 +70,61 @@ const (
 	PostgresDefaultPort = 5432
 )
 
+type varSpec struct {
+	name       string
+	getDefault func() string
+}
+
+var envVars = []varSpec{
+	{
+		name:       LocalhostIP,
+		getDefault: func() string { return lookupLocalhostIP("localhost") },
+	},
+	{
+		name:       CassandraSeeds,
+		getDefault: GetLocalhostIP,
+	},
+	{
+		name:       CassandraPort,
+		getDefault: func() string { return strconv.Itoa(CassandraDefaultPort) },
+	},
+	{
+		name:       MySQLSeeds,
+		getDefault: GetLocalhostIP,
+	},
+	{
+		name:       MySQLPort,
+		getDefault: func() string { return strconv.Itoa(MySQLDefaultPort) },
+	},
+	{
+		name:       PostgresSeeds,
+		getDefault: GetLocalhostIP,
+	},
+	{
+		name:       PostgresPort,
+		getDefault: func() string { return strconv.Itoa(PostgresDefaultPort) },
+	},
+	{
+		name:       ESSeeds,
+		getDefault: GetLocalhostIP,
+	},
+	{
+		name:       ESPort,
+		getDefault: func() string { return strconv.Itoa(ESDefaultPort) },
+	},
+	{
+		name:       ESVersion,
+		getDefault: func() string { return ESDefaultVersion },
+	},
+}
+
 // SetupEnv setup the necessary env
 func SetupEnv() {
-	if os.Getenv(LocalhostIP) == "" {
-		err := os.Setenv(LocalhostIP, lookupLocalhostIP("localhost"))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", LocalhostIP))
-		}
-	}
-
-	if os.Getenv(CassandraSeeds) == "" {
-		err := os.Setenv(CassandraSeeds, LocalhostIP)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", CassandraSeeds))
-		}
-	}
-
-	if os.Getenv(CassandraPort) == "" {
-		err := os.Setenv(CassandraPort, strconv.Itoa(CassandraDefaultPort))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", CassandraPort))
-		}
-	}
-
-	if os.Getenv(MySQLSeeds) == "" {
-		err := os.Setenv(MySQLSeeds, LocalhostIP)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", MySQLSeeds))
-		}
-	}
-
-	if os.Getenv(MySQLPort) == "" {
-		err := os.Setenv(MySQLPort, strconv.Itoa(MySQLDefaultPort))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", MySQLPort))
-		}
-	}
-
-	if os.Getenv(PostgresSeeds) == "" {
-		err := os.Setenv(PostgresSeeds, LocalhostIP)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", PostgresSeeds))
-		}
-	}
-
-	if os.Getenv(PostgresPort) == "" {
-		err := os.Setenv(PostgresPort, strconv.Itoa(PostgresDefaultPort))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", PostgresPort))
-		}
-	}
-
-	if os.Getenv(ESSeeds) == "" {
-		err := os.Setenv(ESSeeds, LocalhostIP)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", ESSeeds))
-		}
-	}
-
-	if os.Getenv(ESPort) == "" {
-		err := os.Setenv(ESPort, strconv.Itoa(ESDefaultPort))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", ESPort))
-		}
-	}
-
-	if os.Getenv(ESVersion) == "" {
-		err := os.Setenv(ESVersion, ESDefaultVersion)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", ESVersion))
+	for _, envVar := range envVars {
+		if os.Getenv(envVar.name) == "" {
+			if err := os.Setenv(envVar.name, envVar.getDefault()); err != nil {
+				panic(fmt.Sprintf("error setting env var %s: %s", envVar.name, err))
+			}
 		}
 	}
 }

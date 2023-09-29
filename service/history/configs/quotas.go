@@ -92,6 +92,7 @@ var (
 		"GetWorkflowExecutionHistoryReverse":     1,
 		"GetWorkflowExecutionRawHistoryV2":       1,
 		"ForceDeleteWorkflowExecution":           1,
+		"GetDLQTasks":                            1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

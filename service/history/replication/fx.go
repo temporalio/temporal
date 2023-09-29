@@ -125,7 +125,7 @@ func ReplicationStreamSchedulerProvider(
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
-		TaskHashFn,
+		WorkflowKeyHashFn,
 		NewSequentialTaskQueue,
 		logger,
 	)

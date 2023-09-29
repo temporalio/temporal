@@ -34,15 +34,12 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/persistence/serialization"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -152,17 +149,15 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			branch, err := serialization.HistoryBranchFromBlob(br.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
-			s.NoError(err)
-			uuidTreeId := branch.TreeId
+			uuidTreeId := br.BranchInfo.TreeId
 			if trees[uuidTreeId] {
 				delete(trees, uuidTreeId)
 
 				s.True(br.ForkTime.UnixNano() > 0)
-				s.True(len(branch.BranchId) > 0)
+				s.True(len(br.BranchInfo.BranchId) > 0)
 				s.Equal("branchInfo", br.Info)
 			} else {
-				s.Fail("treeID not found", branch.TreeId)
+				s.Fail("treeID not found", br.BranchInfo.TreeId)
 			}
 		}
 
@@ -679,47 +674,6 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 }
 
-// TestTreeInfoCompatibility test
-func (s *HistoryV2PersistenceSuite) TestTreeInfoCompatibility() {
-	serializer := serialization.NewSerializer()
-	treeID := uuid.NewRandom().String()
-	branchID := uuid.NewRandom().String()
-	originalBranch := &persistencespb.HistoryBranch{
-		TreeId:   treeID,
-		BranchId: branchID,
-	}
-	originalToken, err := serializer.HistoryBranchToBlob(originalBranch, enumspb.ENCODING_TYPE_PROTO3)
-	s.NoError(err)
-
-	// Forward compatibility -> infer missing branch token
-	blob, err := serializer.HistoryTreeInfoToBlob(
-		&persistencespb.HistoryTreeInfo{
-			BranchInfo: originalBranch,
-			// NOTE: Intentionally missing BranchToken
-		},
-		enumspb.ENCODING_TYPE_PROTO3,
-	)
-	s.NoError(err)
-	info, err := p.ToHistoryTreeInfo(serializer, blob)
-	s.NoError(err)
-	s.Equal(originalToken.Data, info.BranchToken)
-	s.Equal(originalBranch, info.BranchInfo)
-
-	// Backward compatibility -> infer missing branch info
-	blob, err = serializer.HistoryTreeInfoToBlob(
-		&persistencespb.HistoryTreeInfo{
-			BranchToken: originalToken.Data,
-			// NOTE: Intentionally missing BranchInfo
-		},
-		enumspb.ENCODING_TYPE_PROTO3,
-	)
-	s.NoError(err)
-	info, err = p.ToHistoryTreeInfo(serializer, blob)
-	s.NoError(err)
-	s.Equal(originalToken.Data, info.BranchToken)
-	s.Equal(originalBranch, info.BranchInfo)
-}
-
 func (s *HistoryV2PersistenceSuite) getBranchByKey(m sync.Map, k int) []byte {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
@@ -779,21 +733,7 @@ func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.Hi
 		ShardID: s.ShardInfo.GetShardId(),
 	})
 	s.Nil(err)
-	branches, err := s.toHistoryBranches(resp.BranchTokens)
-	s.NoError(err)
-	return branches
-}
-
-func (s *HistoryV2PersistenceSuite) toHistoryBranches(branchTokens [][]byte) ([]*persistencespb.HistoryBranch, error) {
-	branches := make([]*persistencespb.HistoryBranch, len(branchTokens))
-	for i, b := range branchTokens {
-		branch, err := serialization.HistoryBranchFromBlob(b, enumspb.ENCODING_TYPE_PROTO3.String())
-		if err != nil {
-			return nil, err
-		}
-		branches[i] = branch
-	}
-	return branches, nil
+	return resp.BranchInfos
 }
 
 // persistence helper

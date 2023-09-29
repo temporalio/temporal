@@ -39,6 +39,8 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
 	"gopkg.in/yaml.v3"
+
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -184,16 +186,16 @@ func (g *grpcconn) Dial(ctx context.Context) (*grpc.ClientConn, error) {
 
 func (g *grpcconn) dialOpts() []grpc.DialOption {
 	out := []grpc.DialOption{
-		grpc.WithReadBufferSize(coalesce(g.ReadBufferSize, defaultReadBufferSize)),
-		grpc.WithWriteBufferSize(coalesce(g.WriteBufferSize, defaultWriteBufferSize)),
+		grpc.WithReadBufferSize(util.Coalesce(g.ReadBufferSize, defaultReadBufferSize)),
+		grpc.WithWriteBufferSize(util.Coalesce(g.WriteBufferSize, defaultWriteBufferSize)),
 		grpc.WithUserAgent(g.UserAgent),
 		grpc.WithConnectParams(grpc.ConnectParams{
-			MinConnectTimeout: coalesce(g.ConnectParams.MinConnectTimeout, defaultMinConnectTimeout),
+			MinConnectTimeout: util.Coalesce(g.ConnectParams.MinConnectTimeout, defaultMinConnectTimeout),
 			Backoff: backoff.Config{
-				BaseDelay:  coalesce(g.ConnectParams.Backoff.BaseDelay, backoff.DefaultConfig.BaseDelay),
-				MaxDelay:   coalesce(g.ConnectParams.Backoff.MaxDelay, backoff.DefaultConfig.MaxDelay),
-				Jitter:     coalesce(g.ConnectParams.Backoff.Jitter, backoff.DefaultConfig.Jitter),
-				Multiplier: coalesce(g.ConnectParams.Backoff.Multiplier, backoff.DefaultConfig.Multiplier),
+				BaseDelay:  util.Coalesce(g.ConnectParams.Backoff.BaseDelay, backoff.DefaultConfig.BaseDelay),
+				MaxDelay:   util.Coalesce(g.ConnectParams.Backoff.MaxDelay, backoff.DefaultConfig.MaxDelay),
+				Jitter:     util.Coalesce(g.ConnectParams.Backoff.Jitter, backoff.DefaultConfig.Jitter),
+				Multiplier: util.Coalesce(g.ConnectParams.Backoff.Multiplier, backoff.DefaultConfig.Multiplier),
 			},
 		}),
 	}
@@ -260,13 +262,13 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.Connection.Endpoint),
 		otlpmetricgrpc.WithHeaders(cfg.Headers),
-		otlpmetricgrpc.WithTimeout(coalesce(cfg.Timeout, 10*time.Second)),
+		otlpmetricgrpc.WithTimeout(util.Coalesce(cfg.Timeout, 10*time.Second)),
 		otlpmetricgrpc.WithDialOption(dopts...),
 		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
-			Enabled:         coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
-			InitialInterval: coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
-			MaxInterval:     coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
-			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
+			Enabled:         util.Coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: util.Coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     util.Coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  util.Coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
@@ -295,13 +297,13 @@ func (ec *exportConfig) buildOtlpGrpcSpanExporter(
 	opts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.Connection.Endpoint),
 		otlptracegrpc.WithHeaders(cfg.Headers),
-		otlptracegrpc.WithTimeout(coalesce(cfg.Timeout, 10*time.Second)),
+		otlptracegrpc.WithTimeout(util.Coalesce(cfg.Timeout, 10*time.Second)),
 		otlptracegrpc.WithDialOption(cfg.Connection.dialOpts()...),
 		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
-			Enabled:         coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
-			InitialInterval: coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
-			MaxInterval:     coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
-			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
+			Enabled:         util.Coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: util.Coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     util.Coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  util.Coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
@@ -414,14 +416,4 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		)
 	}
 	return obj.Spec.Decode(e.Spec)
-}
-
-func coalesce[T comparable](vals ...T) T {
-	var zero T
-	for _, v := range vals {
-		if v != zero {
-			return v
-		}
-	}
-	return zero
 }

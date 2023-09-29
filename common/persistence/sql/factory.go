@@ -130,6 +130,13 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(conn, f.logger, queueType)
 }
 
+// NewQueueV2 returns a new data-access object for queues and messages. The current implementation is a no-op because
+// we haven't implemented QueueV2 in SQL yet. However, we still need to return something here so that the graph is built
+// correctly. Calls to any method on the returned object will themselves return an error.
+func (f *Factory) NewQueueV2() (p.QueueV2, error) {
+	return NewQueueV2(), nil
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.mainDBConn.ForceClose()
