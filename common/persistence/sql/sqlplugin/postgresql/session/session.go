@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/iancoleman/strcase"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/config"
@@ -38,7 +39,7 @@ import (
 
 const (
 	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
-	driverName = "postgres"
+	driverName = "pgx"
 )
 
 const (
@@ -122,7 +123,6 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 			parameters.Set(sslMode, sslModeRequire)
 		} else {
 			parameters.Set(sslMode, sslModeFull)
-			parameters.Set(sslHost, cfg.TLS.ServerName)
 		}
 
 		if cfg.TLS.CaFile != "" {

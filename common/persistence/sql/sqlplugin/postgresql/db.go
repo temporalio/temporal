@@ -28,8 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -38,10 +38,10 @@ import (
 
 // ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
 // check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
-const ErrDupEntryCode = pq.ErrorCode("23505")
+const ErrDupEntryCode = "23505"
 
 func (pdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*pq.Error)
+	sqlErr, ok := err.(*pgconn.PgError)
 	return ok && sqlErr.Code == ErrDupEntryCode
 }
 

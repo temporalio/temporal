@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
@@ -134,8 +134,8 @@ func (pdb *db) DropAllTables(database string) error {
 // CreateDatabase creates a database if it doesn't exist
 func (pdb *db) CreateDatabase(name string) error {
 	if err := pdb.Exec(fmt.Sprintf(createDatabaseQuery, name)); err != nil {
-		if err, ok := err.(*pq.Error); ok {
-			if err.Code.Name() == "duplicate_database" {
+		if err, ok := err.(*pgconn.PgError); ok {
+			if err.Code == "42P04" {
 				return nil
 			}
 		}
