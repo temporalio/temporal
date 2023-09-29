@@ -150,5 +150,8 @@ service AdminService {
 
     rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse) {
     }
+
+    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    }
 }
 

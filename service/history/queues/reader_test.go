@@ -54,10 +54,10 @@ type (
 		mockScheduler   *MockScheduler
 		mockRescheduler *MockRescheduler
 
-		logger                log.Logger
-		metricsHandler        metrics.Handler
-		executableInitializer ExecutableInitializer
-		monitor               *monitorImpl
+		logger            log.Logger
+		metricsHandler    metrics.Handler
+		executableFactory ExecutableFactory
+		monitor           *monitorImpl
 	}
 )
 
@@ -76,9 +76,21 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
-	}
+	s.executableFactory = ExecutableFactoryFn(func(readerID int64, t tasks.Task) Executable {
+		return NewExecutable(
+			readerID,
+			t,
+			nil,
+			nil,
+			nil,
+			NewNoopPriorityAssigner(),
+			clock.NewRealTimeSource(),
+			nil,
+			nil,
+			nil,
+			metrics.NoopMetricsHandler,
+		)
+	})
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
@@ -179,7 +191,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -206,7 +218,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -489,7 +501,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, scope)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope)
 		slices = append(slices, slice)
 	}
 

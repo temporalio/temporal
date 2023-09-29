@@ -283,7 +283,7 @@ func (s *archivalSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) 
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)
 		s.NoError(err)
-		if len(resp.BranchTokens) == 0 {
+		if len(resp.BranchInfos) == 0 {
 			return true
 		}
 		time.Sleep(retryBackoffTime)
@@ -423,7 +423,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTask()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
@@ -435,7 +435,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessWorkflowTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 	}
 

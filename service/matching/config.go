@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -241,10 +240,10 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: func() int {
-			return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 		},
 		NumReadPartitions: func() int {
-			return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
@@ -263,7 +262,7 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),

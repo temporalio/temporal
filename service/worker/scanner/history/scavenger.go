@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
@@ -240,7 +241,7 @@ func (s *Scavenger) filterTask(
 
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
-		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
+		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info), tag.Error(err))
 		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
 
 		s.Lock()
@@ -250,12 +251,23 @@ func (s *Scavenger) filterTask(
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
+	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
+	if err != nil {
+		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
+		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
+
+		s.Lock()
+		defer s.Unlock()
+		s.hbd.ErrorCount++
+		return nil
+	}
+
 	return &taskDetail{
 		shardID:     shardID,
 		namespaceID: namespaceID,
 		workflowID:  workflowID,
 		runID:       runID,
-		branchToken: branch.BranchToken,
+		branchToken: branchToken.Data,
 	}
 }
 

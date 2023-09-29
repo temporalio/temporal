@@ -97,10 +97,18 @@ func (s *executableSuite) TearDownSuite() {
 func (s *executableSuite) TestExecute_TaskExecuted() {
 	executable := s.newTestExecutable()
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        errors.New("some random error"),
+	})
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
 	s.NoError(executable.Execute())
 }
 
@@ -161,7 +169,11 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 
 			now = now.Add(attemptLatency)
 			s.timeSource.Update(now)
-		}).Return(nil, true, tc.taskErr)
+		}).Return(ExecuteResponse{
+			ExecutionMetricTags: nil,
+			ExecutedAsActive:    true,
+			ExecutionErr:        tc.taskErr,
+		})
 
 		err := executable.Execute()
 		if err != nil {
@@ -219,7 +231,11 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 
 			now = now.Add(attemptLatencies[i])
 			s.timeSource.Update(now)
-		}).Return(nil, true, taskErrors[i])
+		}).Return(ExecuteResponse{
+			ExecutionMetricTags: nil,
+			ExecutedAsActive:    true,
+			ExecutionErr:        taskErrors[i],
+		})
 
 		err := executable.Execute()
 		if err != nil {
@@ -242,7 +258,7 @@ func (s *executableSuite) TestExecute_CapturePanic() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(_ context.Context, _ Executable) ExecuteResponse {
 			panic("test panic during execution")
 		},
 	)
@@ -253,9 +269,13 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(ctx context.Context, _ Executable) ExecuteResponse {
 			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
-			return nil, true, nil
+			return ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        nil,
+			}
 		},
 	)
 	s.NoError(executable.Execute())
@@ -263,9 +283,13 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	// force set to low priority
 	executable.(*executableImpl).priority = ctasks.PriorityLow
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(ctx context.Context, _ Executable) ExecuteResponse {
 			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
-			return nil, true, nil
+			return ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        nil,
+			}
 		},
 	)
 	s.NoError(executable.Execute())
@@ -273,14 +297,22 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	executable := s.newTestExecutable()
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        errors.New("some random error"),
+	})
 	err := executable.Execute()
 	s.Error(err)
 	s.Error(executable.HandleErr(err))
 	s.Equal(2, executable.Attempt())
 
 	// isActive changed to false, should reset attempt
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, false, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        nil,
+	})
 	s.NoError(executable.Execute())
 	s.Equal(1, executable.Attempt())
 }
@@ -289,7 +321,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(_ context.Context, _ Executable) ExecuteResponse {
 			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)

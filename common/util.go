@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -773,7 +772,7 @@ func OverrideWorkflowRunTimeout(
 	} else if workflowRunTimeout == 0 {
 		return workflowExecutionTimeout
 	}
-	return util.Min(workflowRunTimeout, workflowExecutionTimeout)
+	return min(workflowRunTimeout, workflowExecutionTimeout)
 }
 
 // OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
@@ -788,13 +787,13 @@ func OverrideWorkflowTaskTimeout(
 		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
 	}
 
-	taskStartToCloseTimeout = util.Min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
+	taskStartToCloseTimeout = min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
 
 	if workflowRunTimeout == 0 {
 		return taskStartToCloseTimeout
 	}
 
-	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

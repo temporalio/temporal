@@ -53,8 +53,8 @@ type (
 
 		controller *gomock.Controller
 
-		executableInitializer ExecutableInitializer
-		monitor               *monitorImpl
+		executableFactory ExecutableFactory
+		monitor           *monitorImpl
 	}
 )
 
@@ -68,9 +68,21 @@ func (s *sliceSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.executableInitializer = func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
-	}
+	s.executableFactory = ExecutableFactoryFn(func(readerID int64, t tasks.Task) Executable {
+		return NewExecutable(
+			readerID,
+			t,
+			nil,
+			nil,
+			nil,
+			NewNoopPriorityAssigner(),
+			clock.NewRealTimeSource(),
+			nil,
+			nil,
+			nil,
+			metrics.NoopMetricsHandler,
+		)
+	})
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
@@ -86,7 +98,7 @@ func (s *sliceSuite) TestCanSplitByRange() {
 	r := NewRandomRange()
 	scope := NewScope(r, predicates.Universal[tasks.Task]())
 
-	slice := NewSlice(nil, s.executableInitializer, s.monitor, scope)
+	slice := NewSlice(nil, s.executableFactory, s.monitor, scope)
 	s.Equal(scope, slice.Scope())
 
 	s.True(slice.CanSplitByRange(r.InclusiveMin))
@@ -333,7 +345,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
-	slice := NewSlice(nil, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
 	slice.iterators = s.randomIteratorsInRange(r, rand.Intn(2), nil)
 
 	executables := s.randomExecutablesInRange(r, 5)
@@ -382,7 +394,7 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
-	slice := NewSlice(nil, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
 	slice.iterators = []Iterator{} // manually set iterators to be empty to trigger predicate update
 
 	executables := s.randomExecutablesInRange(r, 100)
@@ -451,7 +463,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	}
 
 	for _, batchSize := range []int{1, 2, 5, 10, 20, 100} {
-		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, NewScope(r, predicate))
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
 
 		executables := make([]Executable, 0, numTasks)
 		for {
@@ -499,7 +511,7 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 		}
 	}
 
-	slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
 	_, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.Error(err)
 
@@ -542,7 +554,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 		}
 	}
 
-	slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, NewScope(r, predicate))
 	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
@@ -601,7 +613,7 @@ func (s *sliceSuite) newTestSlice(
 		taskTypes = []enumsspb.TaskType{enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION}
 	}
 
-	slice := NewSlice(nil, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate))
 	for _, executable := range s.randomExecutablesInRange(r, rand.Intn(20)) {
 		slice.pendingExecutables[executable.GetKey()] = executable
 
@@ -660,7 +672,7 @@ func (s *sliceSuite) validateMergedSlice(
 func (s *sliceSuite) validateSliceState(
 	slice *SliceImpl,
 ) {
-	s.NotNil(slice.executableInitializer)
+	s.NotNil(slice.executableFactory)
 
 	for _, executable := range slice.pendingExecutables {
 		s.True(slice.scope.Contains(executable))

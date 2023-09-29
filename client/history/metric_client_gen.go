@@ -173,6 +173,20 @@ func (c *metricClient) GetDLQReplicationMessages(
 	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) GetDLQTasks(
+	ctx context.Context,
+	request *historyservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientGetDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetDLQTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,

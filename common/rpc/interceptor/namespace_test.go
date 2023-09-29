@@ -70,6 +70,7 @@ var (
 		"RemoveTask":                {},
 		"SyncShardStatus":           {},
 		"GetReplicationStatus":      {},
+		"GetDLQTasks":               {},
 	}
 )
 

@@ -39,13 +39,14 @@ var BeanModule = fx.Options(
 	fx.Invoke(BeanLifetimeHooks),
 )
 
-var BeanDepsModule = fx.Options(
-	fx.Provide(ClusterMetadataManagerProvider),
-	fx.Provide(MetadataManagerProvider),
-	fx.Provide(TaskManagerProvider),
-	fx.Provide(NamespaceReplicationQueueProvider),
-	fx.Provide(ShardManagerProvider),
-	fx.Provide(ExecutionManagerProvider),
+var BeanDepsModule = fx.Provide(
+	ClusterMetadataManagerProvider,
+	MetadataManagerProvider,
+	TaskManagerProvider,
+	NamespaceReplicationQueueProvider,
+	ShardManagerProvider,
+	ExecutionManagerProvider,
+	HistoryTaskQueueManagerProvider,
 )
 
 func BeanProvider(
@@ -87,6 +88,10 @@ func ShardManagerProvider(factory Factory) (persistence.ShardManager, error) {
 }
 func ExecutionManagerProvider(factory Factory) (persistence.ExecutionManager, error) {
 	return factory.NewExecutionManager()
+}
+
+func HistoryTaskQueueManagerProvider(factory Factory) (persistence.HistoryTaskQueueManager, error) {
+	return factory.NewHistoryTaskQueueManager()
 }
 
 func BeanLifetimeHooks(

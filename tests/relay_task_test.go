@@ -97,17 +97,13 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	}
 
 	// First workflow task complete with a marker command, and request to relay workflow task (immediately return a new workflow task)
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		false,
-		false,
-		0,
-		3,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithExpectedAttemptCount(0),
+		WithRetries(3),
+		WithForceNewWorkflowTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
@@ -127,7 +123,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
