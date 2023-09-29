@@ -28,7 +28,6 @@ import (
 	"context"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,8 +42,6 @@ import (
 // implementation-specific tests that will not be covered by this suite elsewhere.
 func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
-	t.Cleanup(cancel)
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
