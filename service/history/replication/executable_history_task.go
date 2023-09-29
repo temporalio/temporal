@@ -396,10 +396,10 @@ func (e *ExecutableHistoryTask) checkVersionHistoryItem(incomingHistoryItems []*
 	return serviceerror.NewInvalidArgument("version history does not match")
 }
 
-func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWK definition.WorkflowKey) error {
-	if !(e.WorkflowKey.GetWorkflowID() == incomingWK.GetWorkflowID() &&
-		e.WorkflowKey.GetNamespaceID() == incomingWK.GetNamespaceID() &&
-		e.WorkflowKey.GetRunID() == incomingWK.GetRunID()) {
+func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWorkflowKey definition.WorkflowKey) error {
+	if !(e.WorkflowKey.GetWorkflowID() == incomingWorkflowKey.GetWorkflowID() &&
+		e.WorkflowKey.GetNamespaceID() == incomingWorkflowKey.GetNamespaceID() &&
+		e.WorkflowKey.GetRunID() == incomingWorkflowKey.GetRunID()) {
 		return serviceerror.NewInvalidArgument("workflow key does not match")
 	}
 	return nil
