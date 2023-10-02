@@ -905,6 +905,7 @@ var (
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
+	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
