@@ -321,7 +321,7 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
 			tag.Value(retryErr),
-			tag.Error(retryErr),
+			tag.Error(resendErr),
 		)
 		return resendErr
 	}
