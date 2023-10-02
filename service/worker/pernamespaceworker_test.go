@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
-	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -86,7 +85,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		HostName:          "self",
 		Config: &Config{
 			PerNamespaceWorkerCount: func(ns string) int {
-				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
 			PerNamespaceWorkerOptions: func(ns string) map[string]any {
 				switch ns {
@@ -212,6 +211,9 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(4, options.MaxConcurrentActivityTaskPollers)
+		s.Equal(2000, options.MaxConcurrentWorkflowTaskExecutionSize)
+		s.Equal(2000, options.MaxConcurrentLocalActivityExecutionSize)
+		s.Equal(2000, options.MaxConcurrentActivityExecutionSize)
 	}).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns, workercommon.RegistrationDetails{TotalWorkers: 3, Multiplicity: 2})
 	wkr1.EXPECT().Start()

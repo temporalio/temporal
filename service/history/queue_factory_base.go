@@ -73,7 +73,8 @@ type (
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 
-		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
+		ExecutorWrapper   queues.ExecutorWrapper   `optional:"true"`
+		ExecutableWrapper queues.ExecutableWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {
@@ -92,6 +93,7 @@ type (
 
 var QueueModule = fx.Options(
 	fx.Provide(QueueSchedulerRateLimiterProvider),
+	fx.Provide(NewExecutableDLQWrapper),
 	fx.Provide(
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
@@ -215,6 +217,34 @@ func (f *QueueFactoryBase) Stop() {
 	if f.HostScheduler != nil {
 		f.HostScheduler.Stop()
 	}
+}
+
+func (f *QueueFactoryBase) NewExecutableFactory(
+	executor queues.Executor,
+	scheduler queues.Scheduler,
+	rescheduler queues.Rescheduler,
+	executableWrapper queues.ExecutableWrapper,
+	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+) queues.ExecutableFactory {
+	factory := queues.NewExecutableFactory(
+		executor,
+		scheduler,
+		rescheduler,
+		f.HostPriorityAssigner,
+		timeSource,
+		namespaceRegistry,
+		clusterMetadata,
+		logger,
+		metricsHandler,
+	)
+	if executableWrapper == nil {
+		return factory
+	}
+	return queues.NewExecutableFactoryWrapper(factory, executableWrapper)
 }
 
 func NewQueueHostRateLimiter(

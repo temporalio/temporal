@@ -178,10 +178,17 @@ func proto3Encode(m proto.Message) (commonpb.DataBlob, error) {
 }
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {
-	if e, ok := enumspb.EncodingType_value[encoding]; !ok || enumspb.EncodingType(e) != enumspb.ENCODING_TYPE_PROTO3 {
+	e, ok := enumspb.EncodingType_value[encoding]
+	if !ok {
 		return NewUnknownEncodingTypeError(encoding, enumspb.ENCODING_TYPE_PROTO3)
 	}
+	return Proto3Decode(blob, enumspb.EncodingType(e), result)
+}
 
+func Proto3Decode(blob []byte, e enumspb.EncodingType, result proto.Message) error {
+	if e != enumspb.ENCODING_TYPE_PROTO3 {
+		return NewUnknownEncodingTypeError(enumspb.EncodingType_name[int32(e)], enumspb.ENCODING_TYPE_PROTO3)
+	}
 	if err := proto.Unmarshal(blob, result); err != nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}

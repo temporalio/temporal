@@ -1760,6 +1760,40 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 	return nsResponse, nil
 }
 
+func (adh *AdminHandler) GetDLQTasks(
+	ctx context.Context,
+	request *adminservice.GetDLQTasksRequest,
+) (*adminservice.GetDLQTasksResponse, error) {
+	response, err := adh.historyClient.GetDLQTasks(ctx, &historyservice.GetDLQTasksRequest{
+		DlqKey: &historyservice.HistoryDLQKey{
+			Category:      request.DlqKey.Category,
+			SourceCluster: request.DlqKey.SourceCluster,
+			TargetCluster: request.DlqKey.TargetCluster,
+		},
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	dlqTasks := make([]*adminservice.HistoryDLQTask, len(response.DlqTasks))
+	for i, task := range response.DlqTasks {
+		dlqTasks[i] = &adminservice.HistoryDLQTask{
+			Metadata: &adminservice.HistoryDLQTaskMetadata{
+				MessageId: task.Metadata.MessageId,
+			},
+			Task: &adminservice.HistoryTask{
+				ShardId: task.Task.ShardId,
+				Task:    task.Task.Task,
+			},
+		}
+	}
+	return &adminservice.GetDLQTasksResponse{
+		DlqTasks:      dlqTasks,
+		NextPageToken: response.NextPageToken,
+	}, nil
+}
+
 func convertClusterReplicationConfigToProto(
 	input []string,
 ) []*replicationpb.ClusterReplicationConfig {

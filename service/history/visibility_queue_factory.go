@@ -129,13 +129,22 @@ func (f *visibilityQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := f.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewImmediateQueue(
 		shard,
 		tasks.CategoryVisibility,
 		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
@@ -157,5 +166,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.HostReaderRateLimiter,
 		logger,
 		metricsHandler,
+		factory,
 	)
 }

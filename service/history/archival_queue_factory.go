@@ -172,13 +172,23 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		metricsHandler,
 	)
 
+	factory := f.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewScheduledQueue(
 		shard,
 		tasks.CategoryArchival,
 		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
+		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.ArchivalTaskBatchSize,

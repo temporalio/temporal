@@ -580,6 +580,7 @@ const (
 	MetadataStoreName  DataStoreName = "MetadataStore"
 	ExecutionStoreName DataStoreName = "ExecutionStore"
 	QueueName          DataStoreName = "Queue"
+	QueueV2Name        DataStoreName = "QueueV2"
 	ClusterMDStoreName DataStoreName = "ClusterMDStore"
 )
 

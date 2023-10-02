@@ -64,6 +64,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
+	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -97,6 +98,7 @@ type (
 		hostInfoProvider             membership.HostInfoProvider
 		controller                   shard.Controller
 		tracer                       trace.Tracer
+		taskQueueManager             persistence.HistoryTaskQueueManager
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -124,6 +126,7 @@ type (
 		ShardController              shard.Controller
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
+		TaskQueueManager             persistence.HistoryTaskQueueManager
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -2146,6 +2149,13 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		h.persistenceVisibilityManager,
 		h.logger,
 	)
+}
+
+func (h *Handler) GetDLQTasks(
+	ctx context.Context,
+	request *historyservice.GetDLQTasksRequest,
+) (*historyservice.GetDLQTasksResponse, error) {
+	return getdlqtasks.Invoke(ctx, h.taskQueueManager, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

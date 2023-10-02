@@ -139,6 +139,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                   args.ShardController,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
+		taskQueueManager:             args.TaskQueueManager,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
