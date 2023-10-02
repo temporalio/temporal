@@ -27,23 +27,21 @@ package metrics
 
 // Common tags for all services
 const (
-	OperationTagName           = "operation"
-	ServiceRoleTagName         = "service_role"
-	CacheTypeTagName           = "cache_type"
-	FailureTagName             = "failure"
-	TaskCategoryTagName        = "task_category"
-	TaskTypeTagName            = "task_type"
-	TaskPriorityTagName        = "task_priority"
-	QueueReaderIDTagName       = "queue_reader_id"
-	QueueActionTagName         = "queue_action"
-	QueueTypeTagName           = "queue_type"
-	visibilityTypeTagName      = "visibility_type"
-	ErrorTypeTagName           = "error_type"
-	httpStatusTagName          = "http_status"
-	versionedTagName           = "versioned"
-	resourceExhaustedTag       = "resource_exhausted_cause"
-	standardVisibilityTagValue = "standard_visibility"
-	advancedVisibilityTagValue = "advanced_visibility"
+	OperationTagName            = "operation"
+	ServiceRoleTagName          = "service_role"
+	CacheTypeTagName            = "cache_type"
+	FailureTagName              = "failure"
+	TaskCategoryTagName         = "task_category"
+	TaskTypeTagName             = "task_type"
+	TaskPriorityTagName         = "task_priority"
+	QueueReaderIDTagName        = "queue_reader_id"
+	QueueActionTagName          = "queue_action"
+	QueueTypeTagName            = "queue_type"
+	visibilityPluginNameTagName = "visibility_plugin_name"
+	ErrorTypeTagName            = "error_type"
+	httpStatusTagName           = "http_status"
+	versionedTagName            = "versioned"
+	resourceExhaustedTag        = "resource_exhausted_cause"
 )
 
 // This package should hold all the metrics and tags for temporal
