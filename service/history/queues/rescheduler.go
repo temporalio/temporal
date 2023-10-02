@@ -43,7 +43,8 @@ import (
 )
 
 const (
-	taskChanFullBackoff = 3 * time.Second
+	taskChanFullBackoff                  = 2 * time.Second
+	taskChanFullBackoffJitterCoefficient = 0.5
 
 	reschedulerPQCleanupDuration          = 3 * time.Minute
 	reschedulerPQCleanupJitterCoefficient = 0.15
@@ -248,7 +249,7 @@ func (r *reschedulerImpl) reschedule() {
 			executable.SetScheduledTime(now)
 			submitted := r.scheduler.TrySubmit(executable)
 			if !submitted {
-				r.timerGate.Update(now.Add(taskChanFullBackoff))
+				r.timerGate.Update(now.Add(backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
 				break
 			}
 

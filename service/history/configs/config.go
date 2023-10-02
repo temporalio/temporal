@@ -105,7 +105,6 @@ type Config struct {
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay     dynamicconfig.DurationPropertyFn
-	TaskSchedulerThrottleDuration            dynamicconfig.DurationPropertyFn
 	TaskSchedulerGlobalMaxQPS                dynamicconfig.IntPropertyFn
 	TaskSchedulerMaxQPS                      dynamicconfig.IntPropertyFn
 	TaskSchedulerGlobalNamespaceMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -389,8 +388,7 @@ func NewConfig(
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
-		TaskSchedulerRateLimiterStartupDelay:     dc.GetDurationProperty(dynamicconfig.TaskSchedulerRateLimiterStartupDelay, 30*time.Second),
-		TaskSchedulerThrottleDuration:            dc.GetDurationProperty(dynamicconfig.TaskSchedulerThrottleDuration, time.Second),
+		TaskSchedulerRateLimiterStartupDelay:     dc.GetDurationProperty(dynamicconfig.TaskSchedulerRateLimiterStartupDelay, 5*time.Second),
 		TaskSchedulerGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.TaskSchedulerGlobalMaxQPS, 0),
 		TaskSchedulerMaxQPS:                      dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
 		TaskSchedulerNamespaceMaxQPS:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
