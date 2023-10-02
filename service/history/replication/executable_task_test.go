@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
@@ -282,7 +283,7 @@ func (s *executableTaskSuite) TestResend_Success() {
 		resendErr.EndEventVersion,
 	).Return(nil)
 
-	err := s.task.Resend(context.Background(), remoteCluster, resendErr)
+	err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.NoError(err)
 }
 
@@ -326,7 +327,7 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		ClosedWorkflowOnly: false,
 	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 
-	err := s.task.Resend(context.Background(), remoteCluster, resendErr)
+	err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.NoError(err)
 }
 
@@ -354,7 +355,7 @@ func (s *executableTaskSuite) TestResend_Error() {
 		resendErr.EndEventVersion,
 	).Return(serviceerror.NewUnavailable(""))
 
-	err := s.task.Resend(context.Background(), remoteCluster, resendErr)
+	err := s.task.Resend(context.Background(), remoteCluster, resendErr, ResendAttempt)
 	s.Error(err)
 }
 
