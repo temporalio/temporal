@@ -68,6 +68,12 @@ const (
 	// dynamicRateLimitIncreaseStepSizeKey the amount the rate limit multiplier is increased when the system is healthy. should be between 0 and 1
 	dynamicRateLimitIncreaseStepSizeKey     = "rateIncreaseStepSize"
 	dynamicRateLimitIncreaseStepSizeDefault = 0.1
+	// dynamicRateLimitMultiMinKey is the minimum the rate limit multiplier can be reduced to
+	dynamicRateLimitMultiMinKey     = "rateMultiMin"
+	dynamicRateLimitMultiMinDefault = 0.5
+	// dynamicRateLimitMultiMaxKey is the maximum the rate limit multiplier can be increased to
+	dynamicRateLimitMultiMaxKey     = "rateMultiMax"
+	dynamicRateLimitMultiMaxDefault = 1.0
 )
 
 var DefaultDynamicRateLimitingParams = map[string]interface{}{
@@ -77,4 +83,6 @@ var DefaultDynamicRateLimitingParams = map[string]interface{}{
 	dynamicRateLimitErrorThresholdKey:   dynamicRateLimitErrorThresholdDefault,
 	dynamicRateLimitBackoffStepSizeKey:  dynamicRateLimitBackoffStepSizeDefault,
 	dynamicRateLimitIncreaseStepSizeKey: dynamicRateLimitIncreaseStepSizeDefault,
+	dynamicRateLimitMultiMinKey:         dynamicRateLimitMultiMinDefault,
+	dynamicRateLimitMultiMaxKey:         dynamicRateLimitMultiMaxDefault,
 }
