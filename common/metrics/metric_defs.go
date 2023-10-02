@@ -734,6 +734,19 @@ var (
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
 	)
+	TaskTerminalFailures = NewCounterDef(
+		"task_terminal_failures",
+		WithDescription("The number of times a history task failed with a terminal failure, causing it to be sent to the DLQ."),
+	)
+	TaskDLQFailures = NewCounterDef(
+		"task_dlq_failures",
+		WithDescription("The number of times we failed to send a history task to the DLQ."),
+	)
+	TaskDLQSendLatency = NewTimerDef(
+		"task_dlq_latency",
+		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
+			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
+	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
 	TaskSkipped                     = NewCounterDef("task_skipped")
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")

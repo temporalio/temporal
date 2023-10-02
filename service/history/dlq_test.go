@@ -28,20 +28,25 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/golang/mock/gomock"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/service/history/configs"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
+
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 type (
@@ -76,6 +81,7 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			ctrl := gomock.NewController(t)
 			tqm := &testHistoryTaskQueueManager{}
 			var w queues.ExecutableWrapper
 			fxtest.New(
@@ -84,23 +90,35 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 					func() persistence.HistoryTaskQueueManager {
 						return tqm
 					},
-					func() cluster.Metadata {
-						return fakeMetadata{}
-					},
 					func() *configs.Config {
 						dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]interface{}{
 							dynamicconfig.HistoryTaskDLQEnabled: tc.enableDLQ,
 						}), log.NewTestLogger())
 						return configs.NewConfig(dc, 1, false, false)
 					},
+					func() cluster.Metadata {
+						return fakeMetadata{}
+					},
+					func() namespace.Registry {
+						registry := namespace.NewMockRegistry(ctrl)
+						registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).
+							AnyTimes()
+						return registry
+					},
 					func() clock.TimeSource {
 						return clock.NewEventTimeSource()
+					},
+					func() log.Logger {
+						return log.NewTestLogger()
+					},
+					func() metrics.Handler {
+						return metrics.NoopMetricsHandler
 					},
 					fx.Annotate(history.NewExecutableDLQWrapper, fx.As(new(queues.ExecutableWrapper))),
 				),
 				fx.Populate(&w),
 			)
-			executable := w.Wrap(queuestest.NewFakeExecutable(nil, errTerminal))
+			executable := w.Wrap(queuestest.NewFakeExecutable(&tasks.WorkflowTask{}, errTerminal))
 
 			err := executable.Execute()
 			if tc.enableDLQ {
