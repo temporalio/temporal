@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -144,12 +145,17 @@ func newVisibilityManager(
 	maxWriteQPS dynamicconfig.IntPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	metricsHandler metrics.Handler,
-	tag metrics.Tag,
+	visibilityPluginNameTag metrics.Tag,
 	logger log.Logger,
 ) manager.VisibilityManager {
 	if visStore == nil {
 		return nil
 	}
+	logger.Info(
+		"creating new visibility manager",
+		tag.NewStringTag(visibilityPluginNameTag.Key(), visibilityPluginNameTag.Value()),
+		tag.NewStringTag("visibility_index_name", visStore.GetIndexName()),
+	)
 	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
 
 	// wrap with rate limiter
@@ -157,14 +163,15 @@ func newVisibilityManager(
 		visManager,
 		maxReadQPS,
 		maxWriteQPS,
-		operatorRPSRatio)
+		operatorRPSRatio,
+	)
 	// wrap with metrics client
 	visManager = NewVisibilityManagerMetrics(
 		visManager,
 		metricsHandler,
 		logger,
-		tag)
-
+		visibilityPluginNameTag,
+	)
 	return visManager
 }
 
@@ -211,7 +218,7 @@ func newVisibilityManagerFromDataStoreConfig(
 		maxWriteQPS,
 		operatorRPSRatio,
 		metricsHandler,
-		metrics.AdvancedVisibilityTypeTag(),
+		metrics.VisibilityPluginNameTag(visStore.GetName()),
 		logger,
 	), nil
 }
