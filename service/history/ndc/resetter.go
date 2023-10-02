@@ -63,7 +63,7 @@ type (
 
 	resetterImpl struct {
 		shard          shard.Context
-		transactionMgr transactionMgr
+		transactionMgr TransactionManager
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder StateRebuilder
 
@@ -81,7 +81,7 @@ var _ resetter = (*resetterImpl)(nil)
 
 func NewResetter(
 	shard shard.Context,
-	transactionMgr transactionMgr,
+	transactionMgr TransactionManager,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -168,7 +168,7 @@ func (r *resetterImpl) getBaseBranchToken(
 	incomingFirstEventVersion int64,
 ) (baseBranchToken []byte, retError error) {
 
-	baseWorkflow, err := r.transactionMgr.loadWorkflow(
+	baseWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		r.namespaceID,
 		r.workflowID,

@@ -84,10 +84,18 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	rateLimiter, _ := NewSchedulerRateLimiter(
-		s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
-		s.mockShard.GetConfig().TaskSchedulerMaxQPS,
-		s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
-		s.mockShard.GetConfig().PersistenceMaxQPS,
+		func(namespace string) float64 {
+			return float64(s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS(namespace))
+		},
+		func() float64 {
+			return float64(s.mockShard.GetConfig().TaskSchedulerMaxQPS())
+		},
+		func(namespace string) float64 {
+			return float64(s.mockShard.GetConfig().PersistenceNamespaceMaxQPS(namespace))
+		},
+		func() float64 {
+			return float64(s.mockShard.GetConfig().PersistenceMaxQPS())
+		},
 		s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
 		s.mockShard.GetTimeSource(),
 	)
@@ -110,19 +118,29 @@ func (s *scheduledQueueSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 	)
 
+	var logger log.Logger = log.NewTestLogger()
+	factory := NewExecutableFactory(nil,
+		scheduler,
+		rescheduler,
+		nil,
+		s.mockShard.GetTimeSource(),
+		s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetClusterMetadata(),
+		logger,
+		metrics.NoopMetricsHandler,
+	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
 		scheduler,
 		rescheduler,
-		nil,
-		nil,
+		factory,
 		testQueueOptions,
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,
 		),
-		log.NewTestLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 	)
 }

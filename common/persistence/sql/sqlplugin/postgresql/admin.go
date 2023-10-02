@@ -64,7 +64,7 @@ const (
 	// NOTE we have to use %v because somehow postgresql doesn't work with ? here
 	// It's a small bug in sqlx library
 	// TODO https://github.com/uber/cadence/issues/2893
-	createDatabaseQuery = "CREATE DATABASE %v"
+	createDatabaseQuery = `CREATE DATABASE "%v"`
 
 	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 

@@ -92,7 +92,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 	}
 
 	for range wes {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 	}
 

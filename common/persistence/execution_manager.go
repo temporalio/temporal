@@ -395,9 +395,10 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
-	response, err := m.persistence.GetWorkflowExecution(ctx, request)
-	if err != nil {
-		return nil, err
+	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
+	if respErr != nil && response == nil {
+		// try to utilize resp as much as possible, for RebuildMutableState API
+		return nil, respErr
 	}
 	state, err := m.toWorkflowMutableState(response.State)
 	if err != nil {
@@ -414,7 +415,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		DBRecordVersion:   response.DBRecordVersion,
 		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
 	}
-	return newResponse, nil
+	return newResponse, respErr
 }
 
 func (m *executionManagerImpl) SetWorkflowExecution(
@@ -763,17 +764,18 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
-	internalResp, err := m.persistence.GetCurrentExecution(ctx, request)
-	if err != nil {
-		return nil, err
+	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
+	if respErr != nil && response == nil {
+		// try to utilize resp as much as possible, for RebuildMutableState API
+		return nil, respErr
 	}
 
 	return &GetCurrentExecutionResponse{
-		RunID:          internalResp.RunID,
-		StartRequestID: internalResp.ExecutionState.CreateRequestId,
-		State:          internalResp.ExecutionState.State,
-		Status:         internalResp.ExecutionState.Status,
-	}, nil
+		RunID:          response.RunID,
+		StartRequestID: response.ExecutionState.CreateRequestId,
+		State:          response.ExecutionState.State,
+		Status:         response.ExecutionState.Status,
+	}, respErr
 }
 
 func (m *executionManagerImpl) ListConcreteExecutions(

@@ -34,14 +34,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/definition"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -72,12 +71,15 @@ type (
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		eventSerializer         serialization.Serializer
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
 
-		taskID int64
-		task   *ExecutableHistoryTask
+		taskID       int64
+		task         *ExecutableHistoryTask
+		events       []*historypb.HistoryEvent
+		newRunEvents []*historypb.HistoryEvent
 	}
 )
 
@@ -105,18 +107,23 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
+	s.eventSerializer = serialization.NewSerializer()
 
 	firstEventID := rand.Int63()
 	nextEventID := firstEventID + 1
 	version := rand.Int63()
-	events, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
+	eventsBlob, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: firstEventID,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
-	newEvents, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
+	s.events, _ = serialization.NewSerializer().DeserializeEvents(eventsBlob)
+
+	newEventsBlob, _ := serialization.NewSerializer().SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
+	s.newRunEvents, _ = serialization.NewSerializer().DeserializeEvents(newEventsBlob)
+
 	s.replicationTask = &replicationspb.HistoryTaskAttributes{
 		NamespaceId:       uuid.NewString(),
 		WorkflowId:        uuid.NewString(),
@@ -126,8 +133,8 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 			EventId: nextEventID - 1,
 			Version: version,
 		}},
-		Events:       events,
-		NewRunEvents: newEvents,
+		Events:       eventsBlob,
+		NewRunEvents: newEventsBlob,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 
@@ -142,6 +149,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			EventSerializer:         s.eventSerializer,
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
@@ -170,17 +178,14 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateEventsV2(gomock.Any(), &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.task.NamespaceID,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: s.task.WorkflowID,
-			RunId:      s.task.RunID,
-		},
-		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
-		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
-		Events:              s.replicationTask.Events,
-		NewRunEvents:        s.replicationTask.NewRunEvents,
-	}).Return(nil)
+	engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
+		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
+		s.task.baseExecutionInfo,
+		s.task.versionHistoryItems,
+		[][]*historypb.HistoryEvent{s.events},
+		s.newRunEvents,
+	).Return(nil).Times(1)
 
 	err := s.task.Execute()
 	s.NoError(err)
@@ -225,17 +230,14 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
-	engine.EXPECT().ReplicateEventsV2(gomock.Any(), &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.task.NamespaceID,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: s.task.WorkflowID,
-			RunId:      s.task.RunID,
-		},
-		BaseExecutionInfo:   s.replicationTask.BaseExecutionInfo,
-		VersionHistoryItems: s.replicationTask.VersionHistoryItems,
-		Events:              s.replicationTask.Events,
-		NewRunEvents:        s.replicationTask.NewRunEvents,
-	}).Return(nil)
+	engine.EXPECT().ReplicateHistoryEvents(
+		gomock.Any(),
+		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
+		s.task.baseExecutionInfo,
+		s.task.versionHistoryItems,
+		[][]*historypb.HistoryEvent{s.events},
+		s.newRunEvents,
+	).Return(nil)
 
 	err := serviceerrors.NewRetryReplication(
 		"",
@@ -283,7 +285,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
-	events, _ := serialization.NewSerializer().DeserializeEvents(s.task.req.Events)
+	events := s.events
 
 	shardID := rand.Int31()
 	shardContext := shard.NewMockContext(s.controller)

@@ -34,22 +34,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// Min returns the minimum of two comparable values.
-func Min[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// Min returns the maximum of two comparable values.
-func Max[T constraints.Ordered](a, b T) T {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // MinTime returns the earlier of two given time.Time
 func MinTime(a, b time.Time) time.Time {
 	if a.Before(b) {
@@ -151,4 +135,16 @@ func ReduceSlice[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
 		acc = reducer(acc, val)
 	}
 	return acc
+}
+
+// Coalesce returns the first non-zero value of its arguments, or the zero value for the type
+// if all are zero.
+func Coalesce[T comparable](vals ...T) T {
+	var zero T
+	for _, v := range vals {
+		if v != zero {
+			return v
+		}
+	}
+	return zero
 }

@@ -577,9 +577,15 @@ const (
 	TaskSchedulerRateLimiterStartupDelay = "history.taskSchedulerRateLimiterStartupDelay"
 	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
 	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
+	// TaskSchedulerGlobalMaxQPS is the max qps all task schedulers in the cluster can schedule tasks
+	// If value less or equal to 0, will fall back to TaskSchedulerMaxQPS
+	TaskSchedulerGlobalMaxQPS = "history.taskSchedulerGlobalMaxQPS"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerGlobalNamespaceMaxQPS is the max qps all task schedulers in the cluster can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS
+	TaskSchedulerGlobalNamespaceMaxQPS = "history.taskSchedulerGlobalNamespaceMaxQPS"
 	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
@@ -817,6 +823,9 @@ const (
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
+	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
+	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"

@@ -108,3 +108,7 @@ issues:
     - path: _test\.go
       linters:
         - goerr113
+    - path: ^tools\/.+\.go
+      linters:
+        - goerr113
+        - revive

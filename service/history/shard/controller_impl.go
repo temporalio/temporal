@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -361,7 +360,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 	startTime := time.Now()
 	// Enforce a max limit to ensure we close the shard in a reasonable time,
 	// and to indirectly limit the number of lingering shards.
-	timeLimit := util.Min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
+	timeLimit := min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
 	ctx, cancel := context.WithTimeout(ctx, timeLimit)
 	defer cancel()
 
@@ -434,7 +433,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		_ = shard.AssertOwnership(assertCtx)
 	}
 
-	concurrency := int64(util.Max(c.config.AcquireShardConcurrency(), 1))
+	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
 	sem := semaphore.NewWeighted(concurrency)
 	numShards := c.config.NumberOfShards
 	randomStartOffset := rand.Int31n(numShards)

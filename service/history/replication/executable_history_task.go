@@ -26,22 +26,23 @@ package replication
 
 import (
 	"context"
+	"sync"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -52,7 +53,18 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req *historyservice.ReplicateEventsV2Request
+		baseExecutionInfo   *workflowpb.BaseExecutionInfo
+		versionHistoryItems []*historyspb.VersionHistoryItem
+		eventsBlob          *common.DataBlob
+		newRunEventsBlob    *common.DataBlob
+
+		deserializeLock   sync.Mutex
+		eventsDesResponse *eventsDeserializeResponse
+	}
+	eventsDeserializeResponse struct {
+		events       []*historypb.HistoryEvent
+		newRunEvents []*historypb.HistoryEvent
+		err          error
 	}
 )
 
@@ -78,18 +90,11 @@ func NewExecutableHistoryTask(
 			time.Now().UTC(),
 			sourceClusterName,
 		),
-		req: &historyservice.ReplicateEventsV2Request{
-			NamespaceId: task.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowId,
-				RunId:      task.RunId,
-			},
-			BaseExecutionInfo:   task.BaseExecutionInfo,
-			VersionHistoryItems: task.VersionHistoryItems,
-			Events:              task.Events,
-			// new run events does not need version history since there is no prior events
-			NewRunEvents: task.NewRunEvents,
-		},
+
+		baseExecutionInfo:   task.BaseExecutionInfo,
+		versionHistoryItems: task.VersionHistoryItems,
+		eventsBlob:          task.GetEvents(),
+		newRunEventsBlob:    task.GetNewRunEvents(),
 	}
 }
 
@@ -130,7 +135,19 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateEventsV2(ctx, e.req)
+	events, newRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
+
+	return engine.ReplicateHistoryEvents(
+		ctx,
+		e.WorkflowKey,
+		e.baseExecutionInfo,
+		e.versionHistoryItems,
+		[][]*historypb.HistoryEvent{events},
+		newRunEvents,
+	)
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
@@ -177,7 +194,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return err
 	}
 
-	events, err := serialization.NewSerializer().DeserializeEvents(e.req.Events)
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
 			tag.ShardID(shardContext.GetShardID()),
@@ -227,4 +244,56 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+}
+
+func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+	e.deserializeLock.Lock()
+	defer e.deserializeLock.Unlock()
+
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+
+	defer func() {
+		if retError != nil {
+			e.eventsDesResponse = &eventsDeserializeResponse{
+				events:       nil,
+				newRunEvents: nil,
+				err:          retError,
+			}
+		}
+	}()
+
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
+	if err != nil {
+		e.Logger.Error("unable to deserialize history events",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	}
+
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.newRunEventsBlob)
+	if err != nil {
+		e.Logger.Error("unable to deserialize new run history events",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	}
+	e.eventsDesResponse = &eventsDeserializeResponse{
+		events:       events,
+		newRunEvents: newRunEvents,
+		err:          nil,
+	}
+	return events, newRunEvents, err
 }

@@ -29,7 +29,7 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: v1.19.0
+      version: v1.21.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
