@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -63,7 +64,8 @@ type (
 		maxRateMultiplier float64
 		curRateMultiplier float64
 
-		logger log.Logger
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	dynamicRateLimitingOptions struct {
@@ -89,6 +91,7 @@ func NewHealthRequestRateLimiterImpl(
 	healthSignals persistence.HealthSignalAggregator,
 	rateFn quotas.RateFn,
 	params DynamicRateLimitingParams,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *HealthRequestRateLimiterImpl {
 	limiter := &HealthRequestRateLimiterImpl{
@@ -102,6 +105,7 @@ func NewHealthRequestRateLimiterImpl(
 		minRateMultiplier: DefaultMinRateMultiplier,
 		maxRateMultiplier: DefaultMaxRateMultiplier,
 		curRateMultiplier: DefaultMaxRateMultiplier,
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 	limiter.refreshDynamicParams()
@@ -152,12 +156,14 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 		rl.curRateMultiplier = math.Max(rl.minRateMultiplier, rl.curRateMultiplier-rl.curOptions.RateBackoffStepSize)
 		rl.rateLimiter.SetRPS(rl.curRateMultiplier * rl.rateFn())
 		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
+		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.GetMetricName()).Record(rl.curRateMultiplier)
 		rl.logger.Info("Health threshold exceeded, reducing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
 	} else if rl.curRateMultiplier < rl.maxRateMultiplier {
 		// already doing backoff and under thresholds, increase limit
 		rl.curRateMultiplier = math.Min(rl.maxRateMultiplier, rl.curRateMultiplier+rl.curOptions.RateIncreaseStepSize)
 		rl.rateLimiter.SetRPS(rl.curRateMultiplier * rl.rateFn())
 		rl.rateLimiter.SetBurst(int(rl.rateToBurstRatio * rl.rateFn()))
+		rl.metricsHandler.Gauge(metrics.DynamicRateLimiterMultiplier.GetMetricName()).Record(rl.curRateMultiplier)
 		rl.logger.Info("System healthy, increasing rate limit.", tag.NewFloat64("newMulti", rl.curRateMultiplier), tag.NewFloat64("newRate", rl.rateLimiter.Rate()), tag.NewFloat64("latencyAvg", rl.healthSignals.AverageLatency()), tag.NewFloat64("errorRatio", rl.healthSignals.ErrorRatio()))
 	}
 }
