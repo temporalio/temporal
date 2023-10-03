@@ -315,6 +315,10 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		return err
 	}
 
+	// If workflow has many activity retries (bug in activity code e.g.,), the state transition count can be
+	// large but the number of actual state transition that is applied on target cluster can be very small.
+	// Take the minimum between StateTransitionCount and HistoryLength as heuristic to avoid unnecessary throttling
+	// in such situation.
 	count := min(resp.StateTransitionCount, resp.HistoryLength)
 	for count > 0 {
 		token := min(int(count), rateLimiter.Burst())
