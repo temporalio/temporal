@@ -144,11 +144,12 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		ctx, cancel := newTaskContext(namespaceName)
 		defer cancel()
 
-		if resendErr := e.Resend(
+		if doContinue, resendErr := e.Resend(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
 			retryErr,
-		); resendErr != nil {
+			ResendAttempt,
+		); resendErr != nil || !doContinue {
 			return err
 		}
 		return e.Execute()

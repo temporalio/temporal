@@ -249,7 +249,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(true, nil)
 
 	s.NoError(s.task.HandleErr(err))
 }
@@ -268,7 +268,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, errors.New("OwO"))
 
 	s.Equal(err, s.task.HandleErr(err))
 }

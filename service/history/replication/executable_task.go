@@ -58,14 +58,17 @@ const (
 
 const (
 	applyReplicationTimeout = 20 * time.Second
+
+	ResendAttempt = 2
 )
 
 var (
 	TaskRetryPolicy = backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithBackoffCoefficient(1.2).
-		WithMaximumInterval(5 * time.Second).
-		WithMaximumAttempts(80).
-		WithExpirationInterval(5 * time.Minute)
+			WithBackoffCoefficient(1.2).
+			WithMaximumInterval(5 * time.Second).
+			WithMaximumAttempts(80).
+			WithExpirationInterval(5 * time.Minute)
+	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
 type (
@@ -87,7 +90,8 @@ type (
 			ctx context.Context,
 			remoteCluster string,
 			retryErr *serviceerrors.RetryReplication,
-		) error
+			remainingAttempt int,
+		) (bool, error)
 		DeleteWorkflow(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
@@ -280,7 +284,20 @@ func (e *ExecutableTaskImpl) Resend(
 	ctx context.Context,
 	remoteCluster string,
 	retryErr *serviceerrors.RetryReplication,
-) error {
+	remainingAttempt int,
+) (bool, error) {
+	remainingAttempt--
+	if remainingAttempt < 0 {
+		e.Logger.Error("resend history attempts exceeded",
+			tag.WorkflowNamespaceID(retryErr.NamespaceId),
+			tag.WorkflowID(retryErr.WorkflowId),
+			tag.WorkflowRunID(retryErr.RunId),
+			tag.Value(retryErr),
+			tag.Error(ErrResendAttemptExceeded),
+		)
+		return false, ErrResendAttemptExceeded
+	}
+
 	e.MetricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
@@ -293,7 +310,7 @@ func (e *ExecutableTaskImpl) Resend(
 		)
 	}()
 
-	resendErr := e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
+	switch resendErr := e.ProcessToolBox.NDCHistoryResender.SendSingleWorkflowHistory(
 		ctx,
 		remoteCluster,
 		namespace.ID(retryErr.NamespaceId),
@@ -303,11 +320,10 @@ func (e *ExecutableTaskImpl) Resend(
 		retryErr.StartEventVersion,
 		retryErr.EndEventId,
 		retryErr.EndEventVersion,
-	)
-	switch resendErr.(type) {
+	).(type) {
 	case nil:
 		// no-op
-		return nil
+		return true, nil
 	case *serviceerror.NotFound:
 		e.Logger.Error(
 			"workflow not found in source cluster, proceed to cleanup",
@@ -316,7 +332,7 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowRunID(retryErr.RunId),
 		)
 		// workflow is not found in source cluster, cleanup workflow in target cluster
-		return e.DeleteWorkflow(
+		return false, e.DeleteWorkflow(
 			ctx,
 			definition.NewWorkflowKey(
 				retryErr.NamespaceId,
@@ -324,6 +340,29 @@ func (e *ExecutableTaskImpl) Resend(
 				retryErr.RunId,
 			),
 		)
+	case *serviceerrors.RetryReplication:
+		// it is possible that resend will trigger another resend, e.g.
+		// 1. replicating a workflow which is a reset workflow (call this workflow `new workflow`)
+		// 2. base workflow (call this workflow `old workflow`) of reset workflow is deleted on
+		//	src cluster and never replicated to target cluster
+		// 3. when any of events of the new workflow arrive at target cluster
+		//  a. using base workflow info to resend until branching point between old & new workflow
+		//  b. attempting to use old workflow history events to replay for mutable state then apply new workflow events
+		//  c. attempt failed due to old workflow does not exist
+		//  d. return error to resend new workflow before the branching point
+
+		// handle 2nd resend error, then 1st resend error
+		if _, err := e.Resend(ctx, remoteCluster, resendErr, remainingAttempt); err == nil {
+			return e.Resend(ctx, remoteCluster, retryErr, remainingAttempt)
+		}
+		e.Logger.Error("error resend history for history event",
+			tag.WorkflowNamespaceID(retryErr.NamespaceId),
+			tag.WorkflowID(retryErr.WorkflowId),
+			tag.WorkflowRunID(retryErr.RunId),
+			tag.Value(retryErr),
+			tag.Error(resendErr),
+		)
+		return false, resendErr
 	default:
 		e.Logger.Error("error resend history for history event",
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
@@ -332,7 +371,7 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.Value(retryErr),
 			tag.Error(resendErr),
 		)
-		return resendErr
+		return false, resendErr
 	}
 }
 
