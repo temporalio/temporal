@@ -3610,9 +3610,14 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		return nil, errBatchAPINotAllowed
 	}
 
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace:     request.GetNamespace(),
-		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
+		PageSize:      request.GetPageSize(),
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s' and %s='%s'",
 			searchattribute.WorkflowType,
