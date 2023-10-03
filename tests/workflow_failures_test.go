@@ -47,12 +47,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestWorkflowTimeout() {
+func (s *functionalSuite) TestWorkflowTimeout() {
 	startTime := time.Now().UTC()
 
-	id := "integration-workflow-timeout"
-	wt := "integration-workflow-timeout-type"
-	tl := "integration-workflow-timeout-taskqueue"
+	id := "functional-workflow-timeout"
+	wt := "functional-workflow-timeout-type"
+	tl := "functional-workflow-timeout-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -128,10 +128,10 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *integrationSuite) TestWorkflowTaskFailed() {
-	id := "integration-workflowtask-failed-test"
-	wt := "integration-workflowtask-failed-test-type"
-	tl := "integration-workflowtask-failed-test-taskqueue"
+func (s *functionalSuite) TestWorkflowTaskFailed() {
+	id := "functional-workflowtask-failed-test"
+	wt := "functional-workflowtask-failed-test-type"
+	tl := "functional-workflowtask-failed-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -325,10 +325,10 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
 }
 
-func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
-	id := "integration-respond-workflow-task-completed-test"
-	wt := "integration-respond-workflow-task-completed-test-type"
-	tq := "integration-respond-workflow-task-completed-test-taskqueue"
+func (s *functionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+	id := "functional-respond-workflow-task-completed-test"
+	wt := "functional-respond-workflow-task-completed-test-type"
+	tq := "functional-respond-workflow-task-completed-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

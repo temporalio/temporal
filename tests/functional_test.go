@@ -44,37 +44,37 @@ import (
 )
 
 type (
-	integrationSuite struct {
+	functionalSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		IntegrationBase
+		FunctionalTestBase
 	}
 )
 
-func (s *integrationSuite) SetupSuite() {
+func (s *functionalSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.RetentionTimerJitterDuration: time.Second,
 		dynamicconfig.EnableEagerWorkflowStart:     true,
 	}
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/func_test_cluster.yaml")
 }
 
-func (s *integrationSuite) TearDownSuite() {
+func (s *functionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *integrationSuite) SetupTest() {
+func (s *functionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func TestIntegrationSuite(t *testing.T) {
+func TestFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(integrationSuite))
+	suite.Run(t, new(functionalSuite))
 }
 
-func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *functionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
@@ -87,7 +87,7 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 	return err
 }
 
-func (s *integrationSuite) closeShard(wid string) {
+func (s *functionalSuite) closeShard(wid string) {
 	s.T().Helper()
 
 	resp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
@@ -101,7 +101,7 @@ func (s *integrationSuite) closeShard(wid string) {
 	s.NoError(err)
 }
 
-func unmarshalAny[T proto.Message](s *integrationSuite, a *types.Any) T {
+func unmarshalAny[T proto.Message](s *functionalSuite, a *types.Any) T {
 	s.T().Helper()
 	pb := new(T)
 	ppb := reflect.ValueOf(pb).Elem()
@@ -112,14 +112,14 @@ func unmarshalAny[T proto.Message](s *integrationSuite, a *types.Any) T {
 	return *pb
 }
 
-func marshalAny(s *integrationSuite, pb proto.Message) *types.Any {
+func marshalAny(s *functionalSuite, pb proto.Message) *types.Any {
 	s.T().Helper()
 	a, err := types.MarshalAny(pb)
 	s.NoError(err)
 	return a
 }
 
-func decodeString(s *integrationSuite, pls *commonpb.Payloads) string {
+func decodeString(s *functionalSuite, pls *commonpb.Payloads) string {
 	s.T().Helper()
 	var str string
 	err := payloads.Decode(pls, &str)

@@ -64,11 +64,11 @@ const (
 
 type archivalSuite struct {
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 }
 
 func (s *archivalSuite) SetupSuite() {
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/func_test_cluster.yaml")
 }
 
 func (s *archivalSuite) TearDownSuite() {
@@ -198,7 +198,7 @@ func (s *archivalSuite) TestVisibilityArchival() {
 	}
 }
 
-func (s *IntegrationBase) getNamespaceID(namespace string) string {
+func (s *FunctionalTestBase) getNamespaceID(namespace string) string {
 	namespaceResp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	})

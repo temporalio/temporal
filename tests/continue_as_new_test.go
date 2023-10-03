@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestContinueAsNewWorkflow() {
-	id := "integration-continue-as-new-workflow-test"
-	wt := "integration-continue-as-new-workflow-test-type"
-	tl := "integration-continue-as-new-workflow-test-taskqueue"
+func (s *functionalSuite) TestContinueAsNewWorkflow() {
+	id := "functional-continue-as-new-workflow-test"
+	wt := "functional-continue-as-new-workflow-test-type"
+	tl := "functional-continue-as-new-workflow-test-taskqueue"
 	identity := "worker1"
 	saName := "CustomKeywordField"
 	// Uncomment this line to test with mapper.
@@ -155,10 +155,10 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal("Keyword", string(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 }
 
-func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
-	id := "integration-continue-as-new-workflow-timeout-test"
-	wt := "integration-continue-as-new-workflow-timeout-test-type"
-	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
+func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
+	id := "functional-continue-as-new-workflow-timeout-test"
+	wt := "functional-continue-as-new-workflow-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -256,10 +256,10 @@ GetHistoryLoop:
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
-	id := "integration-wf-continue-as-new-task-id-test"
-	wt := "integration-wf-continue-as-new-task-id-type"
-	tl := "integration-wf-continue-as-new-task-id-taskqueue"
+func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
+	id := "functional-wf-continue-as-new-task-id-test"
+	wt := "functional-wf-continue-as-new-task-id-type"
+	tl := "functional-wf-continue-as-new-task-id-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -346,7 +346,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 type (
 	ParentWithChildContinueAsNew struct {
-		suite *integrationSuite
+		suite *functionalSuite
 
 		parentID           string
 		parentType         string
@@ -366,7 +366,7 @@ type (
 	}
 )
 
-func newParentWithChildContinueAsNew(s *integrationSuite,
+func newParentWithChildContinueAsNew(s *functionalSuite,
 	parentID, parentType, childID, childType string,
 	closePolicy enumspb.ParentClosePolicy) *ParentWithChildContinueAsNew {
 	workflow := &ParentWithChildContinueAsNew{
@@ -466,12 +466,12 @@ func (w *ParentWithChildContinueAsNew) workflow(
 	return nil, nil
 }
 
-func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
-	parentID := "integration-child-workflow-with-continue-as-new-test-parent"
-	childID := "integration-child-workflow-with-continue-as-new-test-child"
-	wtParent := "integration-child-workflow-with-continue-as-new-test-parent-type"
-	wtChild := "integration-child-workflow-with-continue-as-new-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-test-taskqueue"
+func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
+	parentID := "functional-child-workflow-with-continue-as-new-test-parent"
+	childID := "functional-child-workflow-with-continue-as-new-test-child"
+	wtParent := "functional-child-workflow-with-continue-as-new-test-parent-type"
+	wtChild := "functional-child-workflow-with-continue-as-new-test-child-type"
+	tl := "functional-child-workflow-with-continue-as-new-test-taskqueue"
 	identity := "worker1"
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -549,12 +549,12 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	})
 }
 
-func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
-	parentID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent"
-	childID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child"
-	wtParent := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"
-	wtChild := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
+func (s *functionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
+	parentID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent"
+	childID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child"
+	wtParent := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"
+	wtChild := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child-type"
+	tl := "functional-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
 	identity := "worker1"
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}

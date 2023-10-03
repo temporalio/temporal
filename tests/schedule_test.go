@@ -74,9 +74,9 @@ worker restart/long-poll activity failure:
 */
 
 type (
-	scheduleIntegrationSuite struct {
+	scheduleFunctionalSuite struct {
 		*require.Assertions
-		IntegrationBase
+		FunctionalTestBase
 		hostPort      string
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -85,31 +85,31 @@ type (
 	}
 )
 
-func TestScheduleIntegrationSuite(t *testing.T) {
+func TestScheduleFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(scheduleIntegrationSuite))
+	suite.Run(t, new(scheduleFunctionalSuite))
 }
 
-func (s *scheduleIntegrationSuite) SetupSuite() {
+func (s *scheduleFunctionalSuite) SetupSuite() {
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/integration_test_cluster.yaml")
+		s.setupSuite("testdata/func_test_cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
-		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.setupSuite("testdata/func_test_es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
-func (s *scheduleIntegrationSuite) TearDownSuite() {
+func (s *scheduleFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *scheduleIntegrationSuite) SetupTest() {
+func (s *scheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
@@ -128,12 +128,12 @@ func (s *scheduleIntegrationSuite) SetupTest() {
 	}
 }
 
-func (s *scheduleIntegrationSuite) TearDownTest() {
+func (s *scheduleFunctionalSuite) TearDownTest() {
 	s.worker.Stop()
 	s.sdkClient.Close()
 }
 
-func (s *scheduleIntegrationSuite) TestBasics() {
+func (s *scheduleFunctionalSuite) TestBasics() {
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
@@ -428,7 +428,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	}, 10*time.Second, 1*time.Second)
 }
 
-func (s *scheduleIntegrationSuite) TestInput() {
+func (s *scheduleFunctionalSuite) TestInput() {
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"
 	wt := "sched-test-input-wt"
@@ -496,7 +496,7 @@ func (s *scheduleIntegrationSuite) TestInput() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
+func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
@@ -575,7 +575,7 @@ func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestRefresh() {
+func (s *scheduleFunctionalSuite) TestRefresh() {
 	sid := "sched-test-refresh"
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
@@ -665,7 +665,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestListBeforeRun() {
+func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 	sid := "sched-test-list-before-run"
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
@@ -738,7 +738,7 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 	time.Sleep(2 * time.Second)
 }
 
-func (s *scheduleIntegrationSuite) TestRateLimit() {
+func (s *scheduleFunctionalSuite) TestRateLimit() {
 	sid := "sched-test-rate-limit-%d"
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
@@ -817,7 +817,7 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
-func (s *scheduleIntegrationSuite) TestNextTimeCache() {
+func (s *scheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"

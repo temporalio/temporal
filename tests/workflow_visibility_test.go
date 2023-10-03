@@ -40,14 +40,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestVisibility() {
+func (s *functionalSuite) TestVisibility() {
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
-	id1 := "integration-visibility-test1"
-	id2 := "integration-visibility-test2"
-	wt := "integration-visibility-test-type"
-	tl := "integration-visibility-test-taskqueue"
+	id1 := "functional-visibility-test1"
+	id2 := "functional-visibility-test2"
+	wt := "functional-visibility-test-type"
+	tl := "functional-visibility-test-taskqueue"
 	identity := "worker1"
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{

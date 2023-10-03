@@ -78,7 +78,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 
-	fileName := "../testdata/xdc_integration_test_clusters.yaml"
+	fileName := "../testdata/xdc_func_test_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
 		fileName = tests.TestFlags.TestClusterConfigFile
 	}
@@ -94,7 +94,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 		config.DynamicConfigOverrides = s.dynamicConfigOverrides
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
-		clusterConfigs[i].Persistence.DBName = "integration_" + s.clusterNames[i]
+		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
 		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
 			Enabled:                true,

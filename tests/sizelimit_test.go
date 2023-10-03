@@ -50,36 +50,36 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-type sizeLimitIntegrationSuite struct {
+type sizeLimitFunctionalSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 }
 
 // This cluster use customized threshold for history config
-func (s *sizeLimitIntegrationSuite) SetupSuite() {
-	s.setupSuite("testdata/integration_sizelimit_cluster.yaml")
+func (s *sizeLimitFunctionalSuite) SetupSuite() {
+	s.setupSuite("testdata/func_sizelimit_cluster.yaml")
 }
 
-func (s *sizeLimitIntegrationSuite) TearDownSuite() {
+func (s *sizeLimitFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *sizeLimitIntegrationSuite) SetupTest() {
+func (s *sizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func TestSizeLimitIntegrationSuite(t *testing.T) {
+func TestSizeLimitFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(sizeLimitIntegrationSuite))
+	suite.Run(t, new(sizeLimitFunctionalSuite))
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
-	id := "integration-terminate-workflow-by-history-count-limit-test"
-	wt := "integration-terminate-workflow-by-history-count-limit-test-type"
-	tq := "integration-terminate-workflow-by-history-count-limit-test-taskqueue"
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+	id := "functional-terminate-workflow-by-history-count-limit-test"
+	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
+	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -244,11 +244,11 @@ SignalLoop:
 	s.True(isCloseCorrect)
 }
 
-func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
-	id := "integration-workflow-failed-large-payload"
-	wt := "integration-workflow-failed-large-payload-type"
-	tl := "integration-workflow-failed-large-payload-taskqueue"
+	id := "functional-workflow-failed-large-payload"
+	wt := "functional-workflow-failed-large-payload-type"
+	tl := "functional-workflow-failed-large-payload-taskqueue"
 	identity := "worker1"
 
 	largePayload := make([]byte, 1001)
@@ -342,10 +342,10 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.Fail("Missing signal event")
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
-	id := "integration-terminate-workflow-by-ms-size-limit-test"
-	wt := "integration-terminate-workflow-by-ms-size-limit-test-type"
-	tq := "integration-terminate-workflow-by-ms-size-limit-test-taskqueue"
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
+	id := "functional-terminate-workflow-by-ms-size-limit-test"
+	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
+	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -495,10 +495,10 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.True(isCloseCorrect)
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
-	id := "integration-terminate-workflow-by-history-size-limit-test"
-	wt := "integration-terminate-workflow-by-history-size-limit-test-type"
-	tq := "integration-terminate-workflow-by-history-size-limit-test-taskqueue"
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
+	id := "functional-terminate-workflow-by-history-size-limit-test"
+	wt := "functional-terminate-workflow-by-history-size-limit-test-type"
+	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq}

@@ -40,30 +40,30 @@ import (
 	"go.temporal.io/server/common/rpc"
 )
 
-type tlsIntegrationSuite struct {
-	IntegrationBase
+type tlsFunctionalSuite struct {
+	FunctionalTestBase
 	hostPort  string
 	sdkClient sdkclient.Client
 }
 
-func TestTLSIntegrationSuite(t *testing.T) {
+func TestTLSFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(tlsIntegrationSuite))
+	suite.Run(t, new(tlsFunctionalSuite))
 }
 
-func (s *tlsIntegrationSuite) SetupSuite() {
-	s.setupSuite("testdata/tls_integration_test_cluster.yaml")
+func (s *tlsFunctionalSuite) SetupSuite() {
+	s.setupSuite("testdata/tls_func_test_cluster.yaml")
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
 }
 
-func (s *tlsIntegrationSuite) TearDownSuite() {
+func (s *tlsFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *tlsIntegrationSuite) SetupTest() {
+func (s *tlsFunctionalSuite) SetupTest() {
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -77,11 +77,11 @@ func (s *tlsIntegrationSuite) SetupTest() {
 	}
 }
 
-func (s *tlsIntegrationSuite) TearDownTest() {
+func (s *tlsFunctionalSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *tlsIntegrationSuite) TestGRPCMTLS() {
+func (s *tlsFunctionalSuite) TestGRPCMTLS() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 
@@ -97,7 +97,7 @@ func (s *tlsIntegrationSuite) TestGRPCMTLS() {
 	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *tlsIntegrationSuite) TestHTTPMTLS() {
+func (s *tlsFunctionalSuite) TestHTTPMTLS() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -129,7 +129,7 @@ func (s *tlsIntegrationSuite) TestHTTPMTLS() {
 	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *tlsIntegrationSuite) trackAuthInfoByCall() *sync.Map {
+func (s *tlsFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
 	s.testCluster.host.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {

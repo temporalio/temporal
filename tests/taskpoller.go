@@ -59,7 +59,7 @@ type (
 
 	messageHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
 
-	// TaskPoller is used in integration tests to poll workflow or activity task queues.
+	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
 		Engine                       FrontendClient
 		Namespace                    string
@@ -564,7 +564,7 @@ func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Paylo
 
 	f := &failurepb.Failure{
 		Message: err.Error(),
-		Source:  "IntegrationTests",
+		Source:  "Functional Tests",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			Type:         getErrorType(err),
 			NonRetryable: nonRetryable,
