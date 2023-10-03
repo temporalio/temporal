@@ -70,7 +70,7 @@ const (
 	dynamicRateLimitIncreaseStepSizeDefault = 0.1
 	// dynamicRateLimitMultiMinKey is the minimum the rate limit multiplier can be reduced to
 	dynamicRateLimitMultiMinKey     = "rateMultiMin"
-	dynamicRateLimitMultiMinDefault = 0.5
+	dynamicRateLimitMultiMinDefault = 0.8
 	// dynamicRateLimitMultiMaxKey is the maximum the rate limit multiplier can be increased to
 	dynamicRateLimitMultiMaxKey     = "rateMultiMax"
 	dynamicRateLimitMultiMaxDefault = 1.0
