@@ -1,5 +1,5 @@
 - persistence:
-    dbname: func_active_adv_vis
+    dbname: active_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -21,7 +21,7 @@
     numhistoryhosts: 1
 
 - persistence:
-    dbname: func_standby_adv_vis
+    dbname: standby_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10

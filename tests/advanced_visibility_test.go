@@ -2720,7 +2720,7 @@ func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 func (s *advancedVisibilitySuite) updateMaxResultWindow() {
 	esConfig := s.testClusterConfig.ESConfig
 
-	esClient, err := esclient.NewFuncTestsClient(esConfig, s.Logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
 	s.Require().NoError(err)
 
 	acknowledged, err := esClient.IndexPutSettings(

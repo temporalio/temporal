@@ -279,7 +279,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFuncTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFuncTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}
