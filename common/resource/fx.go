@@ -397,6 +397,10 @@ func RPCFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
+	interceptors := []grpc.UnaryClientInterceptor{grpc.UnaryClientInterceptor(traceInterceptor)}
+	if headersProvider != nil {
+		interceptors = append(interceptors, sdk.HeadersProviderInterceptor(headersProvider))
+	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		svcName,
@@ -404,10 +408,7 @@ func RPCFactoryProvider(
 		tlsConfigProvider,
 		frontendURL,
 		frontendTLSConfig,
-		[]grpc.UnaryClientInterceptor{
-			grpc.UnaryClientInterceptor(traceInterceptor),
-			sdk.HeadersProviderInterceptor(headersProvider),
-		},
+		interceptors,
 	), nil
 }
 
