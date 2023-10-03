@@ -300,7 +300,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", nil
 	}
