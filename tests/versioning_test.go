@@ -61,7 +61,7 @@ type versioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
@@ -90,7 +90,7 @@ func (s *versioningIntegSuite) SetupSuite() {
 		// interval so that we don't have to wait so long.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
 	}
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/cluster.yaml")
 }
 
 func (s *versioningIntegSuite) TearDownSuite() {
@@ -119,14 +119,14 @@ func (s *versioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func TestVersioningIntegrationSuite(t *testing.T) {
+func TestVersioningFuncSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, new(versioningIntegSuite))
 }
 
 func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
-	tq := "integration-versioning-basic"
+	tq := "functional-versioning-basic"
 
 	foo := s.prefixed("foo")
 	s.addNewDefaultBuildId(ctx, tq, foo)
@@ -142,7 +142,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 
 func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := NewContext()
-	tq := "integration-versioning-series"
+	tq := "functional-versioning-series"
 
 	for i := 0; i < 10; i++ {
 		s.addNewDefaultBuildId(ctx, tq, s.prefixed(fmt.Sprintf("foo-%d", i)))
@@ -162,7 +162,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 
 func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
-	tq := "integration-versioning-compat-not-found"
+	tq := "functional-versioning-compat-not-found"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -181,7 +181,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 
 func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
-	tq := "integration-versioning-persists"
+	tq := "functional-versioning-persists"
 
 	s.addNewDefaultBuildId(ctx, tq, s.prefixed("foo"))
 
@@ -199,7 +199,7 @@ func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 
 func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 	ctx := NewContext()
-	tq := "integration-versioning-propagate"
+	tq := "functional-versioning-propagate"
 
 	// ensure at least two hops
 	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree

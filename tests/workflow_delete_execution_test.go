@@ -41,10 +41,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
-	id := "integration-delete-workflow-completed-test"
-	wt := "integration-delete-workflow-completed-test-type"
-	tl := "integration-delete-workflow-completed-test-taskqueue"
+func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
+	id := "functional-delete-workflow-completed-test"
+	wt := "functional-delete-workflow-completed-test-type"
+	tl := "functional-delete-workflow-completed-test-taskqueue"
 	identity := "worker1"
 
 	const numExecutions = 5
@@ -177,10 +177,10 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 	}
 }
 
-func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
-	id := "integration-delete-workflow-running-test"
-	wt := "integration-delete-workflow-running-test-type"
-	tl := "integration-delete-workflow-running-test-taskqueue"
+func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
+	id := "functional-delete-workflow-running-test"
+	wt := "functional-delete-workflow-running-test-type"
+	tl := "functional-delete-workflow-running-test-taskqueue"
 	identity := "worker1"
 
 	const numExecutions = 5
@@ -289,10 +289,10 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 	}
 }
 
-func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
-	id := "integration-delete-workflow-running-with-terminate-test"
-	wt := "integration-delete-workflow-running-with-terminate-test-type"
-	tl := "integration-delete-workflow-running-with-terminate-test-taskqueue"
+func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
+	id := "functional-delete-workflow-running-with-terminate-test"
+	wt := "functional-delete-workflow-running-with-terminate-test-type"
+	tl := "functional-delete-workflow-running-with-terminate-test-taskqueue"
 	identity := "worker1"
 
 	const numExecutions = 3

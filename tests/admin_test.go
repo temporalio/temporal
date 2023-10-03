@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 )
 
-func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
+func (s *clientFunctionalSuite) TestAdminRebuildMutableState() {
 
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
@@ -52,7 +52,7 @@ func (s *clientIntegrationSuite) TestAdminRebuildMutableState() {
 
 	s.worker.RegisterWorkflow(workflowFn)
 
-	workflowID := "integration-admin-rebuild-mutable-state-test"
+	workflowID := "functional-admin-rebuild-mutable-state-test"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
 		TaskQueue:          s.taskQueue,

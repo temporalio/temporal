@@ -46,13 +46,13 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestChildWorkflowExecution() {
-	parentID := "integration-child-workflow-test-parent"
-	childID := "integration-child-workflow-test-child"
-	wtParent := "integration-child-workflow-test-parent-type"
-	wtChild := "integration-child-workflow-test-child-type"
-	tlParent := "integration-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestChildWorkflowExecution() {
+	parentID := "functional-child-workflow-test-parent"
+	childID := "functional-child-workflow-test-child"
+	wtParent := "functional-child-workflow-test-parent-type"
+	wtChild := "functional-child-workflow-test-child-type"
+	tlParent := "functional-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 	saName := "CustomKeywordField"
 	// Uncomment this line to test with mapper.
@@ -239,13 +239,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *integrationSuite) TestCronChildWorkflowExecution() {
-	parentID := "integration-cron-child-workflow-test-parent"
-	childID := "integration-cron-child-workflow-test-child"
-	wtParent := "integration-cron-child-workflow-test-parent-type"
-	wtChild := "integration-cron-child-workflow-test-child-type"
-	tlParent := "integration-cron-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-cron-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestCronChildWorkflowExecution() {
+	parentID := "functional-cron-child-workflow-test-parent"
+	childID := "functional-cron-child-workflow-test-child"
+	wtParent := "functional-cron-child-workflow-test-parent-type"
+	wtChild := "functional-cron-child-workflow-test-child-type"
+	tlParent := "functional-cron-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-cron-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	cronSchedule := "@every 3s"
@@ -430,13 +430,13 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 }
 
-func (s *integrationSuite) TestRetryChildWorkflowExecution() {
-	parentID := "integration-retry-child-workflow-test-parent"
-	childID := "integration-retry-child-workflow-test-child"
-	wtParent := "integration-retry-child-workflow-test-parent-type"
-	wtChild := "integration-retry-child-workflow-test-child-type"
-	tlParent := "integration-retry-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-retry-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestRetryChildWorkflowExecution() {
+	parentID := "functional-retry-child-workflow-test-parent"
+	childID := "functional-retry-child-workflow-test-child"
+	wtParent := "functional-retry-child-workflow-test-parent-type"
+	wtChild := "functional-retry-child-workflow-test-child-type"
+	tlParent := "functional-retry-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-retry-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
@@ -603,13 +603,13 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
-	parentID := "integration-retry-fail-child-workflow-test-parent"
-	childID := "integration-retry-fail-child-workflow-test-child"
-	wtParent := "integration-retry-fail-child-workflow-test-parent-type"
-	wtChild := "integration-retry-fail-child-workflow-test-child-type"
-	tlParent := "integration-retry-fail-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-retry-fail-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
+	parentID := "functional-retry-fail-child-workflow-test-parent"
+	childID := "functional-retry-fail-child-workflow-test-child"
+	wtParent := "functional-retry-fail-child-workflow-test-parent-type"
+	wtChild := "functional-retry-fail-child-workflow-test-child-type"
+	tlParent := "functional-retry-fail-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-retry-fail-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}

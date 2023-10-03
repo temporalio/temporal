@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_Sticky() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -88,7 +88,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Sticky() {
 	s.Equal(int32(1), replayCount)
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -144,7 +144,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "should-reach-here", nil
@@ -197,7 +197,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	// stop the worker, so the workflow won't be started before query
 	s.worker.Stop()
 
@@ -259,7 +259,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
 	wg.Wait()
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
