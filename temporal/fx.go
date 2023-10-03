@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
@@ -134,6 +135,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsConfig              *esclient.Config
 		EsClient              esclient.Client
+		HeadersProvider       sdk.HeadersProvider
 		MetricsHandler        metrics.Handler
 	}
 )
@@ -295,6 +297,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsConfig:              esConfig,
 		EsClient:              esClient,
+		HeadersProvider:       so.headersProvider,
 		MetricsHandler:        metricHandler,
 	}, nil
 }

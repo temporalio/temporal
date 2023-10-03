@@ -55,6 +55,7 @@ type (
 	clientFactory struct {
 		hostPort        string
 		tlsConfig       *tls.Config
+		headersProvider HeadersProvider
 		metricsHandler  *MetricsHandler
 		logger          log.Logger
 		sdklogger       sdklog.Logger
@@ -71,6 +72,7 @@ var (
 func NewClientFactory(
 	hostPort string,
 	tlsConfig *tls.Config,
+	headersProvider HeadersProvider,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	stickyCacheSize dynamicconfig.IntPropertyFn,
@@ -78,6 +80,7 @@ func NewClientFactory(
 	return &clientFactory{
 		hostPort:        hostPort,
 		tlsConfig:       tlsConfig,
+		headersProvider: headersProvider,
 		metricsHandler:  NewMetricsHandler(metricsHandler),
 		logger:          logger,
 		sdklogger:       log.NewSdkLogger(logger),
@@ -87,6 +90,7 @@ func NewClientFactory(
 
 func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.HostPort = f.hostPort
+	options.HeadersProvider = f.headersProvider
 	options.MetricsHandler = f.metricsHandler
 	options.Logger = f.sdklogger
 	options.ConnectionOptions = sdkclient.ConnectionOptions{

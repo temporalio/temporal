@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -179,6 +180,13 @@ func WithChainedFrontendGrpcInterceptors(
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customInterceptors = interceptors
+	})
+}
+
+// WithClientHeadersProvider adds headers to every outgoing request
+func WithClientHeadersProvider(h sdk.HeadersProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.headersProvider = h
 	})
 }
 
