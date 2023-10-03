@@ -343,6 +343,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
+		HeadersProvider            sdk.HeadersProvider
 		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
@@ -417,6 +418,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() log.Logger {
 				return params.Logger
 			},
+			func() rpc.ClientHeadersProvider { return params.ClientHeadersProvider },
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},
