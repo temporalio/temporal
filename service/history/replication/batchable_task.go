@@ -41,7 +41,7 @@ type (
 	BatchableTask interface {
 		TrackableExecutableTask
 		// BatchWith task and return a new TrackableExecutableTask
-		BatchWith(task BatchableTask) (TrackableExecutableTask, error)
+		BatchWith(task BatchableTask) (TrackableExecutableTask, bool)
 		CanBatch() bool
 		// MarkUnbatchable will mark current task not batchable, so CanBatch() will return false
 		MarkUnbatchable()
@@ -163,6 +163,9 @@ func (w *batchedTask) handleIndividualTasks() {
 }
 
 func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
+	if w.state != batchStateOpen {
+		return false
+	}
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -177,9 +180,8 @@ func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
 		return false
 	}
 
-	newBatchedTask, err := currentBatchableTask.BatchWith(incomingBatchableTask)
-	if err != nil {
-		w.logger.Info("Failed to batch incomingTask", tag.Error(err))
+	newBatchedTask, success := currentBatchableTask.BatchWith(incomingBatchableTask)
+	if !success {
 		return false
 	}
 	w.batchedTask = newBatchedTask

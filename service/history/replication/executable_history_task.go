@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -305,26 +306,23 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryE
 	return events, newRunEvents, err
 }
 
-func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (_ TrackableExecutableTask, retErr error) {
+func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
 	if !e.wantToBatch {
-		return nil, serviceerror.NewInvalidArgument("Current incomingTask does not want to be batched")
+		return nil, false
 	}
 	e.batchLock.Lock()
 	defer e.batchLock.Unlock()
 
-	if !e.wantToBatch {
-		return nil, serviceerror.NewInvalidArgument("Current incomingTask does not want to be batched")
+	if !e.wantToBatch || !incomingTask.CanBatch() {
+		return nil, false
 	}
 
 	incomingHistoryTask, err := e.validateIncomingBatchTask(incomingTask)
 	if err != nil {
-		return nil, err
+		e.Logger.Debug("Failed to batch task", tag.Error(err))
+		return nil, false
 	}
 
-	longerVersionHistory := e.versionHistoryItems
-	if len(incomingHistoryTask.versionHistoryItems) > len(longerVersionHistory) {
-		longerVersionHistory = incomingHistoryTask.versionHistoryItems
-	}
 	currentEvents, currentNewRunEvents, _ := e.getDeserializedEvents()
 	incomingEvents, incomingNewRunEvents, _ := incomingHistoryTask.getDeserializedEvents()
 
@@ -333,14 +331,21 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (_ Trackab
 		WorkflowKey:         e.WorkflowKey,
 		ExecutableTask:      e.ExecutableTask,
 		baseExecutionInfo:   e.baseExecutionInfo,
-		versionHistoryItems: longerVersionHistory,
+		versionHistoryItems: e.getLongerVersionHistory(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
 		eventsDesResponse: &eventsDeserializeResponse{
 			events:       append(currentEvents, incomingEvents...),
 			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
 			err:          nil,
 		},
 		wantToBatch: true,
-	}, nil
+	}, true
+}
+
+func (e *ExecutableHistoryTask) getLongerVersionHistory(a []*historyspb.VersionHistoryItem, b []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	if a[len(a)-1].GetEventId() > b[len(b)-1].GetEventId() {
+		return a
+	}
+	return b
 }
 
 func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask BatchableTask) (*ExecutableHistoryTask, error) {
@@ -375,24 +380,9 @@ func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask Batchable
 
 // checkVersionHistoryItem will check if incoming tasks Version history is on the same branch as the current one
 func (e *ExecutableHistoryTask) checkVersionHistoryItem(incomingHistoryItems []*historyspb.VersionHistoryItem) error {
-	if len(e.versionHistoryItems) == 0 || len(incomingHistoryItems) == 0 {
-		return serviceerror.NewInvalidArgument("version history empty")
-	}
-
-	firstNotEqualIndex := 0
-	for firstNotEqualIndex < len(e.versionHistoryItems) && firstNotEqualIndex < len(incomingHistoryItems) &&
-		e.versionHistoryItems[firstNotEqualIndex].Equal(incomingHistoryItems[firstNotEqualIndex]) {
-		firstNotEqualIndex++
-	}
-	currentLastIndex := len(e.versionHistoryItems) - 1
-	currentLastItem := e.versionHistoryItems[currentLastIndex]
-	if firstNotEqualIndex == len(e.versionHistoryItems) || // current version history is part of incoming version history
-		(firstNotEqualIndex == currentLastIndex &&
-			currentLastItem.Version == incomingHistoryItems[firstNotEqualIndex].Version &&
-			currentLastItem.EventId <= incomingHistoryItems[firstNotEqualIndex].EventId) {
+	if versionhistory.IsVersionItemsInSameBranch(e.versionHistoryItems, incomingHistoryItems) {
 		return nil
 	}
-
 	return serviceerror.NewInvalidArgument("version history does not match")
 }
 
@@ -422,8 +412,8 @@ func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryE
 		return err
 	}
 
-	if currentNewRunEvents != nil && incomingNewRunEvents != nil {
-		return serviceerror.NewInvalidArgument("only one new run events is expected")
+	if currentNewRunEvents != nil {
+		return serviceerror.NewInvalidArgument("Current Task is expected to be the last event of a workflow")
 	}
 	currentLastEvent := currentEvents[len(currentEvents)-1]
 	incomingFirstEvent := incomingEvents[0]
