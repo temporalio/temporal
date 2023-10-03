@@ -315,10 +315,10 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		return err
 	}
 
-	stateTransitionCount := resp.StateTransitionCount
-	for stateTransitionCount > 0 {
-		token := min(int(stateTransitionCount), rateLimiter.Burst())
-		stateTransitionCount -= int64(token)
+	count := min(resp.StateTransitionCount, resp.HistoryLength)
+	for count > 0 {
+		token := min(int(count), rateLimiter.Burst())
+		count -= int64(token)
 		_ = rateLimiter.ReserveN(time.Now(), token)
 	}
 
