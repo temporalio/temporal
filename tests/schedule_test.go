@@ -97,10 +97,10 @@ func (s *scheduleFunctionalSuite) SetupSuite() {
 	}
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/func_test_cluster.yaml")
+		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
-		s.setupSuite("testdata/func_test_es_cluster.yaml")
+		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }

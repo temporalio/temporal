@@ -52,7 +52,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *tlsFunctionalSuite) SetupSuite() {
-	s.setupSuite("testdata/tls_func_test_cluster.yaml")
+	s.setupSuite("testdata/tls_cluster.yaml")
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr

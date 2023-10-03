@@ -104,7 +104,7 @@ func (s *clientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
 	}
-	s.setupSuite("testdata/client_func_test_cluster.yaml")
+	s.setupSuite("testdata/client_cluster.yaml")
 
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {

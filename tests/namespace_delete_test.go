@@ -86,13 +86,13 @@ func (s *namespaceTestSuite) SetupSuite() {
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
 		var err error
-		s.clusterConfig, err = GetTestClusterConfig("testdata/func_test_cluster.yaml")
+		s.clusterConfig, err = GetTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
 		var err error
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.clusterConfig, err = GetTestClusterConfig("testdata/func_test_es_cluster.yaml")
+		s.clusterConfig, err = GetTestClusterConfig("testdata/es_cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}

@@ -59,7 +59,7 @@ type sizeLimitFunctionalSuite struct {
 
 // This cluster use customized threshold for history config
 func (s *sizeLimitFunctionalSuite) SetupSuite() {
-	s.setupSuite("testdata/func_sizelimit_cluster.yaml")
+	s.setupSuite("testdata/sizelimit_cluster.yaml")
 }
 
 func (s *sizeLimitFunctionalSuite) TearDownSuite() {

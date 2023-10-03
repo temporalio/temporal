@@ -109,7 +109,7 @@ func (s *nDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 
-	fileName := "../testdata/ndc_func_test_clusters.yaml"
+	fileName := "../testdata/ndc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
 		fileName = tests.TestFlags.TestClusterConfigFile
 	}
@@ -1533,7 +1533,7 @@ func (s *nDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch() {
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: "signal",
 						Input:      payloads.EncodeBytes([]byte{}),
-						Identity:   "ndc_func_test",
+						Identity:   "ndc_functional_test",
 					}},
 				},
 			},

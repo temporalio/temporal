@@ -90,7 +90,7 @@ func (s *versioningIntegSuite) SetupSuite() {
 		// interval so that we don't have to wait so long.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
 	}
-	s.setupSuite("testdata/func_test_cluster.yaml")
+	s.setupSuite("testdata/cluster.yaml")
 }
 
 func (s *versioningIntegSuite) TearDownSuite() {

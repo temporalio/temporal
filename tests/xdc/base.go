@@ -78,7 +78,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 
-	fileName := "../testdata/xdc_func_test_clusters.yaml"
+	fileName := "../testdata/xdc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
 		fileName = tests.TestFlags.TestClusterConfigFile
 	}

@@ -104,11 +104,11 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/func_test_cluster.yaml")
+		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	default:
-		s.setupSuite("testdata/func_test_es_cluster.yaml")
+		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
