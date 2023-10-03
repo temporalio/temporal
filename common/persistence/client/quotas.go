@@ -27,6 +27,7 @@ package client
 import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
@@ -90,6 +91,7 @@ func NewPriorityRateLimiter(
 	operatorRPSRatio OperatorRPSRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
@@ -100,7 +102,7 @@ func NewPriorityRateLimiter(
 		// per namespaceID rate limiters
 		newPriorityNamespaceRateLimiter(namespaceMaxQPS, hostMaxQPS, requestPriorityFn, operatorRPSRatio),
 		// host-level dynamic rate limiter
-		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, healthSignals, dynamicParams, logger),
+		newPriorityDynamicRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio, healthSignals, dynamicParams, metricsHandler, logger),
 		// basic host-level rate limiter
 		newPriorityRateLimiter(hostRateFn, requestPriorityFn, operatorRPSRatio),
 	)
@@ -192,15 +194,16 @@ func newPriorityDynamicRateLimiter(
 	operatorRPSRatio OperatorRPSRatio,
 	healthSignals p.HealthSignalAggregator,
 	dynamicParams DynamicRateLimitingParams,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range RequestPrioritiesOrdered {
 		// TODO: refactor this so dynamic rate adjustment is global for all priorities
 		if priority == CallerTypeDefaultPriority[headers.CallerTypeOperator] {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn, operatorRPSRatio), dynamicParams, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, operatorRateFn(rateFn, operatorRPSRatio), dynamicParams, metricsHandler, logger)
 		} else {
-			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, logger)
+			rateLimiters[priority] = NewHealthRequestRateLimiterImpl(healthSignals, rateFn, dynamicParams, metricsHandler, logger)
 		}
 	}
 
