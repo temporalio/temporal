@@ -27,23 +27,21 @@ package metrics
 
 // Common tags for all services
 const (
-	OperationTagName           = "operation"
-	ServiceRoleTagName         = "service_role"
-	CacheTypeTagName           = "cache_type"
-	FailureTagName             = "failure"
-	TaskCategoryTagName        = "task_category"
-	TaskTypeTagName            = "task_type"
-	TaskPriorityTagName        = "task_priority"
-	QueueReaderIDTagName       = "queue_reader_id"
-	QueueActionTagName         = "queue_action"
-	QueueTypeTagName           = "queue_type"
-	visibilityTypeTagName      = "visibility_type"
-	ErrorTypeTagName           = "error_type"
-	httpStatusTagName          = "http_status"
-	versionedTagName           = "versioned"
-	resourceExhaustedTag       = "resource_exhausted_cause"
-	standardVisibilityTagValue = "standard_visibility"
-	advancedVisibilityTagValue = "advanced_visibility"
+	OperationTagName            = "operation"
+	ServiceRoleTagName          = "service_role"
+	CacheTypeTagName            = "cache_type"
+	FailureTagName              = "failure"
+	TaskCategoryTagName         = "task_category"
+	TaskTypeTagName             = "task_type"
+	TaskPriorityTagName         = "task_priority"
+	QueueReaderIDTagName        = "queue_reader_id"
+	QueueActionTagName          = "queue_action"
+	QueueTypeTagName            = "queue_type"
+	visibilityPluginNameTagName = "visibility_plugin_name"
+	ErrorTypeTagName            = "error_type"
+	httpStatusTagName           = "http_status"
+	versionedTagName            = "versioned"
+	resourceExhaustedTag        = "resource_exhausted_cause"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -734,6 +732,19 @@ var (
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
 	)
+	TaskTerminalFailures = NewCounterDef(
+		"task_terminal_failures",
+		WithDescription("The number of times a history task failed with a terminal failure, causing it to be sent to the DLQ."),
+	)
+	TaskDLQFailures = NewCounterDef(
+		"task_dlq_failures",
+		WithDescription("The number of times we failed to send a history task to the DLQ."),
+	)
+	TaskDLQSendLatency = NewTimerDef(
+		"task_dlq_latency",
+		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
+			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
+	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
 	TaskSkipped                     = NewCounterDef("task_skipped")
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
@@ -905,6 +916,7 @@ var (
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
+	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")

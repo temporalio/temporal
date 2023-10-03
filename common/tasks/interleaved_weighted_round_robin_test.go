@@ -35,11 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -91,23 +87,12 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
-			TaskChannelKeyFn:            func(task *testTask) int { return task.channelKey },
-			ChannelWeightFn:             func(key int) int { return s.channelKeyToWeight[key] },
-			ChannelWeightUpdateCh:       s.channelWeightUpdateCh,
-			ChannelQuotaRequestFn:       func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", 0, "") },
-			TaskChannelMetricTagsFn:     func(key int) []metrics.Tag { return nil },
-			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
-			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(false),
+			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
-		quotas.NewRequestRateLimiterAdapter(
-			quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return 1000 },
-			),
-		),
-		clock.NewRealTimeSource(),
 		logger,
-		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -155,8 +140,6 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	s.True(s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
-	// need to wait for the dispatch event loop to update the numInflightTask count
-	time.Sleep(time.Millisecond * 100)
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
@@ -170,9 +153,6 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	testWaitGroup.Add(1)
 
 	mockTask := newTestTask(s.controller, 0)
-	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
-		return false
-	}).Times(1)
 	mockTask.EXPECT().Abort().Do(func() {
 		testWaitGroup.Done()
 	}).Times(1)
@@ -191,9 +171,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	testWaitGroup.Add(1)
 
 	mockTask := newTestTask(s.controller, 0)
-	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
+	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
 		testWaitGroup.Done()
-		return true
 	})
 
 	s.scheduler.Submit(mockTask)
@@ -202,31 +181,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
-func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_FailThenSuccess() {
-	s.mockFIFOScheduler.EXPECT().Start()
-	s.scheduler.Start()
-	s.mockFIFOScheduler.EXPECT().Stop()
-
-	testWaitGroup := sync.WaitGroup{}
-	testWaitGroup.Add(1)
-
-	mockTask := newTestTask(s.controller, 0)
-	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
-		return false
-	}).Times(1)
-	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
-		testWaitGroup.Done()
-	}).Times(1)
-
-	s.scheduler.Submit(mockTask)
-
-	testWaitGroup.Wait()
-	// need to wait for the dispatch event loop to update the numInflightTask count
-	time.Sleep(time.Millisecond * 100)
-	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
-}
-
-func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail_Shutdown() {
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Shutdown() {
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
 	s.mockFIFOScheduler.EXPECT().Stop()
@@ -238,9 +193,6 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail_Sh
 	mockTask := newTestTask(s.controller, 0)
 	mockTask.EXPECT().Abort().Do(func() {
 		testWaitGroup.Done()
-	}).Times(1)
-	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
-		return false
 	}).Times(1)
 
 	s.scheduler.Submit(mockTask)
@@ -266,7 +218,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask0 := newTestTask(s.controller, 0)
 	s.scheduler.Submit(mockTask0)
 	numPendingTasks++
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 5, 5}, channelWeights)
@@ -275,7 +227,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask1 := newTestTask(s.controller, 1)
 	s.scheduler.Submit(mockTask1)
 	numPendingTasks++
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 5, 3}, channelWeights)
@@ -284,7 +236,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask2 := newTestTask(s.controller, 2)
 	s.scheduler.Submit(mockTask2)
 	numPendingTasks++
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2}, channelWeights)
@@ -293,7 +245,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask3 := newTestTask(s.controller, 3)
 	s.scheduler.Submit(mockTask3)
 	numPendingTasks++
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
@@ -304,20 +256,13 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	s.scheduler.Submit(mockTask2)
 	s.scheduler.Submit(mockTask3)
 	numPendingTasks += 4
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule() {
-	maxQPS := 1000000
-	s.scheduler.rateLimiter = quotas.NewRequestRateLimiterAdapter(
-		quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(maxQPS) },
-		),
-	)
-
 	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
 	s.mockFIFOScheduler.EXPECT().Stop()
@@ -349,7 +294,6 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 		testWaitGroup.Done()
 	}).AnyTimes()
 
-	startTime := time.Now()
 	for i := 0; i < numSubmitter; i++ {
 		channel := make(chan *testTask, numTasks)
 		for j := 0; j < numTasks; j++ {
@@ -372,15 +316,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	endWaitGroup.Wait()
 
 	testWaitGroup.Wait()
-	totalDuration := time.Since(startTime)
 
-	// need to wait for the dispatch event loop to update the numInflightTask count
-	time.Sleep(time.Millisecond * 100)
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
-
 	s.Len(submittedTasks, numSubmitter*numTasks)
-	minDuration := time.Duration((numSubmitter*numTasks-maxQPS)/maxQPS) * time.Second
-	s.Greater(totalDuration, minDuration)
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
@@ -409,7 +347,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 	s.scheduler.Submit(mockTask3)
 
 	channelWeights := []int{}
-	for _, channel := range s.scheduler.channels().flattenedChannels {
+	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
@@ -436,7 +374,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 		s.scheduler.Submit(mockTask0)
 		taskWG.Wait()
 
-		flattenedChannels := s.scheduler.channels().flattenedChannels
+		flattenedChannels := s.scheduler.channels()
 		if len(flattenedChannels) != totalWeight {
 			time.Sleep(50 * time.Millisecond)
 			continue
