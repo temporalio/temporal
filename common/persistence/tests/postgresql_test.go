@@ -617,3 +617,14 @@ func TestPostgreSQLClosedConnectionError(t *testing.T) {
 	s := newConnectionSuite(t, testData.Factory)
 	suite.Run(t, s)
 }
+
+func TestPostgreSQLQueueV2(t *testing.T) {
+	testData, tearDown := setUpPostgreSQLTest(t)
+	t.Cleanup(tearDown)
+
+	queue, err := testData.Factory.NewQueueV2()
+	if err != nil {
+		t.Fatalf("unable to create Queue: %v", err)
+	}
+	RunQueueV2TestSuite(t, queue)
+}

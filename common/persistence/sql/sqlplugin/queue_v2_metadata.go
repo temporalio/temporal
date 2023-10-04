@@ -22,24 +22,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package sqlplugin
 
 import (
 	"context"
-	"testing"
+	"database/sql"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence"
 )
 
-func TestNewQueueV2(t *testing.T) {
-	t.Parallel()
+type (
+	// QueueMetadataRow represents a row in queue_metadata table
+	QueueV2MetadataRow struct {
+		QueueType       persistence.QueueV2Type
+		QueueName       string
+		Payload         []byte
+		PayloadEncoding string
+		Version         int64
+	}
 
-	q := sql.NewQueueV2()
-	_, err := q.EnqueueMessage(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "EnqueueMessage")
-	_, err = q.ReadMessages(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "ReadMessages")
-}
+	QueueV2MetadataFilter struct {
+		QueueType persistence.QueueV2Type
+		QueueName string
+	}
+
+	QueueV2MetadataTypeFilter struct {
+		QueueType  persistence.QueueV2Type
+		PageSize   int
+		PageOffset int64
+	}
+
+	QueueV2Metadata interface {
+		InsertIntoQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
+		UpdateQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
+		SelectFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
+		SelectNameFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataTypeFilter) ([]QueueV2MetadataRow, error)
+	}
+)

@@ -22,12 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package v8
+package sqlplugin
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import (
+	"context"
+	"database/sql"
 
-// Version is the MySQL database release version
-const Version = "1.11"
+	"go.temporal.io/server/common/persistence"
+)
 
-// VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.3"
+type (
+	// QueueMessageRow represents a row in queue table
+	QueueV2MessageRow struct {
+		QueueType       persistence.QueueV2Type
+		QueueName       string
+		QueuePartition  int64
+		MessageID       int64
+		MessagePayload  []byte
+		MessageEncoding string
+	}
+
+	// QueueMessagesRangeFilter
+	QueueV2MessagesFilter struct {
+		QueueType    persistence.QueueV2Type
+		QueueName    string
+		Partition    int64
+		MinMessageID int64
+		MaxMessageID int64 // used for RangeDelete
+		PageSize     int   // used for RangeSelect
+	}
+
+	QueueV2Filter struct {
+		QueueType persistence.QueueV2Type
+		QueueName string
+		Partition int
+	}
+
+	QueueV2Message interface {
+		InsertIntoQueueV2Messages(ctx context.Context, row []QueueV2MessageRow) (sql.Result, error)
+		RangeSelectFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) ([]QueueV2MessageRow, error)
+		RangeDeleteFromQueueV2Messages(ctx context.Context, filter QueueV2MessagesFilter) (sql.Result, error)
+		GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter QueueV2Filter) (int64, error)
+	}
+)
