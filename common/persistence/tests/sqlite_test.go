@@ -1064,3 +1064,24 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
 }
+
+func TestSQLiteQueueV2(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	queue, err := factory.NewQueueV2()
+	if err != nil {
+		t.Fatalf("unable to create queue: %v", err)
+	}
+	t.Cleanup(func() {
+		factory.Close()
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	})
+	RunQueueV2TestSuite(t, queue)
+}
