@@ -85,7 +85,7 @@ func GenerateTask(
 		return nil, err
 	}
 
-	historyLength := max(mutableState.GetExecutionInfo().GetLastEventTaskId()-1, 0)
+	historyLength := max(mutableState.GetNextEventID()-1, 0)
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
 		StateTransitionCount: stateTransitionCount,
 		HistoryLength:        historyLength,
