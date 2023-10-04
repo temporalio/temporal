@@ -3617,7 +3617,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace:     request.GetNamespace(),
-		PageSize:      request.GetPageSize(),
+		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s' and %s='%s'",
 			searchattribute.WorkflowType,
