@@ -607,6 +607,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
     int64 state_transition_count = 1;
+    int64 history_length = 2;
 }
 
 message GetReplicationStatusRequest {

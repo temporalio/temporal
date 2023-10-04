@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -84,7 +85,10 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
+
+	historyLength := util.Max(mutableState.GetNextEventID()-1, 0)
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
 		StateTransitionCount: stateTransitionCount,
+		HistoryLength:        historyLength,
 	}, nil
 }
