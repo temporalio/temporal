@@ -411,7 +411,7 @@ func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned
 	tq := s.randomizeStr(s.T().Name())
 	v0 := s.prefixed("v0")
 
-	// RegisterWorkflow a versioned "v0" worker to execute a single workflow task to constrain a workflow on the task queue to a
+	// Register a versioned "v0" worker to execute a single workflow task to constrain a workflow on the task queue to a
 	// compatible set.
 	ch := make(chan struct{}, 1)
 	wf1 := func(ctx workflow.Context) (string, error) {

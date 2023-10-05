@@ -103,7 +103,7 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 	return &workercommon.DedicatedWorkerOptions{
 		TaskQueue: primitives.MigrationActivityTQ,
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
 			DisableWorkflowWorker:     true,
 		},
 	}
