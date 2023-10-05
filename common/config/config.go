@@ -563,6 +563,10 @@ type (
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
+		// Name of main auth header to pass to ClaimMapper (as `AuthToken`). Defaults to `authorization`.
+		AuthHeaderName string `yaml:"authHeaderName"`
+		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
+		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

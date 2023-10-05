@@ -2167,7 +2167,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeReset),
 							},
 						},
 						SearchAttributes: nil,
