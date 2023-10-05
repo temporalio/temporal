@@ -143,6 +143,7 @@ type GrpcServerOptions struct {
 
 func GrpcServerOptionsProvider(
 	logger log.Logger,
+	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -202,6 +203,8 @@ func GrpcServerOptionsProvider(
 			metricsHandler,
 			logger,
 			audienceGetter,
+			cfg.Global.Authorization.AuthHeaderName,
+			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
