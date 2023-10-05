@@ -42,6 +42,7 @@ type (
 	Config struct {
 		Version                      string                    `yaml:"version"`
 		URL                          url.URL                   `yaml:"url"`
+		URLs                         []url.URL                 `yaml:"urls"`
 		Username                     string                    `yaml:"username"`
 		Password                     string                    `yaml:"password"`
 		Indices                      map[string]string         `yaml:"indices"`
