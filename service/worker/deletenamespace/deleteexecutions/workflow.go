@@ -130,7 +130,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		})
 
 		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx2, activityHandles.GetNextPageTokenActivity, GetNextPageTokenParams{
+		err := workflow.ExecuteLocalActivity(ctx2, localActivityHandles.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
 			PageSize:      params.Config.PageSize,

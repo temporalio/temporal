@@ -41,11 +41,11 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-var activityHandles = &Activities{LocalActivities: &LocalActivities{}}
+var activityHandles = &Activities{}
+var localActivityHandles = &LocalActivities{}
 
 type (
 	Activities struct {
-		*LocalActivities
 		visibilityManager manager.VisibilityManager
 		historyClient     historyservice.HistoryServiceClient
 		metricsHandler    metrics.Handler
