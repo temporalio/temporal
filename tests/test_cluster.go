@@ -63,14 +63,14 @@ import (
 )
 
 type (
-	// TestCluster is a base struct for integration tests
+	// TestCluster is a base struct for functional tests
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
 		host         *temporalImpl
 	}
 
-	// ArchiverBase is a base struct for archiver provider being used in integration tests
+	// ArchiverBase is a base struct for archiver provider being used in functional tests
 	ArchiverBase struct {
 		metadata                 archiver.ArchivalMetadata
 		provider                 provider.ArchiverProvider
@@ -279,7 +279,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}

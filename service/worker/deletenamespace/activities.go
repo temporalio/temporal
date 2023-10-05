@@ -27,6 +27,7 @@ package deletenamespace
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -138,7 +139,12 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 	const initialSuffixLength = 5
 
 	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
-		newName := fmt.Sprintf("%s-deleted-%s", nsName, nsID.String()[:suffixLength])
+		suffix := fmt.Sprintf("-deleted-%s", nsID.String()[:suffixLength])
+		if strings.HasSuffix(nsName.String(), suffix) {
+			a.logger.Info("Namespace is already renamed for deletion")
+			return nsName, nil
+		}
+		newName := fmt.Sprintf("%s%s", nsName, suffix)
 
 		_, err := a.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 			Name: newName,
@@ -160,6 +166,10 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 }
 
 func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+	if newName == previousName {
+		return nil
+	}
+
 	ctx = headers.SetCallerName(ctx, previousName.String())
 
 	renameNamespaceRequest := &persistence.RenameNamespaceRequest{

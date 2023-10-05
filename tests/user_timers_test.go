@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/timer"
 )
 
-func (s *integrationSuite) TestUserTimers_Sequential() {
-	id := "integration-user-timers-sequential-test"
-	wt := "integration-user-timers-sequential-test-type"
-	tl := "integration-user-timers-sequential-test-taskqueue"
+func (s *functionalSuite) TestUserTimers_Sequential() {
+	id := "functional-user-timers-sequential-test"
+	wt := "functional-user-timers-sequential-test-type"
+	tl := "functional-user-timers-sequential-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -118,11 +118,11 @@ func (s *integrationSuite) TestUserTimers_Sequential() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestUserTimers_CapDuration() {
-	id := "integration-user-timers-cap-duration-test"
-	wt := "integration-user-timers-cap-duration-test-type"
-	tl := "integration-user-timers-cap-duration-test-taskqueue"
-	identity := "integration-user-timers-cap-duration-test-worker"
+func (s *functionalSuite) TestUserTimers_CapDuration() {
+	id := "functional-user-timers-cap-duration-test"
+	wt := "functional-user-timers-cap-duration-test-type"
+	tl := "functional-user-timers-cap-duration-test-taskqueue"
+	identity := "functional-user-timers-cap-duration-test-worker"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),

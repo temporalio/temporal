@@ -69,34 +69,34 @@ import (
 )
 
 type (
-	integrationClustersTestSuite struct {
+	functionalClustersTestSuite struct {
 		xdcBaseSuite
 	}
 )
 
-func TestIntegrationClustersTestSuite(t *testing.T) {
+func TestFuncClustersTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(integrationClustersTestSuite))
+	suite.Run(t, new(functionalClustersTestSuite))
 }
 
-func (s *integrationClustersTestSuite) SetupSuite() {
+func (s *functionalClustersTestSuite) SetupSuite() {
 	s.setupSuite([]string{"integ_active", "integ_standby"})
 }
 
-func (s *integrationClustersTestSuite) SetupTest() {
+func (s *functionalClustersTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-func (s *integrationClustersTestSuite) TearDownSuite() {
+func (s *functionalClustersTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *integrationClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+func (s *functionalClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
 	s.NoError(payloads.Decode(ps, &r))
 	return
 }
 
-func (s *integrationClustersTestSuite) TestNamespaceFailover() {
+func (s *functionalClustersTestSuite) TestNamespaceFailover() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -142,9 +142,9 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	s.Equal(int64(2), resp3.GetFailoverVersion())
 
 	// start workflow in new cluster
-	id := "integration-namespace-failover-test"
-	wt := "integration-namespace-failover-test-type"
-	tq := "integration-namespace-failover-test-taskqueue"
+	id := "functional-namespace-failover-test"
+	wt := "functional-namespace-failover-test-type"
+	tq := "functional-namespace-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
@@ -171,7 +171,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	s.NotNil(we.GetRunId())
 }
 
-func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
+func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	namespaceName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -200,9 +200,9 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.Equal(resp, resp2)
 
 	// start a workflow
-	id := "integration-simple-workflow-failover-test"
-	wt := "integration-simple-workflow-failover-test-type"
-	tq := "integration-simple-workflow-failover-test-taskqueue"
+	id := "functional-simple-workflow-failover-test"
+	wt := "functional-simple-workflow-failover-test-type"
+	tq := "functional-simple-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
@@ -452,7 +452,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
+func (s *functionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	namespace := "test-sticky-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -477,11 +477,11 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-sticky-workflow-task-workflow-failover-test"
-	wt := "integration-sticky-workflow-task-workflow-failover-test-type"
-	tq := "integration-sticky-workflow-task-workflow-failover-test-taskqueue"
-	stq1 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "integration-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
+	id := "functional-sticky-workflow-task-workflow-failover-test"
+	wt := "functional-sticky-workflow-task-workflow-failover-test-type"
+	tq := "functional-sticky-workflow-task-workflow-failover-test-taskqueue"
+	stq1 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
+	stq2 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
@@ -602,7 +602,7 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	s.True(workflowCompleted)
 }
 
-func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
+func (s *functionalClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
 	namespaceName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -631,9 +631,9 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.Equal(resp, resp2)
 
 	// start a workflow
-	id := "integration-start-workflow-failover-ID-reuse-policy-test"
-	wt := "integration-start-workflow-failover-ID-reuse-policy-test-type"
-	tl := "integration-start-workflow-failover-ID-reuse-policy-test-taskqueue"
+	id := "functional-start-workflow-failover-ID-reuse-policy-test"
+	wt := "functional-start-workflow-failover-ID-reuse-policy-test-type"
+	tl := "functional-start-workflow-failover-ID-reuse-policy-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -725,7 +725,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.Equal(2, workflowCompleteTimes)
 }
 
-func (s *integrationClustersTestSuite) TestTerminateFailover() {
+func (s *functionalClustersTestSuite) TestTerminateFailover() {
 	namespace := "test-terminate-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -750,9 +750,9 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-terminate-workflow-failover-test"
-	wt := "integration-terminate-workflow-failover-test-type"
-	tl := "integration-terminate-workflow-failover-test-taskqueue"
+	id := "functional-terminate-workflow-failover-test"
+	wt := "functional-terminate-workflow-failover-test-type"
+	tl := "functional-terminate-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -896,7 +896,7 @@ GetHistoryLoop2:
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
+func (s *functionalClustersTestSuite) TestResetWorkflowFailover() {
 	namespace := "test-reset-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -921,9 +921,9 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-reset-workflow-failover-test"
-	wt := "integration-reset-workflow-failover-test-type"
-	tl := "integration-reset-workflow-failover-test-taskqueue"
+	id := "functional-reset-workflow-failover-test"
+	wt := "functional-reset-workflow-failover-test-type"
+	tl := "functional-reset-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1053,7 +1053,7 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
 }
 
-func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
+func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
 	namespace := "test-continueAsNew-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1078,9 +1078,9 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-continueAsNew-workflow-failover-test"
-	wt := "integration-continueAsNew-workflow-failover-test-type"
-	tl := "integration-continueAsNew-workflow-failover-test-taskqueue"
+	id := "functional-continueAsNew-workflow-failover-test"
+	wt := "functional-continueAsNew-workflow-failover-test-type"
+	tl := "functional-continueAsNew-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1177,7 +1177,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 }
 
-func (s *integrationClustersTestSuite) TestSignalFailover() {
+func (s *functionalClustersTestSuite) TestSignalFailover() {
 	namespace := "test-signal-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1202,9 +1202,9 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-signal-workflow-failover-test"
-	wt := "integration-signal-workflow-failover-test-type"
-	tl := "integration-signal-workflow-failover-test-taskqueue"
+	id := "functional-signal-workflow-failover-test"
+	wt := "functional-signal-workflow-failover-test-type"
+	tl := "functional-signal-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1380,7 +1380,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) TestUserTimerFailover() {
+func (s *functionalClustersTestSuite) TestUserTimerFailover() {
 	namespace := "test-user-timer-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1405,9 +1405,9 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-user-timer-workflow-failover-test"
-	wt := "integration-user-timer-workflow-failover-test-type"
-	tl := "integration-user-timer-workflow-failover-test-taskqueue"
+	id := "functional-user-timer-workflow-failover-test"
+	wt := "functional-user-timer-workflow-failover-test-type"
+	tl := "functional-user-timer-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1538,7 +1538,7 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 }
 
-func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReconnect() {
+func (s *functionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReconnect() {
 	namespace := "test-force-workflow-task-close-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1690,7 +1690,7 @@ func (s *integrationClustersTestSuite) TestForceWorkflowTaskClose_WithClusterRec
 	s.NoError(err)
 }
 
-func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
+func (s *functionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1715,9 +1715,9 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// Start a workflow
-	id := "integration-transient-workflow-task-workflow-failover-test"
-	wt := "integration-transient-workflow-task-workflow-failover-test-type"
-	tl := "integration-transient-workflow-task-workflow-failover-test-taskqueue"
+	id := "functional-transient-workflow-task-workflow-failover-test"
+	wt := "functional-transient-workflow-task-workflow-failover-test-type"
+	tl := "functional-transient-workflow-task-workflow-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1797,7 +1797,7 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	s.True(workflowFinished)
 }
 
-func (s *integrationClustersTestSuite) TestCronWorkflowStartAndFailover() {
+func (s *functionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	namespace := "test-cron-workflow-start-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1822,9 +1822,9 @@ func (s *integrationClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-cron-workflow-start-and-failover-test"
-	wt := "integration-cron-workflow-start-and-failover-test-type"
-	tl := "integration-cron-workflow-start-and-failover-test-taskqueue"
+	id := "functional-cron-workflow-start-and-failover-test"
+	wt := "functional-cron-workflow-start-and-failover-test-type"
+	tl := "functional-cron-workflow-start-and-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1887,7 +1887,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.NoError(err)
 }
 
-func (s *integrationClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
+func (s *functionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	namespace := "test-cron-workflow-complete-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1912,9 +1912,9 @@ func (s *integrationClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-cron-workflow-complete-andfailover-test"
-	wt := "integration-cron-workflow-complete-andfailover-test-type"
-	tl := "integration-cron-workflow-complete-andfailover-test-taskqueue"
+	id := "functional-cron-workflow-complete-andfailover-test"
+	wt := "functional-cron-workflow-complete-andfailover-test-type"
+	tl := "functional-cron-workflow-complete-andfailover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -1994,7 +1994,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.NoError(err)
 }
 
-func (s *integrationClustersTestSuite) TestWorkflowRetryStartAndFailover() {
+func (s *functionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	namespace := "test-workflow-retry-start-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -2019,9 +2019,9 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-workflow-retry-start-and-failover-test"
-	wt := "integration-workflow-retry-start-and-failover-test-type"
-	tl := "integration-workflow-retry-start-and-failover-test-taskqueue"
+	id := "functional-workflow-retry-start-and-failover-test"
+	wt := "functional-workflow-retry-start-and-failover-test-type"
+	tl := "functional-workflow-retry-start-and-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -2091,7 +2091,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) TestWorkflowRetryFailAndFailover() {
+func (s *functionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	namespace := "test-workflow-retry-fail-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -2116,9 +2116,9 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	client2 := s.cluster2.GetFrontendClient() // standby
 
 	// start a workflow
-	id := "integration-workflow-retry-fail-and-failover-test"
-	wt := "integration-workflow-retry-fail-and-failover-test-type"
-	tl := "integration-workflow-retry-fail-and-failover-test-taskqueue"
+	id := "functional-workflow-retry-fail-and-failover-test"
+	wt := "functional-workflow-retry-fail-and-failover-test-type"
+	tl := "functional-workflow-retry-fail-and-failover-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
@@ -2196,11 +2196,11 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
-func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
+func (s *functionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace, true)
 
-	taskqueue := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
+	taskqueue := "functional-activity-heartbeat-workflow-failover-test-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
 
@@ -2233,7 +2233,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	// Start a workflow
 	startTime := time.Now()
-	workflowID := "integration-activity-heartbeat-workflow-failover-test"
+	workflowID := "functional-activity-heartbeat-workflow-failover-test"
 	run1, err := client1.ExecuteWorkflow(tests.NewContext(), sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
 		TaskQueue:          taskqueue,
@@ -2303,7 +2303,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 }
 
 // Uncomment if you need to debug history.
-// func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
+// func (s *funcClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
 // 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
 // 		WorkflowId: workflowID,
 // 		RunId:      runID,
@@ -2312,14 +2312,14 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 // 	common.PrettyPrintHistory(history, s.logger)
 // }
 
-func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
+func (s *functionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	namespace := "local-ns-to-be-promote-" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace, false)
 
-	taskqueue := "integration-local-ns-to-be-promote-taskqueue"
+	taskqueue := "functional-local-ns-to-be-promote-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
@@ -2667,14 +2667,14 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	verify(workflowID7, run7.GetRunID())
 }
 
-func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
+func (s *functionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	namespace := "force-replication" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace, true)
 
-	taskqueue := "integration-local-force-replication-task-queue"
+	taskqueue := "functional-local-force-replication-task-queue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
@@ -2791,14 +2791,14 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
 }
 
-func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
+func (s *functionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	namespace := "force-replication" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace, true)
 
-	taskqueue := "integration-force-replication-reset-task-queue"
+	taskqueue := "functional-force-replication-reset-task-queue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
@@ -2896,7 +2896,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	verifyHistory(workflowID, resp.GetRunId())
 }
 
-func (s *integrationClustersTestSuite) getHistory(client tests.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *functionalClustersTestSuite) getHistory(client tests.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(tests.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -2918,7 +2918,7 @@ func (s *integrationClustersTestSuite) getHistory(client tests.FrontendClient, n
 	return events
 }
 
-func (s *integrationClustersTestSuite) failover(
+func (s *functionalClustersTestSuite) failover(
 	namespace string,
 	targetCluster string,
 	targetFailoverVersion int64,
@@ -2943,7 +2943,7 @@ func (s *integrationClustersTestSuite) failover(
 	time.Sleep(cacheRefreshInterval)
 }
 
-func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
+func (s *functionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
 	clusters := s.clusterReplicationConfig()
 	if !isGlobalNamespace {
 		clusters = s.clusterReplicationConfig()[0:1]
@@ -2971,7 +2971,7 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlo
 	s.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
 }
 
-func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+func (s *functionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
 		Namespace: namespace,

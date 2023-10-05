@@ -40,10 +40,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestCancelTimer() {
-	id := "integration-cancel-timer-test"
-	wt := "integration-cancel-timer-test-type"
-	tl := "integration-cancel-timer-test-taskqueue"
+func (s *functionalSuite) TestCancelTimer() {
+	id := "functional-cancel-timer-test"
+	wt := "functional-cancel-timer-test-type"
+	tl := "functional-cancel-timer-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -171,10 +171,10 @@ func (s *integrationSuite) TestCancelTimer() {
 	}
 }
 
-func (s *integrationSuite) TestCancelTimer_CancelFiredAndBuffered() {
-	id := "integration-cancel-timer-fired-and-buffered-test"
-	wt := "integration-cancel-timer-fired-and-buffered-test-type"
-	tl := "integration-cancel-timer-fired-and-buffered-test-taskqueue"
+func (s *functionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
+	id := "functional-cancel-timer-fired-and-buffered-test"
+	wt := "functional-cancel-timer-fired-and-buffered-test-type"
+	tl := "functional-cancel-timer-fired-and-buffered-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{

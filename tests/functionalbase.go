@@ -60,8 +60,8 @@ import (
 )
 
 type (
-	// IntegrationBase is a base struct for integration tests
-	IntegrationBase struct {
+	// FunctionalTestBase is a base struct for functional tests
+	FunctionalTestBase struct {
 		suite.Suite
 
 		testCluster            *TestCluster
@@ -78,7 +78,7 @@ type (
 	}
 )
 
-func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
+func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string) {
 	s.setupLogger()
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
@@ -87,7 +87,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
-		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
+		s.Logger.Info("Running functional test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
 		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger)
 		if err != nil {
@@ -99,7 +99,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
-		s.Logger.Info("Running integration test against test cluster")
+		s.Logger.Info("Running functional test against test cluster")
 		cluster, err := NewCluster(clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
@@ -109,14 +109,14 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
 	}
 
-	s.namespace = s.randomizeStr("integration-test-namespace")
+	s.namespace = s.randomizeStr("functional-test-namespace")
 	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
-	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
+	s.foreignNamespace = s.randomizeStr("functional-foreign-test-namespace")
 	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	if clusterConfig.EnableArchival {
-		s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
+		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 
@@ -128,7 +128,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 // setupLogger sets the Logger for the test suite.
 // If the Logger is already set, this method does nothing.
 // If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
-func (s *IntegrationBase) setupLogger() {
+func (s *FunctionalTestBase) setupLogger() {
 	if s.Logger == nil {
 		s.Logger = log.NewTestLogger()
 	}
@@ -158,7 +158,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	return &options, nil
 }
 
-func (s *IntegrationBase) tearDownSuite() {
+func (s *FunctionalTestBase) tearDownSuite() {
 	s.Require().NoError(s.markNamespaceAsDeleted(s.namespace))
 	s.Require().NoError(s.markNamespaceAsDeleted(s.foreignNamespace))
 	if s.archivalNamespace != "" {
@@ -174,7 +174,7 @@ func (s *IntegrationBase) tearDownSuite() {
 	s.adminClient = nil
 }
 
-func (s *IntegrationBase) registerNamespace(
+func (s *FunctionalTestBase) registerNamespace(
 	namespace string,
 	retention time.Duration,
 	historyArchivalState enumspb.ArchivalState,
@@ -216,7 +216,7 @@ func (s *IntegrationBase) registerNamespace(
 	return err
 }
 
-func (s *IntegrationBase) markNamespaceAsDeleted(
+func (s *FunctionalTestBase) markNamespaceAsDeleted(
 	namespace string,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
@@ -231,22 +231,22 @@ func (s *IntegrationBase) markNamespaceAsDeleted(
 	return err
 }
 
-func (s *IntegrationBase) randomizeStr(id string) string {
+func (s *FunctionalTestBase) randomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
-func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
+func (s *FunctionalTestBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	_, _ = fmt.Println(s.formatHistory(&historypb.History{Events: events}))
 }
 
 //lint:ignore U1000 used for debugging.
-func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
+func (s *FunctionalTestBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	_, _ = fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
 }
 
-func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -268,27 +268,27 @@ func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.Workf
 	return events
 }
 
-func (s *IntegrationBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
+func (s *FunctionalTestBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
 	events := s.getHistory(namespace, execution)
 	s.Require().NotEmpty(events)
 	return events[len(events)-1]
 }
 
-func (s *IntegrationBase) decodePayloadsString(ps *commonpb.Payloads) string {
+func (s *FunctionalTestBase) decodePayloadsString(ps *commonpb.Payloads) string {
 	s.T().Helper()
 	var r string
 	s.NoError(payloads.Decode(ps, &r))
 	return r
 }
 
-func (s *IntegrationBase) decodePayloadsInt(ps *commonpb.Payloads) int {
+func (s *FunctionalTestBase) decodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
 	s.NoError(payloads.Decode(ps, &r))
 	return r
 }
 
-func (s *IntegrationBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
+func (s *FunctionalTestBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
 	s.T().Helper()
 	var buf []byte
 	s.NoError(payloads.Decode(ps, &buf))
@@ -296,7 +296,7 @@ func (s *IntegrationBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r
 	return
 }
 
-func (s *IntegrationBase) DurationNear(value, target, tolerance time.Duration) {
+func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
 	s.T().Helper()
 	s.Greater(value, target-tolerance)
 	s.Less(value, target+tolerance)
@@ -305,7 +305,7 @@ func (s *IntegrationBase) DurationNear(value, target, tolerance time.Duration) {
 // To register archival namespace we can't use frontend API as the retention period is set to 0 for testing,
 // and request will be rejected by frontend. Here we make a call directly to persistence to register
 // the namespace.
-func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) error {
+func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string) error {
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -342,7 +342,7 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 	return err
 }
 
-func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) string {
+func (s *FunctionalTestBase) formatHistoryCompact(history *historypb.History) string {
 	s.T().Helper()
 	var sb strings.Builder
 	for _, event := range history.Events {
@@ -354,7 +354,7 @@ func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) strin
 	return ""
 }
 
-func (s *IntegrationBase) formatHistory(history *historypb.History) string {
+func (s *FunctionalTestBase) formatHistory(history *historypb.History) string {
 	s.T().Helper()
 	var sb strings.Builder
 	for _, event := range history.Events {
@@ -370,7 +370,7 @@ func (s *IntegrationBase) formatHistory(history *historypb.History) string {
 	return ""
 }
 
-func (s *IntegrationBase) structToMap(strct any) map[string]any {
+func (s *FunctionalTestBase) structToMap(strct any) map[string]any {
 
 	strctV := reflect.ValueOf(strct)
 	strctT := strctV.Type()
@@ -396,12 +396,12 @@ func (s *IntegrationBase) structToMap(strct any) map[string]any {
 	return ret
 }
 
-func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
+func (s *FunctionalTestBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
 	s.T().Helper()
 	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
 }
 
-func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
+func (s *FunctionalTestBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
 	s.T().Helper()
 	expectedCompactHistory, expectedEventsAttributes := s.parseHistory(expectedHistory)
 	actualCompactHistory := s.formatHistoryCompact(actualHistory)
@@ -414,7 +414,7 @@ func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *hi
 	}
 }
 
-func (s *IntegrationBase) equalStructToMap(expectedMap map[string]any, actualStructV reflect.Value, eventID int64, attrPrefix string) {
+func (s *FunctionalTestBase) equalStructToMap(expectedMap map[string]any, actualStructV reflect.Value, eventID int64, attrPrefix string) {
 	s.T().Helper()
 
 	for attrName, expectedValue := range expectedMap {
@@ -442,7 +442,7 @@ func (s *IntegrationBase) equalStructToMap(expectedMap map[string]any, actualStr
 }
 
 // parseHistory accept history in a formatHistory format and returns compact history string and map of eventID to map of event attributes.
-func (s *IntegrationBase) parseHistory(expectedHistory string) (string, map[int64]map[string]any) {
+func (s *FunctionalTestBase) parseHistory(expectedHistory string) (string, map[int64]map[string]any) {
 	s.T().Helper()
 	h := &historypb.History{}
 	eventsAttrs := make(map[int64]map[string]any)

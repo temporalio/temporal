@@ -44,10 +44,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestRateLimitBufferedEvents() {
-	id := "integration-rate-limit-buffered-events-test"
-	wt := "integration-rate-limit-buffered-events-test-type"
-	tl := "integration-rate-limit-buffered-events-test-taskqueue"
+func (s *functionalSuite) TestRateLimitBufferedEvents() {
+	id := "functional-rate-limit-buffered-events-test"
+	wt := "functional-rate-limit-buffered-events-test-type"
+	tl := "functional-rate-limit-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -142,10 +142,10 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
 
-func (s *integrationSuite) TestBufferedEvents() {
-	id := "integration-buffered-events-test"
-	wt := "integration-buffered-events-test-type"
-	tl := "integration-buffered-events-test-taskqueue"
+func (s *functionalSuite) TestBufferedEvents() {
+	id := "functional-buffered-events-test"
+	wt := "functional-buffered-events-test-type"
+	tl := "functional-buffered-events-test-taskqueue"
 	identity := "worker1"
 	signalName := "buffered-signal"
 
@@ -259,10 +259,10 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
-	id := "integration-buffered-events-out-of-order-test"
-	wt := "integration-buffered-events-out-of-order-test-type"
-	tl := "integration-buffered-events-out-of-order-test-taskqueue"
+func (s *functionalSuite) TestBufferedEventsOutOfOrder() {
+	id := "functional-buffered-events-out-of-order-test"
+	wt := "functional-buffered-events-out-of-order-test-type"
+	tl := "functional-buffered-events-out-of-order-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution

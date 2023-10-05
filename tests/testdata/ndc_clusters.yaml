@@ -1,5 +1,5 @@
 - persistence:
-    dbname: integration_cluster_a
+    dbname: test_cluster_a
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -30,7 +30,7 @@
     numhistoryshards: 1
     numhistoryhosts: 1
 - persistence:
-    dbname: integration_cluster_b
+    dbname: cluster_b
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -61,7 +61,7 @@
     numhistoryshards: 1
     numhistoryhosts: 1
 - persistence:
-    dbname: integration_other
+    dbname: other
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10

@@ -22,25 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package queuestest
 
-import "flag"
+import (
+	"context"
 
-// TestFlags contains the feature flags for functional tests
-var TestFlags struct {
-	FrontendAddr                  string
-	FrontendHTTPAddr              string
-	PersistenceType               string
-	PersistenceDriver             string
-	TestClusterConfigFile         string
-	PersistenceFaultInjectionRate float64
+	"go.temporal.io/server/common/persistence"
+)
+
+// FakeDLQ is a DLQ which records the requests it receives and returns the given error upon DLQ.EnqueueTask.
+type FakeDLQ struct {
+	// Requests to write to the DLQ
+	Requests []*persistence.EnqueueTaskRequest
+	// Err to return on EnqueueTask
+	Err error
 }
 
-func init() {
-	flag.StringVar(&TestFlags.FrontendAddr, "frontendAddress", "", "host:port for temporal frontend service")
-	flag.StringVar(&TestFlags.FrontendHTTPAddr, "frontendHttpAddress", "", "host:port for temporal frontend HTTP service (only applies when frontendAddress set)")
-	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "sql", "type of persistence - [nosql or sql]")
-	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "sqlite", "driver of nosql / sql- [cassandra, mysql, postgresql, sqlite]")
-	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
-	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
+func (d *FakeDLQ) EnqueueTask(
+	_ context.Context,
+	request *persistence.EnqueueTaskRequest,
+) (*persistence.EnqueueTaskResponse, error) {
+	d.Requests = append(d.Requests, request)
+	return nil, d.Err
 }

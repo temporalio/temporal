@@ -162,7 +162,7 @@ func QueueSchedulerRateLimiterProvider(
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
-	return queues.NewSchedulerRateLimiter(
+	return queues.NewPrioritySchedulerRateLimiter(
 		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
 			MemberCounter:    serviceResolver,
 			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
@@ -183,8 +183,6 @@ func QueueSchedulerRateLimiterProvider(
 			PerInstanceQuota: config.PersistenceMaxQPS,
 			GlobalQuota:      config.PersistenceGlobalMaxQPS,
 		}.GetQuota,
-		config.TaskSchedulerRateLimiterStartupDelay,
-		timeSource,
 	)
 }
 
@@ -223,6 +221,7 @@ func (f *QueueFactoryBase) Stop() {
 
 func (f *QueueFactoryBase) NewExecutableFactory(
 	executor queues.Executor,
+	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	executableWrapper queues.ExecutableWrapper,
 	clusterMetadata cluster.Metadata,
@@ -233,7 +232,7 @@ func (f *QueueFactoryBase) NewExecutableFactory(
 ) queues.ExecutableFactory {
 	factory := queues.NewExecutableFactory(
 		executor,
-		f.HostScheduler,
+		scheduler,
 		rescheduler,
 		f.HostPriorityAssigner,
 		timeSource,

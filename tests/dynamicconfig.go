@@ -86,7 +86,7 @@ func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
 	delete(d.overrides, name)
 }
 
-// newTestDCClient - returns a dynamic config client for integration testing
+// newTestDCClient - returns a dynamic config client for functional testing
 func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
 	return &dcClient{
 		overrides: maps.Clone(staticOverrides),

@@ -25,21 +25,17 @@
 package queues
 
 import (
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
 )
 
 type SchedulerRateLimiter quotas.RequestRateLimiter
 
-func NewSchedulerRateLimiter(
+func NewPrioritySchedulerRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
 	hostRateFn quotas.RateFn,
 	persistenceNamespaceRateFn quotas.NamespaceRateFn,
 	persistenceHostRateFn quotas.RateFn,
-	startupDelay dynamicconfig.DurationPropertyFn,
-	timeSource clock.TimeSource,
 ) (SchedulerRateLimiter, error) {
 
 	namespaceRateFnWithFallback := func(namespace string) float64 {
@@ -72,38 +68,31 @@ func NewSchedulerRateLimiter(
 
 	priorityToRateLimiters := make(map[int]quotas.RequestRateLimiter, len(tasks.PriorityName))
 	for priority := range tasks.PriorityName {
-		var requestRateLimiter quotas.RequestRateLimiter
-		if priority == tasks.PriorityHigh {
-			requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
-				namespaceRateFnWithFallback,
-				hostRateFnWithFallback,
-			)
-		} else {
-			requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultOutgoingRateLimiter(hostRateFnWithFallback),
-			)
-		}
-		priorityToRateLimiters[int(priority)] = requestRateLimiter
+		priorityToRateLimiters[int(priority)] = newTaskRequestRateLimiter(
+			namespaceRateFnWithFallback,
+			hostRateFnWithFallback,
+		)
 	}
 
 	priorityLimiter := quotas.NewPriorityRateLimiter(requestPriorityFn, priorityToRateLimiters)
 
-	if startupDelay != nil {
-		return quotas.NewDelayedRequestRateLimiter(priorityLimiter, startupDelay(), timeSource)
-	}
 	return priorityLimiter, nil
 }
 
-func newHighPriorityTaskRequestRateLimiter(
+func newTaskRequestRateLimiter(
 	namespaceRateFn quotas.NamespaceRateFn,
 	hostRateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
-		quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
+		quotas.NewDefaultIncomingRateLimiter(hostRateFn),
 	)
 	namespaceRequestRateLimiterFn := func(req quotas.Request) quotas.RequestRateLimiter {
+		if len(req.Caller) == 0 {
+			return quotas.NoopRequestRateLimiter
+		}
+
 		return quotas.NewRequestRateLimiterAdapter(
-			quotas.NewDefaultOutgoingRateLimiter(
+			quotas.NewDefaultIncomingRateLimiter(
 				func() float64 {
 					if rate := namespaceRateFn(req.Caller); rate > 0 {
 						return rate

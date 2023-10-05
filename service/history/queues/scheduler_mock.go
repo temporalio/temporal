@@ -57,20 +57,6 @@ func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 	return m.recorder
 }
 
-// ChannelWeightFn mocks base method.
-func (m *MockScheduler) ChannelWeightFn() ChannelWeightFn {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ChannelWeightFn")
-	ret0, _ := ret[0].(ChannelWeightFn)
-	return ret0
-}
-
-// ChannelWeightFn indicates an expected call of ChannelWeightFn.
-func (mr *MockSchedulerMockRecorder) ChannelWeightFn() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChannelWeightFn", reflect.TypeOf((*MockScheduler)(nil).ChannelWeightFn))
-}
-
 // Start mocks base method.
 func (m *MockScheduler) Start() {
 	m.ctrl.T.Helper()

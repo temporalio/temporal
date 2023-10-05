@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -51,7 +52,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 		assert.Equal(t, metrics.OperationTagName, tags[0].Key())
 		assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
 		return metricsHandler
-	}).Times(2)
+	}).Times(1)
 
 	mockShard := shard.NewTestContext(
 		ctrl,
@@ -69,13 +70,16 @@ func TestArchivalQueueFactory(t *testing.T) {
 		},
 		tests.NewDynamicConfig(),
 	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	queueFactory := NewArchivalQueueFactory(ArchivalQueueFactoryParams{
 		QueueFactoryBaseParams: QueueFactoryBaseParams{
-			Config:         tests.NewDynamicConfig(),
-			TimeSource:     clock.NewEventTimeSource(),
-			MetricsHandler: metricsHandler,
-			Logger:         log.NewNoopLogger(),
+			NamespaceRegistry: mockShard.Resource.GetNamespaceRegistry(),
+			ClusterMetadata:   mockShard.Resource.GetClusterMetadata(),
+			Config:            tests.NewDynamicConfig(),
+			TimeSource:        clock.NewEventTimeSource(),
+			MetricsHandler:    metricsHandler,
+			Logger:            log.NewNoopLogger(),
 		},
 	})
 	queue := queueFactory.CreateQueue(mockShard, nil)

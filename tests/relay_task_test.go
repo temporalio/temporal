@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
-	id := "integration-relay-workflow-task-timeout-test"
-	wt := "integration-relay-workflow-task-timeout-test-type"
-	tl := "integration-relay-workflow-task-timeout-test-taskqueue"
+func (s *functionalSuite) TestRelayWorkflowTaskTimeout() {
+	id := "functional-relay-workflow-task-timeout-test"
+	wt := "functional-relay-workflow-task-timeout-test-type"
+	tl := "functional-relay-workflow-task-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution

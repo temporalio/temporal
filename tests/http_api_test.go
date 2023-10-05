@@ -43,7 +43,7 @@ type SomeJSONStruct struct {
 	SomeField string `json:"someField"`
 }
 
-func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
+func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -166,7 +166,7 @@ func (s *clientIntegrationSuite) TestHTTPAPIBasics() {
 
 }
 
-func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
+func (s *clientFunctionalSuite) TestHTTPAPIHeaders() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -219,7 +219,7 @@ func (s *clientIntegrationSuite) TestHTTPAPIHeaders() {
 	s.Require().Equal(headers.ServerVersion, listWorkflowMetadata[headers.ClientVersionHeaderName][0])
 }
 
-func (s *clientIntegrationSuite) TestHTTPAPIPretty() {
+func (s *clientFunctionalSuite) TestHTTPAPIPretty() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -231,20 +231,20 @@ func (s *clientIntegrationSuite) TestHTTPAPIPretty() {
 	s.Require().Contains(b, byte('\n'))
 }
 
-func (s *clientIntegrationSuite) httpGet(expectedStatus int, url string) (*http.Response, []byte) {
+func (s *clientFunctionalSuite) httpGet(expectedStatus int, url string) (*http.Response, []byte) {
 	req, err := http.NewRequest("GET", url, nil)
 	s.Require().NoError(err)
 	return s.httpRequest(expectedStatus, req)
 }
 
-func (s *clientIntegrationSuite) httpPost(expectedStatus int, url string, jsonBody string) (*http.Response, []byte) {
+func (s *clientFunctionalSuite) httpPost(expectedStatus int, url string, jsonBody string) (*http.Response, []byte) {
 	req, err := http.NewRequest("POST", url, strings.NewReader(jsonBody))
 	s.Require().NoError(err)
 	req.Header.Set("Content-Type", "application/json")
 	return s.httpRequest(expectedStatus, req)
 }
 
-func (s *clientIntegrationSuite) httpRequest(expectedStatus int, req *http.Request) (*http.Response, []byte) {
+func (s *clientFunctionalSuite) httpRequest(expectedStatus int, req *http.Request) (*http.Response, []byte) {
 	if req.URL.Scheme == "" {
 		req.URL.Scheme = "http"
 	}

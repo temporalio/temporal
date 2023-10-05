@@ -243,11 +243,11 @@ func QueueTypeTag(value string) Tag {
 	return &tagImpl{key: QueueTypeTagName, value: value}
 }
 
-func VisibilityTypeTag(value string) Tag {
+func VisibilityPluginNameTag(value string) Tag {
 	if value == "" {
 		value = unknownValue
 	}
-	return &tagImpl{key: visibilityTypeTagName, value: value}
+	return &tagImpl{key: visibilityPluginNameTagName, value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set.
@@ -257,19 +257,6 @@ func VersionedTag(versioned bool) Tag {
 
 func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
-}
-
-var (
-	standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
-	advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
-)
-
-func StandardVisibilityTypeTag() Tag {
-	return standardVisibilityTypeTag
-}
-
-func AdvancedVisibilityTypeTag() Tag {
-	return advancedVisibilityTypeTag
 }
 
 // HttpStatusTag returns a new httpStatusTag.

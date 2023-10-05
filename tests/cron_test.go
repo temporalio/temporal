@@ -51,10 +51,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
-	id := "integration-wf-cron-failed-infinite-test"
-	wt := "integration-wf-cron-failed-infinite-type"
-	tl := "integration-wf-cron-failed-infinite-taskqueue"
+func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
+	id := "functional-wf-cron-failed-infinite-test"
+	wt := "functional-wf-cron-failed-infinite-type"
+	tl := "functional-wf-cron-failed-infinite-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 5s"
 
@@ -132,10 +132,10 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 	s.True(seeRetry)
 }
 
-func (s *integrationSuite) TestCronWorkflow() {
-	id := "integration-wf-cron-test"
-	wt := "integration-wf-cron-type"
-	tl := "integration-wf-cron-taskqueue"
+func (s *functionalSuite) TestCronWorkflow() {
+	id := "functional-wf-cron-test"
+	wt := "functional-wf-cron-type"
+	tl := "functional-wf-cron-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 3s"
 
@@ -364,7 +364,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 }
 
-func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
+func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	// Run a cron workflow that completes in (almost) all the possible ways:
 	// Run 1: succeeds
 	// Run 2: fails
@@ -375,7 +375,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 
 	// Continue-as-new is not tested (behavior is currently not correct)
 
-	id := "integration-wf-cron-failed-test"
+	id := "functional-wf-cron-failed-test"
 	cronSchedule := "@every 3s"
 
 	targetBackoffDuration := 3 * time.Second
@@ -558,7 +558,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 	s.Equal("test is over", attrs4.GetReason())
 }
 
-func (s *clientIntegrationSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *clientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListOpenWorkflow(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -579,7 +579,7 @@ func (s *clientIntegrationSuite) listOpenWorkflowExecutions(start, end time.Time
 	panic("unreached")
 }
 
-func (s *clientIntegrationSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *clientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListClosedWorkflow(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{

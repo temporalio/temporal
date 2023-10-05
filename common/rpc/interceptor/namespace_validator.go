@@ -55,6 +55,7 @@ type (
 
 var (
 	errNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errBothNamespaceIDAndNameSet  = serviceerror.NewInvalidArgument("Only one of namespace name or Id should be set on request.")
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
@@ -62,6 +63,7 @@ var (
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+		"DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
@@ -248,6 +250,19 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, errNamespaceNotSet
 		}
 		return nil, nil
+	case *operatorservice.DeleteNamespaceRequest:
+		// special case for Operator.DeleteNamespace API which accept either Namespace ID or Namespace name as input
+		namespaceID := namespace.ID(request.GetNamespaceId())
+		if namespaceID.IsEmpty() && namespaceName.IsEmpty() {
+			return nil, errNamespaceNotSet
+		}
+		if !namespaceID.IsEmpty() && !namespaceName.IsEmpty() {
+			return nil, errBothNamespaceIDAndNameSet
+		}
+		if namespaceID != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	case *adminservice.AddSearchAttributesRequest,
 		*adminservice.RemoveSearchAttributesRequest,
 		*adminservice.GetSearchAttributesRequest,

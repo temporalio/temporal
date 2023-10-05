@@ -43,10 +43,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
-	id := "integration-transient-workflow-task-timeout-test"
-	wt := "integration-transient-workflow-task-timeout-test-type"
-	tl := "integration-transient-workflow-task-timeout-test-taskqueue"
+func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
+	id := "functional-transient-workflow-task-timeout-test"
+	wt := "functional-transient-workflow-task-timeout-test-type"
+	tl := "functional-transient-workflow-task-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -133,10 +133,10 @@ func (s *integrationSuite) TestTransientWorkflowTaskTimeout() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
-	id := "integration-transient-workflow-task-history-size-test"
-	wt := "integration-transient-workflow-task-history-size-test-type"
-	tl := "integration-transient-workflow-task-history-size-test-taskqueue"
+func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
+	id := "functional-transient-workflow-task-history-size-test"
+	wt := "functional-transient-workflow-task-history-size-test-type"
+	tl := "functional-transient-workflow-task-history-size-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -325,10 +325,10 @@ func (s *integrationSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 }
 
-func (s *integrationSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
-	id := "integration-no-transient-workflow-task-after-flush-buffered-events-test"
-	wt := "integration-no-transient-workflow-task-after-flush-buffered-events-test-type"
-	tl := "integration-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"
+func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
+	id := "functional-no-transient-workflow-task-after-flush-buffered-events-test"
+	wt := "functional-no-transient-workflow-task-after-flush-buffered-events-test-type"
+	tl := "functional-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution

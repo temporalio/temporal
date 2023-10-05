@@ -41,24 +41,25 @@ import (
 var _ manager.VisibilityManager = (*visibilityManagerMetrics)(nil)
 
 type visibilityManagerMetrics struct {
-	metricHandler            metrics.Handler
-	logger                   log.Logger
-	delegate                 manager.VisibilityManager
-	visibilityTypeMetricsTag metrics.Tag
+	metricHandler metrics.Handler
+	logger        log.Logger
+	delegate      manager.VisibilityManager
+
+	visibilityPluginNameMetricsTag metrics.Tag
 }
 
 func NewVisibilityManagerMetrics(
 	delegate manager.VisibilityManager,
 	metricHandler metrics.Handler,
 	logger log.Logger,
-	visibilityTypeMetricsTag metrics.Tag,
+	visibilityPluginNameMetricsTag metrics.Tag,
 ) *visibilityManagerMetrics {
 	return &visibilityManagerMetrics{
 		metricHandler: metricHandler,
 		logger:        logger,
 		delegate:      delegate,
 
-		visibilityTypeMetricsTag: visibilityTypeMetricsTag,
+		visibilityPluginNameMetricsTag: visibilityPluginNameMetricsTag,
 	}
 }
 
@@ -239,7 +240,7 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 }
 
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
-	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityTypeMetricsTag)
+	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag)
 	taggedHandler.Counter(metrics.VisibilityPersistenceRequests.GetMetricName()).Record(1)
 	return taggedHandler, time.Now().UTC()
 }

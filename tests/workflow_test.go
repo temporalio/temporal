@@ -50,10 +50,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestStartWorkflowExecution() {
-	id := "integration-start-workflow-test"
-	wt := "integration-start-workflow-test-type"
-	tl := "integration-start-workflow-test-taskqueue"
+func (s *functionalSuite) TestStartWorkflowExecution() {
+	id := "functional-start-workflow-test"
+	wt := "functional-start-workflow-test-type"
+	tl := "functional-start-workflow-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -104,10 +104,10 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.Nil(we2)
 }
 
-func (s *integrationSuite) TestStartWorkflowExecution_TerminateIfRunning() {
-	id := "integration-start-workflow-terminate-if-running-test"
-	wt := "integration-start-workflow-terminate-if-running-test-type"
-	tl := "integration-start-workflow-terminate-if-running-test-taskqueue"
+func (s *functionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
+	id := "functional-start-workflow-terminate-if-running-test"
+	wt := "functional-start-workflow-terminate-if-running-test-type"
+	tl := "functional-start-workflow-terminate-if-running-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -151,10 +151,10 @@ func (s *integrationSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
-	id := "integration-start-workflow-with-delay-test"
-	wt := "integration-start-workflow-with-delay-test-type"
-	tl := "integration-start-workflow-with-delay-test-taskqueue"
+func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
+	id := "functional-start-workflow-with-delay-test"
+	wt := "functional-start-workflow-with-delay-test-type"
+	tl := "functional-start-workflow-with-delay-test-taskqueue"
 	identity := "worker1"
 
 	startDelay := 3 * time.Second
@@ -213,10 +213,10 @@ func (s *integrationSuite) TestStartWorkflowExecutionWithDelay() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *integrationSuite) TestTerminateWorkflow() {
-	id := "integration-terminate-workflow-test"
-	wt := "integration-terminate-workflow-test-type"
-	tl := "integration-terminate-workflow-test-taskqueue"
+func (s *functionalSuite) TestTerminateWorkflow() {
+	id := "functional-terminate-workflow-test"
+	wt := "functional-terminate-workflow-test-type"
+	tl := "functional-terminate-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -365,10 +365,10 @@ StartNewExecutionLoop:
 	s.True(newExecutionStarted)
 }
 
-func (s *integrationSuite) TestSequentialWorkflow() {
-	id := "integration-sequential-workflow-test"
-	wt := "integration-sequential-workflow-test-type"
-	tl := "integration-sequential-workflow-test-taskqueue"
+func (s *functionalSuite) TestSequentialWorkflow() {
+	id := "functional-sequential-workflow-test"
+	wt := "functional-sequential-workflow-test-type"
+	tl := "functional-sequential-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -466,10 +466,10 @@ func (s *integrationSuite) TestSequentialWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
-	id := "integration-complete-workflow-task-create-new-test"
-	wt := "integration-complete-workflow-task-create-new-test-type"
-	tl := "integration-complete-workflow-task-create-new-test-taskqueue"
+func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
+	id := "functional-complete-workflow-task-create-new-test"
+	wt := "functional-complete-workflow-task-create-new-test-type"
+	tl := "functional-complete-workflow-task-create-new-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -542,10 +542,10 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 }
 
-func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
-	id := "integration-timeouts-workflow-test"
-	wt := "integration-timeouts-workflow-test-type"
-	tl := "integration-timeouts-workflow-test-taskqueue"
+func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
+	id := "functional-timeouts-workflow-test"
+	wt := "functional-timeouts-workflow-test-type"
+	tl := "functional-timeouts-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_timer"
 
@@ -659,10 +659,10 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestWorkflowRetry() {
-	id := "integration-wf-retry-test"
-	wt := "integration-wf-retry-type"
-	tl := "integration-wf-retry-taskqueue"
+func (s *functionalSuite) TestWorkflowRetry() {
+	id := "functional-wf-retry-test"
+	wt := "functional-wf-retry-type"
+	tl := "functional-wf-retry-taskqueue"
 	identity := "worker1"
 
 	initialInterval := 1 * time.Second
@@ -810,10 +810,10 @@ func (s *integrationSuite) TestWorkflowRetry() {
 	}
 }
 
-func (s *integrationSuite) TestWorkflowRetryFailures() {
-	id := "integration-wf-retry-failures-test"
-	wt := "integration-wf-retry-failures-type"
-	tl := "integration-wf-retry-failures-taskqueue"
+func (s *functionalSuite) TestWorkflowRetryFailures() {
+	id := "functional-wf-retry-failures-test"
+	wt := "functional-wf-retry-failures-type"
+	tl := "functional-wf-retry-failures-taskqueue"
 	identity := "worker1"
 
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) workflowTaskHandler {

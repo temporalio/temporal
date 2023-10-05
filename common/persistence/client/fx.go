@@ -108,6 +108,7 @@ func FactoryProvider(
 				params.OperatorRPSRatio,
 				params.HealthSignals,
 				params.DynamicRateLimitingParams,
+				params.MetricsHandler,
 				params.Logger,
 			)
 		} else {

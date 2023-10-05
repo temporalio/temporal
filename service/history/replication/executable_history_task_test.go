@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/definition"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -249,7 +250,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(nil)
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(true, nil)
 
 	s.NoError(s.task.HandleErr(err))
 }
@@ -268,7 +269,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 		rand.Int63(),
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err).Return(errors.New("OwO"))
+	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, errors.New("OwO"))
 
 	s.Equal(err, s.task.HandleErr(err))
 }

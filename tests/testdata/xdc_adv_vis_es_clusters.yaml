@@ -1,5 +1,5 @@
 - persistence:
-    dbname: integration_active_adv_vis
+    dbname: active_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -19,9 +19,16 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_active
 
 - persistence:
-    dbname: integration_standby_adv_vis
+    dbname: standby_adv_vis
   clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
@@ -41,3 +48,10 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_standby

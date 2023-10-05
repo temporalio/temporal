@@ -1263,7 +1263,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -1291,7 +1291,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
@@ -2233,7 +2233,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -2275,7 +2275,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
