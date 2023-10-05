@@ -329,7 +329,7 @@ CREATE TABLE queue_messages (
     queue_name VARCHAR(255) NOT NULL,
     queue_partition BIGINT NOT NULL,
     message_id BIGINT NOT NULL,
-    message_payload MEDUIMBLOB NOT NULL,
+    message_payload MEDIUMBLOB NOT NULL,
     message_encoding VARCHAR(16) NOT NULL,
     PRIMARY KEY (
         queue_type,
