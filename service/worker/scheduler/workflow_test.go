@@ -992,6 +992,45 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestOnlyStartForAllowAll() {
+	if currentTweakablePolicies.Version < DontTrackOverlapping {
+		s.T().Skip("test will run after Version updated")
+	}
+	// written using low-level mocks so we can check fields of start workflow requests
+
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 func (s *workflowSuite) TestPauseOnFailure() {
 	// written using low-level mocks so we can return failures
 
