@@ -18,6 +18,7 @@ steps:
     command: "make unit-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     plugins:
       - docker-compose#v3.8.0:
           run: build
@@ -30,6 +31,7 @@ steps:
     command: "make integration-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     plugins:
       - docker-compose#v3.8.0:
           run: db-integration-test
@@ -42,6 +44,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -57,6 +60,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -88,6 +92,7 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -103,6 +108,7 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -118,6 +124,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -133,6 +140,7 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -148,6 +156,7 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -163,6 +172,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -178,6 +188,7 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -193,6 +204,7 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -208,6 +220,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -223,6 +236,7 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -238,6 +252,7 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -253,6 +268,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -268,6 +284,7 @@ steps:
     command: "make functional-test-xdc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -283,6 +300,7 @@ steps:
     command: "make functional-test-ndc-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -298,6 +316,7 @@ steps:
     command: "make functional-test-coverage"
     artifact_paths:
       - ".coverage/*.out"
+      - ".testreport/*.xml"
     retry:
       automatic:
         limit: 1
@@ -306,13 +325,29 @@ steps:
           run: integration-test-sqlite
           config: ./develop/buildkite/docker-compose.yml
 
-  - wait
+  - wait: ~
+    continue_on_failure: true  # required for test reports of failed build to be picked up
+  
+  - label: ":mag: test-report"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: buildkite-agent artifact download ".testreport/*.xml" .
+    retry:
+      automatic:
+        limit: 2
+    plugins:
+      - test-collector#v1.10.0:
+          files: ".testreport/*.xml"
+          format: junit
+  
+  - wait # required to prevent uploading partial coverage data for failed builds
 
   - label: ":coverage: coverage-report"
     agents:
       queue: "default"
       docker: "*"
-    command: "./develop/buildkite/scripts/coverage-report.sh"
+    command: "make ci-coverage-report"
     artifact_paths:
       - ".coverage/summary.out"
       - ".coverage/summary.out.html"
@@ -320,7 +355,9 @@ steps:
       automatic:
         limit: 2
     plugins:
+      - artifacts#v1.9.0:
+          download:
+            - ".coverage/*.out"
       - docker-compose#v3.8.0:
           run: coverage-report
           config: ./develop/buildkite/docker-compose.yml
-
