@@ -52,7 +52,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(activityHandles.GetNextPageTokenActivity, mock.Anything, GetNextPageTokenParams{
+	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, GetNextPageTokenParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
 		PageSize:      1000,
@@ -100,16 +100,16 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	}, nil).Times(2)
 
 	a := &Activities{
-		LocalActivities: &LocalActivities{
-			visibilityManager: visibilityManager,
-		},
 		visibilityManager: visibilityManager,
 		historyClient:     nil,
 		metricsHandler:    nil,
 		logger:            nil,
 	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
+	}
 
-	env.RegisterActivity(a.GetNextPageTokenActivity)
+	env.RegisterActivity(la.GetNextPageTokenActivity)
 	env.RegisterActivity(a.DeleteExecutionsActivity)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
@@ -132,7 +132,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	pageNumber := 0
-	env.OnActivity(activityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 3, params.PageSize)
@@ -186,7 +186,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(activityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
+	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
 	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{SuccessCount: 1, ErrorCount: 0}, nil).Times(78)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
@@ -217,7 +217,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(activityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).
+	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).
 		Return([]byte{3, 22, 83}, nil).
 		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
 	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, mock.Anything).
@@ -309,18 +309,18 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	historyClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 	a := &Activities{
-		LocalActivities: &LocalActivities{
-			visibilityManager: visibilityManager,
-			metricsHandler:    metrics.NoopMetricsHandler,
-			logger:            log.NewNoopLogger(),
-		},
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metrics.NoopMetricsHandler,
+		logger:            log.NewNoopLogger(),
+	}
 
-	env.RegisterActivity(a.GetNextPageTokenActivity)
+	env.RegisterActivity(la.GetNextPageTokenActivity)
 	env.RegisterActivity(a.DeleteExecutionsActivity)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
@@ -402,18 +402,18 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(4)
 
 	a := &Activities{
-		LocalActivities: &LocalActivities{
-			visibilityManager: visibilityManager,
-			metricsHandler:    metrics.NoopMetricsHandler,
-			logger:            log.NewNoopLogger(),
-		},
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metrics.NoopMetricsHandler,
+		logger:            log.NewNoopLogger(),
+	}
 
-	env.RegisterActivity(a.GetNextPageTokenActivity)
+	env.RegisterActivity(la.GetNextPageTokenActivity)
 	env.RegisterActivity(a.DeleteExecutionsActivity)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
