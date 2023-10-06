@@ -84,7 +84,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		var err error
 		s.clusterConfig, err = GetTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)

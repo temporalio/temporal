@@ -22,20 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package driver
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // register pgx driver for sqlx
+	"github.com/jmoiron/sqlx"
 )
 
-func TestPQ(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12"}
-	suite.Run(t, s)
+const (
+	// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
+	dupEntryCode    = "23505"
+	dupDatabaseCode = "42P04"
+)
+
+type PGXDriver struct{}
+
+func (p *PGXDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
+	return sqlx.Connect("pgx", dsn)
 }
 
-func TestPGX(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12_pgx"}
-	suite.Run(t, s)
+func (p *PGXDriver) IsDupEntryError(err error) bool {
+	pgxErr, ok := err.(*pgconn.PgError)
+	return ok && pgxErr.Code == dupEntryCode
+}
+
+func (p *PGXDriver) IsDupDatabaseError(err error) bool {
+	pqErr, ok := err.(*pgconn.PgError)
+	return ok && pqErr.Code == dupDatabaseCode
 }

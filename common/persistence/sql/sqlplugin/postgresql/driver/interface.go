@@ -22,20 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package driver
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
+	"github.com/jmoiron/sqlx"
 )
 
-func TestPQ(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12"}
-	suite.Run(t, s)
-}
-
-func TestPGX(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12_pgx"}
-	suite.Run(t, s)
+type Driver interface {
+	CreateConnection(dsn string) (*sqlx.DB, error)
+	IsDupEntryError(error) bool
+	IsDupDatabaseError(error) bool
 }

@@ -145,7 +145,7 @@ func AllowListForValidation(storeNames []string) bool {
 	}
 
 	switch storeNames[0] {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		// Advanced visibility with SQL DB don't support list of values
 		return false
 	default:

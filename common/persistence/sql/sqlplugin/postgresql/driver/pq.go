@@ -22,20 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package driver
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
-func TestPQ(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12"}
-	suite.Run(t, s)
+type PQDriver struct{}
+
+func (p *PQDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
+	return sqlx.Connect("postgres", dsn)
 }
 
-func TestPGX(t *testing.T) {
-	s := &PostgreSQLSuite{pluginName: "postgres12_pgx"}
-	suite.Run(t, s)
+func (p *PQDriver) IsDupEntryError(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	return ok && pqErr.Code.Name() == "unique_violation"
+}
+
+func (p *PQDriver) IsDupDatabaseError(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	return ok && pqErr.Code.Name() == "duplicate_database"
 }

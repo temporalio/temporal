@@ -33,6 +33,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -60,9 +61,10 @@ type Session struct {
 
 func NewSession(
 	cfg *config.SQL,
+	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	db, err := createConnection(cfg, resolver)
+	db, err := createConnection(cfg, d, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -77,9 +79,10 @@ func (s *Session) Close() {
 
 func createConnection(
 	cfg *config.SQL,
+	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	db, err := sqlx.Connect(driverName, buildDSN(cfg, resolver))
+	db, err := d.CreateConnection(buildDSN(cfg, resolver))
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +125,6 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 			parameters.Set(sslMode, sslModeRequire)
 		} else {
 			parameters.Set(sslMode, sslModeFull)
-			parameters.Set(sslHost, cfg.TLS.ServerName)
 		}
 
 		if cfg.TLS.CaFile != "" {

@@ -27,8 +27,6 @@ package postgresql
 import (
 	"fmt"
 	"time"
-
-	"github.com/lib/pq"
 )
 
 const (
@@ -134,10 +132,8 @@ func (pdb *db) DropAllTables(database string) error {
 // CreateDatabase creates a database if it doesn't exist
 func (pdb *db) CreateDatabase(name string) error {
 	if err := pdb.Exec(fmt.Sprintf(createDatabaseQuery, name)); err != nil {
-		if err, ok := err.(*pq.Error); ok {
-			if err.Code.Name() == "duplicate_database" {
-				return nil
-			}
+		if pdb.IsDupDatabaseError(err) {
+			return nil
 		}
 		return err
 	}
