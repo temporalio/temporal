@@ -144,10 +144,10 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 # update-linters is not included because in CI linters are run by github actions.
-ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -322,7 +322,7 @@ prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	@gotestsum --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(NEW_COVER_PROFILE) || exit 1;
+		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
