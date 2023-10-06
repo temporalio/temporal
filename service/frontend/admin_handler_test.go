@@ -32,48 +32,44 @@ import (
 	"sync"
 	"testing"
 
-	commonpb "go.temporal.io/api/common/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
-
-	commonspb "go.temporal.io/server/api/common/v1"
-	"go.temporal.io/server/service/history/tasks"
-
-	"google.golang.org/grpc/metadata"
-
-	historyclient "go.temporal.io/server/client/history"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resourcetest"
-
-	"google.golang.org/grpc/health"
-
-	"go.temporal.io/server/api/adminservicemock/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/testing/mocksdk"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	clientmocks "go.temporal.io/server/client"
+	historyclient "go.temporal.io/server/client/history"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/dlq"
 )
 
 type (
@@ -1216,4 +1212,84 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 			}, response)
 		})
 	}
+}
+
+func (s *adminHandlerSuite) TestPurgeDLQTasks() {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "Success",
+			err:  nil,
+		},
+		{
+			name: "WorkflowExecutionFailed",
+			err:  serviceerror.NewNotFound("example sdk worfklow start failure"),
+		},
+	} {
+		s.Run(tc.name, func() {
+			mockSdkClient := mocksdk.NewMockClient(s.controller)
+			s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient)
+			expectation := mockSdkClient.EXPECT().ExecuteWorkflow(
+				gomock.Any(),
+				gomock.Any(),
+				dlq.WorkflowName,
+				dlq.WorkflowParams{
+					WorkflowType: dlq.WorkflowTypeDelete,
+					DeleteParams: dlq.DeleteParams{
+						TaskCategory:  int(tasks.CategoryTransfer.ID()),
+						SourceCluster: "test-source-cluster",
+						TargetCluster: "test-target-cluster",
+						MaxMessageID:  42,
+					},
+				},
+			)
+			if tc.err != nil {
+				expectation.Return(nil, tc.err)
+			} else {
+				run := mocksdk.NewMockWorkflowRun(s.controller)
+				run.EXPECT().GetRunID().Return("test-run-id")
+				expectation.Return(run, nil)
+			}
+			response, err := s.handler.PurgeDLQTasks(context.Background(), &adminservice.PurgeDLQTasksRequest{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  int32(tasks.CategoryTransfer.ID()),
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+					MessageId: 42,
+				},
+			})
+			if tc.err != nil {
+				s.ErrorIs(err, tc.err)
+				return
+			}
+			s.NoError(err)
+			s.NotNil(response)
+			var token adminservice.DLQJobToken
+			err = token.Unmarshal(response.JobToken)
+			s.NoError(err)
+			s.Equal("delete-dlq-tasks-1_test-source-cluster_test-target-cluster_aG2oua8T", token.WorkflowId)
+			s.Equal("test-run-id", token.RunId)
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
+	_, err := s.handler.PurgeDLQTasks(context.Background(), &adminservice.PurgeDLQTasksRequest{
+		DlqKey: &commonspb.HistoryDLQKey{
+			TaskCategory:  -1,
+			SourceCluster: "test-source-cluster",
+			TargetCluster: "test-target-cluster",
+		},
+		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			MessageId: 42,
+		},
+	})
+	s.Error(err)
+	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+	s.ErrorContains(err, "task category")
+	s.ErrorContains(err, "-1")
 }
