@@ -273,11 +273,9 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
-	@rm -f test.log
+	@rm -f test.log $(COVER_ROOT)/* $(REPORT_ROOT)/*
 	@go clean -testcache
-	@rm -f $(COVER_ROOT)/*
-	@rm -f $(REPORT_ROOT)/*
-
+	
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 $(TEST_DIRS)
@@ -348,6 +346,9 @@ functional-test-ndc-coverage: prepare-coverage-test
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
 	@rm -f $(SUMMARY_COVER_PROFILE)
+	@if [ -z "$(wildcard $(COVER_ROOT)/*)" ]; then \
+		echo "No coverage data, aborting!" && exit 1; \
+	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
