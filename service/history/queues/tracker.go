@@ -37,14 +37,14 @@ type (
 	// currently it's used as a implementation detail in SliceImpl
 	executableTracker struct {
 		pendingExecutables  map[tasks.Key]Executable
-		pendingPerNamesapce map[namespace.ID]int
+		pendingPerNamespace map[namespace.ID]int
 	}
 )
 
 func newExecutableTracker() *executableTracker {
 	return &executableTracker{
 		pendingExecutables:  make(map[tasks.Key]Executable),
-		pendingPerNamesapce: make(map[namespace.ID]int),
+		pendingPerNamespace: make(map[namespace.ID]int),
 	}
 }
 
@@ -53,7 +53,7 @@ func (t *executableTracker) split(
 	thatScope Scope,
 ) (*executableTracker, *executableTracker) {
 	thatPendingExecutables := make(map[tasks.Key]Executable, len(t.pendingExecutables)/2)
-	thatPendingPerNamespace := make(map[namespace.ID]int, len(t.pendingPerNamesapce))
+	thatPendingPerNamespace := make(map[namespace.ID]int, len(t.pendingPerNamespace))
 
 	for key, executable := range t.pendingExecutables {
 		if thisScope.Contains(executable) {
@@ -68,7 +68,7 @@ func (t *executableTracker) split(
 		namespaceID := namespace.ID(executable.GetNamespaceID())
 
 		delete(t.pendingExecutables, key)
-		t.pendingPerNamesapce[namespaceID]--
+		t.pendingPerNamespace[namespaceID]--
 
 		thatPendingExecutables[key] = executable
 		thatPendingPerNamespace[namespaceID]++
@@ -76,13 +76,13 @@ func (t *executableTracker) split(
 
 	return t, &executableTracker{
 		pendingExecutables:  thatPendingExecutables,
-		pendingPerNamesapce: thatPendingPerNamespace,
+		pendingPerNamespace: thatPendingPerNamespace,
 	}
 }
 
 func (t *executableTracker) merge(incomingTracker *executableTracker) *executableTracker {
-	thisExecutables, thisPendingTasks := t.pendingExecutables, t.pendingPerNamesapce
-	thatExecutables, thatPendingTasks := incomingTracker.pendingExecutables, incomingTracker.pendingPerNamesapce
+	thisExecutables, thisPendingTasks := t.pendingExecutables, t.pendingPerNamespace
+	thatExecutables, thatPendingTasks := incomingTracker.pendingExecutables, incomingTracker.pendingPerNamespace
 	if len(thisExecutables) < len(thatExecutables) {
 		thisExecutables, thatExecutables = thatExecutables, thisExecutables
 		thisPendingTasks = thatPendingTasks
@@ -94,7 +94,7 @@ func (t *executableTracker) merge(incomingTracker *executableTracker) *executabl
 	}
 
 	t.pendingExecutables = thisExecutables
-	t.pendingPerNamesapce = thisPendingTasks
+	t.pendingPerNamespace = thisPendingTasks
 	return t
 }
 
@@ -102,14 +102,14 @@ func (t *executableTracker) add(
 	executable Executable,
 ) {
 	t.pendingExecutables[executable.GetKey()] = executable
-	t.pendingPerNamesapce[namespace.ID(executable.GetNamespaceID())]++
+	t.pendingPerNamespace[namespace.ID(executable.GetNamespaceID())]++
 }
 
 func (t *executableTracker) shrink() tasks.Key {
 	minPendingTaskKey := tasks.MaximumKey
 	for key, executable := range t.pendingExecutables {
 		if executable.State() == ctasks.TaskStateAcked {
-			t.pendingPerNamesapce[namespace.ID(executable.GetNamespaceID())]--
+			t.pendingPerNamespace[namespace.ID(executable.GetNamespaceID())]--
 			delete(t.pendingExecutables, key)
 			continue
 		}
@@ -117,9 +117,9 @@ func (t *executableTracker) shrink() tasks.Key {
 		minPendingTaskKey = tasks.MinKey(minPendingTaskKey, key)
 	}
 
-	for namespaceID, numPending := range t.pendingPerNamesapce {
+	for namespaceID, numPending := range t.pendingPerNamespace {
 		if numPending == 0 {
-			delete(t.pendingPerNamesapce, namespaceID)
+			delete(t.pendingPerNamespace, namespaceID)
 		}
 	}
 
@@ -132,5 +132,5 @@ func (t *executableTracker) clear() {
 	}
 
 	t.pendingExecutables = make(map[tasks.Key]Executable)
-	t.pendingPerNamesapce = make(map[namespace.ID]int)
+	t.pendingPerNamespace = make(map[namespace.ID]int)
 }
