@@ -75,10 +75,9 @@ func (q queueV2) EnqueueMessage(
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	var lastMessageID int64
-	operation := "EnqueueMessage"
 	tx, err := q.Db.BeginTx(ctx)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("EnqueueMessage failed. Failed to start transaction. Error: %v", err))
 	}
 	lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
 		QueueType: request.QueueType,
@@ -108,7 +107,7 @@ func (q queueV2) EnqueueMessage(
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("EnqueueMessage failed. Failed to commit transaction. Error: %v", err))
 	}
 	return &persistence.InternalEnqueueMessageResponse{Metadata: persistence.MessageMetadata{ID: lastMessageID}}, err
 }
