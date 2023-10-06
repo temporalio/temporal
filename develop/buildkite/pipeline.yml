@@ -340,8 +340,6 @@ steps:
       - test-collector#v1.10.0:
           files: ".testreport/*.xml"
           format: junit
-  
-  - wait # required to prevent uploading partial coverage data for failed builds
 
   - label: ":coverage: coverage-report"
     agents:

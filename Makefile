@@ -88,10 +88,10 @@ PINNED_DEPENDENCIES := \
 
 # Code coverage & test report output files.
 COVER_ROOT                      := ./.coverage
-NEW_COVER_PROFILE 							:= $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out # generates a new filename each time it's substituted.
+NEW_COVER_PROFILE 							= $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out # generates a new filename each time it's substituted.
 SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
 REPORT_ROOT                     := ./.testreport
-NEW_REPORT 											:= $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml # generates a new filename each time it's substituted.
+NEW_REPORT 											= $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml # generates a new filename each time it's substituted.
 
 # DB
 SQL_USER ?= temporal
@@ -275,8 +275,8 @@ check: copyright-check lint shell-check
 clean-test-results:
 	@rm -f test.log
 	@go clean -testcache
-	@rm -f $(COVER_ROOT)/**
-	@rm -f $(REPORT_ROOT)/**
+	@rm -f $(COVER_ROOT)/*
+	@rm -f $(REPORT_ROOT)/*
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
@@ -321,27 +321,27 @@ prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	gotestsum --junitfile $(NEW_REPORT) -- \
+	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(NEW_COVER_PROFILE) || exit 1;
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	gotestsum --junitfile $(NEW_REPORT) -- \
+	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	gotestsum --junitfile $(NEW_REPORT) -- \
+	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	gotestsum --junitfile $(NEW_REPORT) -- \
+	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	gotestsum --junitfile $(NEW_REPORT) -- \
+	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
