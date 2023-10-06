@@ -90,7 +90,7 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 }
 
 // GetPostgreSQLpfxTestClusterOption return test options
-func GetPostgreSQLpgxTestClusterOption() *TestBaseOptions {
+func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: postgresql.PluginNamePGX,
 		DBUsername:      testPostgreSQLUser,

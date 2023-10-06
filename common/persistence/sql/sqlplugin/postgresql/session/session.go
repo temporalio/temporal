@@ -38,8 +38,7 @@ import (
 )
 
 const (
-	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
-	driverName = "postgres"
+	dsnFmt = "postgres://%v:%v@%v/%v?%v"
 )
 
 const (

@@ -145,7 +145,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
 		case postgresql.PluginNamePGX:
-			ops = persistencetests.GetPostgreSQLpgxTestClusterOption()
+			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
 		case postgresql.PluginNameV12:
 			ops = persistencetests.GetPostgreSQL12TestClusterOption()
 		case postgresql.PluginNameV12PGX:

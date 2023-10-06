@@ -37,10 +37,10 @@ func (p *PQDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
 
 func (p *PQDriver) IsDupEntryError(err error) bool {
 	pqErr, ok := err.(*pq.Error)
-	return ok && pqErr.Code.Name() == "unique_violation"
+	return ok && pqErr.Code == dupEntryCode
 }
 
 func (p *PQDriver) IsDupDatabaseError(err error) bool {
 	pqErr, ok := err.(*pq.Error)
-	return ok && pqErr.Code.Name() == "duplicate_database"
+	return ok && pqErr.Code == dupDatabaseCode
 }
