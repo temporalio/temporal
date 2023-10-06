@@ -40,7 +40,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.uber.org/fx"
 	"gopkg.in/yaml.v3"
+
+	"go.temporal.io/server/common/primitives"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -76,14 +79,45 @@ type (
 		archivalNamespace      string
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 	}
+	// suiteParams contains the variables which are used to configure the test suite via the Option argument to
+	// setupSuite.
+	suiteParams struct {
+		fxOptions map[primitives.ServiceName][]fx.Option
+	}
+	Option func(params *suiteParams)
 )
 
-func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string) {
+// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
+// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
+// obtain the shard controller for the history service, you can do this:
+//
+//	var shardController shard.Controller
+//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
+//	// now you can use shardController during your test
+//
+// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
+// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
+// each one.
+func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) Option {
+	return func(params *suiteParams) {
+		params.fxOptions[serviceName] = append(params.fxOptions[serviceName], options...)
+	}
+}
+
+func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+	params := suiteParams{
+		fxOptions: make(map[primitives.ServiceName][]fx.Option),
+	}
+	for _, opt := range options {
+		opt(&params)
+	}
+
 	s.setupLogger()
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
 	clusterConfig.DynamicConfigOverrides = s.dynamicConfigOverrides
+	clusterConfig.ServiceFxOptions = params.fxOptions
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
