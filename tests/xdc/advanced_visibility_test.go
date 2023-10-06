@@ -100,7 +100,7 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	var fileName string
 	switch tests.TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNamePGX, sqlite.PluginName:
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
 		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
 		s.isElasticsearchEnabled = false
