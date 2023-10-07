@@ -25,7 +25,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -82,7 +81,18 @@ func GetOrPollMutableState(
 	if request.CurrentBranchToken == nil {
 		request.CurrentBranchToken = response.CurrentBranchToken
 	}
-	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+	if err != nil {
+		return nil, err
+	}
+	if request.GetVersionHistoryItem() == nil {
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+		request.VersionHistoryItem = lastVersionHistoryItem
+	}
+	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
@@ -105,8 +115,11 @@ func GetOrPollMutableState(
 		if err != nil {
 			return nil, err
 		}
-		// check again if the current branch token changed
-		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+		currentVersionHistory, err = versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, err
+		}
+		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -131,8 +144,18 @@ func GetOrPollMutableState(
 				// Note: Later events could modify response.WorkerVersionStamp and we won't
 				// update it here. That's okay since this return value is only informative and isn't used for task dispatch.
 				// For correctness we could pass it in the Notification event.
-				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
-					return nil, serviceerrors.NewCurrentBranchChanged(event.CurrentBranchToken, request.CurrentBranchToken)
+				latestVersionHistory, err := versionhistory.GetCurrentVersionHistory(event.VersionHistories)
+				if err != nil {
+					return nil, err
+				}
+				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
+				response.VersionHistories = event.VersionHistories
+				lcaItem, err := versionhistory.FindLCAVersionHistoryItem(latestVersionHistory, currentVersionHistory)
+				if err != nil {
+					return nil, err
+				}
+				if !versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) {
+					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil

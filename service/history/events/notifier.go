@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -62,9 +63,9 @@ type (
 		NextEventID            int64
 		PreviousStartedEventID int64
 		Timestamp              time.Time
-		CurrentBranchToken     []byte
 		WorkflowState          enumsspb.WorkflowExecutionState
 		WorkflowStatus         enumspb.WorkflowExecutionStatus
+		VersionHistories       *historyspb.VersionHistories
 	}
 
 	NotifierImpl struct {
@@ -96,9 +97,9 @@ func NewNotification(
 	lastFirstEventTxnID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
-	currentBranchToken []byte,
 	workflowState enumsspb.WorkflowExecutionState,
 	workflowStatus enumspb.WorkflowExecutionStatus,
+	versionHistories *historyspb.VersionHistories,
 ) *Notification {
 
 	return &Notification{
@@ -111,9 +112,9 @@ func NewNotification(
 		LastFirstEventTxnID:    lastFirstEventTxnID,
 		NextEventID:            nextEventID,
 		PreviousStartedEventID: previousStartedEventID,
-		CurrentBranchToken:     currentBranchToken,
 		WorkflowState:          workflowState,
 		WorkflowStatus:         workflowStatus,
+		VersionHistories:       versionHistories,
 	}
 }
 
