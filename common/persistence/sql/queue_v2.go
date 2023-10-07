@@ -42,6 +42,10 @@ const (
 	EmptyPartition = 0
 )
 
+var (
+	ErrNotImplemented = errors.New("method is not implemented yet for SQL")
+)
+
 type (
 	queueV2 struct {
 		logger log.Logger
@@ -161,4 +165,11 @@ func newQueueV2Row(
 		MessagePayload:  blob.Data,
 		MessageEncoding: blob.EncodingType.String(),
 	}
+}
+
+func (q queueV2) CreateQueue(
+	context.Context,
+	*persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
 }

@@ -48,8 +48,18 @@ func TestGetDLQTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) 
 	}
 	sourceCluster := "test-source-cluster-" + t.Name()
 	targetCluster := "test-target-cluster-" + t.Name()
-	_, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
+	queueType := persistence.QueueTypeHistoryDLQ
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     queueType,
+			Category:      inTask.GetCategory(),
+			SourceCluster: sourceCluster,
+			TargetCluster: targetCluster,
+		},
+	})
+	require.NoError(t, err)
+	_, err = manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     queueType,
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 		Task:          inTask,

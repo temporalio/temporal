@@ -26,13 +26,17 @@ package cassandra
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -41,6 +45,7 @@ type (
 	//	schema/cassandra/temporal/versioned/v1.9/queues.cql
 	queueV2Store struct {
 		session gocql.Session
+		logger  log.Logger
 	}
 )
 
@@ -48,6 +53,8 @@ const (
 	TemplateEnqueueMessageQuery  = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES (?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 	TemplateGetMessagesQuery     = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? ORDER BY message_id ASC LIMIT ?`
 	TemplateGetMaxMessageIDQuery = `SELECT message_id FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? ORDER BY message_id DESC LIMIT 1`
+	TemplateCreateQueueQuery     = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES (?, ?, ?, ?, ?) IF NOT EXISTS`
+	TemplateGetQueueQuery        = `SELECT metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? AND queue_name = ?`
 
 	// QueueMessageIDConflict will be part of the error message when a message with the same ID already exists in the
 	// queue. This is possible when there are concurrent writes to the queue because we enqueue a message using two
@@ -77,15 +84,19 @@ const (
 	//  |                  |<--8. Conflict/Error----------------|
 	//  |                  |                                    |
 	QueueMessageIDConflict = "queue message with id already exists, likely due to concurrent writes"
+
+	// pageTokenPrefixByte is the first byte of the serialized page token. It's used to ensure that the page token is
+	// not empty. Without this, if the last_read_message_id is 0, the serialized page token would be empty, and clients
+	// could erroneously assume that there are no more messages beyond the first page. This is purely used to ensure
+	// that tokens are non-empty; it is not used to verify that the token is valid like the magic byte in some other
+	// protocols.
+	pageTokenPrefixByte = 0
 )
 
-var (
-	ErrInvalidQueueMessageEncodingType = errors.New("invalid encoding type for queue message")
-)
-
-func NewQueueV2Store(session gocql.Session) persistence.QueueV2 {
+func NewQueueV2Store(session gocql.Session, logger log.Logger) persistence.QueueV2 {
 	return &queueV2Store{
 		session: session,
+		logger:  logger,
 	}
 }
 
@@ -94,6 +105,11 @@ func (q *queueV2Store) EnqueueMessage(
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	// TODO: add concurrency control around this method to avoid things like QueueMessageIDConflict.
+	// TODO: cache the queue in memory to avoid querying the database every time.
+	_, err := q.getQueue(ctx, request.QueueType, request.QueueName)
+	if err != nil {
+		return nil, err
+	}
 	messageID, err := q.getNextMessageID(ctx, request.QueueType, request.QueueName)
 	if err != nil {
 		return nil, err
@@ -113,10 +129,14 @@ func (q *queueV2Store) ReadMessages(
 	ctx context.Context,
 	request *persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
+	queue, err := q.getQueue(ctx, request.QueueType, request.QueueName)
+	if err != nil {
+		return nil, err
+	}
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveReadQueueMessagesPageSize
 	}
-	minMessageID, err := persistence.GetMinMessageID(request)
+	minMessageID, err := q.getMinMessageID(request.QueueType, request.QueueName, request.NextPageToken, queue)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +166,7 @@ func (q *queueV2Store) ReadMessages(
 		}
 		encoding, ok := enums.EncodingType_value[messageEncoding]
 		if !ok {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidQueueMessageEncodingType, messageEncoding)
+			return nil, serialization.NewUnknownEncodingTypeError(messageEncoding)
 		}
 
 		encodingType := enums.EncodingType(encoding)
@@ -171,6 +191,94 @@ func (q *queueV2Store) ReadMessages(
 		Messages:      messages,
 		NextPageToken: nextPageToken,
 	}, nil
+}
+
+func (q *queueV2Store) CreateQueue(
+	ctx context.Context,
+	request *persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	queueType := request.QueueType
+	queueName := request.QueueName
+	queue := persistencespb.Queue{
+		Partitions: map[int32]*persistencespb.QueuePartition{
+			0: {
+				MinMessageId: persistence.FirstQueueMessageID,
+			},
+		},
+	}
+	bytes, _ := queue.Marshal()
+	applied, err := q.session.Query(
+		TemplateCreateQueueQuery,
+		queueType,
+		queueName,
+		bytes,
+		enums.ENCODING_TYPE_PROTO3.String(),
+		0,
+	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	if err != nil {
+		return nil, gocql.ConvertError("QueueV2CreateQueue", err)
+	}
+
+	if !applied {
+		return nil, fmt.Errorf(
+			"%w: queue type %v and name %v",
+			persistence.ErrQueueAlreadyExists,
+			queueType,
+			queueName,
+		)
+	}
+	return &persistence.InternalCreateQueueResponse{}, nil
+}
+
+func (q *queueV2Store) getMinMessageID(queueType persistence.QueueV2Type, name string, nextPageToken []byte, queue *persistencespb.Queue) (int, error) {
+	if len(nextPageToken) == 0 {
+		// Currently, we only have one partition for each queue. However, that might change in the future. If a queue is
+		// created with more than 1 partition by a server on a future release, and then that server is downgraded, we
+		// will need to handle this case. Since all DLQ tasks are retried infinitely, we just return an error.
+		numPartitions := len(queue.Partitions)
+		if numPartitions != 1 {
+			return 0, serviceerror.NewInternal(
+				fmt.Sprintf(
+					"queue with type %v and name %v has %d partitions, but this implementation only supports"+
+						" queues with 1 partition. Did you downgrade your Temporal server?",
+					queueType,
+					name,
+					numPartitions,
+				),
+			)
+		}
+		return int(queue.Partitions[0].MinMessageId), nil
+	}
+
+	var token persistencespb.ReadQueueMessagesNextPageToken
+
+	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
+	err := token.Unmarshal(nextPageToken[1:])
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%w: %q: %v",
+			persistence.ErrInvalidReadQueueMessagesNextPageToken,
+			nextPageToken,
+			err,
+		)
+	}
+
+	return int(token.LastReadMessageId) + 1, nil
+}
+
+func (q *queueV2Store) getNextPageToken(result []persistence.QueueV2Message, messageID int64) []byte {
+	if len(result) == 0 {
+		return nil
+	}
+
+	token := &persistencespb.ReadQueueMessagesNextPageToken{
+		LastReadMessageId: messageID,
+	}
+	// This can never fail if you inspect the implementation.
+	b, _ := token.Marshal()
+
+	// See the comment above pageTokenPrefixByte for why we want to do this.
+	return append([]byte{pageTokenPrefixByte}, b...)
 }
 
 func (q *queueV2Store) tryInsert(ctx context.Context, queueType persistence.QueueV2Type, queueName string, blob commonpb.DataBlob, messageID int64) error {
@@ -210,4 +318,48 @@ func (q *queueV2Store) getNextMessageID(ctx context.Context, queueType persisten
 
 	// The next message ID is the max message ID + 1.
 	return maxMessageID + 1, nil
+}
+
+func (q *queueV2Store) getQueue(
+	ctx context.Context,
+	queueType persistence.QueueV2Type,
+	name string,
+) (*persistencespb.Queue, error) {
+	var (
+		queueBytes       []byte
+		queueEncodingStr string
+		version          int64
+	)
+
+	err := q.session.Query(TemplateGetQueueQuery, queueType, name).WithContext(ctx).Scan(
+		&queueBytes,
+		&queueEncodingStr,
+		&version,
+	)
+	if err != nil {
+		if gocql.IsNotFoundError(err) {
+			return nil, persistence.NewQueueNotFoundError(queueType, name)
+		}
+		return nil, gocql.ConvertError("QueueV2GetQueue", err)
+	}
+
+	if queueEncodingStr != enums.ENCODING_TYPE_PROTO3.String() {
+		return nil, fmt.Errorf(
+			"queue with type %v and name %v has invalid encoding: %w",
+			queueType,
+			name,
+			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enums.ENCODING_TYPE_PROTO3),
+		)
+	}
+
+	queue := &persistencespb.Queue{}
+	err = queue.Unmarshal(queueBytes)
+	if err != nil {
+		return nil, serialization.NewDeserializationError(
+			enums.ENCODING_TYPE_PROTO3,
+			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w", queueType, name, err),
+		)
+	}
+
+	return queue, nil
 }

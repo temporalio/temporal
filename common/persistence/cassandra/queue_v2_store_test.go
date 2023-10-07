@@ -35,6 +35,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -60,10 +62,14 @@ func (f failingQuery) Scan(...interface{}) error {
 	return assert.AnError
 }
 
-func TestGetMaxQueueMessageIDQueryErr(t *testing.T) {
+func (f failingQuery) MapScanCAS(map[string]interface{}) (bool, error) {
+	return false, assert.AnError
+}
+
+func TestQueueV2EnqueueMessageQueryErr(t *testing.T) {
 	t.Parallel()
 
-	q := cassandra.NewQueueV2Store(failingSession{})
+	q := newQueue()
 	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
 		QueueType: persistence.QueueTypeHistoryNormal,
 		QueueName: "test-queue-" + t.Name(),
@@ -72,7 +78,26 @@ func TestGetMaxQueueMessageIDQueryErr(t *testing.T) {
 			Data:         []byte("1"),
 		},
 	})
+	assertUnavailable(t, err)
+}
+
+func TestQueueV2CreateQueueQueryErr(t *testing.T) {
+	t.Parallel()
+
+	q := newQueue()
+	_, err := q.CreateQueue(context.Background(), &persistence.InternalCreateQueueRequest{
+		QueueType: persistence.QueueTypeHistoryNormal,
+		QueueName: "test-queue-" + t.Name(),
+	})
+	assertUnavailable(t, err)
+}
+
+func assertUnavailable(t *testing.T, err error) {
+	t.Helper()
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
-	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
+}
+
+func newQueue() persistence.QueueV2 {
+	return cassandra.NewQueueV2Store(failingSession{}, log.NewTestLogger())
 }

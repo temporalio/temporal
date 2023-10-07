@@ -31,6 +31,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -93,13 +95,13 @@ func TestExecutable(t *testing.T, tqm persistence.HistoryTaskQueueManager) {
 				PageSize:      2, // make it 2 even though we want just 1 to verify that there's no extra tasks
 				NextPageToken: nil,
 			})
-			require.NoError(t, err)
 			if tc.shouldDLQ {
+				require.NoError(t, err)
 				if assert.Len(t, response.Tasks, 1) {
 					assert.Equal(t, task, response.Tasks[0].Task)
 				}
 			} else {
-				assert.Empty(t, response.Tasks)
+				assert.ErrorAs(t, err, new(*serviceerror.NotFound))
 			}
 		})
 	}

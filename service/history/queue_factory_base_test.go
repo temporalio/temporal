@@ -25,6 +25,7 @@
 package history
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -156,6 +158,9 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()
 	serviceResolver := membership.NewMockServiceResolver(controller)
 	serviceResolver.EXPECT().MemberCount().Return(1).AnyTimes()
+	lazyLoadedOwnershipBasedQuotaScaler := shard.LazyLoadedOwnershipBasedQuotaScaler{
+		Value: &atomic.Value{},
+	}
 	return fx.Supply(
 		compileTimeDependencies{},
 		cfg,
@@ -164,6 +169,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
 		fx.Annotate(serviceResolver, fx.As(new(membership.ServiceResolver))),
 		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
+		lazyLoadedOwnershipBasedQuotaScaler,
 	)
 }
 
