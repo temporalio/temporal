@@ -32,7 +32,7 @@ import (
 )
 
 type (
-	// QueueMetadataRow represents a row in queue_metadata table
+	// QueueV2MetadataRow represents a row in queue_metadata table
 	QueueV2MetadataRow struct {
 		QueueType       persistence.QueueV2Type
 		QueueName       string

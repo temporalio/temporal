@@ -40,7 +40,8 @@ const (
 
 	// Note that even though this query takes a range lock that serializes all writes, it will return multiple rows
 	// whenever more than one enqueue-er blocks. This is why we max().
-	templateGetLastMessageIDQueryV2    = `SELECT MAX(message_id) FROM queue_messages WHERE message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
+	// TODO Fix the issue and add FOR UPDATE.
+	templateGetLastMessageIDQueryV2    = `SELECT MAX(message_id) FROM queue_messages WHERE message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1)`
 	templateCreateQueueMetadataQueryV2 = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
 	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
 	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=?`

@@ -27,6 +27,7 @@ package tests
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
 )
@@ -616,4 +618,24 @@ func TestMySQLClosedConnectionError(t *testing.T) {
 
 	s := newConnectionSuite(t, testData.Factory)
 	suite.Run(t, s)
+}
+
+func TestMySQLQueueV2(t *testing.T) {
+	testData, tearDown := setUpMySQLTest(t)
+	t.Cleanup(tearDown)
+
+	queue, err := testData.Factory.NewQueueV2()
+	if err != nil {
+		t.Fatalf("unable to create Queue: %v", err)
+	}
+	t.Run("Generic", func(t *testing.T) {
+		t.Parallel()
+		RunQueueV2TestSuite(t, queue)
+	})
+	t.Run("SQL", func(t *testing.T) {
+		t.Parallel()
+		db, err := testData.Factory.GetMainDBConn().Get()
+		require.NoError(t, err)
+		tests.RunSQLQueueV2TestSuite(t, db)
+	})
 }

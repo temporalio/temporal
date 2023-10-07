@@ -75,6 +75,10 @@ func NewFactory(
 	}
 }
 
+func (f *Factory) GetMainDBConn() *DbConn {
+	return &f.mainDBConn
+}
+
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 	conn, err := f.mainDBConn.Get()
@@ -136,7 +140,7 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQueueV2(conn, f.logger)
+	return NewQueueV2(conn, f.logger), nil
 }
 
 // Close closes the factory

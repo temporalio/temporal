@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -78,13 +77,6 @@ const (
 	//  |                  |<--8. Conflict/Error----------------|
 	//  |                  |                                    |
 	QueueMessageIDConflict = "queue message with id already exists, likely due to concurrent writes"
-
-	// pageTokenPrefixByte is the first byte of the serialized page token. It's used to ensure that the page token is
-	// not empty. Without this, if the last_read_message_id is 0, the serialized page token would be empty, and clients
-	// could erroneously assume that there are no more messages beyond the first page. This is purely used to ensure
-	// that tokens are non-empty; it is not used to verify that the token is valid like the magic byte in some other
-	// protocols.
-	pageTokenPrefixByte = 0
 )
 
 var (
@@ -124,7 +116,7 @@ func (q *queueV2Store) ReadMessages(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveReadQueueMessagesPageSize
 	}
-	minMessageID, err := q.getMinMessageID(request)
+	minMessageID, err := persistence.GetMinMessageID(request)
 	if err != nil {
 		return nil, err
 	}
@@ -173,49 +165,12 @@ func (q *queueV2Store) ReadMessages(
 		return nil, gocql.ConvertError("QueueV2ReadMessages", err)
 	}
 
-	nextPageToken := q.getNextPageToken(messages, messageID)
+	nextPageToken := persistence.GetNextPageToken(messages)
 
 	return &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
 	}, nil
-}
-
-func (q *queueV2Store) getMinMessageID(request *persistence.InternalReadMessagesRequest) (int, error) {
-	// TODO: start from the ack level of the queue partition instead of the first message ID when there is no token.
-	if len(request.NextPageToken) == 0 {
-		return persistence.FirstQueueMessageID, nil
-	}
-
-	var token persistencespb.ReadQueueMessagesNextPageToken
-
-	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
-	err := token.Unmarshal(request.NextPageToken[1:])
-	if err != nil {
-		return 0, fmt.Errorf(
-			"%w: %q: %v",
-			persistence.ErrInvalidReadQueueMessagesNextPageToken,
-			request.NextPageToken,
-			err,
-		)
-	}
-
-	return int(token.LastReadMessageId) + 1, nil
-}
-
-func (q *queueV2Store) getNextPageToken(result []persistence.QueueV2Message, messageID int64) []byte {
-	if len(result) == 0 {
-		return nil
-	}
-
-	token := &persistencespb.ReadQueueMessagesNextPageToken{
-		LastReadMessageId: messageID,
-	}
-	// This can never fail if you inspect the implementation.
-	b, _ := token.Marshal()
-
-	// See the comment above pageTokenPrefixByte for why we want to do this.
-	return append([]byte{pageTokenPrefixByte}, b...)
 }
 
 func (q *queueV2Store) tryInsert(ctx context.Context, queueType persistence.QueueV2Type, queueName string, blob commonpb.DataBlob, messageID int64) error {
