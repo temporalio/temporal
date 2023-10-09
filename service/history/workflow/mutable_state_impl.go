@@ -3365,7 +3365,7 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 
 	startToFireTimeout := timestamp.DurationValue(attributes.GetStartToFireTimeout())
 	// TODO: Time skew needs to be taken in to account.
-	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
+	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout)
 
 	ti := &persistencespb.TimerInfo{
 		Version:        event.GetVersion(),
