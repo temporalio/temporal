@@ -101,6 +101,7 @@ func (q queueV2) EnqueueMessage(
 		if rollBackErr != nil {
 			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {

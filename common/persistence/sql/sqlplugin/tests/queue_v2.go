@@ -151,10 +151,10 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "transaction has already been committed or rolled back")
+	assert.ErrorContains(t, err, "insert error")
 	require.Len(t, logger.errMsgs, 1)
 	assert.Contains(t, logger.errMsgs[0], "transaction rollback error")
-	assert.Equal(t, db.commitCalls, 1)
+	assert.Equal(t, db.commitCalls, 0)
 }
 
 func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
