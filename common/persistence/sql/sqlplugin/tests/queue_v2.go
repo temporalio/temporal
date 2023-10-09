@@ -27,7 +27,7 @@ package tests
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,8 +129,8 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:            baseDB,
-		insertErr:     errors.New("insert error"),
-		txRollbackErr: errors.New("rollback error"),
+		insertErr:     fmt.Errorf("insert error"),
+		txRollbackErr: fmt.Errorf("rollback error"),
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
@@ -152,7 +152,7 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:         baseDB,
-		txBeginErr: errors.New("EnqueueMessage failed. Failed to start transaction"),
+		txBeginErr: fmt.Errorf("EnqueueMessage failed. Failed to start transaction"),
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
@@ -172,8 +172,8 @@ func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
 func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:                  baseDB,
-		getLastMessageIdErr: errors.New("getLastMessageId error"),
-		txRollbackErr:       errors.New("rollback error"),
+		getLastMessageIdErr: fmt.Errorf("getLastMessageId error"),
+		txRollbackErr:       fmt.Errorf("rollback error"),
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
@@ -193,7 +193,7 @@ func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 func rangeSelectFromQueueV2MessagesFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:               baseDB,
-		rangeSelectError: errors.New("rangeSelect error"),
+		rangeSelectError: fmt.Errorf("rangeSelect error"),
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)

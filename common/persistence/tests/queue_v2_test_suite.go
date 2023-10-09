@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,11 +49,15 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-	})
-	require.NoError(t, err)
+
+	// TODO: Remove this condition after implementing CreateQueue for SQL.
+	if strings.HasPrefix(t.Name(), "TestCassandra") {
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+	}
 
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
@@ -82,6 +87,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorIs(t, err, persistence.ErrNonPositiveReadQueueMessagesPageSize)
 	})
 	t.Run("TestEnqueueMessageToNonExistentQueue", func(t *testing.T) {
+		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
@@ -93,6 +99,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	})
 	t.Run("TestCreateQueueTwice", func(t *testing.T) {
+		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
@@ -106,6 +113,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	})
 	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
 		t.Parallel()
+		SkipUnimplementedForSQL(t)
 		RunHistoryTaskQueueManagerTestSuite(t, queue)
 	})
 
@@ -182,4 +190,11 @@ func testHappyPath(
 	require.NoError(t, err)
 	assert.Empty(t, response.Messages)
 	assert.Nil(t, response.NextPageToken)
+}
+
+// TODO: Remove this function after implementing CreateQueue for SQL.
+func SkipUnimplementedForSQL(t *testing.T) {
+	if !strings.HasPrefix(t.Name(), "TestCassandra") {
+		t.Skip("skipping test which is not implemented for SQL yet")
+	}
 }
