@@ -111,7 +111,10 @@ func (tx *faultyTx) Rollback() error {
 func (tx *faultyTx) Commit() error {
 	*tx.commitCalls++
 	if tx.db.txCommitErr != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return tx.db.txCommitErr
 	}
 	return tx.Tx.Commit()
