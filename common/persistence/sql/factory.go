@@ -75,8 +75,13 @@ func NewFactory(
 	}
 }
 
-func (f *Factory) GetMainDBConn() *DbConn {
-	return &f.mainDBConn
+// GetDB return a new SQL DB connection
+func (f *Factory) GetDB() (sqlplugin.DB, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return conn, err
 }
 
 // NewTaskStore returns a new task store

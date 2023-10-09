@@ -47,6 +47,7 @@ var (
 	ErrTxBeginFailed          = errors.New("txBegin error")
 	ErrInsertFailed           = errors.New("insert error")
 	ErrTxRollbackFailed       = errors.New("txRollBack err")
+	ErrTxCommitFailed         = errors.New("txCommit err")
 	ErrRangeSelectFailed      = errors.New("rangeSelect err")
 )
 
@@ -55,6 +56,7 @@ type (
 		sqlplugin.DB
 		getLastMessageIdErr error
 		txBeginErr          error
+		txCommitErr         error
 		insertErr           error
 		txRollbackErr       error
 		rangeSelectError    error
@@ -108,6 +110,10 @@ func (tx *faultyTx) Rollback() error {
 
 func (tx *faultyTx) Commit() error {
 	*tx.commitCalls++
+	if tx.db.txCommitErr != nil {
+		tx.Rollback()
+		return tx.db.txCommitErr
+	}
 	return tx.Tx.Commit()
 }
 
@@ -123,6 +129,10 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	t.Run("TxBeginFails", func(t *testing.T) {
 		t.Parallel()
 		testBeginTxFails(t, baseDB)
+	})
+	t.Run("TxCommitFails", func(t *testing.T) {
+		t.Parallel()
+		testCommitTxFails(t, baseDB)
 	})
 	t.Run("FailedToGetLastMessageIDFromDB", func(t *testing.T) {
 		t.Parallel()
@@ -155,6 +165,26 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	require.Len(t, logger.errMsgs, 1)
 	assert.Contains(t, logger.errMsgs[0], "transaction rollback error")
 	assert.Equal(t, db.commitCalls, 0)
+}
+
+func testCommitTxFails(t *testing.T, baseDB sqlplugin.DB) {
+	db := &faultyDB{
+		DB:          baseDB,
+		txCommitErr: ErrTxCommitFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
+		QueueType: persistence.QueueTypeHistoryNormal,
+		QueueName: "test-queue-" + t.Name(),
+		Blob: commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_JSON,
+			Data:         []byte("1"),
+		},
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "EnqueueMessage failed. Failed to commit transaction.")
+	assert.Equal(t, db.commitCalls, 1)
 }
 
 func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {

@@ -634,7 +634,7 @@ func TestMySQLQueueV2(t *testing.T) {
 	})
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
-		db, err := testData.Factory.GetMainDBConn().Get()
+		db, err := testData.Factory.GetDB()
 		require.NoError(t, err)
 		tests.RunSQLQueueV2TestSuite(t, db)
 	})
