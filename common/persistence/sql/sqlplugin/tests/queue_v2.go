@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -40,6 +41,14 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+)
+
+var (
+	ErrGetLastMessageIdFailed = errors.New("getLastMessageId error")
+	ErrTxBeginFailed          = errors.New("txBegin error")
+	ErrInsertFailed           = errors.New("insert error")
+	ErrTxRollbackFailed       = errors.New("txRollBack err")
+	ErrRangeSelectFailed      = errors.New("rangeSelect err")
 )
 
 type (
@@ -129,8 +138,8 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:            baseDB,
-		insertErr:     fmt.Errorf("insert error"),
-		txRollbackErr: fmt.Errorf("rollback error"),
+		insertErr:     ErrInsertFailed,
+		txRollbackErr: ErrTxRollbackFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
@@ -145,14 +154,14 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "transaction has already been committed or rolled back")
 	require.Len(t, logger.errMsgs, 1)
-	assert.Contains(t, logger.errMsgs[0], "rollback error")
+	assert.Contains(t, logger.errMsgs[0], "transaction rollback error")
 	assert.Equal(t, db.commitCalls, 1)
 }
 
 func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:         baseDB,
-		txBeginErr: fmt.Errorf("EnqueueMessage failed. Failed to start transaction"),
+		txBeginErr: ErrTxBeginFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
@@ -165,14 +174,14 @@ func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "EnqueueMessage failed. Failed to start transaction.")
+	assert.ErrorContains(t, err, "txBegin error")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
 func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:                  baseDB,
-		getLastMessageIdErr: fmt.Errorf("getLastMessageId error"),
+		getLastMessageIdErr: ErrGetLastMessageIdFailed,
 		txRollbackErr:       fmt.Errorf("rollback error"),
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
@@ -193,7 +202,7 @@ func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 func rangeSelectFromQueueV2MessagesFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:               baseDB,
-		rangeSelectError: fmt.Errorf("rangeSelect error"),
+		rangeSelectError: ErrRangeSelectFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
