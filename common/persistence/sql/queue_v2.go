@@ -46,23 +46,30 @@ func NewQueueV2() persistence.QueueV2 {
 	return &queueV2{}
 }
 
-func (q queueV2) EnqueueMessage(
+func (q *queueV2) EnqueueMessage(
 	context.Context,
 	*persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	return nil, fmt.Errorf("%w: EnqueueMessage", ErrNotImplemented)
 }
 
-func (q queueV2) ReadMessages(
+func (q *queueV2) ReadMessages(
 	context.Context,
 	*persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
 	return nil, fmt.Errorf("%w: ReadMessages", ErrNotImplemented)
 }
 
-func (q queueV2) CreateQueue(
+func (q *queueV2) CreateQueue(
 	context.Context,
 	*persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
 	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
+}
+
+func (q *queueV2) RangeDeleteMessages(
+	context.Context,
+	*persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	return nil, fmt.Errorf("%w: RangeDeleteMessages", ErrNotImplemented)
 }
