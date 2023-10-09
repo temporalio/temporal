@@ -349,13 +349,15 @@ func (m *HistoryTask) GetBlob() *v1.DataBlob {
 }
 
 type QueuePartition struct {
-	// min_message_id is less than or equal to the id of every message in the queue. If there are no messages in the
-	// queue, then this is 0. It is also 0 if there has only been one message enqueued and it has not been deleted yet
-	// because the first message is always assigned id 0. The min_message_id is mainly used to skip over tombstones in
-	// Cassandra: let's say we deleted the first 1K messages from a queue with 1.1K messages. If an operator asked for
-	// the first 100 messages, without the min_message_id, we would have to scan over the 1K tombstone rows before we
-	// could return the 100 messages. With the min_message_id, we can skip over all of the tombstones by specifying
-	// message_id >= queue.min_message_id.
+	// min_message_id is less than or equal to the id of every message in the queue. The min_message_id is mainly used to
+	// skip over tombstones in Cassandra: let's say we deleted the first 1K messages from a queue with 1.1K messages. If
+	//  an operator asked for the first 100 messages, without the min_message_id, we would have to scan over the 1K
+	// tombstone rows before we could return the 100 messages. With the min_message_id, we can skip over all of the
+	// tombstones by specifying message_id >= queue.min_message_id. Note: it is possible for this to be less than the id
+	// of the lowest message in the queue temporarily because we delete messages before we update the queue metadata.
+	// However, such errors surface to clients with an "Unavailable" code, so clients retry, and the id should be updated
+	// soon. Additionally, we only use min_message_id to skip over tombstones, so it will only affect read performance,
+	// not correctness.
 	MinMessageId int64 `protobuf:"varint,1,opt,name=min_message_id,json=minMessageId,proto3" json:"min_message_id,omitempty"`
 }
 

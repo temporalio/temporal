@@ -174,3 +174,10 @@ func (q *queueV2) CreateQueue(
 ) (*persistence.InternalCreateQueueResponse, error) {
 	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
 }
+
+func (q *queueV2) RangeDeleteMessages(
+	context.Context,
+	*persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	return nil, fmt.Errorf("%w: RangeDeleteMessages", ErrNotImplemented)
+}

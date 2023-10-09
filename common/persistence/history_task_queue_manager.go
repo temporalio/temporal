@@ -188,7 +188,10 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	}, nil
 }
 
-func (m *HistoryTaskQueueManagerImpl) CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error) {
+func (m *HistoryTaskQueueManagerImpl) CreateQueue(
+	ctx context.Context,
+	request *CreateQueueRequest,
+) (*CreateQueueResponse, error) {
 	_, err := m.queue.CreateQueue(ctx, &InternalCreateQueueRequest{
 		QueueType: request.QueueKey.QueueType,
 		QueueName: request.QueueKey.GetQueueName(),
@@ -197,6 +200,20 @@ func (m *HistoryTaskQueueManagerImpl) CreateQueue(ctx context.Context, request *
 		return nil, err
 	}
 	return &CreateQueueResponse{}, nil
+}
+
+func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
+	ctx context.Context,
+	request *DeleteTasksRequest,
+) (*DeleteTasksResponse, error) {
+	_, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
+		QueueType: request.QueueKey.QueueType,
+		QueueName: request.QueueKey.GetQueueName(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &DeleteTasksResponse{}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

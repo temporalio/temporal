@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -44,17 +45,83 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+type (
+	faultyQueue struct {
+		base                   persistence.QueueV2
+		enqueueErr             error
+		readMessagesErr        error
+		createQueueErr         error
+		rangeDeleteMessagesErr error
+	}
+)
+
+func (q faultyQueue) EnqueueMessage(
+	ctx context.Context,
+	req *persistence.InternalEnqueueMessageRequest,
+) (*persistence.InternalEnqueueMessageResponse, error) {
+	if q.enqueueErr != nil {
+		return nil, q.enqueueErr
+	}
+	return q.base.EnqueueMessage(ctx, req)
+}
+
+func (q faultyQueue) ReadMessages(
+	ctx context.Context,
+	req *persistence.InternalReadMessagesRequest,
+) (*persistence.InternalReadMessagesResponse, error) {
+	if q.readMessagesErr != nil {
+		return nil, q.readMessagesErr
+	}
+	return q.base.ReadMessages(ctx, req)
+}
+
+func (q faultyQueue) CreateQueue(
+	ctx context.Context,
+	req *persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	if q.createQueueErr != nil {
+		return nil, q.createQueueErr
+	}
+	return q.base.CreateQueue(ctx, req)
+}
+
+func (q faultyQueue) RangeDeleteMessages(
+	ctx context.Context,
+	req *persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	if q.rangeDeleteMessagesErr != nil {
+		return nil, q.rangeDeleteMessagesErr
+	}
+	return q.base.RangeDeleteMessages(ctx, req)
+}
+
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
 	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, 1)
-	t.Run("TestHistoryTaskQueueManagerHappyPath", func(t *testing.T) {
+	t.Run("TestHistoryTaskQueueManagerEnqueueTasks", func(t *testing.T) {
 		t.Parallel()
-		testHistoryTaskQueueManagerHappyPath(t, historyTaskQueueManager)
+		testHistoryTaskQueueManagerEnqueueTasks(t, historyTaskQueueManager)
+	})
+	t.Run("TestHistoryTaskQueueManagerEnqueueTasksErr", func(t *testing.T) {
+		t.Parallel()
+		testHistoryTaskQueueManagerEnqueueTasksErr(t, queue)
+	})
+	t.Run("TestHistoryTaskQueueManagerCreateQueueErr", func(t *testing.T) {
+		t.Parallel()
+		testHistoryTaskQueueManagerCreateQueueErr(t, queue)
 	})
 	t.Run("TestHistoryTaskQueueManagerErrDeserializeTask", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue, historyTaskQueueManager)
+	})
+	t.Run("DeleteTasks", func(t *testing.T) {
+		t.Parallel()
+		testHistoryTaskQueueManagerDeleteTasks(t, historyTaskQueueManager)
+	})
+	t.Run("DeleteTasksErr", func(t *testing.T) {
+		t.Parallel()
+		testHistoryTaskQueueManagerDeleteTasksErr(t, queue)
 	})
 	t.Run("GetDLQTasks", func(t *testing.T) {
 		t.Parallel()
@@ -70,7 +137,19 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 	})
 }
 
-func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.HistoryTaskQueueManager) {
+func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.QueueV2) {
+	retErr := errors.New("test")
+	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
+		base:           queue,
+		createQueueErr: retErr,
+	}, 1)
+	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
+		QueueKey: getQueueKey(t),
+	})
+	assert.ErrorIs(t, err, retErr)
+}
+
+func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	numHistoryShards := 5
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	t.Cleanup(cancel)
@@ -81,12 +160,7 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.Hist
 	shardID := 2
 	assert.Equal(t, int32(shardID), common.WorkflowIDToHistoryShard(namespaceID, workflowID, int32(numHistoryShards)))
 
-	category := tasks.CategoryTransfer
-	queueKey := persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryNormal,
-		Category:      category,
-		SourceCluster: "test-source-cluster-" + t.Name(),
-	}
+	queueKey := getQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})
@@ -97,11 +171,7 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.Hist
 			WorkflowKey: workflowKey,
 			TaskID:      int64(i + 1),
 		}
-		res, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-			QueueType:     queueKey.QueueType,
-			SourceCluster: queueKey.SourceCluster,
-			Task:          task,
-		})
+		res, err := enqueueTask(ctx, manager, queueKey, task)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+i), res.Metadata.ID)
 	}
@@ -127,6 +197,25 @@ func testHistoryTaskQueueManagerHappyPath(t *testing.T, manager persistence.Hist
 	}
 }
 
+func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.QueueV2) {
+	ctx := context.Background()
+
+	retErr := errors.New("test")
+	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
+		base:       queue,
+		enqueueErr: retErr,
+	}, 1)
+	queueKey := getQueueKey(t)
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey,
+	})
+	require.NoError(t, err)
+	_, err = enqueueTask(ctx, manager, queueKey, &tasks.WorkflowTask{
+		TaskID: 1,
+	})
+	assert.ErrorIs(t, err, retErr)
+}
+
 func testHistoryTaskQueueManagerErrDeserializeHistoryTask(
 	t *testing.T,
 	queue persistence.QueueV2,
@@ -148,6 +237,36 @@ func testHistoryTaskQueueManagerErrDeserializeHistoryTask(
 	})
 }
 
+func testHistoryTaskQueueManagerDeleteTasks(t *testing.T, manager *persistence.HistoryTaskQueueManagerImpl) {
+	ctx := context.Background()
+
+	queueKey := getQueueKey(t)
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey,
+	})
+	require.NoError(t, err)
+	for i := 0; i < 2; i++ {
+		_, err := enqueueTask(ctx, manager, queueKey, &tasks.WorkflowTask{
+			TaskID: int64(i + 1),
+		})
+		require.NoError(t, err)
+	}
+	_, err = manager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
+		QueueKey: queueKey,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+			ID: persistence.FirstQueueMessageID,
+		},
+	})
+	require.NoError(t, err)
+	res, err := manager.ReadTasks(ctx, &persistence.ReadTasksRequest{
+		QueueKey: queueKey,
+		PageSize: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Tasks, 1)
+	assert.Equal(t, int64(2), res.Tasks[0].Task.GetTaskID())
+}
+
 func enqueueAndDeserializeBlob(
 	ctx context.Context,
 	t *testing.T,
@@ -158,11 +277,7 @@ func enqueueAndDeserializeBlob(
 	t.Helper()
 
 	queueType := persistence.QueueTypeHistoryNormal
-	queueKey := persistence.QueueKey{
-		QueueType:     queueType,
-		Category:      tasks.CategoryTransfer,
-		SourceCluster: "test-source-cluster-" + t.Name(),
-	}
+	queueKey := getQueueKey(t)
 	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
@@ -189,4 +304,53 @@ func enqueueAndDeserializeBlob(
 		PageSize: 1,
 	})
 	return err
+}
+
+func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.QueueV2) {
+	ctx := context.Background()
+
+	retErr := errors.New("test")
+	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
+		base:                   queue,
+		rangeDeleteMessagesErr: retErr,
+	}, 1)
+	queueKey := getQueueKey(t)
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey,
+	})
+	require.NoError(t, err)
+	_, err = enqueueTask(ctx, manager, queueKey, &tasks.WorkflowTask{
+		TaskID: 1,
+	})
+	require.NoError(t, err)
+	_, err = manager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
+		QueueKey: queueKey,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+			ID: persistence.FirstQueueMessageID,
+		},
+	})
+	assert.ErrorIs(t, err, retErr)
+}
+
+func getQueueKey(t *testing.T) persistence.QueueKey {
+	return persistence.QueueKey{
+		QueueType:     persistence.QueueTypeHistoryNormal,
+		Category:      tasks.CategoryTransfer,
+		SourceCluster: "test-source-cluster-" + t.Name(),
+		TargetCluster: "test-target-cluster-" + t.Name(),
+	}
+}
+
+func enqueueTask(
+	ctx context.Context,
+	manager persistence.HistoryTaskQueueManager,
+	queueKey persistence.QueueKey,
+	task *tasks.WorkflowTask,
+) (*persistence.EnqueueTaskResponse, error) {
+	return manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     queueKey.QueueType,
+		SourceCluster: queueKey.SourceCluster,
+		TargetCluster: queueKey.TargetCluster,
+		Task:          task,
+	})
 }

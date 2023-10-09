@@ -25,7 +25,6 @@
 package persistence
 
 import (
-	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -41,8 +40,15 @@ const (
 )
 
 var (
-	ErrInvalidReadQueueMessagesNextPageToken = errors.New("invalid next-page token for reading queue messages")
-	ErrNonPositiveReadQueueMessagesPageSize  = errors.New("non-positive page size for reading queue messages")
+	ErrInvalidReadQueueMessagesNextPageToken = &InvalidPersistenceRequestError{
+		Msg: "invalid next-page token for reading queue messages",
+	}
+	ErrNonPositiveReadQueueMessagesPageSize = &InvalidPersistenceRequestError{
+		Msg: "non-positive page size for reading queue messages",
+	}
+	ErrInvalidQueueRangeDeleteMaxMessageID = &InvalidPersistenceRequestError{
+		Msg: "max message id for queue range delete is invalid",
+	}
 )
 
 func NewQueueNotFoundError(queueType QueueV2Type, queueName string) error {
