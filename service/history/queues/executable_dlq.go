@@ -57,6 +57,10 @@ type (
 
 	// DLQ is a dead letter queue that can be used to enqueue tasks that fail to be processed.
 	DLQ interface {
+		CreateQueue(
+			ctx context.Context,
+			request *persistence.CreateQueueRequest,
+		) (*persistence.CreateQueueResponse, error)
 		EnqueueTask(
 			ctx context.Context,
 			request *persistence.EnqueueTaskRequest,
@@ -72,6 +76,7 @@ var (
 	_                      Executable = new(ExecutableDLQ)
 	ErrTerminalTaskFailure            = errors.New("original task failed and this task is now to send the original to the DLQ")
 	ErrSendTaskToDLQ                  = errors.New("failed to send task to DLQ")
+	ErrCreateDLQ                      = errors.New("failed to create DLQ")
 )
 
 // NewExecutableDLQ wraps an Executable to ensure that it is sent to the DLQ if it fails terminally.
@@ -101,11 +106,26 @@ func (d *ExecutableDLQ) Execute() error {
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
 	ctx, cancel := clock.ContextWithTimeout(ctx, sendToDLQTimeout, d.timeSource)
 	defer cancel()
-	_, err := d.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+	task := d.GetTask()
+	queueKey := persistence.QueueKey{
 		QueueType:     persistence.QueueTypeHistoryDLQ,
+		Category:      task.GetCategory(),
 		SourceCluster: d.clusterName,
 		TargetCluster: d.clusterName,
-		Task:          d.GetTask(),
+	}
+	_, err := d.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey,
+	})
+	if err != nil {
+		if !errors.Is(err, persistence.ErrQueueAlreadyExists) {
+			return fmt.Errorf("%w: %v", ErrCreateDLQ, err)
+		}
+	}
+	_, err = d.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     queueKey.QueueType,
+		SourceCluster: queueKey.SourceCluster,
+		TargetCluster: queueKey.TargetCluster,
+		Task:          task,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)

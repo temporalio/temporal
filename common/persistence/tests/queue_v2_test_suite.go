@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/persistence"
 )
@@ -46,6 +48,11 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
+	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
 
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
@@ -73,6 +80,29 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 			NextPageToken: nil,
 		})
 		assert.ErrorIs(t, err, persistence.ErrNonPositiveReadQueueMessagesPageSize)
+	})
+	t.Run("TestEnqueueMessageToNonExistentQueue", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+			QueueType: queueType,
+			QueueName: "non-existent-queue",
+		})
+		assert.ErrorAs(t, err, new(*serviceerror.NotFound))
+		assert.ErrorContains(t, err, "non-existent-queue")
+		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
+	})
+	t.Run("TestCreateQueueTwice", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, persistence.ErrQueueAlreadyExists)
+		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
+		assert.ErrorContains(t, err, queueName)
 	})
 	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
 		t.Parallel()

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -80,15 +81,18 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
-	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.AuthorizationScope)).Return(s.mockMetricsHandler)
-	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.AuthorizationScope)).Return(s.mockMetricsHandler).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
 	s.interceptor = NewAuthorizationInterceptor(
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
 		log.NewNoopLogger(),
-		nil)
+		nil,
+		"",
+		"",
+	)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 
@@ -149,7 +153,61 @@ func (s *authorizerInterceptorSuite) TestNoopClaimMapperWithoutTLS() {
 		s.mockAuthorizer,
 		s.mockMetricsHandler,
 		log.NewNoopLogger(),
-		nil)
+		nil,
+		"",
+		"",
+	)
 	_, err := interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestAlternateHeaders() {
+	interceptor := NewAuthorizationInterceptor(
+		s.mockClaimMapper,
+		NewNoopAuthorizer(),
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		nil,
+		"custom-header",
+		"custom-extra-header",
+	)
+
+	cases := []struct {
+		md       metadata.MD
+		authInfo *AuthInfo
+	}{
+		{
+			metadata.Pairs(
+				"custom-header", "the-token",
+				"custom-extra-header", "more stuff",
+			),
+			&AuthInfo{
+				AuthToken: "the-token",
+				ExtraData: "more stuff",
+			},
+		},
+		{
+			metadata.Pairs(
+				"custom-header", "the-token",
+				"authorization-extras", "this gets ignored",
+			),
+			&AuthInfo{
+				AuthToken: "the-token",
+			},
+		},
+		{
+			metadata.Pairs(
+				"custom-extra-header", "missing main header, this gets ignored",
+			),
+			nil,
+		},
+	}
+	for _, testCase := range cases {
+		if testCase.authInfo != nil {
+			s.mockClaimMapper.EXPECT().GetClaims(testCase.authInfo).Return(&Claims{System: RoleAdmin}, nil)
+		}
+		inCtx := metadata.NewIncomingContext(ctx, testCase.md)
+		_, err := interceptor(inCtx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+		s.NoError(err)
+	}
 }

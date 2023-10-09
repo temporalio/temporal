@@ -42,4 +42,7 @@ func TestNewQueueV2(t *testing.T) {
 	_, err = q.ReadMessages(context.Background(), nil)
 	assert.ErrorIs(t, err, sql.ErrNotImplemented)
 	assert.ErrorContains(t, err, "ReadMessages")
+	_, err = q.CreateQueue(context.Background(), nil)
+	assert.ErrorIs(t, err, sql.ErrNotImplemented)
+	assert.ErrorContains(t, err, "CreateQueue")
 }
