@@ -28,7 +28,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -182,7 +181,7 @@ func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 	db := &faultyDB{
 		DB:                  baseDB,
 		getLastMessageIdErr: ErrGetLastMessageIdFailed,
-		txRollbackErr:       fmt.Errorf("rollback error"),
+		txRollbackErr:       ErrTxRollbackFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
