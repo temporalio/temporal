@@ -199,7 +199,7 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+func StringToEnum(search string, candidates map[string]int32) (int32, error) {
 	if search == "" {
 		return 0, nil
 	}
@@ -314,8 +314,8 @@ func showNextPage() bool {
 	return strings.Trim(input, " ") == ""
 }
 
-func getNamespaceID(c *cli.Context, nsName namespace.Name) (namespace.ID, error) {
-	wfClient := cFactory.WorkflowClient(c)
+func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespace.Name) (namespace.ID, error) {
+	wfClient := clientFactory.WorkflowClient(c)
 
 	ctx, cancel := newContext(c)
 	defer cancel()

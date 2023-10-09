@@ -246,6 +246,51 @@ steps:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
+  - label: ":golang: functional test with postgresql pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional xdc test with postgresql pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-xdc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-xdc-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional ndc test with postgresql pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-ndc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-xdc-postgresql-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
   - label: ":golang: functional test with postgresql 12"
     agents:
       queue: "default"
@@ -289,6 +334,51 @@ steps:
     plugins:
       - docker-compose#v3.8.0:
           run: integration-test-xdc-postgresql12
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional test with postgresql 12 pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-postgresql12-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional xdc test with postgresql 12 pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-xdc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-xdc-postgresql12-pgx
+          config: ./develop/buildkite/docker-compose.yml
+
+  - label: ":golang: functional ndc test with postgresql 12 pgx"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make functional-test-ndc-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: functional test with sqlite"

@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/common/persistence/serialization"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1215,6 +1216,9 @@ type (
 			request *ReadRawTasksRequest,
 		) (*ReadRawTasksResponse, error)
 		ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error)
+		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
+		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
+		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
@@ -1271,6 +1275,22 @@ type (
 	ReadRawTasksResponse struct {
 		Tasks         []RawHistoryTask
 		NextPageToken []byte
+	}
+
+	CreateQueueRequest struct {
+		QueueKey QueueKey
+	}
+
+	CreateQueueResponse struct {
+	}
+
+	DeleteTasksRequest struct {
+		QueueKey                    QueueKey
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	DeleteTasksResponse struct {
+		// empty
 	}
 )
 

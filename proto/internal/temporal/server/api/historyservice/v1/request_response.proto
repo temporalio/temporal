@@ -787,3 +787,10 @@ message GetDLQTasksResponse {
     // there are more results.
     bytes next_page_token = 2;
 }
+
+message DeleteDLQTasksRequest {
+    HistoryDLQKey dlq_key = 1;
+    HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message DeleteDLQTasksResponse {}

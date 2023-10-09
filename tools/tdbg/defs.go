@@ -49,7 +49,3 @@ const (
 
 	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
 )
-
-var (
-	cFactory ClientFactory
-)

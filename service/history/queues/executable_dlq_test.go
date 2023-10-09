@@ -28,27 +28,20 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
-
-type (
-	// fakeTask is needed to compare tasks.Task values by identity
-	fakeTask struct {
-		tasks.Task
-	}
 )
 
 var (
 	// testTask is an arbitrary task that we use to verify that the correct task is enqueued to the DLQ
-	testTask tasks.Task = fakeTask{}
+	testTask tasks.Task = &tasks.WorkflowTask{}
 )
 
 func TestDLQExecutable_TerminalErrors(t *testing.T) {
@@ -125,14 +118,14 @@ func TestDLQExecutable_RandomErr(t *testing.T) {
 	assert.Empty(t, dlq.Requests, "Non-terminal error should not be sent to DLQ")
 }
 
-func TestDLQExecutable_DLQErr(t *testing.T) {
+func TestDLQExecutable_DLQEnqueueErr(t *testing.T) {
 	// Verify that if the DLQ returns an error, we return ErrSendTaskToDLQ
 
 	t.Parallel()
 
 	dlqErr := errors.New("error writing task to queue")
 	originalErr := new(serialization.DeserializationError)
-	dlq := &queuestest.FakeDLQ{Err: dlqErr}
+	dlq := &queuestest.FakeDLQ{EnqueueTaskErr: dlqErr}
 	executable := newExecutable(originalErr)
 	dlqExecutable := newExecutableDLQ(executable, dlq)
 
@@ -160,7 +153,29 @@ func TestDLQExecutable_DLQErr(t *testing.T) {
 	}
 }
 
-func newExecutableDLQ(executable *queuestest.FakeExecutable, dlq *queuestest.FakeDLQ) *queues.ExecutableDLQ {
+func TestDLQExecutable_DLQCreateErr(t *testing.T) {
+	// Verify that if the DLQ returns an error, we return ErrSendTaskToDLQ
+
+	t.Parallel()
+
+	dlqErr := errors.New("error creating queue")
+	originalErr := new(serialization.DeserializationError)
+	dlq := &queuestest.FakeDLQ{
+		CreateQueueErr: dlqErr,
+	}
+	executable := newExecutable(originalErr)
+	dlqExecutable := newExecutableDLQ(executable, dlq)
+
+	err := dlqExecutable.Execute()
+	assert.ErrorIs(t, err, queues.ErrTerminalTaskFailure)
+	assert.ErrorContains(t, err, originalErr.Error())
+
+	err = dlqExecutable.Execute()
+	assert.ErrorIs(t, err, queues.ErrCreateDLQ)
+	assert.ErrorContains(t, err, dlqErr.Error())
+}
+
+func newExecutableDLQ(executable *queuestest.FakeExecutable, dlq queues.DLQ) *queues.ExecutableDLQ {
 	return queues.NewExecutableDLQ(executable, dlq, clock.NewEventTimeSource(), "test-cluster-name")
 }
 

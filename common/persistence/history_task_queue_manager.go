@@ -62,6 +62,7 @@ const (
 var (
 	ErrReadTasksNonPositivePageSize = errors.New("page size to read history tasks must be positive")
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
+	ErrQueueAlreadyExists           = errors.New("queue already exists")
 )
 
 func NewHistoryTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTaskQueueManagerImpl {
@@ -72,7 +73,10 @@ func NewHistoryTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTas
 	}
 }
 
-func (m *HistoryTaskQueueManagerImpl) EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error) {
+func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
+	ctx context.Context,
+	request *EnqueueTaskRequest,
+) (*EnqueueTaskResponse, error) {
 	blob, err := m.serializer.SerializeTask(request.Task)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
@@ -182,6 +186,35 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 		Tasks:         resTasks,
 		NextPageToken: response.NextPageToken,
 	}, nil
+}
+
+func (m *HistoryTaskQueueManagerImpl) CreateQueue(
+	ctx context.Context,
+	request *CreateQueueRequest,
+) (*CreateQueueResponse, error) {
+	_, err := m.queue.CreateQueue(ctx, &InternalCreateQueueRequest{
+		QueueType: request.QueueKey.QueueType,
+		QueueName: request.QueueKey.GetQueueName(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &CreateQueueResponse{}, nil
+}
+
+func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
+	ctx context.Context,
+	request *DeleteTasksRequest,
+) (*DeleteTasksResponse, error) {
+	_, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
+		QueueType:                   request.QueueKey.QueueType,
+		QueueName:                   request.QueueKey.GetQueueName(),
+		InclusiveMaxMessageMetadata: request.InclusiveMaxMessageMetadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &DeleteTasksResponse{}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

@@ -739,6 +739,17 @@ type (
 			ctx context.Context,
 			request *InternalReadMessagesRequest,
 		) (*InternalReadMessagesResponse, error)
+		// CreateQueue creates a new queue. An error will be returned if the queue already exists. In addition, an error
+		// will be returned if you attempt to operate on a queue with something like EnqueueMessage or ReadMessages
+		// before the queue is created.
+		CreateQueue(
+			ctx context.Context,
+			request *InternalCreateQueueRequest,
+		) (*InternalCreateQueueResponse, error)
+		RangeDeleteMessages(
+			ctx context.Context,
+			request *InternalRangeDeleteMessagesRequest,
+		) (*InternalRangeDeleteMessagesResponse, error)
 	}
 
 	QueueV2Type int
@@ -772,5 +783,25 @@ type (
 	InternalReadMessagesResponse struct {
 		Messages      []QueueV2Message
 		NextPageToken []byte
+	}
+
+	InternalCreateQueueRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+	}
+
+	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	// InternalRangeDeleteMessagesRequest deletes all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
+		// empty
 	}
 )

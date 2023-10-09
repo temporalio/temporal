@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"go.temporal.io/server/common/persistence/sql"
 )
 
@@ -37,9 +38,19 @@ func TestNewQueueV2(t *testing.T) {
 
 	q := sql.NewQueueV2()
 	_, err := q.EnqueueMessage(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "EnqueueMessage")
+	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
+		assert.ErrorContains(t, err, "EnqueueMessage")
+	}
 	_, err = q.ReadMessages(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "ReadMessages")
+	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
+		assert.ErrorContains(t, err, "ReadMessages")
+	}
+	_, err = q.CreateQueue(context.Background(), nil)
+	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
+		assert.ErrorContains(t, err, "CreateQueue")
+	}
+	_, err = q.RangeDeleteMessages(context.Background(), nil)
+	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
+		assert.ErrorContains(t, err, "RangeDeleteMessages")
+	}
 }
