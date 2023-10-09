@@ -22,67 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package getdlqtasks contains the logic to implement the [historyservice.HistoryServiceServer.GetDLQTasks] API.
-package getdlqtasks
+package deletedlqtasks
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/consts"
 )
 
-// Invoke the GetDLQTasks API. All errors returned from this function are already translated into the appropriate type
-// from the [serviceerror] package.
 func Invoke(
 	ctx context.Context,
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
-	req *historyservice.GetDLQTasksRequest,
-) (*historyservice.GetDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(req.DlqKey.Category)
+	req *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	categoryEnum := req.DlqKey.Category
+	category, err := api.GetTaskCategory(categoryEnum)
 	if err != nil {
 		return nil, err
 	}
+	if req.InclusiveMaxTaskMetadata == nil {
+		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
+	}
 
-	response, err := historyTaskQueueManager.ReadRawTasks(ctx, &persistence.ReadTasksRequest{
+	_, err = historyTaskQueueManager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
 		QueueKey: persistence.QueueKey{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			Category:      category,
 			SourceCluster: req.DlqKey.SourceCluster,
 			TargetCluster: req.DlqKey.TargetCluster,
 		},
-		PageSize:      int(req.PageSize),
-		NextPageToken: req.NextPageToken,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+			ID: req.InclusiveMaxTaskMetadata.MessageId,
+		},
 	})
 	if err != nil {
-		if errors.Is(err, persistence.ErrReadTasksNonPositivePageSize) {
-			return nil, consts.ErrInvalidPageSize
-		}
-
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetDLQTasks failed. Error: %v", err))
+		return nil, err
 	}
-
-	dlqTasks := make([]*historyservice.HistoryDLQTask, len(response.Tasks))
-	for i, task := range response.Tasks {
-		dlqTasks[i] = &historyservice.HistoryDLQTask{
-			Metadata: &historyservice.HistoryDLQTaskMetadata{
-				MessageId: task.MessageMetadata.ID,
-			},
-			Task: &historyservice.HistoryTask{
-				ShardId: task.Task.ShardId,
-				Task:    task.Task.Blob,
-			},
-		}
-	}
-
-	return &historyservice.GetDLQTasksResponse{
-		DlqTasks:      dlqTasks,
-		NextPageToken: response.NextPageToken,
-	}, nil
+	return &historyservice.DeleteDLQTasksResponse{}, nil
 }

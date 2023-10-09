@@ -41,12 +41,12 @@ import (
 	"go.temporal.io/server/common/membership"
 )
 
-func TestGetDLQTasks_ErrNoHosts(t *testing.T) {
+func TestErrGetAnyHistoryHost(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
-	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{})
+	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{}).AnyTimes()
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,
@@ -55,9 +55,34 @@ func TestGetDLQTasks_ErrNoHosts(t *testing.T) {
 		nil,
 		time.Duration(0),
 	)
-	_, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{})
-	var unavailableErr *serviceerror.Unavailable
-	require.ErrorAs(t, err, &unavailableErr, "Should return an 'Unavailable' error when there are no"+
-		" history hosts available to serve the request")
-	assert.ErrorContains(t, err, history.ErrNoHosts.Error())
+
+	for _, tc := range []struct {
+		name string
+		fn   func() error
+	}{
+		{
+			name: "GetDLQTasks",
+			fn: func() error {
+				_, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{})
+				return err
+			},
+		},
+		{
+			name: "DeleteDLQTasks",
+			fn: func() error {
+				_, err := client.DeleteDLQTasks(context.Background(), &historyservice.DeleteDLQTasksRequest{})
+				return err
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{})
+			var unavailableErr *serviceerror.Unavailable
+			require.ErrorAs(t, err, &unavailableErr, "Should return an 'Unavailable' error when there "+
+				"are no history hosts available to serve the request")
+			assert.ErrorContains(t, err, history.ErrNoHosts.Error())
+		})
+	}
 }
