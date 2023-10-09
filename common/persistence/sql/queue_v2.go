@@ -67,7 +67,7 @@ func NewQueueV2(db sqlplugin.DB,
 	}
 }
 
-func (q queueV2) EnqueueMessage(
+func (q *queueV2) EnqueueMessage(
 	ctx context.Context,
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
@@ -168,7 +168,7 @@ func newQueueV2Row(
 	}
 }
 
-func (q queueV2) CreateQueue(
+func (q *queueV2) CreateQueue(
 	context.Context,
 	*persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
