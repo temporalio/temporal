@@ -47,8 +47,6 @@ const (
 	sslModeRequire = "require"
 	sslModeFull    = "verify-full"
 
-	sslHost = "host"
-
 	sslCA   = "sslrootcert"
 	sslKey  = "sslkey"
 	sslCert = "sslcert"

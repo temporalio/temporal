@@ -28,6 +28,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+const (
+	// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
+	dupEntryCode    = "23505"
+	dupDatabaseCode = "42P04"
+)
+
 type Driver interface {
 	CreateConnection(dsn string) (*sqlx.DB, error)
 	IsDupEntryError(error) bool

@@ -89,7 +89,7 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetPostgreSQLpfxTestClusterOption return test options
+// GetPostgreSQLPGXTestClusterOption return test options
 func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: postgresql.PluginNamePGX,
@@ -115,7 +115,7 @@ func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetPostgreSQL12TestClusterOption return test options
+// GetPostgreSQL12PGXTestClusterOption return test options
 func GetPostgreSQL12PGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: postgresql.PluginNameV12PGX,
