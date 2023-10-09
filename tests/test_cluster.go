@@ -144,8 +144,12 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ops = persistencetests.GetMySQL8TestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNamePGX:
+			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
 		case postgresql.PluginNameV12:
 			ops = persistencetests.GetPostgreSQL12TestClusterOption()
+		case postgresql.PluginNameV12PGX:
+			ops = persistencetests.GetPostgreSQL12PGXTestClusterOption()
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
@@ -198,7 +202,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
 			switch storeConfig.SQL.PluginName {
-			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+			case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 				indexName = storeConfig.SQL.DatabaseName
 			}
 		}

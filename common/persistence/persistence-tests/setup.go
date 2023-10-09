@@ -89,10 +89,36 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
+// GetPostgreSQLPGXTestClusterOption return test options
+func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: postgresql.PluginNamePGX,
+		DBUsername:      testPostgreSQLUser,
+		DBPassword:      testPostgreSQLPassword,
+		DBHost:          environment.GetPostgreSQLAddress(),
+		DBPort:          environment.GetPostgreSQLPort(),
+		SchemaDir:       testPostgreSQLSchemaDir,
+		StoreType:       config.StoreTypeSQL,
+	}
+}
+
 // GetPostgreSQL12TestClusterOption return test options
 func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName: postgresql.PluginNameV12,
+		DBUsername:      testPostgreSQLUser,
+		DBPassword:      testPostgreSQLPassword,
+		DBHost:          environment.GetPostgreSQLAddress(),
+		DBPort:          environment.GetPostgreSQLPort(),
+		SchemaDir:       testPostgreSQL12SchemaDir,
+		StoreType:       config.StoreTypeSQL,
+	}
+}
+
+// GetPostgreSQL12PGXTestClusterOption return test options
+func GetPostgreSQL12PGXTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: postgresql.PluginNameV12PGX,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),

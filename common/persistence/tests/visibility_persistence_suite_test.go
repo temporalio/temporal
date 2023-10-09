@@ -781,7 +781,7 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 
 func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
@@ -813,7 +813,7 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 
 func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
