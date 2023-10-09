@@ -78,9 +78,6 @@ func GetOrPollMutableState(
 	if err != nil {
 		return nil, err
 	}
-	if request.CurrentBranchToken == nil {
-		request.CurrentBranchToken = response.CurrentBranchToken
-	}
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
 	if err != nil {
 		return nil, err
@@ -92,11 +89,14 @@ func GetOrPollMutableState(
 		}
 		request.VersionHistoryItem = lastVersionHistoryItem
 	}
+	// Use the latest event id + event version as the branch identifier. This pair is unique across clusters.
+	// We return the full version histories. Callers need to fetch the last version history item from current branch
+	// and use the last version history item in following calls.
 	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
-	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
+	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking.
 	expectedNextEventID := common.FirstEventID
 	if request.ExpectedNextEventId != common.EmptyEventID {
 		expectedNextEventID = request.GetExpectedNextEventId()
@@ -150,11 +150,7 @@ func GetOrPollMutableState(
 				}
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
-				lcaItem, err := versionhistory.FindLCAVersionHistoryItem(latestVersionHistory, currentVersionHistory)
-				if err != nil {
-					return nil, err
-				}
-				if !versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) {
+				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
 					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
