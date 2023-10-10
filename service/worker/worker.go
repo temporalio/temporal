@@ -29,10 +29,10 @@ import (
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
