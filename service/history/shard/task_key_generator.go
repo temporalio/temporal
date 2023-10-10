@@ -89,23 +89,22 @@ func (a *taskKeyGenerator) setTaskKeys(
 				}
 				task.SetTaskID(id)
 
-				taskScheduledTime := task.GetVisibilityTime()
-				if !isScheduledTask {
-					taskScheduledTime = now
-				}
-				taskScheduledTime = taskScheduledTime.
-					Add(persistence.ScheduledTaskMinPrecision).
-					Truncate(persistence.ScheduledTaskMinPrecision)
-				if isScheduledTask && taskScheduledTime.Before(a.taskMinScheduledTime) {
-					a.logger.Debug("New timer generated is less than min scheduled time",
-						tag.WorkflowNamespaceID(task.GetNamespaceID()),
-						tag.WorkflowID(task.GetWorkflowID()),
-						tag.WorkflowRunID(task.GetRunID()),
-						tag.Timestamp(taskScheduledTime),
-						tag.CursorTimestamp(a.taskMinScheduledTime),
-						tag.ValueShardAllocateTimerBeforeRead,
-					)
-					taskScheduledTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
+				taskScheduledTime := now
+				if isScheduledTask {
+					taskScheduledTime = task.GetVisibilityTime().
+						Add(persistence.ScheduledTaskMinPrecision).
+						Truncate(persistence.ScheduledTaskMinPrecision)
+					if taskScheduledTime.Before(a.taskMinScheduledTime) {
+						a.logger.Debug("New timer generated is less than min scheduled time",
+							tag.WorkflowNamespaceID(task.GetNamespaceID()),
+							tag.WorkflowID(task.GetWorkflowID()),
+							tag.WorkflowRunID(task.GetRunID()),
+							tag.Timestamp(taskScheduledTime),
+							tag.CursorTimestamp(a.taskMinScheduledTime),
+							tag.ValueShardAllocateTimerBeforeRead,
+						)
+						taskScheduledTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
+					}
 				}
 				task.SetVisibilityTime(taskScheduledTime)
 
