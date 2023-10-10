@@ -41,7 +41,8 @@ type (
 		// is equal to shardIO concurrency limit which should be small
 		outstandingTaskKeys     map[tasks.Category]map[tasks.Key]struct{}
 		outstandingRequestCount int
-		waitChannels            []chan<- struct{}
+
+		waitChannels []chan<- struct{}
 	}
 )
 
@@ -115,7 +116,7 @@ func (t *taskRequestTracker) minTaskKey(
 
 	pendingTasksForCategory := t.outstandingTaskKeys[category]
 	if len(pendingTasksForCategory) == 0 {
-		return tasks.Key{}, false
+		return tasks.MinimumKey, false
 	}
 
 	minKey := tasks.MaximumKey

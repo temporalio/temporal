@@ -284,7 +284,7 @@ func (s *ContextImpl) CurrentVectorClock() *clockspb.VectorClock {
 	s.rLock()
 	defer s.rUnlock()
 
-	nextTaskKey := s.taskKeyManager.peekNextTaskKey(tasks.CategoryTransfer)
+	nextTaskKey := s.taskKeyManager.peekTaskKey(tasks.CategoryTransfer)
 	return vclock.NewVectorClock(s.clusterMetadata.GetClusterID(), s.shardID, nextTaskKey.TaskID)
 }
 
@@ -557,7 +557,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
+	requestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(
 		request.NewWorkflowSnapshot.Tasks,
 	)
 	if err != nil {
@@ -620,7 +620,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	if request.NewWorkflowSnapshot != nil {
 		taskMaps = append(taskMaps, request.NewWorkflowSnapshot.Tasks)
 	}
-	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(taskMaps...)
+	requestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(taskMaps...)
 	if err != nil {
 		s.wUnlock()
 		return nil, err
@@ -701,7 +701,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		taskMaps = append(taskMaps, request.NewWorkflowSnapshot.Tasks)
 	}
 
-	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(taskMaps...)
+	requestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(taskMaps...)
 	if err != nil {
 		s.wUnlock()
 		return nil, err
@@ -754,7 +754,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
-	snapShotRequestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
+	snapShotRequestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(
 		request.SetWorkflowSnapshot.Tasks,
 	)
 	if err != nil {
@@ -836,7 +836,7 @@ func (s *ContextImpl) addTasks(
 		return err
 	}
 
-	requestCompletionFn, err := s.taskKeyManager.allocateTaskKey(
+	requestCompletionFn, err := s.taskKeyManager.setAndTrackTaskKeys(
 		request.Tasks,
 	)
 	if err != nil {
@@ -1309,7 +1309,7 @@ func (s *ContextImpl) handleWriteError(
 	s.wLock()
 	defer s.wUnlock()
 
-	return s.handleWriteErrorLocked(s.shardInfo.GetRangeId(), err)
+	return s.handleWriteErrorLocked(requestRangeID, err)
 }
 
 func (s *ContextImpl) handleWriteErrorLocked(

@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -37,42 +36,44 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	taskIDUninitialized = -1
+)
+
 type (
 	renewRangeIDFn func() error
 
-	taskKeyAllocator struct {
+	taskKeyGenerator struct {
 		nextTaskID         int64
 		exclusiveMaxTaskID int64
 
 		taskMinScheduledTime time.Time
 
-		rangeSizeBits          uint
-		timeSource             clock.TimeSource
-		taskScheduledTimeShift dynamicconfig.DurationPropertyFn
-		logger                 log.Logger
+		rangeSizeBits uint
+		timeSource    clock.TimeSource
+		logger        log.Logger
 
 		renewRangeIDFn renewRangeIDFn
 	}
 )
 
-func newTaskKeyAllocator(
+func newTaskKeyGenerator(
 	rangeSizeBits uint,
 	timeSource clock.TimeSource,
-	taskScheduleTimeShift dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
 	renewRangeIDFn renewRangeIDFn,
-) *taskKeyAllocator {
-	// TODO: assert rangeID and minScheduledTime are set
-	return &taskKeyAllocator{
-		rangeSizeBits:          rangeSizeBits,
-		timeSource:             timeSource,
-		taskScheduledTimeShift: taskScheduleTimeShift,
-		logger:                 logger,
-		renewRangeIDFn:         renewRangeIDFn,
+) *taskKeyGenerator {
+	return &taskKeyGenerator{
+		nextTaskID:         taskIDUninitialized,
+		exclusiveMaxTaskID: taskIDUninitialized,
+		rangeSizeBits:      rangeSizeBits,
+		timeSource:         timeSource,
+		logger:             logger,
+		renewRangeIDFn:     renewRangeIDFn,
 	}
 }
 
-func (a *taskKeyAllocator) allocate(
+func (a *taskKeyGenerator) setTaskKeys(
 	taskMaps ...map[tasks.Category][]tasks.Task,
 ) error {
 	now := a.timeSource.Now()
@@ -88,25 +89,25 @@ func (a *taskKeyAllocator) allocate(
 				}
 				task.SetTaskID(id)
 
-				taskScheduleTime := task.GetVisibilityTime()
+				taskScheduledTime := task.GetVisibilityTime()
 				if !isScheduledTask {
-					taskScheduleTime = now
+					taskScheduledTime = now
 				}
-				taskScheduleTime = taskScheduleTime.
+				taskScheduledTime = taskScheduledTime.
 					Add(persistence.ScheduledTaskMinPrecision).
 					Truncate(persistence.ScheduledTaskMinPrecision)
-				if isScheduledTask && taskScheduleTime.Before(a.taskMinScheduledTime) {
+				if isScheduledTask && taskScheduledTime.Before(a.taskMinScheduledTime) {
 					a.logger.Debug("New timer generated is less than min scheduled time",
 						tag.WorkflowNamespaceID(task.GetNamespaceID()),
 						tag.WorkflowID(task.GetWorkflowID()),
 						tag.WorkflowRunID(task.GetRunID()),
-						tag.Timestamp(taskScheduleTime),
+						tag.Timestamp(taskScheduledTime),
 						tag.CursorTimestamp(a.taskMinScheduledTime),
 						tag.ValueShardAllocateTimerBeforeRead,
 					)
-					taskScheduleTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
+					taskScheduledTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
 				}
-				task.SetVisibilityTime(taskScheduleTime)
+				task.SetVisibilityTime(taskScheduledTime)
 
 				a.logger.Debug("Assigning new task key",
 					tag.WorkflowNamespaceID(task.GetNamespaceID()),
@@ -124,27 +125,23 @@ func (a *taskKeyAllocator) allocate(
 	return nil
 }
 
-func (a *taskKeyAllocator) peekNextTaskKey(
+func (a *taskKeyGenerator) peekTaskKey(
 	category tasks.Category,
 ) tasks.Key {
 	switch category.Type() {
 	case tasks.CategoryTypeImmediate:
 		return tasks.NewImmediateKey(a.nextTaskID)
 	case tasks.CategoryTypeScheduled:
-		// Truncation here is just to make sure max read level has the same precision as the old logic
-		// in case existing code can't work correctly with precision higher than 1ms.
-		// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
-
-		a.setTaskMinScheduledTime(
-			a.timeSource.Now().Add(a.taskScheduledTimeShift()),
+		return tasks.NewKey(
+			a.taskMinScheduledTime,
+			a.nextTaskID,
 		)
-		return tasks.NewKey(a.taskMinScheduledTime, a.nextTaskID)
 	default:
 		panic(fmt.Sprintf("Unknown category type: %v", category.Type()))
 	}
 }
 
-func (a *taskKeyAllocator) generateTaskKey(
+func (a *taskKeyGenerator) generateTaskKey(
 	category tasks.Category,
 ) (tasks.Key, error) {
 	id, err := a.generateTaskID()
@@ -156,13 +153,16 @@ func (a *taskKeyAllocator) generateTaskKey(
 	case tasks.CategoryTypeImmediate:
 		return tasks.NewImmediateKey(id), nil
 	case tasks.CategoryTypeScheduled:
-		return tasks.NewKey(a.taskMinScheduledTime, id), nil
+		return tasks.NewKey(
+			a.taskMinScheduledTime,
+			id,
+		), nil
 	default:
 		panic(fmt.Sprintf("Unknown category type: %v", category.Type()))
 	}
 }
 
-func (a *taskKeyAllocator) setRangeID(rangeID int64) {
+func (a *taskKeyGenerator) setRangeID(rangeID int64) {
 	a.nextTaskID = rangeID << a.rangeSizeBits
 	a.exclusiveMaxTaskID = (rangeID + 1) << a.rangeSizeBits
 
@@ -172,7 +172,7 @@ func (a *taskKeyAllocator) setRangeID(rangeID int64) {
 	)
 }
 
-func (a *taskKeyAllocator) setTaskMinScheduledTime(
+func (a *taskKeyGenerator) setTaskMinScheduledTime(
 	taskMinScheduledTime time.Time,
 ) {
 	a.taskMinScheduledTime = util.MaxTime(
@@ -181,10 +181,18 @@ func (a *taskKeyAllocator) setTaskMinScheduledTime(
 	)
 }
 
-func (a *taskKeyAllocator) generateTaskID() (int64, error) {
+func (a *taskKeyGenerator) generateTaskID() (int64, error) {
+	if a.nextTaskID == taskIDUninitialized {
+		a.logger.Panic("Range id is not initialized before generating task id")
+	}
+
 	if a.nextTaskID == a.exclusiveMaxTaskID {
 		if err := a.renewRangeIDFn(); err != nil {
-			return -1, err
+			return taskIDUninitialized, err
+		}
+
+		if a.nextTaskID == a.exclusiveMaxTaskID {
+			a.logger.Panic("Renew rangeID succeeded, but rangeID in task key allocator is not updated.")
 		}
 	}
 

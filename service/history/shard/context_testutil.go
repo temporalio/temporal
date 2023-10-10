@@ -60,7 +60,7 @@ func NewTestContextWithTimeSource(
 ) *ContextTest {
 	result := NewTestContext(ctrl, shardInfo, config)
 	result.timeSource = timeSource
-	result.taskKeyManager.allocator.timeSource = timeSource
+	result.taskKeyManager.generator.timeSource = timeSource
 	result.Resource.TimeSource = timeSource
 	return result
 }

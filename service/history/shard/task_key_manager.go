@@ -36,10 +36,12 @@ import (
 
 type (
 	taskKeyManager struct {
-		allocator *taskKeyAllocator
+		generator *taskKeyGenerator
 		tracker   *taskRequestTracker
 
-		logger log.Logger
+		timeSource clock.TimeSource
+		config     *configs.Config
+		logger     log.Logger
 	}
 )
 
@@ -50,13 +52,14 @@ func newTaskKeyManager(
 	renewRangeIDFn renewRangeIDFn,
 ) *taskKeyManager {
 	manager := &taskKeyManager{
-		tracker: newTaskRequestTracker(),
-		logger:  logger,
+		tracker:    newTaskRequestTracker(),
+		timeSource: timeSource,
+		logger:     logger,
+		config:     config,
 	}
-	manager.allocator = newTaskKeyAllocator(
+	manager.generator = newTaskKeyGenerator(
 		config.RangeSizeBits,
 		timeSource,
-		config.TimerProcessorMaxTimeShift,
 		logger,
 		renewRangeIDFn,
 	)
@@ -64,27 +67,27 @@ func newTaskKeyManager(
 	return manager
 }
 
-func (m *taskKeyManager) allocateTaskKey(
+func (m *taskKeyManager) setAndTrackTaskKeys(
 	taskMaps ...map[tasks.Category][]tasks.Task,
 ) (taskRequestCompletionFn, error) {
 
-	if err := m.allocator.allocate(taskMaps...); err != nil {
+	if err := m.generator.setTaskKeys(taskMaps...); err != nil {
 		return nil, err
 	}
 
 	return m.tracker.track(taskMaps...), nil
 }
 
-func (m *taskKeyManager) peekNextTaskKey(
+func (m *taskKeyManager) peekTaskKey(
 	category tasks.Category,
 ) tasks.Key {
-	return m.allocator.peekNextTaskKey(category)
+	return m.generator.peekTaskKey(category)
 }
 
 func (m *taskKeyManager) generateTaskKey(
 	category tasks.Category,
 ) (tasks.Key, error) {
-	return m.allocator.generateTaskKey(category)
+	return m.generator.generateTaskKey(category)
 }
 
 func (m *taskKeyManager) drainTaskRequests() {
@@ -94,7 +97,7 @@ func (m *taskKeyManager) drainTaskRequests() {
 func (m *taskKeyManager) setRangeID(
 	rangeID int64,
 ) {
-	m.allocator.setRangeID(rangeID)
+	m.generator.setRangeID(rangeID)
 
 	// rangeID update means all pending add tasks requests either already succeeded
 	// are guaranteed to fail, so we can clear pending requests in the tracker
@@ -104,7 +107,7 @@ func (m *taskKeyManager) setRangeID(
 func (m *taskKeyManager) setTaskMinScheduledTime(
 	taskMinScheduledTime time.Time,
 ) {
-	m.allocator.setTaskMinScheduledTime(taskMinScheduledTime)
+	m.generator.setTaskMinScheduledTime(taskMinScheduledTime)
 }
 
 func (m *taskKeyManager) getExclusiveReaderHighWatermark(
@@ -115,7 +118,13 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 		minTaskKey = tasks.MaximumKey
 	}
 
-	nextTaskKey := m.allocator.peekNextTaskKey(category)
+	// TODO: Do we really need this shift?
+	// Should this shift be moved to the write path?
+	m.setTaskMinScheduledTime(
+		m.timeSource.Now().Add(m.config.TimerProcessorMaxTimeShift()),
+	)
+
+	nextTaskKey := m.generator.peekTaskKey(category)
 
 	exclusiveReaderHighWatermark := tasks.MinKey(
 		minTaskKey,
@@ -123,6 +132,10 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 	)
 	if category.Type() == tasks.CategoryTypeScheduled {
 		exclusiveReaderHighWatermark.TaskID = 0
+
+		// Truncation here is just to make sure high read watermark has the same precision as the old logic
+		// in case existing code can't work correctly with precision higher than 1ms.
+		// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
 		exclusiveReaderHighWatermark.FireTime = exclusiveReaderHighWatermark.FireTime.
 			Truncate(persistence.ScheduledTaskMinPrecision)
 	}
