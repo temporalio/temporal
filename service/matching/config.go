@@ -67,6 +67,8 @@ type (
 		VersionBuildIdLimitPerQueue       dynamicconfig.IntPropertyFnWithNamespaceFilter
 		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
+		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		MaxWaitForPollerBeforeFwd              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -101,6 +103,8 @@ type (
 	taskQueueConfig struct {
 		forwarderConfig
 		SyncMatchWaitDuration func() time.Duration
+		BacklogNegligibleAge func() time.Duration
+		MaxWaitForPollerBeforeFwd func() time.Duration
 		TestDisableSyncMatch  func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
@@ -188,6 +192,8 @@ func NewConfig(
 		VersionBuildIdLimitPerQueue:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VersionBuildIdLimitPerQueue, 100),
 		TaskQueueLimitPerBuildId:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskQueuesPerBuildIdLimit, 20),
 		GetUserDataLongPollTimeout:            dc.GetDurationProperty(dynamicconfig.MatchingGetUserDataLongPollTimeout, 5*time.Minute),
+		BacklogNegligibleAge:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingBacklogNegligibleAge, 24*365*10*time.Hour),
+		MaxWaitForPollerBeforeFwd:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxWaitForPollerBeforeFwd, 200*time.Millisecond),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
@@ -220,6 +226,12 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		},
 		SyncMatchWaitDuration: func() time.Duration {
 			return config.SyncMatchWaitDuration(namespace.String(), taskQueueName, taskType)
+		},
+		BacklogNegligibleAge: func() time.Duration {
+			return config.BacklogNegligibleAge(namespace.String(), taskQueueName, taskType)
+		},
+		MaxWaitForPollerBeforeFwd: func() time.Duration {
+			return config.MaxWaitForPollerBeforeFwd(namespace.String(), taskQueueName, taskType)
 		},
 		TestDisableSyncMatch: config.TestDisableSyncMatch,
 		LoadUserData: func() bool {
