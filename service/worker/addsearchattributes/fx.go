@@ -91,7 +91,6 @@ func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.De
 		TaskQueue: primitives.AddSearchAttributesActivityTQ,
 		Options: sdkworker.Options{
 			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
-			DisableWorkflowWorker:     true,
 		},
 	}
 }

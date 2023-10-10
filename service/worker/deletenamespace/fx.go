@@ -106,7 +106,6 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 		TaskQueue: primitives.DeleteNamespaceActivityTQ,
 		Options: sdkworker.Options{
 			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
-			DisableWorkflowWorker:     true,
 		},
 	}
 }

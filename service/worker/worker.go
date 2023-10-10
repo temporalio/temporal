@@ -32,10 +32,10 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -101,6 +101,7 @@ func (wm *workerManager) Start() {
 			wc.RegisterActivities(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker for activities
+			activityWorkerOptions.Options.DisableWorkflowWorker = true
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)
