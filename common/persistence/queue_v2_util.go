@@ -39,7 +39,7 @@ const (
 	pageTokenPrefixByte = 0
 )
 
-func GetNextPageToken(result []QueueV2Message) []byte {
+func GetNextPageTokenForQueueV2(result []QueueV2Message) []byte {
 	if len(result) == 0 {
 		return nil
 	}
@@ -54,7 +54,7 @@ func GetNextPageToken(result []QueueV2Message) []byte {
 	return append([]byte{pageTokenPrefixByte}, b...)
 }
 
-func GetMinMessageID(request *InternalReadMessagesRequest) (int64, error) {
+func GetMinMessageIDForQueueV2(request *InternalReadMessagesRequest) (int64, error) {
 	// TODO: start from the ack level of the queue partition instead of the first message ID when there is no token.
 	if len(request.NextPageToken) == 0 {
 		return FirstQueueMessageID, nil

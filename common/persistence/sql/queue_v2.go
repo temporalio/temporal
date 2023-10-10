@@ -31,15 +31,17 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 const (
-	EmptyPartition = 0
+	defaultPartition = 0
 )
 
 var (
@@ -79,7 +81,7 @@ func (q *queueV2) EnqueueMessage(
 	lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
 		QueueType: request.QueueType,
 		QueueName: request.QueueName,
-		Partition: EmptyPartition,
+		Partition: defaultPartition,
 	})
 	switch {
 	case err == nil:
@@ -117,8 +119,9 @@ func (q *queueV2) ReadMessages(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveReadQueueMessagesPageSize
 	}
+
 	var minMessageID int64
-	minMessageID, err := persistence.GetMinMessageID(request)
+	minMessageID, err := persistence.GetMinMessageIDForQueueV2(request)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +129,7 @@ func (q *queueV2) ReadMessages(
 	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
 		QueueType:    request.QueueType,
 		QueueName:    request.QueueName,
-		Partition:    EmptyPartition,
+		Partition:    defaultPartition,
 		MinMessageID: minMessageID,
 		PageSize:     request.PageSize,
 	})
@@ -137,13 +140,22 @@ func (q *queueV2) ReadMessages(
 
 	var messages []persistence.QueueV2Message
 	for _, row := range rows {
-		messages = append(messages, persistence.QueueV2Message{
+		encoding, ok := enums.EncodingType_value[row.MessageEncoding]
+		if !ok {
+			return nil, serialization.NewUnknownEncodingTypeError(row.MessageEncoding)
+		}
+		encodingType := enums.EncodingType(encoding)
+		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: row.MessageID},
-			Data:     *persistence.NewDataBlob(row.MessagePayload, row.MessageEncoding),
-		})
+			Data: commonpb.DataBlob{
+				EncodingType: encodingType,
+				Data:         row.MessagePayload,
+			},
+		}
+		messages = append(messages, message)
 	}
-	nextPageToken := persistence.GetNextPageToken(messages)
 
+	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -161,7 +173,7 @@ func newQueueV2Row(
 	return sqlplugin.QueueV2MessageRow{
 		QueueType:       queueType,
 		QueueName:       queueName,
-		QueuePartition:  EmptyPartition,
+		QueuePartition:  defaultPartition,
 		MessageID:       messageID,
 		MessagePayload:  blob.Data,
 		MessageEncoding: blob.EncodingType.String(),
