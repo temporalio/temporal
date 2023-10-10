@@ -37,11 +37,13 @@ loop QueueProcessor
 end
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`StartWorkflow` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api/startworkflow/api.go#L157).
 - History service [queue processors](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/history_engine.go#L303) and [transfer task queue processor](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/queues/queue_immediate.go#L150).
 
+</details>
 <br>
 
 ---
@@ -68,10 +70,12 @@ Frontend->>Worker: WorkflowTask
 Worker->>Worker: Advance workflow
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`RecordWorkflowTaskStarted` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/handler.go#L319)
 
+</details>
 <br>
 
 ---
@@ -97,10 +101,12 @@ loop QueueProcessor
 end
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`ScheduleActivityTask` command handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/workflow_task_handler.go#L338)
 
+</details>
 <br>
 
 ---
@@ -124,10 +130,12 @@ Frontend->>Worker: ActivityTask
 Worker->>Worker: Execute activity
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`RecordActivityTaskStarted` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/handler.go#L287)
 
+</details>
 <br>
 
 ---
@@ -153,10 +161,12 @@ loop QueueProcessor
 end
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`RespondActivityTaskCompleted` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/handler.go#L361)
 
+</details>
 <br>
 
 ---
@@ -191,10 +201,12 @@ loop QueueProcessor
 end
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`RespondWorkflowTaskCompleted` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/handler.go#L478)
 
+</details>
 <br>
 
 ---
@@ -219,6 +231,9 @@ loop QueueProcessor
 end
 ```
 
-**Code entrypoints:**
+<details>
+<summary><i>Code entrypoints</i></summary>
 
 - History service [`RespondActivityTaskFailed` handler](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/handler.go#L400)
+
+</details>

@@ -247,7 +247,7 @@ shard->>persistence: (transactionally) update <br>Mutable State and add History 
 ```
 
 <details>
-<summary>Code entrypoints</summary>
+<summary><i>Code entrypoints</i></summary>
 
 These state transitions are performed using the generic utility function [GetAndUpdateWorkflowWithNew](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api/update_workflow_util.go#L37). The utility function receives a function that performs the updates to mutable state specific to the particular state transition, and then performs the two commits to persistence via
 [`UpdateWorkflowExecutionAsActive`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/workflow/context.go#L459), ultimately calling the persistence backends, e.g.
