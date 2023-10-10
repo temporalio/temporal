@@ -80,11 +80,9 @@ func NewTaskQueueTaskSuite(
 }
 
 func (s *TaskQueueTaskSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *TaskQueueTaskSuite) TearDownSuite() {
-
 }
 
 func (s *TaskQueueTaskSuite) SetupTest() {

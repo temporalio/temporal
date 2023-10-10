@@ -28,7 +28,6 @@ import (
 	"context"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -72,7 +71,6 @@ func TestWorkflowConsistencyCheckerSuite(t *testing.T) {
 }
 
 func (s *workflowConsistencyCheckerSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *workflowConsistencyCheckerSuite) TearDownSuite() {

@@ -353,7 +353,6 @@ func (s *Service) Start() {
 
 	// must start resource first
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
-	rand.Seed(time.Now().UnixNano())
 
 	s.versionChecker.Start()
 	s.adminHandler.Start()

@@ -26,12 +26,7 @@ package shuffle
 
 import (
 	"math/rand"
-	"time"
 )
-
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
 
 func String(str string) string {
 	return string(Bytes([]byte(str)))

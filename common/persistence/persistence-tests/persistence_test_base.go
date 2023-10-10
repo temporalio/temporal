@@ -416,10 +416,8 @@ func randString(length int) string {
 // GenerateRandomDBName helper
 // Format: MMDDHHMMSS_abc
 func GenerateRandomDBName(n int) string {
-	now := time.Now().UTC()
-	rand.Seed(now.UnixNano())
 	var prefix strings.Builder
-	prefix.WriteString(now.Format("0102150405"))
+	prefix.WriteString(time.Now().UTC().Format("0102150405"))
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()
