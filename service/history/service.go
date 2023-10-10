@@ -25,7 +25,6 @@
 package history
 
 import (
-	"math/rand"
 	"net"
 	"time"
 
@@ -91,7 +90,6 @@ func (s *Service) Start() {
 	s.logger.Info("history starting")
 
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
-	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()
 

@@ -133,11 +133,9 @@ func TestHistoryBuilderSuite(t *testing.T) {
 }
 
 func (s *historyBuilderSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *historyBuilderSuite) TearDownSuite() {
-
 }
 
 func (s *historyBuilderSuite) SetupTest() {

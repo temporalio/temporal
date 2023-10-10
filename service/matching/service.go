@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"math/rand"
 	"net"
 	"time"
 
@@ -92,7 +91,6 @@ func (s *Service) Start() {
 
 	// must start base service first
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
-	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()
 
