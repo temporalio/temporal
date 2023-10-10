@@ -77,7 +77,9 @@ func (a *taskKeyGenerator) setTaskKeys(
 	taskMaps ...map[tasks.Category][]tasks.Task,
 ) error {
 	now := a.timeSource.Now()
-	a.setTaskMinScheduledTime(now)
+	// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
+	// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
+	a.setTaskMinScheduledTime(now.Truncate(persistence.ScheduledTaskMinPrecision))
 
 	for _, taskMap := range taskMaps {
 		for category, tasksByCategory := range taskMap {
@@ -91,9 +93,14 @@ func (a *taskKeyGenerator) setTaskKeys(
 
 				taskScheduledTime := now
 				if isScheduledTask {
+					// Persistence might loss precision when saving to DB.
+					// Make the task scheduled time to have the same precision as DB here,
+					// so that if the comparsion in the next step passes, it's guaranteed
+					// the task can be retrieved from DB by queue processor.
 					taskScheduledTime = task.GetVisibilityTime().
 						Add(persistence.ScheduledTaskMinPrecision).
 						Truncate(persistence.ScheduledTaskMinPrecision)
+
 					if taskScheduledTime.Before(a.taskMinScheduledTime) {
 						a.logger.Debug("New timer generated is less than min scheduled time",
 							tag.WorkflowNamespaceID(task.GetNamespaceID()),
@@ -103,6 +110,8 @@ func (a *taskKeyGenerator) setTaskKeys(
 							tag.CursorTimestamp(a.taskMinScheduledTime),
 							tag.ValueShardAllocateTimerBeforeRead,
 						)
+						// Theoritically we don't need to add the extra 1ms.
+						// Guess it's just to be extra safe here.
 						taskScheduledTime = a.taskMinScheduledTime.Add(persistence.ScheduledTaskMinPrecision)
 					}
 				}
@@ -174,10 +183,7 @@ func (a *taskKeyGenerator) setRangeID(rangeID int64) {
 func (a *taskKeyGenerator) setTaskMinScheduledTime(
 	taskMinScheduledTime time.Time,
 ) {
-	a.taskMinScheduledTime = util.MaxTime(
-		a.taskMinScheduledTime,
-		taskMinScheduledTime.Truncate(persistence.ScheduledTaskMinPrecision),
-	)
+	a.taskMinScheduledTime = util.MaxTime(a.taskMinScheduledTime, taskMinScheduledTime)
 }
 
 func (a *taskKeyGenerator) generateTaskID() (int64, error) {

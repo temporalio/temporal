@@ -118,10 +118,11 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 		minTaskKey = tasks.MaximumKey
 	}
 
-	// TODO: Do we really need this shift?
-	// Should this shift be moved to the write path?
+	// TODO: should this be moved generator.setTaskKeys() ?
 	m.setTaskMinScheduledTime(
-		m.timeSource.Now().Add(m.config.TimerProcessorMaxTimeShift()),
+		// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
+		// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
+		m.timeSource.Now().Add(m.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision),
 	)
 
 	nextTaskKey := m.generator.peekTaskKey(category)
@@ -133,9 +134,8 @@ func (m *taskKeyManager) getExclusiveReaderHighWatermark(
 	if category.Type() == tasks.CategoryTypeScheduled {
 		exclusiveReaderHighWatermark.TaskID = 0
 
-		// Truncation here is just to make sure high read watermark has the same precision as the old logic
-		// in case existing code can't work correctly with precision higher than 1ms.
-		// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
+		// TODO: Truncation here is just to make sure task scheduled time has the same precision as the old logic.
+		// Remove this truncation once we validate the rest of the code can worker correctly with higher precision.
 		exclusiveReaderHighWatermark.FireTime = exclusiveReaderHighWatermark.FireTime.
 			Truncate(persistence.ScheduledTaskMinPrecision)
 	}

@@ -1690,7 +1690,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
-	var scheduledTaskMaxReadLevel time.Time
+	var taskMinScheduledTime time.Time
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
 	taskCategories := tasks.GetCategories()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
@@ -1698,29 +1698,29 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			continue
 		}
 
-		maxReadTime := tasks.DefaultFireTime
+		exclusiveMaxReadTime := tasks.DefaultFireTime
 		for categoryID, queueState := range shardInfo.QueueStates {
 			category, ok := taskCategories[categoryID]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
 				continue
 			}
 
-			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
+			exclusiveMaxReadTime = util.MaxTime(exclusiveMaxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
-		// we only need to make sure max read level >= persisted ack level/exclusiveReaderHighWatermark
-		// Add().Truncate() here is just to make sure max read level has the same precision as the old logic
+		// we only need to make sure min scheduled time >= persisted ack level/exclusiveReaderHighWatermark
+		// Add().Truncate() here is just to make sure min scheduled time has the same precision as the old logic
 		// in case existing code can't work correctly with precision higher than 1ms.
 		// Once we validate the rest of the code can worker correctly with higher precision, the code should simply be
-		// scheduledTaskMaxReadLevel = util.MaxTime(scheduledTaskMaxReadLevel, maxReadTime)
-		scheduledTaskMaxReadLevel = util.MaxTime(
-			scheduledTaskMaxReadLevel,
-			maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+		// taskMinScheduledTime = util.MaxTime(taskMinScheduledTime, maxReadTime)
+		taskMinScheduledTime = util.MaxTime(
+			taskMinScheduledTime,
+			exclusiveMaxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
 		)
 
 		if clusterName != currentClusterName {
 			remoteClusterInfos[clusterName] = &remoteClusterInfo{
-				CurrentTime:                maxReadTime,
+				CurrentTime:                exclusiveMaxReadTime,
 				AckedReplicationTaskIDs:    make(map[int32]int64),
 				AckedReplicationTimestamps: make(map[int32]time.Time),
 			}
@@ -1732,7 +1732,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	s.shardInfo = shardInfo
 	s.remoteClusterInfos = remoteClusterInfos
-	s.taskKeyManager.setTaskMinScheduledTime(scheduledTaskMaxReadLevel)
+	s.taskKeyManager.setTaskMinScheduledTime(taskMinScheduledTime)
 
 	return nil
 }
