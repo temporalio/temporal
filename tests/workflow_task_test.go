@@ -49,14 +49,8 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	stikyTaskQueue := &taskqueuepb.TaskQueue{
-		Name: "test-sticky-taskqueue",
-		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-	}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -99,7 +93,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-				WorkerTaskQueue:        stikyTaskQueue,
+				WorkerTaskQueue:        stickyTaskQueue,
 				ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 			},
 			ReturnNewWorkflowTask:      true,
@@ -137,7 +131,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -157,14 +151,8 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	stikyTaskQueue := &taskqueuepb.TaskQueue{
-		Name: "test-sticky-taskqueue",
-		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-	}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -204,7 +192,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -226,7 +214,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -248,7 +236,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -268,7 +256,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -306,7 +294,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -379,7 +367,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -452,7 +440,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -538,7 +526,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -642,7 +630,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -743,7 +731,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),

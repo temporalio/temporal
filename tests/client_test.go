@@ -857,10 +857,8 @@ func (s *clientFunctionalSuite) TestStickyAutoReset() {
 	s.worker.Stop()
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
 	resp, err := s.engine.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace: s.namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: stickyQueue,
-		},
+		Namespace:     s.namespace,
+		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.taskQueue},
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
 	s.NoError(err)
@@ -889,10 +887,7 @@ func (s *clientFunctionalSuite) TestStickyAutoReset() {
 	// now poll from normal queue, and it should see the full history.
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: s.taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
+		TaskQueue: &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 
 	// should be able to get the task without having to wait until sticky timeout (5s)

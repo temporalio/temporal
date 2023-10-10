@@ -48,8 +48,7 @@ func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	stl := "functional-sticky-timeout-non-transient-workflow-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{}
-	stickyTaskQueue.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
@@ -58,7 +57,7 @@ func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -122,7 +121,7 @@ func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	poller := &TaskPoller{
 		Engine:                       s.engine,
 		Namespace:                    s.namespace,
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,
@@ -220,8 +219,7 @@ func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	stl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{}
-	stickyTaskQueue.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
@@ -230,7 +228,7 @@ func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -282,7 +280,7 @@ func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	poller := &TaskPoller{
 		Engine:                       s.engine,
 		Namespace:                    s.namespace,
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,

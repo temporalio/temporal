@@ -56,7 +56,7 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -107,7 +107,7 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					Header:              header,
 					Memo:                memo,
@@ -163,7 +163,7 @@ func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -196,7 +196,7 @@ func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set timeout to 1
 					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -264,7 +264,7 @@ func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -474,7 +474,7 @@ func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
 	tl := "functional-child-workflow-with-continue-as-new-test-taskqueue"
 	identity := "worker1"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	definition := newParentWithChildContinueAsNew(s, parentID, wtParent, childID, wtChild, enumspb.PARENT_CLOSE_POLICY_ABANDON)
 
@@ -557,7 +557,7 @@ func (s *functionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	tl := "functional-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
 	identity := "worker1"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	definition := newParentWithChildContinueAsNew(s, parentID, wtParent, childID, wtChild, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
