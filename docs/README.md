@@ -4,7 +4,7 @@ Below we give a high-level overview of how Temporal works; other pages provide m
 
 - [History Service](./history-service.md)
 - [Matching Service](./matching-service.md)
-- [Temporal Workers](https://github.Com/temporalio/sdk-core/blob/master/architecture.md)
+- [Temporal Workers](https://github.com/temporalio/sdk-core/blob/master/ARCHITECTURE.md)
 - [Workflow Lifecycle](./workflow-lifecycle.md)
 
 A Temporal cluster executes units of application logic called Workflows in a durable manner that automatically handles intermittent failures, and retries failed operations. The following are some fundamental premises:
@@ -58,5 +58,5 @@ Temporal Workers poll the Task Queues in the Matching service for tasks. There a
 
 - [History Service](./history-service.md)
 - [Matching Service](./matching-service.md)
-- [Temporal Workers](https://github.Com/temporalio/sdk-core/blob/master/architecture.md)
+- [Temporal Workers](https://github.com/temporalio/sdk-core/blob/master/ARCHITECTURE.md)
 - [Workflow Lifecycle](./workflow-lifecycle.md)
