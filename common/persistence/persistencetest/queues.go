@@ -22,54 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package persistencetest
 
 import (
-	"context"
-	"errors"
-	"fmt"
+	"testing"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	queueV2 struct{}
+	getQueueKeyParams struct {
+		QueueType persistence.QueueV2Type
+		Category  tasks.Category
+	}
 )
 
-var (
-	ErrNotImplemented = errors.New("method is not implemented yet for SQL")
-)
-
-// NewQueueV2 returns an implementation of [persistence.QueueV2] which always returns an error because it is not
-// implemented yet.
-func NewQueueV2() persistence.QueueV2 {
-	return &queueV2{}
+func WithQueueType(queueType persistence.QueueV2Type) func(p *getQueueKeyParams) {
+	return func(p *getQueueKeyParams) {
+		p.QueueType = queueType
+	}
 }
 
-func (q *queueV2) EnqueueMessage(
-	context.Context,
-	*persistence.InternalEnqueueMessageRequest,
-) (*persistence.InternalEnqueueMessageResponse, error) {
-	return nil, fmt.Errorf("%w: EnqueueMessage", ErrNotImplemented)
+func WithCategory(category tasks.Category) func(p *getQueueKeyParams) {
+	return func(p *getQueueKeyParams) {
+		p.Category = category
+	}
 }
 
-func (q *queueV2) ReadMessages(
-	context.Context,
-	*persistence.InternalReadMessagesRequest,
-) (*persistence.InternalReadMessagesResponse, error) {
-	return nil, fmt.Errorf("%w: ReadMessages", ErrNotImplemented)
-}
-
-func (q *queueV2) CreateQueue(
-	context.Context,
-	*persistence.InternalCreateQueueRequest,
-) (*persistence.InternalCreateQueueResponse, error) {
-	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
-}
-
-func (q *queueV2) RangeDeleteMessages(
-	context.Context,
-	*persistence.InternalRangeDeleteMessagesRequest,
-) (*persistence.InternalRangeDeleteMessagesResponse, error) {
-	return nil, fmt.Errorf("%w: RangeDeleteMessages", ErrNotImplemented)
+func GetQueueKey(t *testing.T, opts ...func(p *getQueueKeyParams)) persistence.QueueKey {
+	params := &getQueueKeyParams{
+		QueueType: persistence.QueueTypeHistoryNormal,
+		Category:  tasks.CategoryTransfer,
+	}
+	for _, opt := range opts {
+		opt(params)
+	}
+	// Note that it is important to include the test name in the cluster name to ensure that the generated queue name is
+	// unique across tests. That way, we can run many queue tests without any risk of queue name collisions.
+	return persistence.QueueKey{
+		QueueType:     params.QueueType,
+		Category:      params.Category,
+		SourceCluster: "test-source-cluster-" + t.Name(),
+		TargetCluster: "test-target-cluster-" + t.Name(),
+	}
 }

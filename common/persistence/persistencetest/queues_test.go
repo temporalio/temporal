@@ -22,30 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tdbg
+package persistencetest_test
 
 import (
-	"time"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/persistencetest"
+	"go.temporal.io/server/service/history/tasks"
 )
 
-const (
-	localHostPort = "127.0.0.1:7233"
+func TestGetQueueKey_Default(t *testing.T) {
+	t.Parallel()
 
-	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
-	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
-	defaultDateTimeRangeLongRE  = "^[1-9][0-9]*(second|minute|hour|day|week|month|year)$" // eg. 1second, 20minute, 300hour etc.
-	defaultDateTimeRangeNum     = "^[1-9][0-9]*"                                          // eg. 1, 20, 300 etc.
+	queueKey := persistencetest.GetQueueKey(t)
+	assert.Equal(t, persistence.QueueTypeHistoryNormal, queueKey.QueueType)
+	assert.Equal(t, tasks.CategoryTransfer, queueKey.Category)
+	assert.Equal(t, "test-source-cluster-TestGetQueueKey_Default", queueKey.SourceCluster)
+	assert.Equal(t, "test-target-cluster-TestGetQueueKey_Default", queueKey.TargetCluster)
+}
 
-	// time ranges
-	day   = 24 * time.Hour
-	week  = 7 * day
-	month = 30 * day
-	year  = 365 * day
+func TestGetQueueKey_WithOptions(t *testing.T) {
+	t.Parallel()
 
-	defaultTimeFormat              = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat          = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultContextTimeoutInSeconds = 5
-	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
-
-	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
-)
+	queueKey := persistencetest.GetQueueKey(t,
+		persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ),
+		persistencetest.WithCategory(tasks.CategoryTimer),
+	)
+	assert.Equal(t, persistence.QueueTypeHistoryDLQ, queueKey.QueueType)
+	assert.Equal(t, tasks.CategoryTimer, queueKey.Category)
+	assert.Equal(t, "test-source-cluster-TestGetQueueKey_WithOptions", queueKey.SourceCluster)
+	assert.Equal(t, "test-target-cluster-TestGetQueueKey_WithOptions", queueKey.TargetCluster)
+}

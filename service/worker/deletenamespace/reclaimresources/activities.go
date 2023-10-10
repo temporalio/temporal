@@ -89,7 +89,7 @@ func NewLocalActivities(
 
 func (a *LocalActivities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
 	switch a.visibilityManager.GetReadStoreName(nsName) {
-	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		return true, nil
 	default:
 		return false, nil

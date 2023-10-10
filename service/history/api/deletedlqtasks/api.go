@@ -22,58 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgresql
+package deletedlqtasks
 
 import (
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
-	"go.temporal.io/server/common/resolver"
+	"context"
+
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api"
 )
 
-const (
-	// PluginName is the name of the plugin
-	PluginNameV12    = "postgres12"
-	PluginNameV12PGX = "postgres12_pgx"
-)
-
-type pluginV12 struct {
-	plugin
-}
-
-var _ sqlplugin.Plugin = (*pluginV12)(nil)
-
-func init() {
-	sql.RegisterPlugin(PluginNameV12, &pluginV12{plugin{&driver.PQDriver{}}})
-	sql.RegisterPlugin(PluginNameV12PGX, &pluginV12{plugin{&driver.PGXDriver{}}})
-
-}
-
-// CreateDB initialize the db object
-func (d *pluginV12) CreateDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-) (sqlplugin.DB, error) {
-	conn, err := d.createDBConnection(cfg, r)
+func Invoke(
+	ctx context.Context,
+	historyTaskQueueManager persistence.HistoryTaskQueueManager,
+	req *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	categoryEnum := req.DlqKey.Category
+	category, err := api.GetTaskCategory(categoryEnum)
 	if err != nil {
 		return nil, err
 	}
-	db := newDBV12(dbKind, cfg.DatabaseName, d.d, conn, nil)
-	return db, nil
-}
+	if req.InclusiveMaxTaskMetadata == nil {
+		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
+	}
 
-// CreateAdminDB initialize the adminDB object
-func (d *pluginV12) CreateAdminDB(
-	dbKind sqlplugin.DbKind,
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-) (sqlplugin.AdminDB, error) {
-	conn, err := d.createDBConnection(cfg, r)
+	_, err = historyTaskQueueManager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     persistence.QueueTypeHistoryDLQ,
+			Category:      category,
+			SourceCluster: req.DlqKey.SourceCluster,
+			TargetCluster: req.DlqKey.TargetCluster,
+		},
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+			ID: req.InclusiveMaxTaskMetadata.MessageId,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	db := newDBV12(dbKind, cfg.DatabaseName, d.d, conn, nil)
-	return db, nil
+	return &historyservice.DeleteDLQTasksResponse{}, nil
 }

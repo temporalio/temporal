@@ -169,6 +169,7 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 	}
 	return d.TaskStore, nil
 }
+
 func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore, error) {
 	if d.ShardStore == nil {
 		baseFactory, err := d.baseFactory.NewShardStore()
@@ -189,7 +190,6 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 	}
 	return d.ShardStore, nil
 }
-
 func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
 	if d.MetadataStore == nil {
 		baseStore, err := d.baseFactory.NewMetadataStore()
@@ -484,6 +484,16 @@ func (f *FaultInjectionQueueV2) CreateQueue(
 		return nil, err
 	}
 	return f.baseQueue.CreateQueue(ctx, request)
+}
+
+func (f *FaultInjectionQueueV2) RangeDeleteMessages(
+	ctx context.Context,
+	request *persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	if err := f.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return f.baseQueue.RangeDeleteMessages(ctx, request)
 }
 
 func NewFaultInjectionExecutionStore(

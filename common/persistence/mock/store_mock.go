@@ -1437,6 +1437,21 @@ func (mr *MockQueueV2MockRecorder) EnqueueMessage(ctx, request interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueMessage", reflect.TypeOf((*MockQueueV2)(nil).EnqueueMessage), ctx, request)
 }
 
+// RangeDeleteMessages mocks base method.
+func (m *MockQueueV2) RangeDeleteMessages(ctx context.Context, request *persistence.InternalRangeDeleteMessagesRequest) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeDeleteMessages", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalRangeDeleteMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RangeDeleteMessages indicates an expected call of RangeDeleteMessages.
+func (mr *MockQueueV2MockRecorder) RangeDeleteMessages(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteMessages", reflect.TypeOf((*MockQueueV2)(nil).RangeDeleteMessages), ctx, request)
+}
+
 // ReadMessages mocks base method.
 func (m *MockQueueV2) ReadMessages(ctx context.Context, request *persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
 	m.ctrl.T.Helper()

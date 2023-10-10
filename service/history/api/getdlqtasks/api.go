@@ -31,11 +31,11 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/consts"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 )
 
 // Invoke the GetDLQTasks API. All errors returned from this function are already translated into the appropriate type
@@ -45,9 +45,9 @@ func Invoke(
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
 	req *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	category, ok := tasks.GetCategoryByID(int32(req.DlqKey.Category))
-	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid queue category %v", req.DlqKey.Category))
+	category, err := api.GetTaskCategory(req.DlqKey.Category)
+	if err != nil {
+		return nil, err
 	}
 
 	response, err := historyTaskQueueManager.ReadRawTasks(ctx, &persistence.ReadTasksRequest{

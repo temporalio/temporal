@@ -1218,6 +1218,7 @@ type (
 		ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error)
 		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
 		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
+		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
@@ -1281,6 +1282,15 @@ type (
 	}
 
 	CreateQueueResponse struct {
+	}
+
+	DeleteTasksRequest struct {
+		QueueKey                    QueueKey
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	DeleteTasksResponse struct {
+		// empty
 	}
 )
 
