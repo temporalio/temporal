@@ -32,7 +32,7 @@ import (
 )
 
 type (
-	// QueueMessageRow represents a row in queue table
+	// QueueV2MessageRow represents a row in queue table
 	QueueV2MessageRow struct {
 		QueueType       persistence.QueueV2Type
 		QueueName       string
@@ -42,7 +42,7 @@ type (
 		MessageEncoding string
 	}
 
-	// QueueMessagesRangeFilter
+	// QueueV2MessagesFilter
 	QueueV2MessagesFilter struct {
 		QueueType    persistence.QueueV2Type
 		QueueName    string

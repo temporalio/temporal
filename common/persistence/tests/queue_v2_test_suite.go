@@ -37,6 +37,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 )
 
 // RunQueueV2TestSuite executes interface-level tests for a queue persistence-layer implementation. There should be more
@@ -345,5 +347,20 @@ func enqueueMessage(
 			EncodingType: enums.ENCODING_TYPE_JSON,
 			Data:         params.data,
 		},
+	})
+}
+
+func RunQueueV2TestSuiteForSQL(t *testing.T, factory *sql.Factory) {
+	t.Run("Generic", func(t *testing.T) {
+		t.Parallel()
+		queue, err := factory.NewQueueV2()
+		require.NoError(t, err)
+		RunQueueV2TestSuite(t, queue)
+	})
+	t.Run("SQL", func(t *testing.T) {
+		t.Parallel()
+		db, err := factory.GetDB()
+		require.NoError(t, err)
+		tests.RunSQLQueueV2TestSuite(t, db)
 	})
 }

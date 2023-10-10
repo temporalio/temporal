@@ -31,7 +31,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
@@ -43,7 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
@@ -1077,22 +1075,12 @@ func TestSQLiteQueueV2(t *testing.T) {
 		testSQLiteClusterName,
 		logger,
 	)
-	queue, err := factory.NewQueueV2()
-	if err != nil {
-		t.Fatalf("unable to create queue: %v", err)
-	}
 	t.Cleanup(func() {
 		factory.Close()
 		assert.NoError(t, os.Remove(cfg.DatabaseName))
 	})
-	t.Run("Generic", func(t *testing.T) {
+	t.Run("RunQueueV2TestSuiteForSQL", func(t *testing.T) {
 		t.Parallel()
-		RunQueueV2TestSuite(t, queue)
-	})
-	t.Run("SQL", func(t *testing.T) {
-		t.Parallel()
-		db, err := factory.GetDB()
-		require.NoError(t, err)
-		tests.RunSQLQueueV2TestSuite(t, db)
+		RunQueueV2TestSuiteForSQL(t, factory)
 	})
 }
