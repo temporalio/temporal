@@ -30,7 +30,7 @@ A Temporal cluster executes units of application logic called Workflows in a dur
 These premises have led to a system architecture which is divided into user-hosted processes, versus the Temporal cluster processes (which may be hosted outside the user's systems):
 
 <!-- https://lucid.app/lucidchart/0202e4b8-5258-4cd6-a6a0-67159300532b/edit -->
-<img src="https://github.com/temporalio/temporal/assets/52205/fd60b445-4f79-47ac-9193-de64ff395205">
+<img src="https://github.com/temporalio/temporal/assets/52205/47a7c139-1bb4-46f9-a401-793a63e39341">
 
 ### User-hosted processes
 
