@@ -39,8 +39,8 @@ type (
 		// using priority queue to track the min pending task key
 		// might be an overkill since the max length of the nested map
 		// is equal to shardIO concurrency limit which should be small
-		outstandingTaskKeys     map[tasks.Category]map[tasks.Key]struct{}
-		outstandingRequestCount int
+		pendingTaskKeys      map[tasks.Category]map[tasks.Key]struct{}
+		inflightRequestCount int
 
 		waitChannels []chan<- struct{}
 	}
@@ -52,8 +52,8 @@ func newTaskRequestTracker() *taskRequestTracker {
 		outstandingTaskKeys[category] = make(map[tasks.Key]struct{})
 	}
 	return &taskRequestTracker{
-		outstandingTaskKeys: outstandingTaskKeys,
-		waitChannels:        make([]chan<- struct{}, 0),
+		pendingTaskKeys: outstandingTaskKeys,
+		waitChannels:    make([]chan<- struct{}, 0),
 	}
 }
 
@@ -63,7 +63,7 @@ func (t *taskRequestTracker) track(
 	t.Lock()
 	defer t.Unlock()
 
-	t.outstandingRequestCount++
+	t.inflightRequestCount++
 
 	minKeyByCategory := make(map[tasks.Category]tasks.Key)
 	for _, taskMap := range taskMaps {
@@ -86,23 +86,27 @@ func (t *taskRequestTracker) track(
 		}
 	}
 	for category, minKey := range minKeyByCategory {
-		t.outstandingTaskKeys[category][minKey] = struct{}{}
+		t.pendingTaskKeys[category][minKey] = struct{}{}
 	}
 
 	return func(writeErr error) {
 		t.Lock()
 		defer t.Unlock()
 
+		// Task key is not pending only when we get a definitive result from persistence.
+		// This result can be either a success or a error that guarantees the task with that key
+		// will not be persisted.
 		if writeErr == nil || !OperationPossiblySucceeded(writeErr) {
 			// we can only remove the task from the pending task list if we are sure it was inserted
+			// or the insertion is guaranteed to have failed
 			for category, minKey := range minKeyByCategory {
-				delete(t.outstandingTaskKeys[category], minKey)
+				delete(t.pendingTaskKeys[category], minKey)
 			}
 		}
 
-		// always mark the request as completed, otherwise rangeID renew will be blocked forever
-		t.outstandingRequestCount--
-		if t.outstandingRequestCount == 0 {
+		// While task key might still be pending, the request is completed and no longer inflight
+		t.inflightRequestCount--
+		if t.inflightRequestCount == 0 {
 			t.closeWaitChannelsLocked()
 		}
 	}
@@ -114,7 +118,7 @@ func (t *taskRequestTracker) minTaskKey(
 	t.Lock()
 	defer t.Unlock()
 
-	pendingTasksForCategory := t.outstandingTaskKeys[category]
+	pendingTasksForCategory := t.pendingTaskKeys[category]
 	if len(pendingTasksForCategory) == 0 {
 		return tasks.MinimumKey, false
 	}
@@ -129,10 +133,14 @@ func (t *taskRequestTracker) minTaskKey(
 	return minKey, true
 }
 
+// drain method blocks until all inflight requests are completed
+// This method should be called before updating shard rangeID,
+// otherwise inflight request can fails as those requests are conditioned on
+// the current rangeID
 func (t *taskRequestTracker) drain() {
 	t.Lock()
 
-	if t.outstandingRequestCount == 0 {
+	if t.inflightRequestCount == 0 {
 		t.Unlock()
 		return
 	}
@@ -148,10 +156,10 @@ func (t *taskRequestTracker) clear() {
 	t.Lock()
 	defer t.Unlock()
 
-	for category := range t.outstandingTaskKeys {
-		t.outstandingTaskKeys[category] = make(map[tasks.Key]struct{})
+	for category := range t.pendingTaskKeys {
+		t.pendingTaskKeys[category] = make(map[tasks.Key]struct{})
 	}
-	t.outstandingRequestCount = 0
+	t.inflightRequestCount = 0
 	t.closeWaitChannelsLocked()
 }
 
