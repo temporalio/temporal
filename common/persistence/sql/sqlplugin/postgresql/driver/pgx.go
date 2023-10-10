@@ -22,30 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tdbg
+package driver
 
 import (
-	"time"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // register pgx driver for sqlx
+	"github.com/jmoiron/sqlx"
 )
 
-const (
-	localHostPort = "127.0.0.1:7233"
+type PGXDriver struct{}
 
-	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
-	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
-	defaultDateTimeRangeLongRE  = "^[1-9][0-9]*(second|minute|hour|day|week|month|year)$" // eg. 1second, 20minute, 300hour etc.
-	defaultDateTimeRangeNum     = "^[1-9][0-9]*"                                          // eg. 1, 20, 300 etc.
+func (p *PGXDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
+	return sqlx.Connect("pgx", dsn)
+}
 
-	// time ranges
-	day   = 24 * time.Hour
-	week  = 7 * day
-	month = 30 * day
-	year  = 365 * day
+func (p *PGXDriver) IsDupEntryError(err error) bool {
+	pgxErr, ok := err.(*pgconn.PgError)
+	return ok && pgxErr.Code == dupEntryCode
+}
 
-	defaultTimeFormat              = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat          = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultContextTimeoutInSeconds = 5
-	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
-
-	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
-)
+func (p *PGXDriver) IsDupDatabaseError(err error) bool {
+	pqErr, ok := err.(*pgconn.PgError)
+	return ok && pqErr.Code == dupDatabaseCode
+}

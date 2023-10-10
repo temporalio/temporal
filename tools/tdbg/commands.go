@@ -56,7 +56,7 @@ const (
 )
 
 // AdminShowWorkflow shows history
-func AdminShowWorkflow(c *cli.Context) error {
+func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
@@ -72,14 +72,14 @@ func AdminShowWorkflow(c *cli.Context) error {
 	endEventVersion := int64(c.Int(FlagMaxEventVersion))
 	outputFileName := c.String(FlagOutputFilename)
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 
 	serializer := serialization.NewSerializer()
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 }
 
 // AdminImportWorkflow imports history
-func AdminImportWorkflow(c *cli.Context) error {
+func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func AdminImportWorkflow(c *cli.Context) error {
 	}
 	inputFileName := c.String(FlagInputFilename)
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 
 	serializer := serialization.NewSerializer()
 
@@ -242,8 +242,8 @@ func AdminImportWorkflow(c *cli.Context) error {
 }
 
 // AdminDescribeWorkflow describe a new workflow execution for admin
-func AdminDescribeWorkflow(c *cli.Context) error {
-	resp, err := describeMutableState(c)
+func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+	resp, err := describeMutableState(c, clientFactory)
 	if err != nil {
 		return err
 	}
@@ -278,8 +278,8 @@ func AdminDescribeWorkflow(c *cli.Context) error {
 	return nil
 }
 
-func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateResponse, error) {
-	adminClient := cFactory.AdminClient(c)
+func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminservice.DescribeMutableStateResponse, error) {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -312,8 +312,8 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
 // (e.g. if a child workflow has recorded its result in the parent workflow)
 // Please use normal workflow delete command to gracefully delete a workflow execution.
-func AdminDeleteWorkflow(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -373,10 +373,10 @@ func AdminGetShardID(c *cli.Context) error {
 }
 
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
-func AdminListShardTasks(c *cli.Context) error {
+func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory) error {
 	sid := int32(c.Int(FlagShardID))
 	categoryStr := c.String(FlagTaskType)
-	categoryValue, err := stringToEnum(categoryStr, enumsspb.TaskCategory_value)
+	categoryValue, err := StringToEnum(categoryStr, enumsspb.TaskCategory_value)
 	if err != nil {
 		categoryInt, err := strconv.Atoi(categoryStr)
 		if err != nil {
@@ -389,7 +389,7 @@ func AdminListShardTasks(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter Task type: %s", err)
 	}
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 	pageSize := defaultPageSize
 	if c.IsSet(FlagPageSize) {
 		pageSize = c.Int(FlagPageSize)
@@ -442,11 +442,11 @@ func AdminListShardTasks(c *cli.Context) error {
 }
 
 // AdminRemoveTask describes history host
-func AdminRemoveTask(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRemoveTask(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 	shardID := c.Int(FlagShardID)
 	taskID := c.Int64(FlagTaskID)
-	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	categoryInt, err := StringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
 		return fmt.Errorf("unable to parse Task Type: %s", err)
 	}
@@ -477,9 +477,9 @@ func AdminRemoveTask(c *cli.Context) error {
 }
 
 // AdminDescribeShard describes shard by shard id
-func AdminDescribeShard(c *cli.Context) error {
+func AdminDescribeShard(c *cli.Context, clientFactory ClientFactory) error {
 	sid := c.Int(FlagShardID)
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
@@ -493,8 +493,8 @@ func AdminDescribeShard(c *cli.Context) error {
 }
 
 // AdminShardManagement describes history host
-func AdminShardManagement(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminShardManagement(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 	sid := c.Int(FlagShardID)
 
 	ctx, cancel := newContext(c)
@@ -511,10 +511,10 @@ func AdminShardManagement(c *cli.Context) error {
 }
 
 // AdminListGossipMembers outputs a list of gossip members
-func AdminListGossipMembers(c *cli.Context) error {
+func AdminListGossipMembers(c *cli.Context, clientFactory ClientFactory) error {
 	roleFlag := c.String(FlagClusterMembershipRole)
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
@@ -539,8 +539,8 @@ func AdminListGossipMembers(c *cli.Context) error {
 }
 
 // AdminListClusterMembers outputs a list of cluster members
-func AdminListClusterMembers(c *cli.Context) error {
-	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
+func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error {
+	role, _ := StringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag, err := parseTime(c.String(FlagFrom), time.Time{}, time.Now().UTC())
 	if err != nil {
@@ -548,7 +548,7 @@ func AdminListClusterMembers(c *cli.Context) error {
 	}
 	heartbeat := time.Duration(heartbeatFlag.UnixNano())
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -569,8 +569,8 @@ func AdminListClusterMembers(c *cli.Context) error {
 }
 
 // AdminDescribeHistoryHost describes history host
-func AdminDescribeHistoryHost(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace := c.String(FlagNamespace)
 	workflowID := c.String(FlagWorkflowID)
@@ -618,8 +618,8 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 }
 
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
-func AdminRefreshWorkflowTasks(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
@@ -635,7 +635,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	nsID, err := getNamespaceID(c, clientFactory, namespace.Name(nsName))
 	if err != nil {
 		return err
 	}
@@ -656,8 +656,8 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 }
 
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
-func AdminRebuildMutableState(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
+func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error {
+	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {

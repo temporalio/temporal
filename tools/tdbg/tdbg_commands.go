@@ -28,50 +28,52 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var commands = []*cli.Command{
-	{
-		Name:        "workflow",
-		Aliases:     []string{"w"},
-		Usage:       "Run admin operation on workflow",
-		Subcommands: newAdminWorkflowCommands(),
-	},
-	{
-		Name:        "shard",
-		Aliases:     []string{"s"},
-		Usage:       "Run admin operation on specific shard",
-		Subcommands: newAdminShardManagementCommands(),
-	},
-	{
-		Name:        "history-host",
-		Aliases:     []string{"h"},
-		Usage:       "Run admin operation on history host",
-		Subcommands: newAdminHistoryHostCommands(),
-	},
-	{
-		Name:        "taskqueue",
-		Aliases:     []string{"tq"},
-		Usage:       "Run admin operation on taskQueue",
-		Subcommands: newAdminTaskQueueCommands(),
-	},
-	{
-		Name:        "membership",
-		Aliases:     []string{"m"},
-		Usage:       "Run admin operation on membership",
-		Subcommands: newAdminMembershipCommands(),
-	},
-	{
-		Name:        "dlq",
-		Usage:       "Run admin operation on DLQ",
-		Subcommands: newAdminDLQCommands(),
-	},
-	{
-		Name:        "decode",
-		Usage:       "Decode payload",
-		Subcommands: newDecodeCommands(),
-	},
+func getCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:        "workflow",
+			Aliases:     []string{"w"},
+			Usage:       "Run admin operation on workflow",
+			Subcommands: newAdminWorkflowCommands(clientFactory),
+		},
+		{
+			Name:        "shard",
+			Aliases:     []string{"s"},
+			Usage:       "Run admin operation on specific shard",
+			Subcommands: newAdminShardManagementCommands(clientFactory),
+		},
+		{
+			Name:        "history-host",
+			Aliases:     []string{"h"},
+			Usage:       "Run admin operation on history host",
+			Subcommands: newAdminHistoryHostCommands(clientFactory),
+		},
+		{
+			Name:        "taskqueue",
+			Aliases:     []string{"tq"},
+			Usage:       "Run admin operation on taskQueue",
+			Subcommands: newAdminTaskQueueCommands(clientFactory),
+		},
+		{
+			Name:        "membership",
+			Aliases:     []string{"m"},
+			Usage:       "Run admin operation on membership",
+			Subcommands: newAdminMembershipCommands(clientFactory),
+		},
+		{
+			Name:        "dlq",
+			Usage:       "Run admin operation on DLQ",
+			Subcommands: newAdminDLQCommands(clientFactory),
+		},
+		{
+			Name:        "decode",
+			Usage:       "Decode payload",
+			Subcommands: newDecodeCommands(),
+		},
+	}
 }
 
-func newAdminWorkflowCommands() []*cli.Command {
+func newAdminWorkflowCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -92,7 +94,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 					Usage: "input file",
 				}},
 			Action: func(c *cli.Context) error {
-				return AdminImportWorkflow(c)
+				return AdminImportWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -131,7 +133,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 					Usage: "output file",
 				}},
 			Action: func(c *cli.Context) error {
-				return AdminShowWorkflow(c)
+				return AdminShowWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -151,7 +153,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c)
+				return AdminDescribeWorkflow(c, clientFactory)
 			},
 		},
 		{
@@ -171,7 +173,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c)
+				return AdminRefreshWorkflowTasks(c, clientFactory)
 			},
 		},
 		{
@@ -191,7 +193,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRebuildMutableState(c)
+				return AdminRebuildMutableState(c, clientFactory)
 			},
 		},
 		{
@@ -211,13 +213,13 @@ func newAdminWorkflowCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c)
+				return AdminDeleteWorkflow(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminShardManagementCommands() []*cli.Command {
+func newAdminShardManagementCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -230,7 +232,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeShard(c)
+				return AdminDescribeShard(c, clientFactory)
 			},
 		},
 		{
@@ -284,7 +286,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListShardTasks(c)
+				return AdminListShardTasks(c, clientFactory)
 			},
 		},
 		{
@@ -297,7 +299,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminShardManagement(c)
+				return AdminShardManagement(c, clientFactory)
 			},
 		},
 		{
@@ -324,13 +326,13 @@ func newAdminShardManagementCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRemoveTask(c)
+				return AdminRemoveTask(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminMembershipCommands() []*cli.Command {
+func newAdminMembershipCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-gossip",
@@ -343,7 +345,7 @@ func newAdminMembershipCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListGossipMembers(c)
+				return AdminListGossipMembers(c, clientFactory)
 			},
 		},
 		{
@@ -364,13 +366,13 @@ func newAdminMembershipCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListClusterMembers(c)
+				return AdminListClusterMembers(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminHistoryHostCommands() []*cli.Command {
+func newAdminHistoryHostCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -396,7 +398,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeHistoryHost(c)
+				return AdminDescribeHistoryHost(c, clientFactory)
 			},
 		},
 		{
@@ -424,7 +426,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 	}
 }
 
-func newAdminTaskQueueCommands() []*cli.Command {
+func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-tasks",
@@ -463,99 +465,71 @@ func newAdminTaskQueueCommands() []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListTaskQueueTasks(c)
+				return AdminListTaskQueueTasks(c, clientFactory)
 			},
 		},
 	}
 }
 
-func newAdminDLQCommands() []*cli.Command {
+func newAdminDLQCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "read",
 			Aliases: []string{"r"},
 			Usage:   "Read DLQ Messages",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
+			Flags: append(
+				getDLQFlags(),
 				&cli.IntFlag{
 					Name:  FlagMaxMessageCount,
 					Usage: "Max message size to fetch",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
 				},
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
-			},
+			),
 			Action: func(c *cli.Context) error {
-				return AdminGetDLQMessages(c)
+				return AdminGetDLQMessages(c, clientFactory)
 			},
 		},
 		{
 			Name:    "purge",
 			Aliases: []string{"p"},
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-			},
+			Flags:   getDLQFlags(),
 			Action: func(c *cli.Context) error {
-				return AdminPurgeDLQMessages(c)
+				return AdminPurgeDLQMessages(c, clientFactory)
 			},
 		},
 		{
 			Name:    "merge",
 			Aliases: []string{"m"},
 			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-			},
+			Flags:   getDLQFlags(),
 			Action: func(c *cli.Context) error {
-				return AdminMergeDLQMessages(c)
+				return AdminMergeDLQMessages(c, clientFactory)
 			},
+		},
+	}
+}
+
+func getDLQFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:  FlagDLQType,
+			Usage: "Type of DLQ to manage. (options: namespace, history)",
+		},
+		&cli.StringFlag{
+			Name:  FlagCluster,
+			Usage: "Source cluster",
+		},
+		&cli.IntFlag{
+			Name:  FlagShardID,
+			Usage: "ShardId",
+		},
+		&cli.IntFlag{
+			Name:  FlagLastMessageID,
+			Usage: "The upper boundary of the read message",
 		},
 	}
 }

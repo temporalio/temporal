@@ -22,30 +22,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tdbg
+package api_test
 
 import (
-	"time"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/codes"
+
+	enumspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/api"
 )
 
-const (
-	localHostPort = "127.0.0.1:7233"
+func TestGetTaskCategory(t *testing.T) {
+	t.Parallel()
 
-	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
-	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
-	defaultDateTimeRangeLongRE  = "^[1-9][0-9]*(second|minute|hour|day|week|month|year)$" // eg. 1second, 20minute, 300hour etc.
-	defaultDateTimeRangeNum     = "^[1-9][0-9]*"                                          // eg. 1, 20, 300 etc.
+	category, err := api.GetTaskCategory(enumspb.TASK_CATEGORY_TRANSFER)
+	require.NoError(t, err)
+	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), int(category.ID()))
 
-	// time ranges
-	day   = 24 * time.Hour
-	week  = 7 * day
-	month = 30 * day
-	year  = 365 * day
-
-	defaultTimeFormat              = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat          = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultContextTimeoutInSeconds = 5
-	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
-
-	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
-)
+	_, err = api.GetTaskCategory(enumspb.TASK_CATEGORY_UNSPECIFIED)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "Unspecified")
+	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
+}

@@ -22,30 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tdbg
+package persistencetest
 
 import (
-	"time"
+	"testing"
+
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 )
 
-const (
-	localHostPort = "127.0.0.1:7233"
-
-	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
-	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
-	defaultDateTimeRangeLongRE  = "^[1-9][0-9]*(second|minute|hour|day|week|month|year)$" // eg. 1second, 20minute, 300hour etc.
-	defaultDateTimeRangeNum     = "^[1-9][0-9]*"                                          // eg. 1, 20, 300 etc.
-
-	// time ranges
-	day   = 24 * time.Hour
-	week  = 7 * day
-	month = 30 * day
-	year  = 365 * day
-
-	defaultTimeFormat              = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat          = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultContextTimeoutInSeconds = 5
-	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
-
-	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
+type (
+	getQueueKeyParams struct {
+		QueueType persistence.QueueV2Type
+		Category  tasks.Category
+	}
 )
+
+func WithQueueType(queueType persistence.QueueV2Type) func(p *getQueueKeyParams) {
+	return func(p *getQueueKeyParams) {
+		p.QueueType = queueType
+	}
+}
+
+func WithCategory(category tasks.Category) func(p *getQueueKeyParams) {
+	return func(p *getQueueKeyParams) {
+		p.Category = category
+	}
+}
+
+func GetQueueKey(t *testing.T, opts ...func(p *getQueueKeyParams)) persistence.QueueKey {
+	params := &getQueueKeyParams{
+		QueueType: persistence.QueueTypeHistoryNormal,
+		Category:  tasks.CategoryTransfer,
+	}
+	for _, opt := range opts {
+		opt(params)
+	}
+	// Note that it is important to include the test name in the cluster name to ensure that the generated queue name is
+	// unique across tests. That way, we can run many queue tests without any risk of queue name collisions.
+	return persistence.QueueKey{
+		QueueType:     params.QueueType,
+		Category:      params.Category,
+		SourceCluster: "test-source-cluster-" + t.Name(),
+		TargetCluster: "test-target-cluster-" + t.Name(),
+	}
+}
