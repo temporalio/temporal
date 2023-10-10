@@ -30,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 
@@ -60,7 +61,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			ShardId: 0,
 			RangeId: 1,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDArchival: {
+				int32(tasks.CategoryIDArchival): {
 					ReaderStates: nil,
 					ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 						FireTime: timestamp.TimeNowPtrUtc(),

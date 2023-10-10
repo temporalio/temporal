@@ -698,7 +698,7 @@ func createImmediateTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	categoryID int32,
+	categoryID int,
 	immedidateTasks []p.InternalHistoryTask,
 ) error {
 	// This is for backward compatiblity.
@@ -721,7 +721,7 @@ func createImmediateTasks(
 	for _, task := range immedidateTasks {
 		immediateTasksRows = append(immediateTasksRows, sqlplugin.HistoryImmediateTasksRow{
 			ShardID:      shardID,
-			CategoryID:   categoryID,
+			CategoryID:   int32(categoryID),
 			TaskID:       task.Key.TaskID,
 			Data:         task.Blob.Data,
 			DataEncoding: task.Blob.EncodingType.String(),
@@ -748,7 +748,7 @@ func createScheduledTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	categoryID int32,
+	categoryID int,
 	scheduledTasks []p.InternalHistoryTask,
 ) error {
 	// This is for backward compatiblity.
@@ -766,7 +766,7 @@ func createScheduledTasks(
 	for _, task := range scheduledTasks {
 		scheduledTasksRows = append(scheduledTasksRows, sqlplugin.HistoryScheduledTasksRow{
 			ShardID:             shardID,
-			CategoryID:          categoryID,
+			CategoryID:          int32(categoryID),
 			VisibilityTimestamp: task.Key.FireTime,
 			TaskID:              task.Key.TaskID,
 			Data:                task.Blob.Data,

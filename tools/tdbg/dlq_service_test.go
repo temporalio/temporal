@@ -112,7 +112,7 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		expectedErrSubstrings: nil,
 	}
 	tc.override(&p)
-	app := tdbg.NewCliApp(p.clientFactory)
+	app := tdbg.NewCliApp(p.clientFactory, tasks.NewDefaultTaskCategoryRegistry())
 	app.ExitErrHandler = func(c *cli.Context, err error) {
 		return
 	}
