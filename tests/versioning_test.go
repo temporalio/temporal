@@ -101,12 +101,8 @@ func (s *versioningIntegSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	clientAddr := "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		clientAddr = TestFlags.FrontendAddr
-	}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  clientAddr,
+		HostPort:  s.hostPort,
 		Namespace: s.namespace,
 	})
 	if err != nil {

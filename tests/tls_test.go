@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
@@ -42,7 +43,6 @@ import (
 
 type tlsFunctionalSuite struct {
 	FunctionalTestBase
-	hostPort  string
 	sdkClient sdkclient.Client
 }
 
@@ -53,10 +53,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 
 func (s *tlsFunctionalSuite) SetupSuite() {
 	s.setupSuite("testdata/tls_cluster.yaml")
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
+
 }
 
 func (s *tlsFunctionalSuite) TearDownSuite() {

@@ -78,6 +78,7 @@ type (
 		foreignNamespace       string
 		archivalNamespace      string
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		hostPort               string
 	}
 	// suiteParams contains the variables which are used to configure the test suite via the Option argument to
 	// setupSuite.
@@ -112,6 +113,10 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		opt(&params)
 	}
 
+	s.hostPort = "127.0.0.1:7134"
+	if TestFlags.FrontendAddr != "" {
+		s.hostPort = TestFlags.FrontendAddr
+	}
 	s.setupLogger()
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)

@@ -72,6 +72,7 @@ var (
 		"GetReplicationStatus":      {},
 		"GetDLQTasks":               {},
 		"DeleteDLQTasks":            {},
+		"AddTasks":                  {},
 	}
 )
 

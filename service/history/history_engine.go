@@ -35,6 +35,7 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/service/history/api/addtasks"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -888,4 +889,11 @@ func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (_ *historyservice.AddTasksResponse, retError error) {
+	return addtasks.Invoke(ctx, e.shardContext, e.eventSerializer, int(e.config.NumberOfShards), request)
 }
