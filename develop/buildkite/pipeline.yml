@@ -628,7 +628,7 @@ steps:
 
   - wait: ~
     continue_on_failure: true  # required for test reports of failed build to be picked up
-  
+
   - label: ":mag: test-report"
     agents:
       queue: "default"
@@ -637,6 +637,9 @@ steps:
       automatic:
         limit: 2
     plugins:
+      - artifacts#v1.9.0:
+          download:
+            - ".testreport/*.xml"
       - test-collector#v1.10.0:
           files: ".testreport/*.xml"
           format: junit
