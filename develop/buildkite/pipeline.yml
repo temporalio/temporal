@@ -636,13 +636,11 @@ steps:
     agents:
       queue: "default"
       docker: "*"
+    command: buildkite-agent artifact download ".testreport/*.xml" .
     retry:
       automatic:
         limit: 2
     plugins:
-      - artifacts#v1.9.0:
-          download:
-            - ".testreport/*.xml"
       - test-collector#v1.10.0:
           files: ".testreport/*.xml"
           format: junit
