@@ -129,16 +129,16 @@ func ContainsVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.V
 
 // FindLCAVersionHistoryItem returns the lowest common ancestor VersionHistoryItem.
 func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	return findLCAVersionHistoryItemFromItemSlice(v.Items, remote.Items)
+	return FindLCAVersionHistoryItemFromItemSlice(v.Items, remote.Items)
 }
 
-func findLCAVersionHistoryItemFromItemSlice(a []*historyspb.VersionHistoryItem, b []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
-	aIndex := len(a) - 1
-	bIndex := len(b) - 1
+func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
+	aIndex := len(versionHistoryItemsA) - 1
+	bIndex := len(versionHistoryItemsB) - 1
 
 	for aIndex >= 0 && bIndex >= 0 {
-		aVersionItem := a[aIndex]
-		bVersionItem := b[bIndex]
+		aVersionItem := versionHistoryItemsA[aIndex]
+		bVersionItem := versionHistoryItemsB[bIndex]
 
 		if aVersionItem.Version == bVersionItem.Version {
 			if aVersionItem.GetEventId() > bVersionItem.GetEventId() {
@@ -156,25 +156,24 @@ func findLCAVersionHistoryItemFromItemSlice(a []*historyspb.VersionHistoryItem, 
 	return nil, serviceerror.NewInternal("version history is malformed. No joint point found.")
 }
 
-// IsSameBranch checks if two version history items are in the same branch
-func IsVersionItemsInSameBranch(a []*historyspb.VersionHistoryItem, b []*historyspb.VersionHistoryItem) bool {
-	lowestCommonAncestor, err := findLCAVersionHistoryItemFromItemSlice(a, b)
+// IsVersionHistoryItemsInSameBranch checks if two version history items are in the same branch
+func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) bool {
+	lowestCommonAncestor, err := FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA, versionHistoryItemsB)
 	if err != nil {
 		return false
 	}
 
-	aLastItem, err := getLastVersionHistoryItem(a)
+	aLastItem, err := getLastVersionHistoryItem(versionHistoryItemsA)
 	if err != nil {
 		return false
 	}
 
-	bLastItem, err := getLastVersionHistoryItem(b)
+	bLastItem, err := getLastVersionHistoryItem(versionHistoryItemsB)
 	if err != nil {
 		return false
 	}
 
 	return lowestCommonAncestor.Equal(aLastItem) || lowestCommonAncestor.Equal(bLastItem)
-
 }
 
 // IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.

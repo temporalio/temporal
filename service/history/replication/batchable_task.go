@@ -111,6 +111,8 @@ func (w *batchedTask) IsRetryableError(err error) bool {
 }
 
 func (w *batchedTask) RetryPolicy() backoff.RetryPolicy {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if len(w.individualTasks) == 1 {
 		return w.batchedTask.RetryPolicy()
 	}
@@ -163,9 +165,6 @@ func (w *batchedTask) handleIndividualTasks() {
 }
 
 func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
-	if w.state != batchStateOpen {
-		return false
-	}
 	w.lock.Lock()
 	defer w.lock.Unlock()
 

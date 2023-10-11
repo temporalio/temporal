@@ -63,8 +63,8 @@ type (
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
 
-		batchLock   sync.Mutex
-		wantToBatch bool
+		batchLock sync.Mutex
+		batchable bool
 	}
 	eventsDeserializeResponse struct {
 		events       []*historypb.HistoryEvent
@@ -101,7 +101,7 @@ func NewExecutableHistoryTask(
 		versionHistoryItems: task.VersionHistoryItems,
 		eventsBlob:          task.GetEvents(),
 		newRunEventsBlob:    task.GetNewRunEvents(),
-		wantToBatch:         true,
+		batchable:           true,
 	}
 }
 
@@ -307,13 +307,13 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryE
 }
 
 func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
-	if !e.wantToBatch {
+	if !e.batchable {
 		return nil, false
 	}
 	e.batchLock.Lock()
 	defer e.batchLock.Unlock()
 
-	if !e.wantToBatch || !incomingTask.CanBatch() {
+	if !e.batchable || !incomingTask.CanBatch() {
 		return nil, false
 	}
 
@@ -331,27 +331,35 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (Trackable
 		WorkflowKey:         e.WorkflowKey,
 		ExecutableTask:      e.ExecutableTask,
 		baseExecutionInfo:   e.baseExecutionInfo,
-		versionHistoryItems: e.getLongerVersionHistory(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
+		versionHistoryItems: e.getFresherVersionHistoryItems(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
 		eventsDesResponse: &eventsDeserializeResponse{
 			events:       append(currentEvents, incomingEvents...),
 			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
 			err:          nil,
 		},
-		wantToBatch: true,
+		batchable: true,
 	}, true
 }
 
-func (e *ExecutableHistoryTask) getLongerVersionHistory(a []*historyspb.VersionHistoryItem, b []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
-	if a[len(a)-1].GetEventId() > b[len(b)-1].GetEventId() {
-		return a
+func (e *ExecutableHistoryTask) getFresherVersionHistoryItems(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	fresherVersionHistoryItems := versionHistoryItemsA
+	if versionHistoryItemsA[len(versionHistoryItemsA)-1].GetEventId() < versionHistoryItemsB[len(versionHistoryItemsB)-1].GetEventId() {
+		fresherVersionHistoryItems = versionHistoryItemsB
 	}
-	return b
+	var items []*historyspb.VersionHistoryItem
+	for _, item := range fresherVersionHistoryItems {
+		items = append(items, versionhistory.CopyVersionHistoryItem(item))
+	}
+	return items
 }
 
 func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask BatchableTask) (*ExecutableHistoryTask, error) {
 	incomingHistoryTask, isHistoryTask := incomingTask.(*ExecutableHistoryTask)
 	if !isHistoryTask {
 		return nil, serviceerror.NewInvalidArgument("Unsupported Batch type")
+	}
+	if err := e.checkSourceCluster(incomingHistoryTask.SourceClusterName()); err != nil {
+		return nil, err
 	}
 
 	if err := e.checkWorkflowKey(incomingHistoryTask.WorkflowKey); err != nil {
@@ -378,28 +386,39 @@ func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask Batchable
 	return incomingHistoryTask, nil
 }
 
+func (e *ExecutableHistoryTask) checkSourceCluster(incomingTaskSourceCluster string) error {
+	if e.SourceClusterName() != incomingTaskSourceCluster {
+		return serviceerror.NewInvalidArgument("source cluster does not match")
+	}
+	return nil
+}
+
 // checkVersionHistoryItem will check if incoming tasks Version history is on the same branch as the current one
 func (e *ExecutableHistoryTask) checkVersionHistoryItem(incomingHistoryItems []*historyspb.VersionHistoryItem) error {
-	if versionhistory.IsVersionItemsInSameBranch(e.versionHistoryItems, incomingHistoryItems) {
+	if versionhistory.IsVersionHistoryItemsInSameBranch(e.versionHistoryItems, incomingHistoryItems) {
 		return nil
 	}
 	return serviceerror.NewInvalidArgument("version history does not match")
 }
 
 func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWorkflowKey definition.WorkflowKey) error {
-	if !(e.WorkflowKey.GetWorkflowID() == incomingWorkflowKey.GetWorkflowID() &&
-		e.WorkflowKey.GetNamespaceID() == incomingWorkflowKey.GetNamespaceID() &&
-		e.WorkflowKey.GetRunID() == incomingWorkflowKey.GetRunID()) {
+	if e.WorkflowKey != incomingWorkflowKey {
 		return serviceerror.NewInvalidArgument("workflow key does not match")
 	}
 	return nil
 }
 
 func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo *workflowpb.BaseExecutionInfo) error {
-	if e.baseExecutionInfo != nil && incomingTaskExecutionInfo != nil && !e.baseExecutionInfo.Equal(incomingTaskExecutionInfo) {
-		return serviceerror.NewInvalidArgument("base execution info not match")
+	if e.baseExecutionInfo == nil && incomingTaskExecutionInfo == nil {
+		return nil
+	}
+	if e.baseExecutionInfo == nil || incomingTaskExecutionInfo == nil {
+		return serviceerror.NewInvalidArgument("one of base execution is nil")
 	}
 
+	if !e.baseExecutionInfo.Equal(incomingTaskExecutionInfo) {
+		return serviceerror.NewInvalidArgument("base execution is not equal")
+	}
 	return nil
 }
 
@@ -428,11 +447,13 @@ func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryE
 }
 
 func (e *ExecutableHistoryTask) CanBatch() bool {
-	return e.wantToBatch
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+	return e.batchable
 }
 
 func (e *ExecutableHistoryTask) MarkUnbatchable() {
 	e.batchLock.Lock()
 	defer e.batchLock.Unlock()
-	e.wantToBatch = false
+	e.batchable = false
 }

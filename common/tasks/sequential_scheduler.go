@@ -267,9 +267,15 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 			s.queueChan <- queue
 			return
 		default:
-			// sequential_batch_queue individual task handler is depending on following logic executed in synchronize:
-			// removeTaskFromQueue -> executeTask -> handleResult(Ack/Nack) -> removeQueue if Empty
-			// For the following reason: If batchedTask Nacked, the individual tasks in the batch will be put back to the queue
+			// NOTE: implicit assumption
+			// 1. a queue is owned by a coroutine
+			// 2. a coroutine will remove a task from its queue then execute the task; this coroutine will ack / nack / reschedule the task at the end
+			// 3. queue will be deleted once queue is empty
+			//
+			// for batched tasks, if task is state
+			// ack: behavior is same as normal task
+			// nack: batched task will be broken into original tasks, and synchronously added to queue (so queue is not empty)
+			// reschedule: behavior is same as normal task
 			if !queue.IsEmpty() {
 				s.executeTask(queue)
 			} else {
