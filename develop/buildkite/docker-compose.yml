@@ -238,16 +238,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres_pgx"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.coverage:/temporal/.coverage
     networks:
       services-network:
         aliases:
@@ -270,7 +265,7 @@ services:
       services-network:
         aliases:
           - integration-test
-  
+
   integration-test-postgresql12-pgx:
     build:
       context: ../..
@@ -280,15 +275,10 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12_pgx"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.coverage:/temporal/.coverage
     networks:
       services-network:
         aliases:
@@ -406,16 +396,11 @@ services:
       - "PERSISTENCE_DRIVER=postgres_pgx"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.coverage:/temporal/.coverage
     networks:
       services-network:
         aliases:
@@ -450,15 +435,10 @@ services:
       - "PERSISTENCE_DRIVER=postgres12_pgx"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
       - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
         aliases:
