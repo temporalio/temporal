@@ -337,8 +337,8 @@ integration-test-coverage: prepare-coverage-test
 		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage for best build caching.
-pre-build-functional-test-coverage:
-	@go test -exec=true -count=0 $(FUNCTIONAL_TEST_ROOT) -race $(TEST_TAG) $(FUNCTIONAL_TEST_COVERPKG)
+pre-build-functional-test-coverage: prepare-coverage-test
+	@go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) -race $(TEST_TAG) $(FUNCTIONAL_TEST_COVERPKG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
