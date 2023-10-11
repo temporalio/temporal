@@ -149,6 +149,7 @@ steps:
   # #     queue: "default"
   # #     docker: "*"
   # #   command: "make functional-test-coverage"
+  # #   parallelism: 3
   # #   artifact_paths:
   # #     - ".coverage/*.out"
   # #   retry:
@@ -415,6 +416,7 @@ steps:
   #     queue: "default"
   #     docker: "*"
   #   command: "make functional-test-coverage"
+  #   parallelism: 3
   #   artifact_paths:
   #     - ".coverage/*.out"
   #     - ".testreport/*.xml"
@@ -609,6 +611,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make functional-test-coverage"
+    parallelism: 3
     artifact_paths:
       - ".coverage/*.out"
       - ".testreport/*.xml"
