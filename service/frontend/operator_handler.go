@@ -550,13 +550,14 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == primitives.SystemLocalNamespace {
+	if request.GetNamespace() == primitives.SystemLocalNamespace || request.GetNamespaceId() == primitives.SystemNamespaceID {
 		return nil, errUnableDeleteSystemNamespace
 	}
 
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
-		Namespace: namespace.Name(request.GetNamespace()),
+		Namespace:   namespace.Name(request.GetNamespace()),
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    h.config.DeleteNamespaceDeleteActivityRPS(),
 			PageSize:                             h.config.DeleteNamespacePageSize(),

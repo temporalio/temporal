@@ -36,22 +36,22 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// acquireShardIntegrationSuite is the base test suite for testing acquire shard.
-type acquireShardIntegrationSuite struct {
-	IntegrationBase
+// acquireShardFunctionalSuite is the base test suite for testing acquire shard.
+type acquireShardFunctionalSuite struct {
+	FunctionalTestBase
 	logRecorder *logRecorder
 	logs        chan logRecord
 }
 
 // SetupSuite sets up the test suite by setting the log recorder.
-func (s *acquireShardIntegrationSuite) SetupSuite() {
+func (s *acquireShardFunctionalSuite) SetupSuite() {
 	s.logs = make(chan logRecord, 100)
 	s.logRecorder = newLogRecorder(s.logs)
 	s.Logger = s.logRecorder
 }
 
 // TearDownSuite tears down the test suite by shutting down the test cluster after a short delay.
-func (s *acquireShardIntegrationSuite) TearDownSuite() {
+func (s *acquireShardFunctionalSuite) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
 	time.Sleep(time.Second * 5)
 	s.tearDownSuite()
@@ -112,12 +112,12 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 // ownershipLostErrorSuite is the test suite for testing what happens when acquire shard returns an ownership lost
 // error.
 type ownershipLostErrorSuite struct {
-	acquireShardIntegrationSuite
+	acquireShardFunctionalSuite
 }
 
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *ownershipLostErrorSuite) SetupSuite() {
-	s.acquireShardIntegrationSuite.SetupSuite()
+	s.acquireShardFunctionalSuite.SetupSuite()
 	s.setupSuite("testdata/acquire_shard_ownership_lost_error.yaml")
 }
 
@@ -160,12 +160,12 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 
 // deadlineExceededErrorSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded.
 type deadlineExceededErrorSuite struct {
-	acquireShardIntegrationSuite
+	acquireShardFunctionalSuite
 }
 
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *deadlineExceededErrorSuite) SetupSuite() {
-	s.acquireShardIntegrationSuite.SetupSuite()
+	s.acquireShardFunctionalSuite.SetupSuite()
 	s.setupSuite("testdata/acquire_shard_deadline_exceeded_error.yaml")
 }
 
@@ -208,14 +208,14 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // eventualSuccessSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded error
 // followed by a successful acquire shard call.
 type eventualSuccessSuite struct {
-	acquireShardIntegrationSuite
+	acquireShardFunctionalSuite
 }
 
 // SetupSuite reads the targeted eventual success fault injection config from the testdata folder.
 // This config deterministically causes the first acquire shard call to return a deadline exceeded error, and it causes
 // the next call to return a successful response.
 func (s *eventualSuccessSuite) SetupSuite() {
-	s.acquireShardIntegrationSuite.SetupSuite()
+	s.acquireShardFunctionalSuite.SetupSuite()
 	s.setupSuite("testdata/acquire_shard_eventual_success.yaml")
 }
 

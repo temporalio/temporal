@@ -43,10 +43,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
-	id := "integration-request-cancel-workflow-test"
-	wt := "integration-request-cancel-workflow-test-type"
-	tl := "integration-request-cancel-workflow-test-taskqueue"
+func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
+	id := "functional-request-cancel-workflow-test"
+	wt := "functional-request-cancel-workflow-test-type"
+	tl := "functional-request-cancel-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -138,10 +138,10 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.Equal("Cancelled", s.decodePayloadsString(cancelledEventAttributes.GetDetails()))
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
-	id := "integration-cancel-workflow-command-target-running-test"
-	wt := "integration-cancel-workflow-command-target-running-test-type"
-	tl := "integration-cancel-workflow-command-target-running-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
+	id := "functional-cancel-workflow-command-target-running-test"
+	wt := "functional-cancel-workflow-command-target-running-test-type"
+	tl := "functional-cancel-workflow-command-target-running-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -274,10 +274,10 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunni
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
-	id := "integration-cancel-workflow-command-target-finished-test"
-	wt := "integration-cancel-workflow-command-target-finished-test-type"
-	tl := "integration-cancel-workflow-command-target-finished-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
+	id := "functional-cancel-workflow-command-target-finished-test"
+	wt := "functional-cancel-workflow-command-target-finished-test-type"
+	tl := "functional-cancel-workflow-command-target-finished-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -406,10 +406,10 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinis
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
-	id := "integration-cancel-workflow-command-target-not-found-test"
-	wt := "integration-cancel-workflow-command-target-not-found-test-type"
-	tl := "integration-cancel-workflow-command-target-not-found-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
+	id := "functional-cancel-workflow-command-target-not-found-test"
+	wt := "functional-cancel-workflow-command-target-not-found-test-type"
+	tl := "functional-cancel-workflow-command-target-not-found-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -486,12 +486,12 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFo
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
-	id := "integration-immediate-child-cancellation-workflow-task-failed-test"
-	wt := "integration-immediate-child-cancellation-workflow-task-failed-test-type"
-	tl := "integration-immediate-child-cancellation-workflow-task-failed-test-taskqueue"
-	childWorkflowID := "integration-immediate-child-cancellation-workflow-task-failed-child-test"
-	childTaskQueue := "integration-immediate-child-cancellation-workflow-task-failed-child-test-taskqueue"
+func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
+	id := "functional-immediate-child-cancellation-workflow-task-failed-test"
+	wt := "functional-immediate-child-cancellation-workflow-task-failed-test-type"
+	tl := "functional-immediate-child-cancellation-workflow-task-failed-test-taskqueue"
+	childWorkflowID := "functional-immediate-child-cancellation-workflow-task-failed-child-test"
+	childTaskQueue := "functional-immediate-child-cancellation-workflow-task-failed-child-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}

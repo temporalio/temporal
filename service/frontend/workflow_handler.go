@@ -3542,8 +3542,11 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 	case batcher.BatchTypeDelete:
 		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
+	case batcher.BatchTypeReset:
+		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
 	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %s is not supported", operationTypeString))
+		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
+		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))
 	}
 
 	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
@@ -3610,9 +3613,14 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		return nil, errBatchAPINotAllowed
 	}
 
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace:     request.GetNamespace(),
-		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
+		PageSize:      request.PageSize,
 		NextPageToken: request.GetNextPageToken(),
 		Query: fmt.Sprintf("%s = '%s' and %s='%s'",
 			searchattribute.WorkflowType,

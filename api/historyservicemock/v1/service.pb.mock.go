@@ -81,6 +81,26 @@ func (mr *MockHistoryServiceClientMockRecorder) CloseShard(ctx, in interface{}, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).CloseShard), varargs...)
 }
 
+// DeleteDLQTasks mocks base method.
+func (m *MockHistoryServiceClient) DeleteDLQTasks(ctx context.Context, in *historyservice.DeleteDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.DeleteDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteDLQTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteDLQTasks indicates an expected call of DeleteDLQTasks.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteDLQTasks), varargs...)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) DeleteWorkflowExecution(ctx context.Context, in *historyservice.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1263,7 +1283,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -1291,7 +1311,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
@@ -1354,6 +1374,21 @@ func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *histor
 func (mr *MockHistoryServiceServerMockRecorder) CloseShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).CloseShard), arg0, arg1)
+}
+
+// DeleteDLQTasks mocks base method.
+func (m *MockHistoryServiceServer) DeleteDLQTasks(arg0 context.Context, arg1 *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteDLQTasks indicates an expected call of DeleteDLQTasks.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteDLQTasks), arg0, arg1)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -2233,7 +2268,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -2275,7 +2310,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)

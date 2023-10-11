@@ -28,20 +28,30 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/queues"
 )
 
 // FakeDLQ is a DLQ which records the requests it receives and returns the given error upon DLQ.EnqueueTask.
 type FakeDLQ struct {
 	// Requests to write to the DLQ
-	Requests []*persistence.EnqueueTaskRequest
-	// Err to return on EnqueueTask
-	Err error
+	Requests       []*persistence.EnqueueTaskRequest
+	EnqueueTaskErr error
+	CreateQueueErr error
 }
+
+var _ queues.DLQ = (*FakeDLQ)(nil)
 
 func (d *FakeDLQ) EnqueueTask(
 	_ context.Context,
 	request *persistence.EnqueueTaskRequest,
 ) (*persistence.EnqueueTaskResponse, error) {
 	d.Requests = append(d.Requests, request)
-	return nil, d.Err
+	return nil, d.EnqueueTaskErr
+}
+
+func (d *FakeDLQ) CreateQueue(
+	context.Context,
+	*persistence.CreateQueueRequest,
+) (*persistence.CreateQueueResponse, error) {
+	return nil, d.CreateQueueErr
 }

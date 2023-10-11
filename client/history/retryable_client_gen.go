@@ -50,6 +50,21 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	var resp *historyservice.DeleteDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,

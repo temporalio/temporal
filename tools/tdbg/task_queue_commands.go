@@ -33,13 +33,13 @@ import (
 )
 
 // AdminListTaskQueueTasks displays task information
-func AdminListTaskQueueTasks(c *cli.Context) error {
+func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error {
 	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
 	tqName := c.String(FlagTaskQueue)
-	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
+	tlTypeInt, err := StringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
 		return fmt.Errorf("invalid task queue type: %v", err)
 	}
@@ -56,7 +56,7 @@ func AdminListTaskQueueTasks(c *cli.Context) error {
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 
-	client := cFactory.AdminClient(c)
+	client := clientFactory.AdminClient(c)
 
 	req := &adminservice.GetTaskQueueTasksRequest{
 		Namespace:     namespace,

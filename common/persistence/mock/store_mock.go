@@ -1407,6 +1407,21 @@ func (m *MockQueueV2) EXPECT() *MockQueueV2MockRecorder {
 	return m.recorder
 }
 
+// CreateQueue mocks base method.
+func (m *MockQueueV2) CreateQueue(ctx context.Context, request *persistence.InternalCreateQueueRequest) (*persistence.InternalCreateQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateQueue", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalCreateQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateQueue indicates an expected call of CreateQueue.
+func (mr *MockQueueV2MockRecorder) CreateQueue(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQueue", reflect.TypeOf((*MockQueueV2)(nil).CreateQueue), ctx, request)
+}
+
 // EnqueueMessage mocks base method.
 func (m *MockQueueV2) EnqueueMessage(ctx context.Context, request *persistence.InternalEnqueueMessageRequest) (*persistence.InternalEnqueueMessageResponse, error) {
 	m.ctrl.T.Helper()
@@ -1420,6 +1435,21 @@ func (m *MockQueueV2) EnqueueMessage(ctx context.Context, request *persistence.I
 func (mr *MockQueueV2MockRecorder) EnqueueMessage(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueMessage", reflect.TypeOf((*MockQueueV2)(nil).EnqueueMessage), ctx, request)
+}
+
+// RangeDeleteMessages mocks base method.
+func (m *MockQueueV2) RangeDeleteMessages(ctx context.Context, request *persistence.InternalRangeDeleteMessagesRequest) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeDeleteMessages", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalRangeDeleteMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RangeDeleteMessages indicates an expected call of RangeDeleteMessages.
+func (mr *MockQueueV2MockRecorder) RangeDeleteMessages(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteMessages", reflect.TypeOf((*MockQueueV2)(nil).RangeDeleteMessages), ctx, request)
 }
 
 // ReadMessages mocks base method.

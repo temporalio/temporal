@@ -119,7 +119,7 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 // NewQueueV2 returns a new data-access object for queues and messages stored in Cassandra. It will never return an
 // error.
 func (f *Factory) NewQueueV2() (p.QueueV2, error) {
-	return NewQueueV2Store(f.session), nil
+	return NewQueueV2Store(f.session, f.logger), nil
 }
 
 // Close closes the factory

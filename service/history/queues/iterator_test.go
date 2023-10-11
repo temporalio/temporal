@@ -26,7 +26,6 @@ package queues
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -37,10 +36,6 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/service/history/tasks"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 type (
 	iteratorSuite struct {

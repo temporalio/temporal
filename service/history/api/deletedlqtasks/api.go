@@ -22,24 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package deletedlqtasks
 
 import (
 	"context"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api"
 )
 
-func TestNewQueueV2(t *testing.T) {
-	t.Parallel()
+func Invoke(
+	ctx context.Context,
+	historyTaskQueueManager persistence.HistoryTaskQueueManager,
+	req *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	categoryEnum := req.DlqKey.Category
+	category, err := api.GetTaskCategory(categoryEnum)
+	if err != nil {
+		return nil, err
+	}
+	if req.InclusiveMaxTaskMetadata == nil {
+		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
+	}
 
-	q := sql.NewQueueV2()
-	_, err := q.EnqueueMessage(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "EnqueueMessage")
-	_, err = q.ReadMessages(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "ReadMessages")
+	_, err = historyTaskQueueManager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     persistence.QueueTypeHistoryDLQ,
+			Category:      category,
+			SourceCluster: req.DlqKey.SourceCluster,
+			TargetCluster: req.DlqKey.TargetCluster,
+		},
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+			ID: req.InclusiveMaxTaskMetadata.MessageId,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.DeleteDLQTasksResponse{}, nil
 }

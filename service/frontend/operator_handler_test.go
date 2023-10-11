@@ -720,6 +720,11 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 			Request:  &operatorservice.DeleteNamespaceRequest{Namespace: "temporal-system"},
 			Expected: &serviceerror.InvalidArgument{Message: "Unable to delete system namespace."},
 		},
+		{
+			Name:     "system namespace id",
+			Request:  &operatorservice.DeleteNamespaceRequest{NamespaceId: "32049b68-7872-4094-8e63-d0dd59896a83"},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to delete system namespace."},
+		},
 	}
 	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
@@ -774,6 +779,22 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
+
+	// Success case with id.
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
+		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
+		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
+		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
+		return nil
+	})
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun, nil)
+
+	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		NamespaceId: "c13c01a7-3887-4eda-ba4b-9a07a6359e7e",
 	})
 	s.NoError(err)
 	s.NotNil(resp)

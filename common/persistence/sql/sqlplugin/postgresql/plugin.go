@@ -34,13 +34,15 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/session"
 	"go.temporal.io/server/common/resolver"
 )
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "postgres"
+	PluginName    = "postgres"
+	PluginNamePGX = "postgres_pgx"
 )
 
 var (
@@ -50,12 +52,16 @@ var (
 	}
 )
 
-type plugin struct{}
+type plugin struct {
+	d driver.Driver
+}
 
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{})
+	sql.RegisterPlugin(PluginName, &plugin{&driver.PQDriver{}})
+	sql.RegisterPlugin(PluginNamePGX, &plugin{&driver.PGXDriver{}})
+
 }
 
 // CreateDB initialize the db object
@@ -68,7 +74,7 @@ func (d *plugin) CreateDB(
 	if err != nil {
 		return nil, err
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, conn, nil)
 	return db, nil
 }
 
@@ -82,7 +88,7 @@ func (d *plugin) CreateAdminDB(
 	if err != nil {
 		return nil, err
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, conn, nil)
 	return db, nil
 }
 
@@ -95,7 +101,7 @@ func (d *plugin) createDBConnection(
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
 	if cfg.DatabaseName != "" {
-		postgresqlSession, err := session.NewSession(cfg, resolver)
+		postgresqlSession, err := session.NewSession(cfg, d.d, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -111,6 +117,7 @@ func (d *plugin) createDBConnection(
 		cfg.DatabaseName = databaseName
 		if postgresqlSession, err := session.NewSession(
 			cfg,
+			d.d,
 			resolver,
 		); err == nil {
 			return postgresqlSession.DB, nil

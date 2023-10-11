@@ -41,11 +41,11 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
-	id := "integration-sticky-timeout-non-transient-workflow-task"
-	wt := "integration-sticky-timeout-non-transient-command-type"
-	tl := "integration-sticky-timeout-non-transient-workflow-taskqueue"
-	stl := "integration-sticky-timeout-non-transient-workflow-taskqueue-sticky"
+func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
+	id := "functional-sticky-timeout-non-transient-workflow-task"
+	wt := "functional-sticky-timeout-non-transient-command-type"
+	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
+	stl := "functional-sticky-timeout-non-transient-workflow-taskqueue-sticky"
 	identity := "worker1"
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{}
@@ -213,11 +213,11 @@ WaitForStickyTimeoutLoop:
 	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
 }
 
-func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
-	id := "integration-reset-sticky-fire-schedule-to-start-timeout"
-	wt := "integration-reset-sticky-fire-schedule-to-start-timeout-type"
-	tl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
-	stl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
+func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
+	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
+	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
+	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
+	stl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
 	identity := "worker1"
 
 	stickyTaskQueue := &taskqueuepb.TaskQueue{}

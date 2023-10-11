@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -52,11 +51,9 @@ func TestMetadataSuite(t *testing.T) {
 }
 
 func (s *metadataSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *metadataSuite) TearDownSuite() {
-
 }
 
 func (s *metadataSuite) SetupTest() {

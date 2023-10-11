@@ -31,6 +31,6 @@ import (
 )
 
 func main() {
-	app := tdbg.NewCliApp()
+	app := tdbg.NewCliApp(tdbg.NewClientFactory())
 	_ = app.Run(os.Args)
 }

@@ -318,5 +318,9 @@ service HistoryService {
     rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
     }
 
-    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {}
+    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    }
+
+    rpc DeleteDLQTasks (DeleteDLQTasksRequest) returns (DeleteDLQTasksResponse) {
+    }
 }

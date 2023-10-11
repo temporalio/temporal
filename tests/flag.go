@@ -26,7 +26,7 @@ package tests
 
 import "flag"
 
-// TestFlags contains the feature flags for integration tests
+// TestFlags contains the feature flags for functional tests
 var TestFlags struct {
 	FrontendAddr                  string
 	FrontendHTTPAddr              string

@@ -13,4 +13,4 @@ esconfig:
     scheme: "http"
     host: "${ES_SEEDS}:9200"
   indices:
-    visibility: temporal_visibility_v1_integration_test
+    visibility: temporal_visibility_v1_test

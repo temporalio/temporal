@@ -202,10 +202,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	result interface{},
 ) {
 	if _, ok := grpcActions[methodName]; !ok || !strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
-		// grpcActions checks that methodName is the one that we care about.
-		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
-		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
-		// method name. But we only want to emit action metrics from frontend.
+		// grpcActions checks that methodName is the one that we care about, and we only care about WorkflowService.
 		return
 	}
 
@@ -217,11 +214,13 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			return
 		}
 
+		hasMarker := false
 		for _, command := range completedRequest.Commands {
 			if _, ok := commandActions[command.CommandType]; ok {
 				switch command.CommandType {
 				case enums.COMMAND_TYPE_RECORD_MARKER:
 					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
+					hasMarker = true
 					markerName := command.GetRecordMarkerCommandAttributes().GetMarkerName()
 					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_RecordMarker_"+markerName))
 				default:
@@ -229,6 +228,13 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 				}
 			}
+		}
+		if hasMarker {
+			// Emit separate action metric for batch of markers.
+			// One workflow task response may contain multiple marker commands. Each marker will emit one
+			// command_RecordMarker_Xxx action metric. Depending on pricing model, you may want to ignore all individual
+			// command_RecordMarker_Xxx and use command_BatchMarkers instead.
+			metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_BatchMarkers"))
 		}
 
 	case pollActivityTaskQueue:

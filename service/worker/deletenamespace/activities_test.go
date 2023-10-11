@@ -55,6 +55,10 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, namespace.Name("namespace-deleted-names"), deletedName)
 
+	deletedName, err = a.GenerateDeletedNamespaceNameActivity(context.Background(), "namespace-id", "namespace-deleted-names")
+	require.NoError(t, err)
+	require.Equal(t, namespace.Name("namespace-deleted-names"), deletedName)
+
 	metadataManager.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		Name: "namespace-deleted-names",
 	}).Return(nil, nil)

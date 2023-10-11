@@ -35,10 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type (
 	taskKeySuite struct {
 		suite.Suite

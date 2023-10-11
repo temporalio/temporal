@@ -39,17 +39,27 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// TestGetDLQTasks is a library test function intended to be invoked from a persistence test suite. It works by
+// TestInvoke is a library test function intended to be invoked from a persistence test suite. It works by
 // enqueueing a task into the DLQ and then calling [getdlqtasks.Invoke] to verify that the right task is returned.
-func TestGetDLQTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) {
+func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	ctx := context.Background()
 	inTask := &tasks.WorkflowTask{
 		TaskID: 42,
 	}
 	sourceCluster := "test-source-cluster-" + t.Name()
 	targetCluster := "test-target-cluster-" + t.Name()
-	_, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
+	queueType := persistence.QueueTypeHistoryDLQ
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     queueType,
+			Category:      inTask.GetCategory(),
+			SourceCluster: sourceCluster,
+			TargetCluster: targetCluster,
+		},
+	})
+	require.NoError(t, err)
+	_, err = manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     queueType,
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 		Task:          inTask,

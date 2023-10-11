@@ -80,6 +80,7 @@ message GetMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message GetMutableStateResponse {
@@ -115,6 +116,7 @@ message PollMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message PollMutableStateResponse {
@@ -608,6 +610,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
     int64 state_transition_count = 1;
+    int64 history_length = 2;
 }
 
 message GetReplicationStatusRequest {
@@ -784,3 +787,10 @@ message GetDLQTasksResponse {
     // there are more results.
     bytes next_page_token = 2;
 }
+
+message DeleteDLQTasksRequest {
+    HistoryDLQKey dlq_key = 1;
+    HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message DeleteDLQTasksResponse {}

@@ -105,7 +105,7 @@ issues:
       text: "(cyclomatic|cognitive)"
       linters:
         - revive
-    - path: _test\.go
+    - path: _test\.go|^common/persistence\/tests\/.+\.go # Ignore things like err = errors.New("test error") in tests
       linters:
         - goerr113
     - path: ^tools\/.+\.go

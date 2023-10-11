@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -55,6 +56,9 @@ type (
 
 const (
 	RequestUnauthorized = "Request unauthorized."
+
+	defaultAuthHeaderName      = "authorization"
+	defaultAuthExtraHeaderName = "authorization-extras"
 )
 
 var (
@@ -80,8 +84,8 @@ func (a *interceptor) Interceptor(
 		var tlsConnection *credentials.TLSInfo
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			authHeaders = md["authorization"]
-			authExtraHeaders = md["authorization-extras"]
+			authHeaders = md[a.authHeaderName]
+			authExtraHeaders = md[a.authExtraHeaderName]
 		}
 		tlsConnection = TLSInfoFormContext(ctx)
 		clientCert := PeerCert(tlsConnection)
@@ -175,11 +179,13 @@ func (a *interceptor) logAuthError(err error) {
 }
 
 type interceptor struct {
-	authorizer     Authorizer
-	claimMapper    ClaimMapper
-	metricsHandler metrics.Handler
-	logger         log.Logger
-	audienceGetter JWTAudienceMapper
+	authorizer          Authorizer
+	claimMapper         ClaimMapper
+	metricsHandler      metrics.Handler
+	logger              log.Logger
+	audienceGetter      JWTAudienceMapper
+	authHeaderName      string
+	authExtraHeaderName string
 }
 
 // NewAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
@@ -189,13 +195,17 @@ func NewAuthorizationInterceptor(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
+	authHeaderName string,
+	authExtraHeaderName string,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
-		claimMapper:    claimMapper,
-		authorizer:     authorizer,
-		metricsHandler: metricsHandler,
-		logger:         logger,
-		audienceGetter: audienceGetter,
+		claimMapper:         claimMapper,
+		authorizer:          authorizer,
+		metricsHandler:      metricsHandler,
+		logger:              logger,
+		audienceGetter:      audienceGetter,
+		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
 	}).Interceptor
 }
 

@@ -158,31 +158,36 @@ func getOptionalQueueFactories(
 }
 
 func QueueSchedulerRateLimiterProvider(
+	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewPrioritySchedulerRateLimiter(
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalMaxQPS,
-		}.GetQuota,
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.TaskSchedulerNamespaceMaxQPS,
+			config.TaskSchedulerGlobalNamespaceMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.TaskSchedulerMaxQPS,
+			config.TaskSchedulerGlobalMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceNamespaceMaxQPS,
+			config.PersistenceGlobalNamespaceMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceMaxQPS,
+			config.PersistenceGlobalMaxQPS,
+		).GetQuota,
 	)
 }
 

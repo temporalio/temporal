@@ -78,7 +78,7 @@ import (
 )
 
 type (
-	nDCIntegrationTestSuite struct {
+	nDCFunctionalTestSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
@@ -100,16 +100,16 @@ type (
 	}
 )
 
-func TestNDCIntegrationTestSuite(t *testing.T) {
+func TestNDCFuncTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(nDCIntegrationTestSuite))
+	suite.Run(t, new(nDCFunctionalTestSuite))
 }
 
-func (s *nDCIntegrationTestSuite) SetupSuite() {
+func (s *nDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 
-	fileName := "../testdata/ndc_integration_test_clusters.yaml"
+	fileName := "../testdata/ndc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
 		fileName = tests.TestFlags.TestClusterConfigFile
 	}
@@ -166,7 +166,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }
 
-func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
+func (s *nDCFunctionalTestSuite) GetReplicationMessagesMock(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
 	opts ...grpc.CallOption,
@@ -199,13 +199,13 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 	}
 }
 
-func (s *nDCIntegrationTestSuite) SetupTest() {
+func (s *nDCFunctionalTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }
 
-func (s *nDCIntegrationTestSuite) TearDownSuite() {
+func (s *nDCFunctionalTestSuite) TearDownSuite() {
 	if s.generator != nil {
 		s.generator.Reset()
 	}
@@ -213,7 +213,7 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 	s.NoError(s.cluster.TearDownCluster())
 }
 
-func (s *nDCIntegrationTestSuite) TestSingleBranch() {
+func (s *nDCFunctionalTestSuite) TestSingleBranch() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-single-branch-test" + uuid.New()
@@ -257,7 +257,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	}
 }
 
-func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
+func (s *nDCFunctionalTestSuite) TestMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-multiple-branches-test" + uuid.New()
@@ -389,7 +389,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 	}
 }
 
-func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
+func (s *nDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	workflowID := "ndc-migration-test" + uuid.New()
 
 	workflowType := "event-generator-workflow-type"
@@ -449,7 +449,7 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	)
 }
 
-func (s *nDCIntegrationTestSuite) TestReplicateWorkflowState_PartialReplicated() {
+func (s *nDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "replicate-workflow-state-partially-replicated" + uuid.New()
@@ -523,7 +523,7 @@ func (s *nDCIntegrationTestSuite) TestReplicateWorkflowState_PartialReplicated()
 	s.NoError(err)
 }
 
-func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
+func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.New()
@@ -866,7 +866,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
-func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {
+func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-handcrafted-multiple-branches-with-continue-as-new-test" + uuid.New()
@@ -1166,7 +1166,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
-func (s *nDCIntegrationTestSuite) TestImportSingleBranch() {
+func (s *nDCFunctionalTestSuite) TestImportSingleBranch() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-import-single-branch-test" + uuid.New()
@@ -1210,7 +1210,7 @@ func (s *nDCIntegrationTestSuite) TestImportSingleBranch() {
 	}
 }
 
-func (s *nDCIntegrationTestSuite) TestImportMultipleBranches() {
+func (s *nDCFunctionalTestSuite) TestImportMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
 	workflowID := "ndc-import-multiple-branches-test" + uuid.New()
@@ -1352,7 +1352,7 @@ func (s *nDCIntegrationTestSuite) TestImportMultipleBranches() {
 	}
 }
 
-func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
+func (s *nDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 
 	workflowID := "ndc-events-reapply-zombie-workflow-test" + uuid.New()
 
@@ -1436,7 +1436,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 }
 
-func (s *nDCIntegrationTestSuite) TestEventsReapply_NonCurrentBranch() {
+func (s *nDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch() {
 
 	workflowID := "ndc-events-reapply-non-current-test" + uuid.New()
 	runID := uuid.New()
@@ -1533,7 +1533,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_NonCurrentBranch() {
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 						SignalName: "signal",
 						Input:      payloads.EncodeBytes([]byte{}),
-						Identity:   "ndc_integration_test",
+						Identity:   "ndc_functional_test",
 					}},
 				},
 			},
@@ -1551,7 +1551,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_NonCurrentBranch() {
 	)
 }
 
-func (s *nDCIntegrationTestSuite) TestResend() {
+func (s *nDCFunctionalTestSuite) TestResend() {
 
 	workflowID := "ndc-re-send-test" + uuid.New()
 	runID := uuid.New()
@@ -2049,7 +2049,7 @@ func (s *nDCIntegrationTestSuite) TestResend() {
 	s.Equal(batchCount, 10)
 }
 
-func (s *nDCIntegrationTestSuite) registerNamespace() {
+func (s *nDCFunctionalTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
 	client1 := s.cluster.GetFrontendClient() // cluster
 	_, err := client1.RegisterNamespace(s.newContext(), &workflowservice.RegisterNamespaceRequest{
@@ -2075,7 +2075,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace.String()), tag.WorkflowNamespaceID(s.namespaceID.String()))
 }
 
-func (s *nDCIntegrationTestSuite) generateNewRunHistory(
+func (s *nDCFunctionalTestSuite) generateNewRunHistory(
 	event *historypb.HistoryEvent,
 	nsName namespace.Name,
 	nsID namespace.ID,
@@ -2132,7 +2132,7 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	return eventBlob
 }
 
-func (s *nDCIntegrationTestSuite) generateEventBlobs(
+func (s *nDCFunctionalTestSuite) generateEventBlobs(
 	workflowID string,
 	runID string,
 	workflowType string,
@@ -2152,7 +2152,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	return eventBlob, newRunEventBlob
 }
 
-func (s *nDCIntegrationTestSuite) applyEvents(
+func (s *nDCFunctionalTestSuite) applyEvents(
 	workflowID string,
 	runID string,
 	workflowType string,
@@ -2188,7 +2188,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	}
 }
 
-func (s *nDCIntegrationTestSuite) importEvents(
+func (s *nDCFunctionalTestSuite) importEvents(
 	workflowID string,
 	runID string,
 	workflowType string,
@@ -2251,7 +2251,7 @@ func (s *nDCIntegrationTestSuite) importEvents(
 	s.Nil(resp.Token)
 }
 
-func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
+func (s *nDCFunctionalTestSuite) applyEventsThroughFetcher(
 	workflowID string,
 	runID string,
 	workflowType string,
@@ -2283,7 +2283,7 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 	}
 }
 
-func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
+func (s *nDCFunctionalTestSuite) eventBatchesToVersionHistory(
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
 ) *historyspb.VersionHistory {
@@ -2307,7 +2307,7 @@ func (s *nDCIntegrationTestSuite) eventBatchesToVersionHistory(
 	return versionHistory
 }
 
-func (s *nDCIntegrationTestSuite) verifyEventHistorySize(
+func (s *nDCFunctionalTestSuite) verifyEventHistorySize(
 	workflowID string,
 	runID string,
 	historySize int64,
@@ -2329,7 +2329,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistorySize(
 	s.True(historySize <= describeWorkflow.WorkflowExecutionInfo.HistorySizeBytes)
 }
 
-func (s *nDCIntegrationTestSuite) verifyVersionHistory(
+func (s *nDCFunctionalTestSuite) verifyVersionHistory(
 	workflowID string,
 	runID string,
 	expectedVersionHistory *historyspb.VersionHistory,
@@ -2375,7 +2375,7 @@ func (s *nDCIntegrationTestSuite) verifyVersionHistory(
 	))
 }
 
-func (s *nDCIntegrationTestSuite) verifyEventHistory(
+func (s *nDCFunctionalTestSuite) verifyEventHistory(
 	workflowID string,
 	runID string,
 	historyBatch []*historypb.History,
@@ -2413,12 +2413,12 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	}
 }
 
-func (s *nDCIntegrationTestSuite) setupRemoteFrontendClients() {
+func (s *nDCFunctionalTestSuite) setupRemoteFrontendClients() {
 	s.mockAdminClient["cluster-b"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
 	s.mockAdminClient["cluster-c"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).AnyTimes()
 }
 
-func (s *nDCIntegrationTestSuite) sizeOfHistoryEvents(
+func (s *nDCFunctionalTestSuite) sizeOfHistoryEvents(
 	events []*historypb.HistoryEvent,
 ) int64 {
 	blob, err := serialization.NewSerializer().SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
@@ -2426,7 +2426,7 @@ func (s *nDCIntegrationTestSuite) sizeOfHistoryEvents(
 	return int64(len(blob.Data))
 }
 
-func (s *nDCIntegrationTestSuite) newContext() context.Context {
+func (s *nDCFunctionalTestSuite) newContext() context.Context {
 	ctx := tests.NewContext()
 	return headers.SetCallerInfo(
 		ctx,
@@ -2434,7 +2434,7 @@ func (s *nDCIntegrationTestSuite) newContext() context.Context {
 	)
 }
 
-func (s *nDCIntegrationTestSuite) IsForceTerminated(
+func (s *nDCFunctionalTestSuite) IsForceTerminated(
 	workflowID string,
 	runID string,
 ) bool {

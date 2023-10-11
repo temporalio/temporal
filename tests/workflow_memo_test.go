@@ -48,10 +48,10 @@ type RunIdGetter interface {
 }
 type startFunc func() (RunIdGetter, error)
 
-func (s *integrationSuite) TestStartWithMemo() {
-	id := "integration-start-with-memo-test"
-	wt := "integration-start-with-memo-test-type"
-	tl := "integration-start-with-memo-test-taskqueue"
+func (s *functionalSuite) TestStartWithMemo() {
+	id := "functional-start-with-memo-test"
+	wt := "functional-start-with-memo-test-type"
+	tl := "functional-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
@@ -79,10 +79,10 @@ func (s *integrationSuite) TestStartWithMemo() {
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl}, memo)
 }
 
-func (s *integrationSuite) TestSignalWithStartWithMemo() {
-	id := "integration-signal-with-start-with-memo-test"
-	wt := "integration-signal-with-start-with-memo-test-type"
-	tl := "integration-signal-with-start-with-memo-test-taskqueue"
+func (s *functionalSuite) TestSignalWithStartWithMemo() {
+	id := "functional-signal-with-start-with-memo-test"
+	wt := "functional-signal-with-start-with-memo-test-type"
+	tl := "functional-signal-with-start-with-memo-test-taskqueue"
 	identity := "worker1"
 
 	memo := &commonpb.Memo{
@@ -115,7 +115,7 @@ func (s *integrationSuite) TestSignalWithStartWithMemo() {
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
-func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo) {
+func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo) {
 	identity := "worker1"
 
 	we, err0 := startFn()
