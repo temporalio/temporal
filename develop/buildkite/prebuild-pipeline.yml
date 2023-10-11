@@ -7,6 +7,7 @@ steps:
       - ecr#v2.7.0: {login: true}
       - docker-compose#v4.14.0:
           build: build
-          config: ./develop/buildkite/prebuild-docker-compose.yml
+          target: prebuild
+          config: ./develop/buildkite/docker-compose.yml
           push: "build:283266070392.dkr.ecr.us-west-2.amazonaws.com/buildkite:server-prebuild-cache"
           propagate-environment: true

@@ -1,4 +1,4 @@
-FROM temporalio/base-ci-builder:1.10.3
+FROM temporalio/base-ci-builder:1.10.3 AS prebuild
 WORKDIR /temporal
 
 # Populate some data in the go build cache to speed up subsequent builds.
@@ -10,12 +10,11 @@ RUN go mod download google.golang.org/api
 RUN go mod download modernc.org/sqlite
 RUN go mod download
 
-# Build deps (in two layers).
+# Build deps (in two layers to parallelize push/pull).
 RUN head -100 third_party_deps.txt | xargs go build -race
 RUN tail +100 third_party_deps.txt | xargs go build -race
 
-# Note: Everything above this line should be the same as prebuild-Dockerfile.
-# If you change something here, change that too.
+FROM prebuild AS build
 
 ADD . /temporal
 
