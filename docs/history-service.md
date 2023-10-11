@@ -126,10 +126,10 @@ The History Service handles two types of gRPC requests relating to an individual
 1. **Requests originating from the User Application**<br>
    (Start / Cancel / Query / Update / Signal / Reset etc)
 
+  The handlers for these requests are defined in [`history/api/`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api)
+
    <details>
    <summary><i>Code entrypoints</i></summary>
-
-   - The handlers for these requests are defined in [`history/api/`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api).
 
    - In the case of, for example, `StartWorkflow`, `UpdateWorkflow`, and `SignalWorkflow`, the RPC results in a [state transition](#state-transitions) which is implemented using a [shared code path](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/service/history/api/update_workflow_util.go#L37).
 
