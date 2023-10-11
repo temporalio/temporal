@@ -395,6 +395,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		}
+		ms.GetExecutionInfo().GetVersionHistories()
 		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
 			"tests.NamespaceID",
 			newExecution,
@@ -402,9 +403,9 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(0),
 			int64(4),
 			int64(1),
-			[]byte{1},
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			ms.GetExecutionInfo().GetVersionHistories()))
 	}
 
 	// return immediately, since the expected next event ID appears

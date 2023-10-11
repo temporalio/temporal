@@ -379,6 +379,7 @@ func (e *historyEngineImpl) PollMutableState(
 			Execution:           request.Execution,
 			ExpectedNextEventId: request.ExpectedNextEventId,
 			CurrentBranchToken:  request.CurrentBranchToken,
+			VersionHistoryItem:  request.GetVersionHistoryItem(),
 		},
 		e.shard,
 		e.workflowConsistencyChecker,
