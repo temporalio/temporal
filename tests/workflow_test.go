@@ -471,7 +471,6 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	id := "functional-complete-workflow-task-create-new-test"
 	wt := "functional-complete-workflow-task-create-new-test-type"
 	tl := "functional-complete-workflow-task-create-new-test-taskqueue"
-	stickyTq := "functional-complete-workflow-task-create-new-test-sticky-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -517,19 +516,13 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		Engine:              s.engine,
 		Namespace:           s.namespace,
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	res, err := poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+	res, err := poller.PollAndProcessWorkflowTask(WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
