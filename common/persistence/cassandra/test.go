@@ -31,6 +31,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -135,27 +136,38 @@ func (s *TestCluster) CreateSession(
 	}
 
 	var err error
-	s.session, err = commongocql.NewSession(
-		func() (*gocql.ClusterConfig, error) {
-			return commongocql.NewCassandraCluster(
-				config.Cassandra{
-					Hosts:    s.cfg.Hosts,
-					Port:     s.cfg.Port,
-					User:     s.cfg.User,
-					Password: s.cfg.Password,
-					Keyspace: keyspace,
-					Consistency: &config.CassandraStoreConsistency{
-						Default: &config.CassandraConsistencySettings{
-							Consistency: "ONE",
+	op := func() error {
+		session, err := commongocql.NewSession(
+			func() (*gocql.ClusterConfig, error) {
+				return commongocql.NewCassandraCluster(
+					config.Cassandra{
+						Hosts:    s.cfg.Hosts,
+						Port:     s.cfg.Port,
+						User:     s.cfg.User,
+						Password: s.cfg.Password,
+						Keyspace: keyspace,
+						Consistency: &config.CassandraStoreConsistency{
+							Default: &config.CassandraConsistencySettings{
+								Consistency: "ONE",
+							},
 						},
+						ConnectTimeout: s.cfg.ConnectTimeout,
 					},
-					ConnectTimeout: s.cfg.ConnectTimeout,
-				},
-				resolver.NewNoopResolver(),
-			)
-		},
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
+					resolver.NewNoopResolver(),
+				)
+			},
+			log.NewNoopLogger(),
+			metrics.NoopMetricsHandler,
+		)
+		if err == nil {
+			s.session = session
+		}
+		return err
+	}
+	err = backoff.ThrottleRetry(
+		op,
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
 	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
