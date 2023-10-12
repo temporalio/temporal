@@ -80,6 +80,7 @@ message GetMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message GetMutableStateResponse {
@@ -115,6 +116,7 @@ message PollMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message PollMutableStateResponse {

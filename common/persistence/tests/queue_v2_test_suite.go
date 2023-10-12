@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 )
 
 // RunQueueV2TestSuite executes interface-level tests for a queue persistence-layer implementation. There should be more
@@ -45,11 +48,15 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-	})
-	require.NoError(t, err)
+
+	// TODO: Remove this condition after implementing CreateQueue for SQL.
+	if strings.HasPrefix(t.Name(), "TestCassandra") {
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+	}
 
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
@@ -79,6 +86,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorIs(t, err, persistence.ErrNonPositiveReadQueueMessagesPageSize)
 	})
 	t.Run("TestEnqueueMessageToNonExistentQueue", func(t *testing.T) {
+		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
@@ -90,6 +98,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	})
 	t.Run("TestCreateQueueTwice", func(t *testing.T) {
+		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
@@ -103,11 +112,12 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	})
 	t.Run("TestRangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
-
+		SkipUnimplementedForSQL(t)
 		testRangeDeleteMessages(ctx, t, queue)
 	})
 	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
 		t.Parallel()
+		SkipUnimplementedForSQL(t)
 		RunHistoryTaskQueueManagerTestSuite(t, queue)
 	})
 }
@@ -171,6 +181,13 @@ func testHappyPath(
 	require.NoError(t, err)
 	assert.Empty(t, response.Messages)
 	assert.Nil(t, response.NextPageToken)
+}
+
+// TODO: Remove this function after implementing CreateQueue for SQL.
+func SkipUnimplementedForSQL(t *testing.T) {
+	if !strings.HasPrefix(t.Name(), "TestCassandra") {
+		t.Skip("skipping test which is not implemented for SQL yet")
+	}
 }
 
 func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistence.QueueV2) {
@@ -330,5 +347,20 @@ func enqueueMessage(
 			EncodingType: enums.ENCODING_TYPE_JSON,
 			Data:         params.data,
 		},
+	})
+}
+
+func RunQueueV2TestSuiteForSQL(t *testing.T, factory *sql.Factory) {
+	t.Run("Generic", func(t *testing.T) {
+		t.Parallel()
+		queue, err := factory.NewQueueV2()
+		require.NoError(t, err)
+		RunQueueV2TestSuite(t, queue)
+	})
+	t.Run("SQL", func(t *testing.T) {
+		t.Parallel()
+		db, err := factory.GetDB()
+		require.NoError(t, err)
+		tests.RunSQLQueueV2TestSuite(t, db)
 	})
 }

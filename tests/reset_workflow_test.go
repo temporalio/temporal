@@ -51,7 +51,7 @@ func (s *functionalSuite) TestResetWorkflow() {
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -94,7 +94,7 @@ func (s *functionalSuite) TestResetWorkflow() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             strconv.Itoa(i),
 						ActivityType:           &commonpb.ActivityType{Name: "ResetActivity"},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -228,7 +228,7 @@ func (s *functionalSuite) testResetWorkflowReapply(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -374,7 +374,7 @@ func (s *functionalSuite) testResetWorkflowReapplyBuffer(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -524,7 +524,7 @@ func (s *functionalSuite) testResetWorkflowRangeScheduleToStart(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{

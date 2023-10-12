@@ -93,11 +93,9 @@ func NewExecutionMutableStateSuite(
 }
 
 func (s *ExecutionMutableStateSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *ExecutionMutableStateSuite) TearDownSuite() {
-
 }
 
 func (s *ExecutionMutableStateSuite) SetupTest() {

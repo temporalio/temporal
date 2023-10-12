@@ -63,7 +63,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
@@ -103,7 +103,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					Header:                 header,
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
@@ -192,7 +192,7 @@ func (s *functionalSuite) TestActivityRetry() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -226,7 +226,7 @@ func (s *functionalSuite) TestActivityRetry() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             "A",
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("1"),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
@@ -245,7 +245,7 @@ func (s *functionalSuite) TestActivityRetry() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             "B",
 						ActivityType:           &commonpb.ActivityType{Name: timeoutActivityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue"},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("2"),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(5 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
@@ -403,7 +403,7 @@ func (s *functionalSuite) TestActivityRetry_Infinite() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -436,7 +436,7 @@ func (s *functionalSuite) TestActivityRetry_Infinite() {
 					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:          "A",
 						ActivityType:        &commonpb.ActivityType{Name: activityName},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:               payloads.EncodeString("1"),
 						StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
@@ -508,7 +508,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -546,7 +546,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -612,7 +612,7 @@ func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -649,7 +649,7 @@ func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -757,7 +757,7 @@ func (s *functionalSuite) TestActivityCancellationNotStarted() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -794,7 +794,7 @@ func (s *functionalSuite) TestActivityCancellationNotStarted() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),

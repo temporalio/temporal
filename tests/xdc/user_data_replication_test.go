@@ -435,25 +435,17 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 	s.Require().NoError(err)
 
 	_, err = activeFrontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  namespace,
-		WorkflowId: "test",
-		RequestId:  uuid.NewString(),
-		WorkflowType: &commonpb.WorkflowType{
-			Name: "workflow",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
+		Namespace:    namespace,
+		WorkflowId:   "test",
+		RequestId:    uuid.NewString(),
+		WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
-		Identity: "test",
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "v0",
 			UseVersioning: true,
