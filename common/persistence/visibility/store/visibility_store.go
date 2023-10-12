@@ -80,11 +80,11 @@ type (
 		CloseTime            time.Time
 		Status               enumspb.WorkflowExecutionStatus
 		HistoryLength        int64
+		HistorySizeBytes     int64
 		StateTransitionCount int64
 		Memo                 *commonpb.DataBlob
 		TaskQueue            string
 		SearchAttributes     *commonpb.SearchAttributes
-		HistorySizeBytes     int64
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -102,19 +102,18 @@ type (
 
 	// InternalVisibilityRequestBase is a base request to visibility APIs.
 	InternalVisibilityRequestBase struct {
-		NamespaceID          string
-		WorkflowID           string
-		RunID                string
-		WorkflowTypeName     string
-		StartTime            time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTime        time.Time
-		StateTransitionCount int64
-		TaskID               int64
-		ShardID              int32
-		Memo                 *commonpb.DataBlob
-		TaskQueue            string
-		SearchAttributes     *commonpb.SearchAttributes
+		NamespaceID      string
+		WorkflowID       string
+		RunID            string
+		WorkflowTypeName string
+		StartTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		ExecutionTime    time.Time
+		TaskID           int64
+		ShardID          int32
+		Memo             *commonpb.DataBlob
+		TaskQueue        string
+		SearchAttributes *commonpb.SearchAttributes
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
@@ -125,9 +124,11 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTime        time.Time
-		HistoryLength    int64
-		HistorySizeBytes int64
+		CloseTime            time.Time
+		HistoryLength        int64
+		HistorySizeBytes     int64
+		ExecutionDuration    time.Duration
+		StateTransitionCount int64
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
