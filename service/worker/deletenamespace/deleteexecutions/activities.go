@@ -41,9 +41,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-var activityHandles = &Activities{}
-var localActivityHandles = &LocalActivities{}
-
 type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager

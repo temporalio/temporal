@@ -43,9 +43,6 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
-var activityHandles = &Activities{}
-var localActivityHandles = &LocalActivities{}
-
 type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager

@@ -106,6 +106,9 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
 
+	var a *Activities
+	var la *LocalActivities
+
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
 	nextPageToken := params.NextPageToken
@@ -121,7 +124,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	// ConcurrentDeleteExecutionsActivities number of them and executes them concurrently on available workers.
 	for i := 0; i < params.Config.PagesPerExecution; i++ {
 		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
-		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, activityHandles.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
+		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
 			RPS:           params.Config.DeleteActivityRPS,
@@ -130,7 +133,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		})
 
 		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx2, localActivityHandles.GetNextPageTokenActivity, GetNextPageTokenParams{
+		err := workflow.ExecuteLocalActivity(ctx2, la.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
 			PageSize:      params.Config.PageSize,

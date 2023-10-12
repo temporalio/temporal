@@ -41,8 +41,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-var localActivityHandles = &localActivities{}
-
 type (
 	localActivities struct {
 		metadataManager persistence.MetadataManager

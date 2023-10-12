@@ -52,14 +52,17 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, GetNextPageTokenParams{
+	var a *Activities
+	var la *LocalActivities
+
+	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, GetNextPageTokenParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
 		PageSize:      1000,
 		NextPageToken: nil,
 	}).Return(nil, nil).Once()
 
-	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, DeleteExecutionsActivityParams{
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, DeleteExecutionsActivityParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
 		RPS:           100,
@@ -131,8 +134,11 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
+	var a *Activities
+	var la *LocalActivities
+
 	pageNumber := 0
-	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 3, params.PageSize)
@@ -149,7 +155,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	}).Times(100)
 
 	nilTokenOnce := false
-	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 100, params.RPS)
@@ -186,8 +192,11 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
-	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{SuccessCount: 1, ErrorCount: 0}, nil).Times(78)
+	var a *Activities
+	var la *LocalActivities
+
+	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Times(78)
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{SuccessCount: 1, ErrorCount: 0}, nil).Times(78)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
@@ -217,10 +226,13 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
-	env.OnActivity(localActivityHandles.GetNextPageTokenActivity, mock.Anything, mock.Anything).
+	var a *Activities
+	var la *LocalActivities
+
+	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).
 		Return([]byte{3, 22, 83}, nil).
 		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
-	env.OnActivity(activityHandles.DeleteExecutionsActivity, mock.Anything, mock.Anything).
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).
 		Return(DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("specific_error_from_activity")).
 		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
 

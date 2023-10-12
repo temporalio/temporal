@@ -49,6 +49,9 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
+	var a *Activities
+	var la *LocalActivities
+
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
 		Namespace:   "namespace",
@@ -66,11 +69,11 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(localActivityHandles.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(localActivityHandles.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
-	env.OnActivity(activityHandles.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
-	env.OnActivity(localActivityHandles.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
+	env.OnActivity(la.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -96,6 +99,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
+	var a *Activities
+	var la *LocalActivities
+
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
 		Namespace:   "namespace",
@@ -113,9 +119,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(localActivityHandles.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(localActivityHandles.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
-	env.OnActivity(activityHandles.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(stderrors.New("specific_error_from_activity")).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
@@ -140,6 +146,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
+	var a *Activities
+	var la *LocalActivities
+
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
 		Namespace:   "namespace",
@@ -157,9 +166,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(localActivityHandles.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(localActivityHandles.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
-	env.OnActivity(activityHandles.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(errors.NewExecutionsStillExistError(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
