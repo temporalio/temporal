@@ -55,7 +55,7 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -98,7 +98,7 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "1",
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -125,7 +125,7 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -179,7 +179,7 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 		Namespace:           s.namespace,
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -208,7 +208,7 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
@@ -234,7 +234,7 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -257,16 +257,17 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 	before := time.Now().UTC()
 
 	// when no one polling on the taskqueue (activity or workflow), there shall be no poller information
-	pollerInfos := testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	pollerInfos := testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Empty(pollerInfos)
 
 	_, errWorkflowTask := poller.PollAndProcessWorkflowTask()
 	s.NoError(errWorkflowTask)
-	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().After(before))
@@ -274,12 +275,12 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
-	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
-	pollerInfos = testDescribeTaskQueue(s.namespace, &taskqueuepb.TaskQueue{Name: tl}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().After(before))

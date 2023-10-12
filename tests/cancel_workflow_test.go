@@ -51,7 +51,7 @@ func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -146,7 +146,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -282,7 +282,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -414,7 +414,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -496,7 +496,7 @@ func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -556,7 +556,7 @@ func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 					Namespace:    s.namespace,
 					WorkflowId:   childWorkflowID,
 					WorkflowType: &commonpb.WorkflowType{Name: "childTypeA"},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: childTaskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: childTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:        payloads.EncodeBytes([]byte{1}),
 				}},
 			}, {

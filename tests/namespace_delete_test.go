@@ -274,7 +274,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 			Namespace:    "ns_name_seattle",
 			WorkflowId:   wid,
 			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
 		s.NoError(err)
 		executions = append(executions, &commonpb.WorkflowExecution{
@@ -358,7 +358,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 			Namespace:    "ns_name_los_angeles",
 			WorkflowId:   wid,
 			WorkflowType: &commonpb.WorkflowType{Name: "workflowTypeName"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "taskQueueName", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
 		s.NoError(err)
 		executions = append(executions, &commonpb.WorkflowExecution{
