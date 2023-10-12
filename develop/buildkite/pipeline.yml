@@ -542,6 +542,7 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          skip-checkout: true
           mount-buildkite-agent: true
           propagate-environment: true
 
@@ -562,6 +563,7 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          skip-checkout: true
           mount-buildkite-agent: true
           propagate-environment: true
 
@@ -582,6 +584,7 @@ steps:
       - docker-compose#v4.14.0:
           run: integration-test-xdc-postgresql12-pgx
           config: ./develop/buildkite/docker-compose.yml
+          skip-checkout: true
           mount-buildkite-agent: true
           propagate-environment: true
 
