@@ -58,16 +58,12 @@ func (s *functionalSuite) TestChildWorkflowExecution() {
 	// Uncomment this line to test with mapper.
 	// saName = "AliasForCustomKeywordField"
 
-	parentWorkflowType := &commonpb.WorkflowType{}
-	parentWorkflowType.Name = wtParent
+	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 
-	childWorkflowType := &commonpb.WorkflowType{}
-	childWorkflowType.Name = wtChild
+	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 
-	taskQueueParent := &taskqueuepb.TaskQueue{}
-	taskQueueParent.Name = tlParent
-	taskQueueChild := &taskqueuepb.TaskQueue{}
-	taskQueueChild.Name = tlChild
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -254,8 +250,8 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -441,8 +437,8 @@ func (s *functionalSuite) TestRetryChildWorkflowExecution() {
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -614,8 +610,8 @@ func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
