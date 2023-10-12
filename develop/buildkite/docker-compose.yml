@@ -65,6 +65,12 @@ services:
       - discovery.type=single-node
       - plugins.security.disabled=true
 
+  prebuild:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+      target: prebuild
+
   build:
     build:
       context: ../..
