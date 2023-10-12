@@ -249,7 +249,14 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
+	iters := s.tweakables.IterationsBeforeContinueAsNew
+	for {
+		// TODO: use the real GetSuggestContinueAsNew
+		suggestContinueAsNew := workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= 1e6
+		if (iters == 0 || suggestContinueAsNew) && s.pendingUpdate == nil && s.pendingPatch == nil {
+			break
+		}
+		iters--
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
@@ -288,7 +295,6 @@ func (s *scheduler) run() error {
 		// 3. a workflow that we were watching finished
 		s.sleep(nextWakeup)
 		s.updateTweakables()
-
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
