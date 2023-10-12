@@ -320,8 +320,8 @@ func (u *Update) onAcceptanceMsg(
 	return nil
 }
 
-// onRejectionMsg expectes the Update state to be stateRequested and returns
-// an error if it finds otherwise. On commit of buffered effects the state
+// onRejectionMsg expects the Update state to be stateRequested and returns
+// an error otherwise. On commit of buffered effects the state
 // machine transitions to stateCompleted and the accepted and outcome futures
 // are both completed with the failurepb.Failure value from the
 // updatepb.Rejection input message.
@@ -354,7 +354,7 @@ func (u *Update) onRejectionMsg(
 
 // onResponseMsg expects the Update to be in either stateProvisionallyAccepted
 // or stateAccepted and returns an error if it finds otherwise. On commit of
-// buffered effects the state machine will transtion to stateCompleted and the
+// buffered effects the state machine will transition to stateCompleted and the
 // outcome future is completed with the updatepb.Outcome from the
 // updatepb.Response input message.
 func (u *Update) onResponseMsg(
