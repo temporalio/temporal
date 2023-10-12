@@ -36,23 +36,26 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 		Value: 1,
 	},
 
-	// The system activity worker task queues in all namespaces should only have one partition, since
-	// we'll only run one worker per task queue.
+	// The system activity worker task queues in the system local namespace should only have
+	// one partition, since we'll only run one worker per task queue.
 	{
 		Constraints: Constraints{
 			TaskQueueName: primitives.AddSearchAttributesActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
 		},
 		Value: 1,
 	},
 	{
 		Constraints: Constraints{
 			TaskQueueName: primitives.DeleteNamespaceActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
 		},
 		Value: 1,
 	},
 	{
 		Constraints: Constraints{
 			TaskQueueName: primitives.MigrationActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
 		},
 		Value: 1,
 	},
