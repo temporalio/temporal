@@ -794,3 +794,22 @@ message DeleteDLQTasksRequest {
 }
 
 message DeleteDLQTasksResponse {}
+
+message AddTasksRequest {
+  // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
+  // not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
+  // request, which would be more complicated.
+  int32 shard_id = 1;
+
+  message Task {
+    // category is needed to deserialize the tasks. Examples include "transfer", "timer", etc. See the history/tasks
+    // package for a definitive list. Warning: this is not the same as the stringified value of a TaskCategory enum.
+    string category = 1;
+    // blob is the serialized task.
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}

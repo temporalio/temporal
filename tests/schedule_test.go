@@ -77,7 +77,6 @@ type (
 	scheduleFunctionalSuite struct {
 		*require.Assertions
 		FunctionalTestBase
-		hostPort      string
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
@@ -91,10 +90,6 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 }
 
 func (s *scheduleFunctionalSuite) SetupSuite() {
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		s.setupSuite("testdata/cluster.yaml")

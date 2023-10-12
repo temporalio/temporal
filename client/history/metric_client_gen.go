@@ -33,6 +33,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *metricClient) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.AddTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientAddTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
