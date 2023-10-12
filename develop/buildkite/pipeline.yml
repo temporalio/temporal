@@ -65,8 +65,7 @@ steps:
       docker: "*"
     command: "make unit-test-coverage"
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     plugins:
       - artifacts#v1.9.0:
           download: "develop/buildkite/*"
@@ -84,8 +83,7 @@ steps:
       docker: "*"
     command: "make integration-test-coverage"
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     plugins:
       - artifacts#v1.9.0:
           download: "develop/buildkite/*"
@@ -104,8 +102,7 @@ steps:
     command: "make functional-test-coverage"
     parallelism: 3
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     retry:
       automatic:
         limit: 1
@@ -127,8 +124,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -151,8 +147,7 @@ steps:
   # #   command: "make functional-test-coverage"
   # #   parallelism: 3
   # #   artifact_paths:
-  # #     - ".coverage/*.out"
-  # #     - ".testreport/*.xml"
+  # #     - ".testoutput/*"
   # #   retry:
   # #     automatic:
   # #       limit: 1
@@ -173,8 +168,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -195,8 +189,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -218,8 +211,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -240,8 +232,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -262,8 +253,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -285,8 +275,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -307,8 +296,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -329,8 +317,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -352,8 +339,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -374,8 +360,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -396,8 +381,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -419,8 +403,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -441,8 +424,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -463,8 +445,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -486,8 +467,7 @@ steps:
   #   command: "make functional-test-coverage"
   #   parallelism: 3
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -508,8 +488,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-xdc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -530,8 +509,7 @@ steps:
   #     docker: "*"
   #   command: "make functional-test-ndc-coverage"
   #   artifact_paths:
-  #     - ".coverage/*.out"
-  #     - ".testreport/*.xml"
+  #     - ".testoutput/*"
   #   retry:
   #     automatic:
   #       limit: 1
@@ -553,8 +531,7 @@ steps:
     command: "make functional-test-coverage"
     parallelism: 3
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     retry:
       automatic:
         limit: 1
@@ -574,8 +551,7 @@ steps:
       docker: "*"
     command: "make functional-test-xdc-coverage"
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     retry:
       automatic:
         limit: 1
@@ -595,8 +571,7 @@ steps:
       docker: "*"
     command: "make functional-test-ndc-coverage"
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     retry:
       automatic:
         limit: 1
@@ -617,8 +592,7 @@ steps:
     command: "make functional-test-coverage"
     parallelism: 3
     artifact_paths:
-      - ".coverage/*.out"
-      - ".testreport/*.xml"
+      - ".testoutput/*"
     retry:
       automatic:
         limit: 1
@@ -640,13 +614,13 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: buildkite-agent artifact download ".testreport/*.xml" .
+    command: "buildkite-agent artifact download '.testoutput/*.junit.xml' ."
     retry:
       automatic:
         limit: 2
     plugins:
       - test-collector#v1.10.0:
-          files: ".testreport/*.xml"
+          files: ".testoutput/*.junit.xml"
           format: junit
 
   - label: ":coverage: coverage-report"
@@ -655,8 +629,8 @@ steps:
       docker: "*"
     command: "make ci-coverage-report"
     artifact_paths:
-      - ".coverage/summary.out"
-      - ".coverage/summary.out.html"
+      - ".testoutput/summary.out"
+      - ".testoutput/summary.out.html"
     retry:
       automatic:
         limit: 2
@@ -664,7 +638,7 @@ steps:
       - artifacts#v1.9.0:
           download:
             - "develop/buildkite/*"
-            - ".coverage/*.out"
+            - ".testoutput/*.cover.out"
       - ecr#v2.7.0: {login: true}
       - docker-compose#v4.14.0:
           run: coverage-report

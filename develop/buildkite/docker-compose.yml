@@ -74,7 +74,7 @@ services:
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
 
   ci-build-misc:
     build:
@@ -98,7 +98,7 @@ services:
       - mysql
       - postgresql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -119,7 +119,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -140,7 +140,7 @@ services:
       - cassandra
       - elasticsearch8
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -161,7 +161,7 @@ services:
       - cassandra
       - opensearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -182,7 +182,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -200,7 +200,7 @@ services:
     depends_on:
       - mysql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -221,7 +221,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -242,7 +242,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -260,7 +260,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -278,7 +278,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -293,7 +293,7 @@ services:
       - "PERSISTENCE_DRIVER=sqlite"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -315,7 +315,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -337,7 +337,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -356,7 +356,7 @@ services:
     depends_on:
       - mysql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -378,7 +378,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -400,7 +400,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -419,7 +419,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -438,7 +438,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -451,7 +451,7 @@ services:
     environment:
       - COVERALLS_TOKEN
     volumes:
-      - ../../.coverage:/temporal/.coverage
+      - ../../.testoutput:/temporal/.testoutput
 
 networks:
   services-network:

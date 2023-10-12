@@ -90,11 +90,10 @@ PINNED_DEPENDENCIES := \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
-COVER_ROOT             := ./.coverage
-NEW_COVER_PROFILE       = $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out   # generates a new filename each time it's substituted
-SUMMARY_COVER_PROFILE  := $(COVER_ROOT)/summary.out
-REPORT_ROOT            := ./.testreport
-NEW_REPORT              = $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
+TEST_OUTPUT_ROOT        := ./.testoutput
+NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
+SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
+NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
 
 # DB
 SQL_USER ?= temporal
@@ -286,7 +285,7 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
-	@rm -f test.log $(COVER_ROOT)/* $(REPORT_ROOT)/*
+	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache
 
 unit-test: clean-test-results
@@ -318,13 +317,10 @@ functional-with-fault-injection-test: clean-test-results
 test: unit-test integration-test functional-test functional-with-fault-injection-test
 
 ##### Coverage & Reporting #####
-$(COVER_ROOT):
-	@mkdir -p $(COVER_ROOT)
+$(TEST_OUTPUT_ROOT):
+	@mkdir -p $(TEST_OUTPUT_ROOT)
 
-$(REPORT_ROOT):
-	@mkdir -p $(REPORT_ROOT)
-
-prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
+prepare-coverage-test: update-gotestsum $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
@@ -356,14 +352,14 @@ functional-test-ndc-coverage: prepare-coverage-test
 		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
-$(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
+$(SUMMARY_COVER_PROFILE):
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
 	@rm -f $(SUMMARY_COVER_PROFILE)
-	@if [ -z "$(wildcard $(COVER_ROOT)/*)" ]; then \
+	@if [ -z "$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)" ]; then \
 		echo "No coverage data, aborting!" && exit 1; \
 	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
-	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
+	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
 		grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
