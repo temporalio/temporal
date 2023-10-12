@@ -152,6 +152,7 @@ steps:
   # #   parallelism: 3
   # #   artifact_paths:
   # #     - ".coverage/*.out"
+  # #     - ".testreport/*.xml"
   # #   retry:
   # #     automatic:
   # #       limit: 1
@@ -430,6 +431,7 @@ steps:
   #     - docker-compose#v4.14.0:
   #         run: integration-test-postgresql-pgx
   #         config: ./develop/buildkite/docker-compose.yml
+  #         skip-checkout: true
   #         mount-buildkite-agent: true
   #         propagate-environment: true
 
@@ -451,6 +453,7 @@ steps:
   #     - docker-compose#v4.14.0:
   #         run: integration-test-xdc-postgresql-pgx
   #         config: ./develop/buildkite/docker-compose.yml
+  #         skip-checkout: true
   #         mount-buildkite-agent: true
   #         propagate-environment: true
 
@@ -472,6 +475,7 @@ steps:
   #     - docker-compose#v4.14.0:
   #         run: integration-test-xdc-postgresql-pgx
   #         config: ./develop/buildkite/docker-compose.yml
+  #         skip-checkout: true
   #         mount-buildkite-agent: true
   #         propagate-environment: true
 
