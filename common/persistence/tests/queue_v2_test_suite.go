@@ -26,10 +26,11 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"strconv"
 	"testing"
+
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
