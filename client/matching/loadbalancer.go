@@ -72,7 +72,7 @@ type (
 		forceReadPartition  dynamicconfig.IntPropertyFn
 		forceWritePartition dynamicconfig.IntPropertyFn
 
-		lock       sync.Mutex
+		lock         sync.Mutex
 		taskQueueLBs map[taskQueueKey]*tqLoadBalancer
 	}
 
@@ -108,8 +108,8 @@ func NewLoadBalancer(
 		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
 		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
 		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
-		lock:       sync.Mutex{},
-		taskQueueLBs: make(map[taskQueueKey]*tqLoadBalancer),
+		lock:                sync.Mutex{},
+		taskQueueLBs:        make(map[taskQueueKey]*tqLoadBalancer),
 	}
 	return lb
 }
@@ -146,12 +146,12 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
 // Caller is responsible to call pollToken.Release() after complete the poll.
-func (b *defaultLoadBalancer) PickReadPartition(
-		namespaceID namespace.ID,
-		taskQueue taskqueuepb.TaskQueue,
-		taskQueueType enumspb.TaskQueueType,
-		forwardedFrom string,
-	) *pollToken {
+func (lb *defaultLoadBalancer) PickReadPartition(
+	namespaceID namespace.ID,
+	taskQueue taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
+	forwardedFrom string,
+) *pollToken {
 	if forwardedFrom != "" || taskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// no partition for sticky task queue and forwarded request
 		return &pollToken{fullName: taskQueue.GetName()}
@@ -165,24 +165,24 @@ func (b *defaultLoadBalancer) PickReadPartition(
 
 	key := taskQueueKey{NamespaceID: namespaceID, Name: parsedName, Type: taskQueueType}
 
-	b.lock.Lock()
-	tqlb, ok := b.taskQueueLBs[key]
+	lb.lock.Lock()
+	tqlb, ok := lb.taskQueueLBs[key]
 	if !ok {
 		tqlb = newTaskQueueLoadBalancer(key)
-		b.taskQueueLBs[key] = tqlb
+		lb.taskQueueLBs[key] = tqlb
 	}
-	b.lock.Unlock()
+	lb.lock.Unlock()
 
 	// For read path it's safer to return global default partition count instead of root partition, when we fail to
 	// map namespace ID to name.
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 
-	namespaceName, err := b.namespaceIDToName(namespaceID)
+	namespaceName, err := lb.namespaceIDToName(namespaceID)
 	if err == nil {
-		partitionCount = b.nReadPartitions(string(namespaceName), parsedName.BaseNameString(), taskQueueType)
+		partitionCount = lb.nReadPartitions(string(namespaceName), parsedName.BaseNameString(), taskQueueType)
 	}
 
-	return tqlb.pickReadPartition(partitionCount, b.forceReadPartition())
+	return tqlb.pickReadPartition(partitionCount, lb.forceReadPartition())
 }
 
 func newTaskQueueLoadBalancer(key taskQueueKey) *tqLoadBalancer {
@@ -214,7 +214,7 @@ func (b *tqLoadBalancer) pickReadPartition(partitionCount int, forcedPartition i
 	}
 }
 
-func (b* tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
+func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
 	// pick a random partition to start with
 	startPartitionID := rand.Intn(partitionCount)
 	pickedPartitionID := startPartitionID

@@ -30,7 +30,7 @@ func TestTQLoadBalancer(t *testing.T) {
 
 	// release one, and pick one, the newly picked one should have one poller
 	p3.Release()
-	p3 = tqlb.pickReadPartition(partitionCount, -1)
+	tqlb.pickReadPartition(partitionCount, -1)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 
 	// pick one again, this time it should have 2 pollers
