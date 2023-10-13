@@ -251,9 +251,9 @@ func (s *scheduler) run() error {
 
 	iters := s.tweakables.IterationsBeforeContinueAsNew
 	for {
-		// TODO: use the real GetSuggestContinueAsNew
-		suggestContinueAsNew := workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= 1e6
-		if (iters == 0 || suggestContinueAsNew) && s.pendingUpdate == nil && s.pendingPatch == nil {
+		// TODO: use the real GetContinueAsNewSuggested
+		suggestContinueAsNew := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= 1e6
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
 			break
 		}
 		iters--
