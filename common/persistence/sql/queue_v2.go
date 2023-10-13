@@ -79,7 +79,7 @@ func (q *queueV2) EnqueueMessage(
 		}
 		return nil, err
 	}
-	_, err = q.getQueue(metadata)
+	_, err = q.getQueueMetadata(metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (q *queueV2) ReadMessages(
 		}
 		return nil, err
 	}
-	qm, err := q.getQueue(metadata)
+	qm, err := q.getQueueMetadata(metadata)
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
 			enums.ENCODING_TYPE_PROTO3,
@@ -265,7 +265,7 @@ func (q *queueV2) RangeDeleteMessages(
 			}
 			return err
 		}
-		qm, err := q.getQueue(metadata)
+		qm, err := q.getQueueMetadata(metadata)
 		if err != nil {
 			return err
 		}
@@ -321,7 +321,7 @@ func (q *queueV2) RangeDeleteMessages(
 	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
 }
 
-func (q *queueV2) getQueue(
+func (q *queueV2) getQueueMetadata(
 	metadata *sqlplugin.QueueV2MetadataRow,
 ) (*QueueV2Metadata, error) {
 	if metadata.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {

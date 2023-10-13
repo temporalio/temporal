@@ -105,6 +105,56 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 		assert.ErrorContains(t, err, queueName)
 	})
+	t.Run("InvalidEncodingForQueueMessage", func(t *testing.T) {
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			Blob: commonpb.DataBlob{
+				EncodingType: 4,
+				Data:         []byte("1"),
+			},
+		})
+		require.NoError(t, err)
+		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.Error(t, err)
+		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	})
+	t.Run("InvalidEncodingForQueueMetadata", func(t *testing.T) {
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			Blob: commonpb.DataBlob{
+				EncodingType: 4,
+				Data:         []byte("1"),
+			},
+		})
+		require.NoError(t, err)
+		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.Error(t, err)
+		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	})
 	t.Run("TestRangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
 		testRangeDeleteMessages(ctx, t, queue)
@@ -188,7 +238,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueType: queueType,
 			QueueName: queueName,
 		})
-		assert.ErrorContains(t, err, "not found")
+		assert.ErrorAs(t, err, new(*serviceerror.NotFound))
 	})
 
 	t.Run("InvalidMaxMessageID", func(t *testing.T) {
@@ -306,58 +356,6 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		require.NoError(t, err)
 		require.Len(t, response.Messages, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), response.Messages[0].MetaData.ID)
-	})
-
-	t.Run("InvalidEncodingForQueueMessage", func(t *testing.T) {
-		queueType := persistence.QueueTypeHistoryNormal
-		queueName := "test-queue-" + t.Name()
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-		})
-		require.NoError(t, err)
-		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			Blob: commonpb.DataBlob{
-				EncodingType: 4,
-				Data:         []byte("1"),
-			},
-		})
-		require.NoError(t, err)
-		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			PageSize:  10,
-		})
-		require.Error(t, err)
-		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
-	})
-
-	t.Run("InvalidEncodingForQueueMetadata", func(t *testing.T) {
-		queueType := persistence.QueueTypeHistoryNormal
-		queueName := "test-queue-" + t.Name()
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-		})
-		require.NoError(t, err)
-		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			Blob: commonpb.DataBlob{
-				EncodingType: 4,
-				Data:         []byte("1"),
-			},
-		})
-		require.NoError(t, err)
-		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			PageSize:  10,
-		})
-		require.Error(t, err)
-		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 	})
 }
 
