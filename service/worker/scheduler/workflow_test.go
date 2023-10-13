@@ -248,8 +248,8 @@ func (s *workflowSuite) setupDelayedCallbacks(start time.Time, cbs []delayedCall
 		if delay := cb.at.Sub(start); delay > 0 {
 			if cb.finishTest {
 				cb.f = func() {
-					s.env.SetCurrentHistoryLength(1e6) // signals workflow loop to exit
-					state.finished = true              // signals this loop to exit
+					s.env.SetCurrentHistoryLength(impossibleHistorySize) // signals workflow loop to exit
+					state.finished = true                                // signals test to exit
 				}
 			}
 			s.env.RegisterDelayedCallback(cb.f, delay)

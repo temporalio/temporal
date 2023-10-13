@@ -96,6 +96,8 @@ const (
 	rateLimitedErrorType = "RateLimited"
 
 	nextTimeCacheV1Size = 10
+
+	impossibleHistorySize = 1e6 // just for testing, no real history can be this long
 )
 
 type (
@@ -252,7 +254,7 @@ func (s *scheduler) run() error {
 	iters := s.tweakables.IterationsBeforeContinueAsNew
 	for {
 		// TODO: use the real GetContinueAsNewSuggested
-		suggestContinueAsNew := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= 1e6
+		suggestContinueAsNew := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= impossibleHistorySize
 		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
 			break
 		}
