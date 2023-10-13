@@ -214,6 +214,7 @@ func (b *tqLoadBalancer) pickReadPartition(partitionCount int, forcedPartition i
 	}
 }
 
+// caller to ensure that lock is obtained before call this function
 func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
 	// pick a random partition to start with
 	startPartitionID := rand.Intn(partitionCount)
