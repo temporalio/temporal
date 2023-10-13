@@ -29,10 +29,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -44,18 +44,14 @@ const (
 	defaultPartition = 0
 )
 
-var (
-	ErrNotImplemented = errors.New("method is not implemented yet for SQL")
-)
-
 type (
 	queueV2 struct {
-		logger log.Logger
 		SqlStore
 	}
 
-	QueueV2MetadataPayload struct {
-		AckLevel int64
+	QueueV2Metadata struct {
+		Metadata *persistencespb.Queue
+		Version  int64
 	}
 )
 
@@ -65,7 +61,6 @@ func NewQueueV2(db sqlplugin.DB,
 ) persistence.QueueV2 {
 	return &queueV2{
 		SqlStore: NewSqlStore(db, logger),
-		logger:   logger,
 	}
 }
 
@@ -73,35 +68,45 @@ func (q *queueV2) EnqueueMessage(
 	ctx context.Context,
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
-	var lastMessageID int64
+	filter := sqlplugin.QueueV2MetadataFilter{
+		QueueType: request.QueueType,
+		QueueName: request.QueueName,
+	}
+	metadata, err := q.Db.SelectFromQueueV2Metadata(ctx, filter)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, persistence.NewQueueNotFoundError(request.QueueType, request.QueueName)
+		}
+		return nil, err
+	}
+	_, err = q.getQueue(metadata)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := q.Db.BeginTx(ctx)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("EnqueueMessage failed. Failed to start transaction. Error: %v", err))
 	}
-	lastMessageID, err = tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
+	lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
 		QueueType: request.QueueType,
 		QueueName: request.QueueName,
 		Partition: defaultPartition,
 	})
-	switch {
-	case err == nil:
-		lastMessageID = lastMessageID + 1
-	case errors.Is(err, sql.ErrNoRows):
-		lastMessageID = persistence.FirstQueueMessageID
-	default:
+	nextMessageID, err := q.getNextMessageId(lastMessageID, err)
+	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
-			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, fmt.Errorf("failed to get last enqueued message id: %w", err)
 	}
 	_, err = tx.InsertIntoQueueV2Messages(ctx, []sqlplugin.QueueV2MessageRow{
-		newQueueV2Row(request.QueueType, request.QueueName, lastMessageID, request.Blob),
+		newQueueV2Row(request.QueueType, request.QueueName, nextMessageID, request.Blob),
 	})
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
-			q.logger.Error("transaction rollback error", tag.Error(rollBackErr))
+			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, err
 	}
@@ -109,23 +114,44 @@ func (q *queueV2) EnqueueMessage(
 	if err := tx.Commit(); err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("EnqueueMessage failed. Failed to commit transaction. Error: %v", err))
 	}
-	return &persistence.InternalEnqueueMessageResponse{Metadata: persistence.MessageMetadata{ID: lastMessageID}}, err
+	return &persistence.InternalEnqueueMessageResponse{Metadata: persistence.MessageMetadata{ID: nextMessageID}}, err
 }
 
 func (q *queueV2) ReadMessages(
 	ctx context.Context,
 	request *persistence.InternalReadMessagesRequest,
 ) (*persistence.InternalReadMessagesResponse, error) {
+
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveReadQueueMessagesPageSize
 	}
-
-	var minMessageID int64
-	minMessageID, err := persistence.GetMinMessageIDForQueueV2(request)
+	filter := sqlplugin.QueueV2MetadataFilter{
+		QueueType: request.QueueType,
+		QueueName: request.QueueName,
+	}
+	metadata, err := q.Db.SelectFromQueueV2Metadata(ctx, filter)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, persistence.NewQueueNotFoundError(request.QueueType, request.QueueName)
+		}
+		return nil, err
+	}
+	qm, err := q.getQueue(metadata)
+	if err != nil {
+		return nil, serialization.NewDeserializationError(
+			enums.ENCODING_TYPE_PROTO3,
+			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w", request.QueueType, request.QueueName, err),
+		)
+	}
+	minMessageID, err := persistence.GetMinMessageIDToReadForQueueV2(
+		request.QueueType,
+		request.QueueName,
+		request.NextPageToken,
+		qm.Metadata,
+	)
 	if err != nil {
 		return nil, err
 	}
-
 	rows, err := q.Db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
 		QueueType:    request.QueueType,
 		QueueName:    request.QueueName,
@@ -133,11 +159,9 @@ func (q *queueV2) ReadMessages(
 		MinMessageID: minMessageID,
 		PageSize:     request.PageSize,
 	})
-
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("RangeSelectFromQueueV2Messages operation failed. Error %v", err))
 	}
-
 	var messages []persistence.QueueV2Message
 	for _, row := range rows {
 		encoding, ok := enums.EncodingType_value[row.MessageEncoding]
@@ -154,7 +178,6 @@ func (q *queueV2) ReadMessages(
 		}
 		messages = append(messages, message)
 	}
-
 	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
@@ -181,15 +204,161 @@ func newQueueV2Row(
 }
 
 func (q *queueV2) CreateQueue(
-	context.Context,
-	*persistence.InternalCreateQueueRequest,
+	ctx context.Context,
+	request *persistence.InternalCreateQueueRequest,
 ) (*persistence.InternalCreateQueueResponse, error) {
-	return nil, fmt.Errorf("%w: CreateQueue", ErrNotImplemented)
+	queueType := request.QueueType
+	queueName := request.QueueName
+	payload := persistencespb.Queue{
+		Partitions: map[int32]*persistencespb.QueuePartition{
+			defaultPartition: {
+				MinMessageId: persistence.FirstQueueMessageID,
+			},
+		},
+	}
+	bytes, _ := payload.Marshal()
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  bytes,
+		MetadataEncoding: enums.ENCODING_TYPE_PROTO3.String(),
+		Version:          0,
+	}
+	_, err := q.Db.InsertIntoQueueV2Metadata(ctx, &row)
+	if q.Db.IsDupEntryError(err) {
+		return nil, fmt.Errorf(
+			"%w: queue type %v and name %v",
+			persistence.ErrQueueAlreadyExists,
+			queueType,
+			queueName,
+		)
+	}
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("InsertIntoQueueV2Metadata operation failed. Error %v", err),
+		)
+	}
+	return &persistence.InternalCreateQueueResponse{}, nil
 }
 
 func (q *queueV2) RangeDeleteMessages(
-	context.Context,
-	*persistence.InternalRangeDeleteMessagesRequest,
+	ctx context.Context,
+	request *persistence.InternalRangeDeleteMessagesRequest,
 ) (*persistence.InternalRangeDeleteMessagesResponse, error) {
-	return nil, fmt.Errorf("%w: RangeDeleteMessages", ErrNotImplemented)
+	if request.InclusiveMaxMessageMetadata.ID < persistence.FirstQueueMessageID {
+		return nil, fmt.Errorf(
+			"%w: id is %d but must be >= %d",
+			persistence.ErrInvalidQueueRangeDeleteMaxMessageID,
+			request.InclusiveMaxMessageMetadata.ID,
+			persistence.FirstQueueMessageID,
+		)
+	}
+	err := q.txExecute(ctx, "RangeDeleteMessages", func(tx sqlplugin.Tx) error {
+		filter := sqlplugin.QueueV2MetadataFilter{
+			QueueType: request.QueueType,
+			QueueName: request.QueueName,
+		}
+		metadata, err := tx.SelectFromQueueV2Metadata(ctx, filter)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return persistence.NewQueueNotFoundError(request.QueueType, request.QueueName)
+			}
+			return err
+		}
+		qm, err := q.getQueue(metadata)
+		if err != nil {
+			return err
+		}
+		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, request.QueueName, qm.Metadata)
+		if err != nil {
+			return err
+		}
+		minMessageID := partition.MinMessageId
+		lastIDToDelete := request.InclusiveMaxMessageMetadata.ID
+		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
+			QueueType: request.QueueType,
+			QueueName: request.QueueName,
+			Partition: defaultPartition,
+		})
+		nextMessageID, err := q.getNextMessageId(lastMessageID, err)
+		if err != nil {
+			return err
+		}
+		lastIDToDelete = persistence.ClampLastIDToDeleteForQueueV2(lastIDToDelete, nextMessageID, minMessageID)
+		if lastIDToDelete < 0 {
+			return nil
+		}
+		msgFilter := sqlplugin.QueueV2MessagesFilter{
+			QueueType:    request.QueueType,
+			QueueName:    request.QueueName,
+			Partition:    defaultPartition,
+			MinMessageID: minMessageID,
+			MaxMessageID: lastIDToDelete,
+			PageSize:     0,
+		}
+		_, err = tx.RangeDeleteFromQueueV2Messages(ctx, msgFilter)
+		if err != nil {
+			return err
+		}
+		partition.MinMessageId = lastIDToDelete + 1
+		bytes, _ := qm.Metadata.Marshal()
+		row := sqlplugin.QueueV2MetadataRow{
+			QueueType:        request.QueueType,
+			QueueName:        request.QueueName,
+			MetadataPayload:  bytes,
+			MetadataEncoding: enums.ENCODING_TYPE_PROTO3.String(),
+			Version:          0,
+		}
+		_, err = tx.UpdateQueueV2Metadata(ctx, &row)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+}
+
+func (q *queueV2) getQueue(
+	metadata *sqlplugin.QueueV2MetadataRow,
+) (*QueueV2Metadata, error) {
+	if metadata.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {
+		return nil, fmt.Errorf(
+			"queue with type %v and name %v has invalid encoding: %w",
+			metadata.QueueType,
+			metadata.QueueName,
+			serialization.NewUnknownEncodingTypeError(metadata.MetadataEncoding, enums.ENCODING_TYPE_PROTO3),
+		)
+	}
+	qm := &persistencespb.Queue{}
+	err := qm.Unmarshal(metadata.MetadataPayload)
+	if err != nil {
+		return nil, serialization.NewDeserializationError(
+			enums.ENCODING_TYPE_PROTO3,
+			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w",
+				metadata.QueueType,
+				metadata.QueueName,
+				err),
+		)
+	}
+	return &QueueV2Metadata{
+		Metadata: qm,
+		Version:  metadata.Version,
+	}, nil
+}
+
+func (q *queueV2) getNextMessageId(
+	lastMessageID int64,
+	err error,
+) (int64, error) {
+	switch {
+	case err == nil:
+		return lastMessageID + 1, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return persistence.FirstQueueMessageID, nil
+	default:
+		return 0, err
+	}
 }

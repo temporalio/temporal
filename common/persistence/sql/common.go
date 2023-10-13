@@ -88,7 +88,8 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*persistence.WorkflowConditionFailedError,
 			*serviceerror.NamespaceAlreadyExists,
 			*persistence.ShardOwnershipLostError,
-			*serviceerror.Unavailable:
+			*serviceerror.Unavailable,
+			*serviceerror.NotFound:
 			return err
 		default:
 			return serviceerror.NewUnavailable(fmt.Sprintf("%v: %v", operation, err))

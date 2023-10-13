@@ -26,8 +26,9 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,6 @@ import (
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 )
 
 // RunQueueV2TestSuite executes interface-level tests for a queue persistence-layer implementation. There should be more
@@ -49,14 +49,11 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 
-	// TODO: Remove this condition after implementing CreateQueue for SQL.
-	if strings.HasPrefix(t.Name(), "TestCassandra") {
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-		})
-		require.NoError(t, err)
-	}
+	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
 
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
@@ -86,7 +83,6 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorIs(t, err, persistence.ErrNonPositiveReadQueueMessagesPageSize)
 	})
 	t.Run("TestEnqueueMessageToNonExistentQueue", func(t *testing.T) {
-		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
@@ -98,7 +94,6 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 		assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	})
 	t.Run("TestCreateQueueTwice", func(t *testing.T) {
-		SkipUnimplementedForSQL(t)
 		t.Parallel()
 
 		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
@@ -112,12 +107,10 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	})
 	t.Run("TestRangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
-		SkipUnimplementedForSQL(t)
 		testRangeDeleteMessages(ctx, t, queue)
 	})
 	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
 		t.Parallel()
-		SkipUnimplementedForSQL(t)
 		RunHistoryTaskQueueManagerTestSuite(t, queue)
 	})
 }
@@ -183,13 +176,6 @@ func testHappyPath(
 	assert.Nil(t, response.NextPageToken)
 }
 
-// TODO: Remove this function after implementing CreateQueue for SQL.
-func SkipUnimplementedForSQL(t *testing.T) {
-	if !strings.HasPrefix(t.Name(), "TestCassandra") {
-		t.Skip("skipping test which is not implemented for SQL yet")
-	}
-}
-
 func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistence.QueueV2) {
 	t.Helper()
 
@@ -202,7 +188,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueType: queueType,
 			QueueName: queueName,
 		})
-		assert.ErrorAs(t, err, new(*serviceerror.NotFound))
+		assert.ErrorContains(t, err, "not found")
 	})
 
 	t.Run("InvalidMaxMessageID", func(t *testing.T) {
@@ -320,6 +306,58 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		require.NoError(t, err)
 		require.Len(t, response.Messages, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), response.Messages[0].MetaData.ID)
+	})
+
+	t.Run("InvalidEncodingForQueueMessage", func(t *testing.T) {
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			Blob: commonpb.DataBlob{
+				EncodingType: 4,
+				Data:         []byte("1"),
+			},
+		})
+		require.NoError(t, err)
+		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.Error(t, err)
+		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	})
+
+	t.Run("InvalidEncodingForQueueMetadata", func(t *testing.T) {
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			Blob: commonpb.DataBlob{
+				EncodingType: 4,
+				Data:         []byte("1"),
+			},
+		})
+		require.NoError(t, err)
+		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.Error(t, err)
+		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 	})
 }
 
