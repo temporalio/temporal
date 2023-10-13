@@ -370,8 +370,8 @@ const (
 	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
-	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
+	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
