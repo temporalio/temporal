@@ -281,7 +281,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		},
 	).Return(&persistence.GetCurrentExecutionResponse{RunID: s.currentRunID}, nil)
 
-	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID)
+	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.NoError(err)
 	s.Equal(s.currentRunID, runID)
 }
@@ -300,7 +300,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	).Return(nil, serviceerror.NewNotFound(""))
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(nil)
 
-	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID)
+	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Empty(runID)
 }
@@ -319,7 +319,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	).Return(nil, serviceerror.NewNotFound(""))
 	s.shardContext.EXPECT().AssertOwnership(ctx).Return(&persistence.ShardOwnershipLostError{})
 
-	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID)
+	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
 	s.Empty(runID)
 }
@@ -337,7 +337,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		},
 	).Return(nil, serviceerror.NewUnavailable(""))
 
-	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID)
+	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Empty(runID)
 }
