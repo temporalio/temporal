@@ -96,9 +96,6 @@ func (db *faultyDB) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 }
 
 func (tx *faultyTx) InsertIntoQueueV2Messages(ctx context.Context, row []sqlplugin.QueueV2MessageRow) (sql.Result, error) {
-	//if _, err := tx.Tx.InsertIntoQueueV2Messages(ctx, row); err != nil {
-	//	return nil, err
-	//}
 	if tx.db.insertErr != nil {
 		return nil, tx.db.insertErr
 	}
@@ -530,10 +527,6 @@ func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin
 func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	//db := &faultyDB{
-	//	DB:                  baseDB,
-	//	insertMetadataError: ErrInsertMetadataFailed,
-	//}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(baseDB, logger)
 
