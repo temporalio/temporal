@@ -199,43 +199,39 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	})
 	t.Run("FailedToGetLastMessageIDFromDB", func(t *testing.T) {
 		t.Parallel()
-		rangeSelectFromQueueV2MessagesFails(ctx, t, baseDB)
+		testRangeSelectFromQueueV2MessagesFails(ctx, t, baseDB)
 	})
-	//t.Run("ReadUnknownMessageEncoding", func(t *testing.T) {
-	//	t.Parallel()
-	//	unknownEncodingForReadMessage(ctx, t, baseDB)
-	//})
 	t.Run("InsertIntoQueueV2MetadataFails", func(t *testing.T) {
 		t.Parallel()
-		insertIntoQueueV2MetadataFails(ctx, t, baseDB)
+		testInsertIntoQueueV2MetadataFails(ctx, t, baseDB)
 	})
 	t.Run("GetPartitionFailsForRangeDelete", func(t *testing.T) {
 		t.Parallel()
-		getPartitionFails(ctx, t, baseDB)
+		testGetPartitionFails(ctx, t, baseDB)
 	})
 	t.Run("GetLastMessageIDForDeleteFails", func(t *testing.T) {
 		t.Parallel()
-		getLastMessageIDForDeleteFails(ctx, t, baseDB)
+		testGetLastMessageIDForDeleteFails(ctx, t, baseDB)
 	})
 	t.Run("RangeDeleteMessagesFails", func(t *testing.T) {
 		t.Parallel()
-		rangeDeleteMessagesFails(ctx, t, baseDB)
+		testRangeDeleteMessagesFails(ctx, t, baseDB)
 	})
 	t.Run("UpdateMetadataFails", func(t *testing.T) {
 		t.Parallel()
-		updateMetadataFails(ctx, t, baseDB)
+		testUpdateMetadataFails(ctx, t, baseDB)
 	})
 	t.Run("InvalidMetadataEncoding", func(t *testing.T) {
 		t.Parallel()
-		invalidMetadataEncoding(ctx, t, baseDB)
+		testInvalidMetadataEncoding(ctx, t, baseDB)
 	})
 	t.Run("InvalidMetadataPayload", func(t *testing.T) {
 		t.Parallel()
-		invalidMetadataPayload(ctx, t, baseDB)
+		testInvalidMetadataPayload(ctx, t, baseDB)
 	})
 	t.Run("SelectMetadataFails", func(t *testing.T) {
 		t.Parallel()
-		selectMetadataFails(ctx, t, baseDB)
+		testSelectMetadataFails(ctx, t, baseDB)
 	})
 
 }
@@ -352,7 +348,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 	assert.Equal(t, db.commitCalls, 0)
 }
 
-func rangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testRangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -376,7 +372,7 @@ func rangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, base
 	assert.ErrorContains(t, err, "RangeSelectFromQueueV2Messages operation failed")
 }
 
-func insertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testInsertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -393,7 +389,7 @@ func insertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseDB sq
 	assert.ErrorContains(t, err, "InsertIntoQueueV2Metadata operation failed")
 }
 
-func getPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -427,7 +423,7 @@ func getPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	assert.ErrorContains(t, err, "partitions")
 }
 
-func getLastMessageIDForDeleteFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testGetLastMessageIDForDeleteFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -450,7 +446,7 @@ func getLastMessageIDForDeleteFails(ctx context.Context, t *testing.T, baseDB sq
 	assert.ErrorContains(t, err, "getLastMessageId error")
 }
 
-func rangeDeleteMessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testRangeDeleteMessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -473,7 +469,7 @@ func rangeDeleteMessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugi
 	assert.ErrorContains(t, err, "rangeDeleteFailed")
 }
 
-func updateMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testUpdateMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -496,7 +492,7 @@ func updateMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB)
 	assert.ErrorContains(t, err, "updateMetadataFailed")
 }
 
-func selectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
@@ -531,7 +527,7 @@ func selectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 }
 
-func invalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	//db := &faultyDB{
@@ -559,7 +555,7 @@ func invalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplugin.
 	assert.ErrorAs(t, err, new(*serialization.DeserializationError))
 }
 
-func invalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
@@ -598,37 +594,4 @@ func invalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlplugin
 	})
 	assert.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
-}
-
-func unknownEncodingForReadMessage(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueTypeHistoryNormal
-	queueName := "test-queue-" + t.Name()
-
-	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(baseDB, logger)
-	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-	})
-	require.NoError(t, err)
-
-	_, err = q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-		Blob: commonpb.DataBlob{
-			EncodingType: 4,
-			Data:         []byte("1"),
-		},
-	})
-	require.NoError(t, err)
-
-	msg, err := q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
-		QueueType:     persistence.QueueTypeHistoryNormal,
-		QueueName:     queueName,
-		PageSize:      1,
-		NextPageToken: nil,
-	})
-	require.NotNil(t, msg)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "not found")
 }
