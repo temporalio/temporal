@@ -993,9 +993,6 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 }
 
 func (s *workflowSuite) TestOnlyStartForAllowAll() {
-	if currentTweakablePolicies.Version < DontTrackOverlapping {
-		s.T().Skip("test will run after Version updated")
-	}
 	// written using low-level mocks so we can check fields of start workflow requests
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
