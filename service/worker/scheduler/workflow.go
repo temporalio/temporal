@@ -194,8 +194,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14,                // see note below
-		Version:                           NewCacheAndJitter, // TODO: switch to DontTrackOverlapping
+		NextTimeCacheV2Size:               14, // see note below
+		Version:                           DontTrackOverlapping,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
