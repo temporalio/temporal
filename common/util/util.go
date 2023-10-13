@@ -42,7 +42,7 @@ func MinTime(a, b time.Time) time.Time {
 	return b
 }
 
-// MinTime returns the later of two given time.Time
+// MaxTime returns the later of two given time.Time
 func MaxTime(a, b time.Time) time.Time {
 	if a.After(b) {
 		return a
