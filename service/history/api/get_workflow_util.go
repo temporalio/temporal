@@ -25,7 +25,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -48,8 +47,8 @@ import (
 
 func GetOrPollMutableState(
 	ctx context.Context,
+	shardContext shard.Context,
 	request *historyservice.GetMutableStateRequest,
-	shard shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
@@ -75,18 +74,29 @@ func GetOrPollMutableState(
 		request.Execution.WorkflowId,
 		request.Execution.RunId,
 	)
-	response, err := GetMutableState(ctx, workflowKey, workflowConsistencyChecker)
+	response, err := GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
 	if err != nil {
 		return nil, err
 	}
-	if request.CurrentBranchToken == nil {
-		request.CurrentBranchToken = response.CurrentBranchToken
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+	if err != nil {
+		return nil, err
 	}
-	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+	if request.GetVersionHistoryItem() == nil {
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+		request.VersionHistoryItem = lastVersionHistoryItem
+	}
+	// Use the latest event id + event version as the branch identifier. This pair is unique across clusters.
+	// We return the full version histories. Callers need to fetch the last version history item from current branch
+	// and use the last version history item in following calls.
+	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
-	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
+	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking.
 	expectedNextEventID := common.FirstEventID
 	if request.ExpectedNextEventId != common.EmptyEventID {
 		expectedNextEventID = request.GetExpectedNextEventId()
@@ -101,23 +111,26 @@ func GetOrPollMutableState(
 		}
 		defer func() { _ = eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
-		response, err = GetMutableState(ctx, workflowKey, workflowConsistencyChecker)
+		response, err = GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
 		if err != nil {
 			return nil, err
 		}
-		// check again if the current branch token changed
-		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+		currentVersionHistory, err = versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, err
+		}
+		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return response, nil
 		}
 
-		namespaceRegistry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+		namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(shard.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
+		timer := time.NewTimer(shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
 		defer timer.Stop()
 		for {
 			select {
@@ -131,8 +144,14 @@ func GetOrPollMutableState(
 				// Note: Later events could modify response.WorkerVersionStamp and we won't
 				// update it here. That's okay since this return value is only informative and isn't used for task dispatch.
 				// For correctness we could pass it in the Notification event.
-				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
-					return nil, serviceerrors.NewCurrentBranchChanged(event.CurrentBranchToken, request.CurrentBranchToken)
+				latestVersionHistory, err := versionhistory.GetCurrentVersionHistory(event.VersionHistories)
+				if err != nil {
+					return nil, err
+				}
+				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
+				response.VersionHistories = event.VersionHistories
+				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
+					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil
@@ -150,6 +169,7 @@ func GetOrPollMutableState(
 
 func GetMutableState(
 	ctx context.Context,
+	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
@@ -172,7 +192,7 @@ func GetMutableState(
 	}
 	defer func() { weCtx.GetReleaseFn()(retError) }()
 
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}

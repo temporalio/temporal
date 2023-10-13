@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -277,7 +276,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.setupMocksForWorkflows(runs, gotRuns)
 			s.setupDelayedCallbacks(startTime, cbs)
 
-			currentTweakablePolicies.IterationsBeforeContinueAsNew = util.Min(iterations, every)
+			currentTweakablePolicies.IterationsBeforeContinueAsNew = min(iterations, every)
 
 			s.T().Logf("starting workflow for %d iterations out of %d remaining, %d total, start time %s",
 				currentTweakablePolicies.IterationsBeforeContinueAsNew, iterations, maxIterations, startTime)
@@ -544,7 +543,7 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				end:    time.Date(2022, 6, 1, 0, 29, 0, 0, time.UTC),
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
-			// skipped over :15, :20
+			// skipped over :15, :20, :25
 			{
 				id:     "myid-2022-06-01T00:30:00Z",
 				start:  time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC),
@@ -557,9 +556,33 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
 			},
+			{at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(0), s.describe().Info.OverlapSkipped)
+				},
+			},
+			{at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
+				},
+			},
+			{at: time.Date(2022, 6, 1, 0, 26, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(1), s.describe().Info.BufferSize)
+					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+				},
+			},
 			{
 				at: time.Date(2022, 6, 1, 0, 31, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:30:00Z"}, s.runningWorkflows()) },
+			},
+			{at: time.Date(2022, 6, 1, 0, 32, 0, 0, time.UTC),
+				f: func() {
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
+				},
 			},
 		},
 		&schedpb.Schedule{
@@ -635,6 +658,81 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 			},
 		},
 		9,
+	)
+}
+
+func (s *workflowSuite) TestBufferLimit() {
+	originalMaxBufferSize := currentTweakablePolicies.MaxBufferSize
+	currentTweakablePolicies.MaxBufferSize = 2
+	defer func() { currentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T00:05:00Z",
+				start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 22, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// first buffered one:
+			{
+				id:     "myid-2022-06-01T00:10:00Z",
+				start:  time.Date(2022, 6, 1, 0, 22, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// next buffered one, and also one more gets buffered:
+			{
+				id:     "myid-2022-06-01T00:15:00Z",
+				start:  time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 24, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// run :20 does not fit in the buffer. finally back on track for :25
+			{
+				id:     "myid-2022-06-01T00:25:00Z",
+				start:  time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 20, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows())
+					s.Equal(int64(2), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 23, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 25, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:25:00Z"}, s.runningWorkflows())
+					s.Equal(int64(0), s.describe().Info.BufferSize)
+					s.Equal(int64(1), s.describe().Info.BufferDropped)
+				},
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(5 * time.Minute),
+				}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			},
+		},
+		8,
 	)
 }
 
@@ -738,7 +836,6 @@ func (s *workflowSuite) TestOverlapTerminate() {
 }
 
 func (s *workflowSuite) TestOverlapAllowAll() {
-	// also contains tests for RunningWorkflows and refresh, since it's convenient to do here
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -766,70 +863,7 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 		},
-		[]delayedCallback{
-			{
-				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
-				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
-				f: func() {
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 15, 30, 0, time.UTC),
-				f: func() {
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 16, 30, 0, time.UTC),
-				f: func() {
-					// :15 has ended here, but we won't know until we refresh since we don't have a long-poll watcher
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
-					// poke it to refresh
-					s.env.SignalWorkflow(SignalNameRefresh, nil)
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 16, 31, 0, time.UTC),
-				f: func() {
-					// now we'll see it end
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 18, 0, 0, time.UTC),
-				f: func() {
-					// :05 has ended, but we won't see it yet
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 21, 0, 0, time.UTC),
-				f: func() {
-					// we'll see :05 ended because :20 started and did an implicit refresh
-					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
-				f: func() {
-					// we won't see these ended yet
-					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
-					// poke it to refresh
-					s.env.SignalWorkflow(SignalNameRefresh, nil)
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 23, 1, 0, time.UTC),
-				f: func() {
-					// now we will
-					s.Equal([]string(nil), s.runningWorkflows())
-				},
-			},
-		},
+		nil,
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
@@ -840,7 +874,7 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			},
 		},
-		7,
+		5,
 	)
 }
 
@@ -954,6 +988,45 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 5)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestOnlyStartForAllowAll() {
+	if currentTweakablePolicies.Version < DontTrackOverlapping {
+		s.T().Skip("test will run after Version updated")
+	}
+	// written using low-level mocks so we can check fields of start workflow requests
+
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -1398,7 +1471,7 @@ func (s *workflowSuite) TestLimitedActions() {
 			RemainingActions: 2,
 		},
 		Policies: &schedpb.SchedulePolicies{
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 4)
 	s.True(s.env.IsWorkflowCompleted())

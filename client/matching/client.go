@@ -170,7 +170,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
-	partition := c.loadBalancer.PickReadPartition(
+	partition := c.loadBalancer.PickWritePartition(
 		namespace.ID(request.GetNamespaceId()),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,

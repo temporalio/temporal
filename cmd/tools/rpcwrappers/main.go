@@ -101,6 +101,8 @@ var (
 		"client.history.DescribeHistoryHost":    true,
 		"client.history.GetReplicationMessages": true,
 		"client.history.GetReplicationStatus":   true,
+		"client.history.GetDLQTasks":            true,
+		"client.history.DeleteDLQTasks":         true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
@@ -416,8 +418,6 @@ import (
 
 	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/metrics"
 )
 `)
 
@@ -428,7 +428,7 @@ func (c *metricClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) (_ {{.ResponseType}}, retError error) {
 
-	metricsHandler, startTime := c.startMetricsRecording(ctx, metrics.{{.MetricPrefix}}{{.Method}}Scope)
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "{{.MetricPrefix}}{{.Method}}")
 	defer func() {
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()

@@ -27,16 +27,19 @@ package cache
 import (
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/configs"
 )
 
 var Module = fx.Options(
+	fx.Provide(func(config *configs.Config) Cache {
+		return NewHostLevelCache(config)
+	}),
 	fx.Provide(NewCacheFnProvider),
 )
 
 // NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
 func NewCacheFnProvider() NewCacheFn {
-	return func(shard shard.Context) Cache {
-		return NewCache(shard)
+	return func(config *configs.Config) Cache {
+		return NewShardLevelCache(config)
 	}
 }

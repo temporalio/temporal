@@ -45,11 +45,11 @@ const (
 )
 
 // AdminGetDLQMessages gets DLQ metadata
-func AdminGetDLQMessages(c *cli.Context) (err error) {
+func AdminGetDLQMessages(c *cli.Context, clientFactory ClientFactory) (err error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	dlqType := c.String(FlagDLQType)
 	sourceCluster := c.String(FlagCluster)
 	shardID := c.Int(FlagShardID)
@@ -120,7 +120,7 @@ func AdminGetDLQMessages(c *cli.Context) (err error) {
 }
 
 // AdminPurgeDLQMessages deletes messages from DLQ
-func AdminPurgeDLQMessages(c *cli.Context) error {
+func AdminPurgeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -135,7 +135,7 @@ func AdminPurgeDLQMessages(c *cli.Context) error {
 		prompt("Are you sure to purge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 	t, err := toQueueType(dlqType)
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func AdminPurgeDLQMessages(c *cli.Context) error {
 }
 
 // AdminMergeDLQMessages merges message from DLQ
-func AdminMergeDLQMessages(c *cli.Context) error {
+func AdminMergeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -168,7 +168,7 @@ func AdminMergeDLQMessages(c *cli.Context) error {
 		prompt("Are you sure to merge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
-	adminClient := cFactory.AdminClient(c)
+	adminClient := clientFactory.AdminClient(c)
 
 	t, err := toQueueType(dlqType)
 	if err != nil {

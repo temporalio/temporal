@@ -40,14 +40,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestVisibility() {
+func (s *functionalSuite) TestVisibility() {
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
-	id1 := "integration-visibility-test1"
-	id2 := "integration-visibility-test2"
-	wt := "integration-visibility-test-type"
-	tl := "integration-visibility-test-taskqueue"
+	id1 := "functional-visibility-test1"
+	id2 := "functional-visibility-test2"
+	wt := "functional-visibility-test-type"
+	tl := "functional-visibility-test-taskqueue"
 	identity := "worker1"
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
@@ -55,7 +55,7 @@ func (s *integrationSuite) TestVisibility() {
 		Namespace:           s.namespace,
 		WorkflowId:          id1,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -79,7 +79,7 @@ func (s *integrationSuite) TestVisibility() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -87,7 +87,7 @@ func (s *integrationSuite) TestVisibility() {
 		T:                   s.T(),
 	}
 
-	_, err1 := poller.PollAndProcessWorkflowTask(false, false)
+	_, err1 := poller.PollAndProcessWorkflowTask()
 	s.NoError(err1)
 
 	// wait until the start workflow is done
@@ -117,7 +117,7 @@ func (s *integrationSuite) TestVisibility() {
 		Namespace:           s.namespace,
 		WorkflowId:          id2,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),

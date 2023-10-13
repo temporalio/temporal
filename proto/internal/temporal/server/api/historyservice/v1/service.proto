@@ -278,7 +278,13 @@ service HistoryService {
     }
 
     // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+    // NOTE: this is experimental API
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    }
+
+    // ImportWorkflowExecution attempts to import workflow according to persisted history events.
+    // NOTE: this is experimental API
+    rpc ImportWorkflowExecution (ImportWorkflowExecutionRequest) returns (ImportWorkflowExecutionResponse) {
     }
 
     // DeleteWorkflowVisibilityRecord force delete a workflow's visibility record.
@@ -310,5 +316,21 @@ service HistoryService {
     }
 
     rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
+    }
+
+    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    }
+
+    rpc DeleteDLQTasks (DeleteDLQTasksRequest) returns (DeleteDLQTasksResponse) {
+    }
+    // The AddTasks API is used to add history tasks to a shard. The first use-case for this API is the DLQ. When we are
+    // unable to process history tasks, we add them to a DLQ. When they need to be retried, we take them out of the DLQ
+    // and add them back using this API. We expose this via an API instead of doing this in the history engine because
+    // replication tasks, which are DLQ'd on the target cluster need to be added back to the queue on the source
+    // cluster, so there is already a network boundary. There is a maximum of 1000 tasks per request. There must be at
+    // least one task per request. If any task in the list does not have the same shard ID as the request, the request
+    // will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
+    // in the same shard. Calls to the persistence API will be batched by workflow run.
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {
     }
 }

@@ -38,15 +38,17 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/timer"
 )
 
-func (s *integrationSuite) TestSequential_UserTimers() {
-	id := "integration-sequential-user-timers-test"
-	wt := "integration-sequential-user-timers-test-type"
-	tl := "integration-sequential-user-timers-test-taskqueue"
+func (s *functionalSuite) TestUserTimers_Sequential() {
+	id := "functional-user-timers-sequential-test"
+	wt := "functional-user-timers-sequential-test-type"
+	tl := "functional-user-timers-sequential-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -54,7 +56,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -96,7 +98,7 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -105,13 +107,100 @@ func (s *integrationSuite) TestSequential_UserTimers() {
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
+}
+
+func (s *functionalSuite) TestUserTimers_CapDuration() {
+	id := "functional-user-timers-cap-duration-test"
+	wt := "functional-user-timers-cap-duration-test-type"
+	tl := "functional-user-timers-cap-duration-test-taskqueue"
+	identity := "functional-user-timers-cap-duration-test-worker"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(timer.MaxAllowedTimer * 2),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
+	s.Equal(timer.MaxAllowedTimer, *descResp.ExecutionConfig.WorkflowRunTimeout)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	timerID := "200-year-timer"
+	wtHandler := func(
+		_ *commonpb.WorkflowExecution,
+		_ *commonpb.WorkflowType,
+		_, _ int64,
+		_ *historypb.History,
+	) ([]*commandpb.Command, error) {
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+			Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+				TimerId:            timerID,
+				StartToFireTimeout: timestamp.DurationPtr(timer.MaxAllowedTimer * 2),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// poll workflow task to schedule the timer
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Logger.Info("PollAndProcessWorkflowTask: completed")
+	s.NoError(err)
+
+	adminDescResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
+	timerInfos := adminDescResp.DatabaseMutableState.TimerInfos
+	s.Len(timerInfos, 1)
+	s.True(timerInfos[timerID].ExpiryTime.Before(time.Now().Add(timer.MaxAllowedTimer)))
+
+	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
 }

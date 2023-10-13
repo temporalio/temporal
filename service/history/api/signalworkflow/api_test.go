@@ -26,9 +26,7 @@ package signalworkflow
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 
@@ -36,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -74,7 +73,6 @@ func TestSignalWorkflowSuite(t *testing.T) {
 }
 
 func (s *signalWorkflowSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *signalWorkflowSuite) TearDownSuite() {
@@ -106,10 +104,10 @@ func (s *signalWorkflowSuite) SetupTest() {
 	}).AnyTimes()
 
 	s.currentContext = workflow.NewMockContext(s.controller)
-	s.currentContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.currentMutableState, nil).AnyTimes()
+	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil).AnyTimes()
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(

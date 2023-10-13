@@ -27,8 +27,6 @@ package postgresql
 import (
 	"fmt"
 	"time"
-
-	"github.com/lib/pq"
 )
 
 const (
@@ -64,7 +62,7 @@ const (
 	// NOTE we have to use %v because somehow postgresql doesn't work with ? here
 	// It's a small bug in sqlx library
 	// TODO https://github.com/uber/cadence/issues/2893
-	createDatabaseQuery = "CREATE DATABASE %v"
+	createDatabaseQuery = `CREATE DATABASE "%v"`
 
 	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
 
@@ -134,10 +132,8 @@ func (pdb *db) DropAllTables(database string) error {
 // CreateDatabase creates a database if it doesn't exist
 func (pdb *db) CreateDatabase(name string) error {
 	if err := pdb.Exec(fmt.Sprintf(createDatabaseQuery, name)); err != nil {
-		if err, ok := err.(*pq.Error); ok {
-			if err.Code.Name() == "duplicate_database" {
-				return nil
-			}
+		if pdb.IsDupDatabaseError(err) {
+			return nil
 		}
 		return err
 	}

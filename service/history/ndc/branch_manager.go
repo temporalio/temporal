@@ -49,7 +49,13 @@ const (
 
 type (
 	BranchMgr interface {
-		prepareBranch(
+		GetOrCreate(
+			ctx context.Context,
+			incomingVersionHistory *historyspb.VersionHistory,
+			incomingFirstEventID int64,
+			incomingFirstEventVersion int64,
+		) (bool, int32, error)
+		Create(
 			ctx context.Context,
 			incomingVersionHistory *historyspb.VersionHistory,
 			incomingFirstEventID int64,
@@ -90,11 +96,30 @@ func NewBranchMgr(
 	}
 }
 
+func (r *BranchMgrImpl) GetOrCreate(
+	ctx context.Context,
+	incomingVersionHistory *historyspb.VersionHistory,
+	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
+) (bool, int32, error) {
+	return r.prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion, true)
+}
+
+func (r *BranchMgrImpl) Create(
+	ctx context.Context,
+	incomingVersionHistory *historyspb.VersionHistory,
+	incomingFirstEventID int64,
+	incomingFirstEventVersion int64,
+) (bool, int32, error) {
+	return r.prepareBranch(ctx, incomingVersionHistory, incomingFirstEventID, incomingFirstEventVersion, false)
+}
+
 func (r *BranchMgrImpl) prepareBranch(
 	ctx context.Context,
 	incomingVersionHistory *historyspb.VersionHistory,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
+	reuseBranch bool,
 ) (bool, int32, error) {
 
 	localVersionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -111,7 +136,7 @@ func (r *BranchMgrImpl) prepareBranch(
 	}
 
 	// if can directly append to a branch
-	if versionhistory.IsLCAVersionHistoryItemAppendable(versionHistory, lcaVersionHistoryItem) {
+	if reuseBranch && versionhistory.IsLCAVersionHistoryItemAppendable(versionHistory, lcaVersionHistoryItem) {
 		doContinue, err := r.verifyEventsOrder(
 			ctx,
 			versionHistory,

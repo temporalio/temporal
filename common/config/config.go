@@ -81,6 +81,9 @@ type (
 	PProf struct {
 		// Port is the port on which the PProf will bind to
 		Port int `yaml:"port"`
+		// Host defaults to `localhost` but can be overriden
+		// for instance in the case of dual stack IPv4/IPv6
+		Host string `yaml:"host"`
 	}
 
 	// RPC contains the rpc config items
@@ -90,9 +93,11 @@ type (
 		// Port used for membership listener
 		MembershipPort int `yaml:"membershipPort"`
 		// BindOnLocalHost is true if localhost is the bind address
+		// if neither BindOnLocalHost nor BindOnIP are set then an
+		// an attempt to discover an address is made
 		BindOnLocalHost bool `yaml:"bindOnLocalHost"`
-		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0`) -
-		// check net.ParseIP for supported syntax, only IPv4 is supported,
+		// BindOnIP can be used to bind service on specific ip (eg. `0.0.0.0` or `::`)
+		// check net.ParseIP for supported syntax
 		// mutually exclusive with `BindOnLocalHost` option
 		BindOnIP string `yaml:"bindOnIP"`
 		// HTTPPort is the port on which HTTP will listen. If unset/0, HTTP will be
@@ -225,8 +230,8 @@ type (
 		// MaxJoinDuration is the max wait time to join the gossip ring
 		MaxJoinDuration time.Duration `yaml:"maxJoinDuration"`
 		// BroadcastAddress is used as the address that is communicated to remote nodes to connect on.
-		// This is generally used when BindOnIP would be the same across several nodes (ie: 0.0.0.0)
-		// and for nat traversal scenarios. Check net.ParseIP for supported syntax, only IPv4 is supported.
+		// This is generally used when BindOnIP would be the same across several nodes (ie: `0.0.0.0` or `::`)
+		// and for nat traversal scenarios. Check net.ParseIP for supported syntax
 		BroadcastAddress string `yaml:"broadcastAddress"`
 	}
 
@@ -558,6 +563,10 @@ type (
 		Authorizer string `yaml:"authorizer"`
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
+		// Name of main auth header to pass to ClaimMapper (as `AuthToken`). Defaults to `authorization`.
+		AuthHeaderName string `yaml:"authHeaderName"`
+		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
+		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider
@@ -575,6 +584,7 @@ const (
 	MetadataStoreName  DataStoreName = "MetadataStore"
 	ExecutionStoreName DataStoreName = "ExecutionStore"
 	QueueName          DataStoreName = "Queue"
+	QueueV2Name        DataStoreName = "QueueV2"
 	ClusterMDStoreName DataStoreName = "ClusterMDStore"
 )
 

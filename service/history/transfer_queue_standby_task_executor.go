@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
@@ -51,7 +50,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -70,7 +68,6 @@ var (
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
-	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricProvider metrics.Handler,
@@ -83,7 +80,6 @@ func newTransferQueueStandbyTaskExecutor(
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
 			workflowCache,
-			archivalClient,
 			logger,
 			metricProvider,
 			historyRawClient,
@@ -98,11 +94,11 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		getNamespaceTagByID(t.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
 	}
@@ -131,7 +127,11 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = errUnknownTransferTask
 	}
 
-	return metricsTags, false, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    false,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
@@ -145,7 +145,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +194,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -237,46 +237,15 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
-		if err != nil {
-			return nil, err
-		}
 		executionInfo := mutableState.GetExecutionInfo()
-		executionState := mutableState.GetExecutionState()
-		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowStatus := executionState.Status
-		workflowHistoryLength := mutableState.GetNextEventID() - 1
-		workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-		workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-		searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
 		}
-		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
-		}
-
-		if !transferTask.CanSkipVisibilityArchival {
-			if err := t.archiveVisibility(
-				ctx,
-				namespace.ID(transferTask.NamespaceID),
-				transferTask.WorkflowID,
-				transferTask.RunID,
-				workflowTypeName,
-				workflowStartTime,
-				workflowExecutionTime,
-				timestamp.TimeValue(wfCloseTime),
-				workflowStatus,
-				workflowHistoryLength,
-				visibilityMemo,
-				searchAttr,
-			); err != nil {
-				return nil, err
-			}
 		}
 
 		// verify if parent got the completion event
@@ -354,7 +323,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -389,7 +358,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -424,7 +393,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.Version, transferTask.Version, transferTask)
+		err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.Version, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -505,7 +474,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	nsRecord, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+	nsRecord, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
@@ -514,7 +483,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return nil
 	}
 
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, taskInfo)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, taskInfo)
 	if err != nil {
 		return err
 	}
@@ -526,7 +495,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, taskInfo, t.metricHandler, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}
@@ -640,7 +609,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",
-			tag.ShardID(t.shard.GetShardID()),
+			tag.ShardID(t.shardContext.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
@@ -667,7 +636,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			return err
 		}
 		t.logger.Error("Error re-replicating history from remote.",
-			tag.ShardID(t.shard.GetShardID()),
+			tag.ShardID(t.shardContext.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
@@ -680,5 +649,5 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 }
 
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
-	return t.shard.GetCurrentTime(t.clusterName)
+	return t.shardContext.GetCurrentTime(t.clusterName)
 }

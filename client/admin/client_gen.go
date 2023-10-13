@@ -123,6 +123,16 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetDLQTasks(
+	ctx context.Context,
+	request *adminservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetDLQTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNamespace(
 	ctx context.Context,
 	request *adminservice.GetNamespaceRequest,
@@ -191,6 +201,16 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+}
+
+func (c *clientImpl) ImportWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ImportWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ImportWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListClusterMembers(

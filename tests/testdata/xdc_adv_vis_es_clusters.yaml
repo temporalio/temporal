@@ -1,0 +1,57 @@
+- persistence:
+    dbname: active_adv_vis
+  clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+    masterClusterName: "active-adv-vis"
+    currentClusterName: "active-adv-vis"
+    clusterInformation:
+      active-adv-vis:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:9134"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 2
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_active
+
+- persistence:
+    dbname: standby_adv_vis
+  clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+    masterClusterName: "standby-adv-vis"
+    currentClusterName: "standby-adv-vis"
+    clusterInformation:
+      standby-adv-vis:
+        enabled: true
+        initialFailoverVersion: 2
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:10134"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 3
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_standby

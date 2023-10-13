@@ -27,7 +27,7 @@ package ndc
 import replicationpb "go.temporal.io/api/replication/v1"
 
 var (
-	clusterName              = []string{"active", "standby", "other"}
+	clusterName              = []string{"cluster-a", "cluster-b", "cluster-c"}
 	clusterReplicationConfig = []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},

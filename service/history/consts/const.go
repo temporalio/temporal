@@ -81,6 +81,8 @@ var (
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
 	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistorySizeExceedsLimit)
+	// ErrHistoryCountExceedsLimit is error indicating workflow execution has exceeded system defined history count limit
+	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistoryCountExceedsLimit)
 	// ErrMutableStateSizeExceedsLimit is error indicating workflow execution has exceeded system defined mutable state size limit
 	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonMutableStateSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster
@@ -101,6 +103,8 @@ var (
 	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
 	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
 	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
+	// ErrWorkflowClosedBeforeWorkflowTaskStarted is an error indicating workflow execution was closed before WorkflowTaskStarted event
+	ErrWorkflowClosedBeforeWorkflowTaskStarted = serviceerror.NewWorkflowNotReady("Workflow execution closed before WorkflowTaskStarted event")
 
 	ErrWorkflowIDNotSet                 = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	ErrInvalidRunID                     = serviceerror.NewInvalidArgument("Invalid RunId.")

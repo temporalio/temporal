@@ -35,6 +35,21 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
+func (c *retryableClient) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.AddTasksResponse, error) {
+	var resp *historyservice.AddTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -44,6 +59,21 @@ func (c *retryableClient) CloseShard(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CloseShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	var resp *historyservice.DeleteDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteDLQTasks(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -185,6 +215,21 @@ func (c *retryableClient) GetDLQReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetDLQTasks(
+	ctx context.Context,
+	request *historyservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetDLQTasksResponse, error) {
+	var resp *historyservice.GetDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
@@ -284,6 +329,21 @@ func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ImportWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	var resp *historyservice.ImportWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ImportWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

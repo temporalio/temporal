@@ -74,10 +74,9 @@ worker restart/long-poll activity failure:
 */
 
 type (
-	scheduleIntegrationSuite struct {
+	scheduleFunctionalSuite struct {
 		*require.Assertions
-		IntegrationBase
-		hostPort      string
+		FunctionalTestBase
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
@@ -85,31 +84,27 @@ type (
 	}
 )
 
-func TestScheduleIntegrationSuite(t *testing.T) {
+func TestScheduleFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(scheduleIntegrationSuite))
+	suite.Run(t, new(scheduleFunctionalSuite))
 }
 
-func (s *scheduleIntegrationSuite) SetupSuite() {
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
+func (s *scheduleFunctionalSuite) SetupSuite() {
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/integration_test_cluster.yaml")
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
-		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
-func (s *scheduleIntegrationSuite) TearDownSuite() {
+func (s *scheduleFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *scheduleIntegrationSuite) SetupTest() {
+func (s *scheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
@@ -128,12 +123,12 @@ func (s *scheduleIntegrationSuite) SetupTest() {
 	}
 }
 
-func (s *scheduleIntegrationSuite) TearDownTest() {
+func (s *scheduleFunctionalSuite) TearDownTest() {
 	s.worker.Stop()
 	s.sdkClient.Close()
 }
 
-func (s *scheduleIntegrationSuite) TestBasics() {
+func (s *scheduleFunctionalSuite) TestBasics() {
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
@@ -163,7 +158,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
 					},
@@ -428,7 +423,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	}, 10*time.Second, 1*time.Second)
 }
 
-func (s *scheduleIntegrationSuite) TestInput() {
+func (s *scheduleFunctionalSuite) TestInput() {
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"
 	wt := "sched-test-input-wt"
@@ -457,7 +452,7 @@ func (s *scheduleIntegrationSuite) TestInput() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:        inputPayloads,
 				},
 			},
@@ -496,7 +491,7 @@ func (s *scheduleIntegrationSuite) TestInput() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
+func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
@@ -512,7 +507,7 @@ func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},
@@ -575,7 +570,7 @@ func (s *scheduleIntegrationSuite) TestLastCompletionAndError() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestRefresh() {
+func (s *scheduleFunctionalSuite) TestRefresh() {
 	sid := "sched-test-refresh"
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
@@ -595,7 +590,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:               wid,
 					WorkflowType:             &commonpb.WorkflowType{Name: wt},
-					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					WorkflowExecutionTimeout: timestamp.DurationPtr(3 * time.Second),
 				},
 			},
@@ -650,9 +645,11 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 	s.NoError(err)
 	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
 
-	// scheduler has done some stuff
-	events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-	s.Greater(len(events3), len(events2))
+	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
+	s.Eventually(func() bool {
+		events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+		return len(events3) > len(events2)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// cleanup
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
@@ -663,7 +660,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 	s.NoError(err)
 }
 
-func (s *scheduleIntegrationSuite) TestListBeforeRun() {
+func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 	sid := "sched-test-list-before-run"
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
@@ -685,7 +682,7 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},
@@ -736,7 +733,7 @@ func (s *scheduleIntegrationSuite) TestListBeforeRun() {
 	time.Sleep(2 * time.Second)
 }
 
-func (s *scheduleIntegrationSuite) TestRateLimit() {
+func (s *scheduleFunctionalSuite) TestRateLimit() {
 	sid := "sched-test-rate-limit-%d"
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
@@ -776,7 +773,7 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 						WorkflowId:   fmt.Sprintf(wid, i),
 						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					},
 				},
 			},
@@ -815,7 +812,7 @@ func (s *scheduleIntegrationSuite) TestRateLimit() {
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
-func (s *scheduleIntegrationSuite) TestNextTimeCache() {
+func (s *scheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
@@ -831,7 +828,7 @@ func (s *scheduleIntegrationSuite) TestNextTimeCache() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},

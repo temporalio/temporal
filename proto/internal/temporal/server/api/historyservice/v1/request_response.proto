@@ -80,6 +80,7 @@ message GetMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message GetMutableStateResponse {
@@ -115,6 +116,7 @@ message PollMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message PollMutableStateResponse {
@@ -608,6 +610,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
     int64 state_transition_count = 1;
+    int64 history_length = 2;
 }
 
 message GetReplicationStatusRequest {
@@ -649,6 +652,18 @@ message RebuildMutableStateRequest {
 }
 
 message RebuildMutableStateResponse {
+}
+
+message ImportWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    repeated temporal.api.common.v1.DataBlob history_batches = 3;
+    temporal.server.api.history.v1.VersionHistory version_history = 4;
+    bytes token = 5;
+}
+
+message ImportWorkflowExecutionResponse {
+    bytes token = 1;
 }
 
 message DeleteWorkflowVisibilityRecordRequest {
@@ -732,3 +747,69 @@ message ForceDeleteWorkflowExecutionRequest {
 message ForceDeleteWorkflowExecutionResponse {
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }
+
+message HistoryTask {
+    // shard_id is included to avoid having to deserialize the task blob.
+    int32 shard_id = 1;
+    temporal.api.common.v1.DataBlob task = 2;
+}
+
+message HistoryDLQTaskMetadata {
+    // message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
+    int64 message_id = 1;
+}
+
+// HistoryDLQTask is a history task that has been moved to the DLQ, so it also has a message ID (index within that
+// queue).
+message HistoryDLQTask {
+    HistoryDLQTaskMetadata metadata = 1;
+    HistoryTask task = 2;
+}
+
+// HistoryDLQKey is a compound key that identifies a history DLQ.
+message HistoryDLQKey {
+    temporal.server.api.enums.v1.TaskCategory category = 1;
+    string source_cluster = 2;
+    string target_cluster = 3;
+}
+
+message GetDLQTasksRequest {
+    HistoryDLQKey dlq_key = 1;
+    // page_size must be positive. Up to this many tasks will be returned.
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message GetDLQTasksResponse {
+    repeated HistoryDLQTask dlq_tasks = 1;
+    // next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+    // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+    // there are more results.
+    bytes next_page_token = 2;
+}
+
+message DeleteDLQTasksRequest {
+    HistoryDLQKey dlq_key = 1;
+    HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message DeleteDLQTasksResponse {}
+
+message AddTasksRequest {
+  // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
+  // not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
+  // request, which would be more complicated.
+  int32 shard_id = 1;
+
+  message Task {
+    // category is needed to deserialize the tasks. Examples include "transfer", "timer", etc. See the history/tasks
+    // package for a definitive list. Warning: this is not the same as the stringified value of a TaskCategory enum.
+    string category = 1;
+    // blob is the serialized task.
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}

@@ -41,15 +41,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
-	id := "integration-sticky-timeout-non-transient-workflow-task"
-	wt := "integration-sticky-timeout-non-transient-command-type"
-	tl := "integration-sticky-timeout-non-transient-workflow-taskqueue"
-	stl := "integration-sticky-timeout-non-transient-workflow-taskqueue-sticky"
+func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
+	id := "functional-sticky-timeout-non-transient-workflow-task"
+	wt := "functional-sticky-timeout-non-transient-command-type"
+	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
+	stl := "functional-sticky-timeout-non-transient-workflow-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{}
-	stickyTaskQueue.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
@@ -58,7 +57,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -122,7 +121,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	poller := &TaskPoller{
 		Engine:                       s.engine,
 		Namespace:                    s.namespace,
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,
@@ -131,7 +130,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -162,7 +161,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -178,7 +177,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -194,7 +193,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion
@@ -213,15 +212,14 @@ WaitForStickyTimeoutLoop:
 	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
 }
 
-func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
-	id := "integration-reset-sticky-fire-schedule-to-start-timeout"
-	wt := "integration-reset-sticky-fire-schedule-to-start-timeout-type"
-	tl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
-	stl := "integration-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
+func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
+	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
+	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
+	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"
+	stl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue-sticky"
 	identity := "worker1"
 
-	stickyTaskQueue := &taskqueuepb.TaskQueue{}
-	stickyTaskQueue.Name = stl
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stl, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 	stickyScheduleToStartTimeout := 2 * time.Second
 
 	// Start workflow execution
@@ -230,7 +228,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -282,7 +280,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 	poller := &TaskPoller{
 		Engine:                       s.engine,
 		Namespace:                    s.namespace,
-		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                    &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:                     identity,
 		WorkflowTaskHandler:          wtHandler,
 		Logger:                       s.Logger,
@@ -291,7 +289,7 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		StickyScheduleToStartTimeout: stickyScheduleToStartTimeout,
 	}
 
-	_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -329,7 +327,7 @@ WaitForStickyTimeoutLoop:
 	s.True(stickyTimeout, "Workflow task not timed out")
 
 	for i := 1; i <= 3; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -345,7 +343,7 @@ WaitForStickyTimeoutLoop:
 	s.NoError(err)
 
 	for i := 1; i <= 2; i++ {
-		_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, int32(i))
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(i))
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -361,7 +359,7 @@ WaitForStickyTimeoutLoop:
 	s.True(workflowTaskFailed)
 
 	// Complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithRespondSticky, WithExpectedAttemptCount(3))
 	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion

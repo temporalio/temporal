@@ -86,15 +86,12 @@ PINNED_DEPENDENCIES := \
 	github.com/go-sql-driver/mysql@v1.5.0 \
 	github.com/urfave/cli/v2@v2.4.0
 
-# Code coverage output files.
+# Code coverage & test report output files.
 COVER_ROOT                      := ./.coverage
-UNIT_COVER_PROFILE              := $(COVER_ROOT)/unit_coverprofile.out
-INTEGRATION_COVER_PROFILE       := $(COVER_ROOT)/integration_coverprofile.out
-DB_TOOL_COVER_PROFILE           := $(COVER_ROOT)/db_tool_coverprofile.out
-FUNCTIONAL_COVER_PROFILE        := $(COVER_ROOT)/functional_$(PERSISTENCE_DRIVER)_coverprofile.out
-FUNCTIONAL_XDC_COVER_PROFILE    := $(COVER_ROOT)/functional_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
-FUNCTIONAL_NDC_COVER_PROFILE    := $(COVER_ROOT)/functional_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+NEW_COVER_PROFILE 							= $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out # generates a new filename each time it's substituted.
 SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
+REPORT_ROOT                     := ./.testreport
+NEW_REPORT 											= $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml # generates a new filename each time it's substituted.
 
 # DB
 SQL_USER ?= temporal
@@ -121,6 +118,10 @@ update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
 	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
 
+update-gotestsum:
+	@printf $(COLOR) "Install/update gotestsum..."
+	@go install gotest.tools/gotestsum@v1.11
+
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
@@ -143,10 +144,10 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 # update-linters is not included because in CI linters are run by github actions.
-ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -272,9 +273,9 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
-	@rm -f test.log
+	@rm -f test.log $(COVER_ROOT)/* $(REPORT_ROOT)/*
 	@go clean -testcache
-
+	
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 $(TEST_DIRS)
@@ -307,35 +308,47 @@ functional-with-fault-injection-test: clean-test-results
 
 test: unit-test integration-test functional-test functional-with-fault-injection-test
 
-##### Coverage #####
+##### Coverage & Reporting #####
 $(COVER_ROOT):
 	@mkdir -p $(COVER_ROOT)
 
-unit-test-coverage: $(COVER_ROOT)
+$(REPORT_ROOT):
+	@mkdir -p $(REPORT_ROOT)
+
+prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
+
+unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
-	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(NEW_COVER_PROFILE)
 
-integration-test-coverage: $(COVER_ROOT)
+integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-coverage: $(COVER_ROOT)
+functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-xdc-coverage: $(COVER_ROOT)
+functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_XDC_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-ndc-coverage: $(COVER_ROOT)
+functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_NDC_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
 	@rm -f $(SUMMARY_COVER_PROFILE)
+	@if [ -z "$(wildcard $(COVER_ROOT)/*)" ]; then \
+		echo "No coverage data, aborting!" && exit 1; \
+	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \

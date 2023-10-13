@@ -34,6 +34,26 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *clientImpl) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.AddTasksResponse, error) {
+	shardID := request.GetShardId()
+	var response *historyservice.AddTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -310,6 +330,26 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ImportWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.ImportWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	var response *historyservice.ImportWorkflowExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ImportWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

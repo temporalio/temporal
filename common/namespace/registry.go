@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -257,7 +259,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 				r.cacheLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.NamespaceRegistryLockLatency.GetMetricName(),
+			MetricsName: metrics.DDNamespaceRegistryLockLatency.GetMetricName(),
 		},
 	}
 }
@@ -460,7 +462,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	r.cacheNameToID = newCacheNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
-	stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
+	stateChangeCallbacks = maps.Values(r.stateChangeCallbacks)
 	r.cacheLock.Unlock()
 
 	// call state change callbacks
@@ -655,15 +657,4 @@ func namespaceStateChanged(old *Namespace, new *Namespace) bool {
 		old.IsGlobalNamespace() != new.IsGlobalNamespace() ||
 		old.ActiveClusterName() != new.ActiveClusterName() ||
 		old.ReplicationState() != new.ReplicationState()
-}
-
-// This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
-// for map[any]T (see https://github.com/golang/go/issues/51257 and many more)
-// TODO: this can be removed after upgrade to Go 1.20
-func mapAnyValues[T any](m map[any]T) []T {
-	r := make([]T, 0, len(m))
-	for _, v := range m {
-		r = append(r, v)
-	}
-	return r
 }

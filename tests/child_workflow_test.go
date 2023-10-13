@@ -46,28 +46,24 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestChildWorkflowExecution() {
-	parentID := "integration-child-workflow-test-parent"
-	childID := "integration-child-workflow-test-child"
-	wtParent := "integration-child-workflow-test-parent-type"
-	wtChild := "integration-child-workflow-test-child-type"
-	tlParent := "integration-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestChildWorkflowExecution() {
+	parentID := "functional-child-workflow-test-parent"
+	childID := "functional-child-workflow-test-child"
+	wtParent := "functional-child-workflow-test-parent-type"
+	wtChild := "functional-child-workflow-test-child-type"
+	tlParent := "functional-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 	saName := "CustomKeywordField"
 	// Uncomment this line to test with mapper.
 	// saName = "AliasForCustomKeywordField"
 
-	parentWorkflowType := &commonpb.WorkflowType{}
-	parentWorkflowType.Name = wtParent
+	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 
-	childWorkflowType := &commonpb.WorkflowType{}
-	childWorkflowType.Name = wtChild
+	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 
-	taskQueueParent := &taskqueuepb.TaskQueue{}
-	taskQueueParent.Name = tlParent
-	taskQueueChild := &taskqueuepb.TaskQueue{}
-	taskQueueChild.Name = tlChild
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -195,17 +191,17 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
@@ -226,7 +222,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(completedEvent)
@@ -239,13 +235,13 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *integrationSuite) TestCronChildWorkflowExecution() {
-	parentID := "integration-cron-child-workflow-test-parent"
-	childID := "integration-cron-child-workflow-test-child"
-	wtParent := "integration-cron-child-workflow-test-parent-type"
-	wtChild := "integration-cron-child-workflow-test-child-type"
-	tlParent := "integration-cron-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-cron-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestCronChildWorkflowExecution() {
+	parentID := "functional-cron-child-workflow-test-parent"
+	childID := "functional-cron-child-workflow-test-child"
+	wtParent := "functional-cron-child-workflow-test-parent-type"
+	wtChild := "functional-cron-child-workflow-test-child-type"
+	tlParent := "functional-cron-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-cron-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	cronSchedule := "@every 3s"
@@ -254,8 +250,8 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -355,20 +351,20 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
 	for i := 0; i < 3; i++ {
-		_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
 	}
@@ -383,7 +379,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.Nil(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(terminatedEvent)
@@ -430,19 +426,19 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	}
 }
 
-func (s *integrationSuite) TestRetryChildWorkflowExecution() {
-	parentID := "integration-retry-child-workflow-test-parent"
-	childID := "integration-retry-child-workflow-test-child"
-	wtParent := "integration-retry-child-workflow-test-parent-type"
-	wtChild := "integration-retry-child-workflow-test-child-type"
-	tlParent := "integration-retry-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-retry-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestRetryChildWorkflowExecution() {
+	parentID := "functional-retry-child-workflow-test-parent"
+	childID := "functional-retry-child-workflow-test-child"
+	wtParent := "functional-retry-child-workflow-test-parent-type"
+	wtChild := "functional-retry-child-workflow-test-child-type"
+	tlParent := "functional-retry-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-retry-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -563,37 +559,37 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
 
 	// Process Child Execution #1
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.False(childComplete)
 
 	// Process Child Execution #2
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.False(childComplete)
 
 	// Process Child Execution #3
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Parent should see child complete
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -603,19 +599,19 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
-	parentID := "integration-retry-fail-child-workflow-test-parent"
-	childID := "integration-retry-fail-child-workflow-test-child"
-	wtParent := "integration-retry-fail-child-workflow-test-parent-type"
-	wtChild := "integration-retry-fail-child-workflow-test-child-type"
-	tlParent := "integration-retry-fail-child-workflow-test-parent-taskqueue"
-	tlChild := "integration-retry-fail-child-workflow-test-child-taskqueue"
+func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
+	parentID := "functional-retry-fail-child-workflow-test-parent"
+	childID := "functional-retry-fail-child-workflow-test-child"
+	wtParent := "functional-retry-fail-child-workflow-test-parent-type"
+	wtChild := "functional-retry-fail-child-workflow-test-child-type"
+	tlParent := "functional-retry-fail-child-workflow-test-parent-taskqueue"
+	tlChild := "functional-retry-fail-child-workflow-test-child-taskqueue"
 	identity := "worker1"
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
-	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
-	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -728,34 +724,34 @@ func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
 	}
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err := pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
 
 	// Process ChildExecution Started event
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(startedEvent)
 
 	// Process Child Execution #1
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child Execution #2
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child Execution #3
-	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerChild.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Parent should see child complete
-	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	_, err = pollerParent.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

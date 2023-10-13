@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -316,10 +315,14 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		return err
 	}
 
-	stateTransitionCount := resp.StateTransitionCount
-	for stateTransitionCount > 0 {
-		token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
-		stateTransitionCount -= int64(token)
+	// If workflow has many activity retries (bug in activity code e.g.,), the state transition count can be
+	// large but the number of actual state transition that is applied on target cluster can be very small.
+	// Take the minimum between StateTransitionCount and HistoryLength as heuristic to avoid unnecessary throttling
+	// in such situation.
+	count := min(resp.StateTransitionCount, resp.HistoryLength)
+	for count > 0 {
+		token := min(int(count), rateLimiter.Burst())
+		count -= int64(token)
 		_ = rateLimiter.ReserveN(time.Now(), token)
 	}
 

@@ -57,18 +57,18 @@ const failQueryWorkflowTaskAttemptCount = 3
 func Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (_ *historyservice.QueryWorkflowResponse, retError error) {
-	scope := shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
+	scope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	nsEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +123,15 @@ func Invoke(
 		return nil, consts.ErrWorkflowTaskNotScheduled
 	}
 
+	if !mutableState.IsWorkflowExecutionRunning() && mutableState.GetLastWorkflowTaskStartedEventID() == common.EmptyEventID {
+		// Workflow was closed before WorkflowTaskStarted event. In this case query will fail.
+		return nil, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted
+	}
+
 	if mutableState.GetExecutionInfo().WorkflowTaskAttempt >= failQueryWorkflowTaskAttemptCount {
 		// while workflow task is failing, the query to that workflow will also fail. Failing fast here to prevent wasting
 		// resources to load history for a query that will fail.
-		shard.GetLogger().Info("Fail query fast due to WorkflowTask in failed state.",
+		shardContext.GetLogger().Info("Fail query fast due to WorkflowTask in failed state.",
 			tag.WorkflowNamespace(request.Request.Namespace),
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
@@ -146,7 +151,7 @@ func Invoke(
 		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
 		// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
-		safeToDispatchDirectly := !nsEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) ||
+		safeToDispatchDirectly := !nsEntry.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) ||
 			!mutableState.IsWorkflowExecutionRunning() ||
 			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasStartedWorkflowTask())
 		if safeToDispatchDirectly {
@@ -161,7 +166,7 @@ func Invoke(
 				msResp,
 				request.GetNamespaceId(),
 				req,
-				shard,
+				shardContext,
 				workflowConsistencyChecker,
 				rawMatchingClient,
 				matchingClient,
@@ -176,7 +181,7 @@ func Invoke(
 	defer func() { scope.Timer(metrics.WorkflowTaskQueryLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	queryReg := mutableState.GetQueryRegistry()
-	if len(queryReg.GetBufferedIDs()) >= shard.GetConfig().MaxBufferedQueryCount() {
+	if len(queryReg.GetBufferedIDs()) >= shardContext.GetConfig().MaxBufferedQueryCount() {
 		scope.Counter(metrics.QueryBufferExceededCount.GetMetricName()).Record(1)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
@@ -207,7 +212,7 @@ func Invoke(
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
-			msResp, err := api.GetMutableState(ctx, workflowKey, workflowConsistencyChecker)
+			msResp, err := api.GetMutableState(ctx, shardContext, workflowKey, workflowConsistencyChecker)
 			if err != nil {
 				return nil, err
 			}
@@ -217,7 +222,7 @@ func Invoke(
 				msResp,
 				request.GetNamespaceId(),
 				req,
-				shard,
+				shardContext,
 				workflowConsistencyChecker,
 				rawMatchingClient,
 				matchingClient,

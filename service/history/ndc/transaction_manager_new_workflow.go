@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -46,18 +47,24 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
-		transactionMgr transactionMgr
+		shardContext                shard.Context
+		transactionMgr              TransactionManager
+		bypassVersionSemanticsCheck bool
 	}
 )
 
 var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
-	transactionMgr transactionMgr,
+	shardContext shard.Context,
+	transactionMgr TransactionManager,
+	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForNewWorkflowImpl {
 
 	return &nDCTransactionMgrForNewWorkflowImpl{
-		transactionMgr: transactionMgr,
+		shardContext:                shardContext,
+		transactionMgr:              transactionMgr,
+		bypassVersionSemanticsCheck: bypassVersionSemanticsCheck,
 	}
 }
 
@@ -76,7 +83,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	targetRunID := targetExecutionState.RunId
 
 	// we need to check the current workflow execution
-	currentRunID, err := r.transactionMgr.getCurrentWorkflowRunID(
+	currentRunID, err := r.transactionMgr.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -97,7 +104,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	// there exists a current workflow, need additional check
-	currentWorkflow, err := r.transactionMgr.loadWorkflow(
+	currentWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -167,6 +174,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		}
 		return targetWorkflow.GetContext().CreateWorkflowExecution(
 			ctx,
+			r.shardContext,
 			createMode,
 			prevRunID,
 			prevLastWriteVersion,
@@ -182,6 +190,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -203,7 +212,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
+	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != workflow.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
 
@@ -221,6 +230,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	if err := targetWorkflow.GetContext().ReapplyEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -232,6 +242,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.GetContext().CreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
@@ -268,6 +279,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 
 	return currentWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),

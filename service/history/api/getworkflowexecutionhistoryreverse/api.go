@@ -31,10 +31,13 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -44,7 +47,7 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryReverseRequest,
@@ -61,27 +64,37 @@ func Invoke(
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
+		versionHistoryItem *historyspb.VersionHistoryItem,
+	) ([]byte, string, int64, *historyspb.VersionHistoryItem, error) {
 		response, err := api.GetOrPollMutableState(
 			ctx,
+			shardContext,
 			&historyservice.GetMutableStateRequest{
 				NamespaceId:         namespaceUUID.String(),
 				Execution:           execution,
 				ExpectedNextEventId: expectedNextEventID,
 				CurrentBranchToken:  currentBranchToken,
+				VersionHistoryItem:  versionHistoryItem,
 			},
-			shard,
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
-
 		if err != nil {
-			return nil, "", 0, err
+			return nil, "", 0, nil, err
 		}
 
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, "", 0, nil, err
+		}
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, "", 0, nil, err
+		}
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventTxnId(),
+			lastVersionHistoryItem,
 			nil
 	}
 
@@ -94,8 +107,8 @@ func Invoke(
 
 	if req.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, err =
-			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstTxnID, continuationToken.VersionHistoryItem, err =
+			queryMutableState(namespaceID, execution, common.FirstEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +137,7 @@ func Invoke(
 		if _, ok := retError.(*serviceerror.DataLoss); ok {
 			api.TrimHistoryNode(
 				ctx,
-				shard,
+				shardContext,
 				workflowConsistencyChecker,
 				eventNotifier,
 				namespaceID.String(),
@@ -139,7 +152,7 @@ func Invoke(
 	// return all events
 	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = api.GetHistoryReverse(
 		ctx,
-		shard,
+		shardContext,
 		namespaceID,
 		*execution,
 		continuationToken.NextEventId,

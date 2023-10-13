@@ -121,12 +121,17 @@ type (
 
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
+	logger := log.NewTestLogger()
+	testCluster := NewTestClusterForCassandra(options, logger)
+	return NewTestBaseForCluster(testCluster, logger)
+}
+
+func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewTestLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
-	return NewTestBaseForCluster(testCluster, logger)
+	return testCluster
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -140,7 +145,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		switch options.SQLDBPluginName {
 		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNameV12:
+		case postgresql.PluginName, postgresql.PluginNamePGX, postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -152,10 +157,10 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		switch options.SQLDBPluginName {
 		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBHost = environment.GetMySQLAddress()
-		case postgresql.PluginName:
+		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
 		case sqlite.PluginName:
-			options.DBHost = environment.Localhost
+			options.DBHost = environment.GetLocalhostIP()
 		default:
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
@@ -411,10 +416,8 @@ func randString(length int) string {
 // GenerateRandomDBName helper
 // Format: MMDDHHMMSS_abc
 func GenerateRandomDBName(n int) string {
-	now := time.Now().UTC()
-	rand.Seed(now.UnixNano())
 	var prefix strings.Builder
-	prefix.WriteString(now.Format("0102150405"))
+	prefix.WriteString(time.Now().UTC().Format("0102150405"))
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()

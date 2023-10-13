@@ -79,7 +79,7 @@ type advancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
@@ -103,12 +103,12 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 	}
 
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-		s.setupSuite("testdata/integration_test_cluster.yaml")
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	default:
-		s.setupSuite("testdata/integration_test_es_cluster.yaml")
+		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -157,9 +157,9 @@ func TestAdvancedVisibilitySuite(t *testing.T) {
 }
 
 func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
-	id := "es-integration-start-workflow-test"
-	wt := "es-integration-start-workflow-test-type"
-	tl := "es-integration-start-workflow-test-taskqueue"
+	id := "es-functional-start-workflow-test"
+	wt := "es-functional-start-workflow-test-type"
+	tl := "es-functional-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrPayload, _ := payload.Encode(s.testSearchAttributeVal)
@@ -208,9 +208,9 @@ func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow() {
-	id := "es-integration-list-workflow-test"
-	wt := "es-integration-list-workflow-test-type"
-	tl := "es-integration-list-workflow-test-taskqueue"
+	id := "es-functional-list-workflow-test"
+	wt := "es-functional-list-workflow-test-type"
+	tl := "es-functional-list-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -221,9 +221,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
-	id := "es-integration-list-workflow-execution-time-test"
-	wt := "es-integration-list-workflow-execution-time-test-type"
-	tl := "es-integration-list-workflow-execution-time-test-taskqueue"
+	id := "es-functional-list-workflow-execution-time-test"
+	wt := "es-functional-list-workflow-execution-time-test-type"
+	tl := "es-functional-list-workflow-execution-time-test-taskqueue"
 
 	now := time.Now().UTC()
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
@@ -263,9 +263,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
-	id := "es-integration-list-workflow-by-search-attr-test"
-	wt := "es-integration-list-workflow-by-search-attr-test-type"
-	tl := "es-integration-list-workflow-by-search-attr-test-taskqueue"
+	id := "es-functional-list-workflow-by-search-attr-test"
+	wt := "es-functional-list-workflow-by-search-attr-test-type"
+	tl := "es-functional-list-workflow-by-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -294,7 +294,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 		return []*commandpb.Command{upsertCommand}, nil
 	}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
@@ -305,16 +305,14 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
@@ -350,9 +348,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_PageToken() {
-	id := "es-integration-list-workflow-token-test"
-	wt := "es-integration-list-workflow-token-test-type"
-	tl := "es-integration-list-workflow-token-test-taskqueue"
+	id := "es-functional-list-workflow-token-test"
+	wt := "es-functional-list-workflow-token-test-type"
+	tl := "es-functional-list-workflow-token-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	numOfWorkflows := defaultPageSize - 1 // == 4
@@ -362,9 +360,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_PageToken() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_SearchAfter() {
-	id := "es-integration-list-workflow-searchAfter-test"
-	wt := "es-integration-list-workflow-searchAfter-test-type"
-	tl := "es-integration-list-workflow-searchAfter-test-taskqueue"
+	id := "es-functional-list-workflow-searchAfter-test"
+	wt := "es-functional-list-workflow-searchAfter-test-type"
+	tl := "es-functional-list-workflow-searchAfter-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	numOfWorkflows := defaultPageSize + 1 // == 6
@@ -374,9 +372,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
-	id := "es-integration-list-workflow-or-query-test"
-	wt := "es-integration-list-workflow-or-query-test-type"
-	tl := "es-integration-list-workflow-or-query-test-taskqueue"
+	id := "es-functional-list-workflow-or-query-test"
+	wt := "es-functional-list-workflow-or-query-test-type"
+	tl := "es-functional-list-workflow-or-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	// start 3 workflows
@@ -481,9 +479,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
-	id := "es-integration-list-workflow-keyword-query-test"
-	wt := "es-integration-list-workflow-keyword-query-test-type"
-	tl := "es-integration-list-workflow-keyword-query-test-taskqueue"
+	id := "es-functional-list-workflow-keyword-query-test"
+	wt := "es-functional-list-workflow-keyword-query-test-type"
+	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	searchAttr := &commonpb.SearchAttributes{
@@ -598,9 +596,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
-	id := "es-integration-list-workflow-string-query-test"
-	wt := "es-integration-list-workflow-string-query-test-type"
-	tl := "es-integration-list-workflow-string-query-test-taskqueue"
+	id := "es-functional-list-workflow-string-query-test"
+	wt := "es-functional-list-workflow-string-query-test-type"
+	tl := "es-functional-list-workflow-string-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	searchAttr := &commonpb.SearchAttributes{
@@ -715,9 +713,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 
 // To test last page search trigger max window size error
 func (s *advancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
-	id := "es-integration-list-workflow-max-window-size-test"
-	wt := "es-integration-list-workflow-max-window-size-test-type"
-	tl := "es-integration-list-workflow-max-window-size-test-taskqueue"
+	id := "es-functional-list-workflow-max-window-size-test"
+	wt := "es-functional-list-workflow-max-window-size-test-type"
+	tl := "es-functional-list-workflow-max-window-size-test-taskqueue"
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	for i := 0; i < defaultPageSize; i++ {
@@ -764,9 +762,9 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
-	id := "es-integration-list-workflow-order-by-test"
-	wt := "es-integration-list-workflow-order-by-test-type"
-	tl := "es-integration-list-workflow-order-by-test-taskqueue"
+	id := "es-functional-list-workflow-order-by-test"
+	wt := "es-functional-list-workflow-order-by-test-type"
+	tl := "es-functional-list-workflow-order-by-test-taskqueue"
 
 	initialTime := time.Now().UTC()
 	for i := 0; i < defaultPageSize+1; i++ { // start 6
@@ -1044,14 +1042,14 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
-	id := "es-integration-scan-workflow-test"
-	wt := "es-integration-scan-workflow-test-type"
-	tl := "es-integration-scan-workflow-test-taskqueue"
+	id := "es-functional-scan-workflow-test"
+	wt := "es-functional-scan-workflow-test-type"
+	tl := "es-functional-scan-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1076,9 +1074,9 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
-	id := "es-integration-scan-workflow-search-attr-test"
-	wt := "es-integration-scan-workflow-search-attr-test-type"
-	tl := "es-integration-scan-workflow-search-attr-test-taskqueue"
+	id := "es-functional-scan-workflow-search-attr-test"
+	wt := "es-functional-scan-workflow-search-attr-test-type"
+	tl := "es-functional-scan-workflow-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -1100,14 +1098,14 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
-	id := "es-integration-scan-workflow-token-test"
-	wt := "es-integration-scan-workflow-token-test-type"
-	tl := "es-integration-scan-workflow-token-test-taskqueue"
+	id := "es-functional-scan-workflow-token-test"
+	wt := "es-functional-scan-workflow-token-test-type"
+	tl := "es-functional-scan-workflow-token-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:           s.namespace,
@@ -1126,9 +1124,9 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 }
 
 func (s *advancedVisibilitySuite) TestCountWorkflow() {
-	id := "es-integration-count-workflow-test"
-	wt := "es-integration-count-workflow-test-type"
-	tl := "es-integration-count-workflow-test-taskqueue"
+	id := "es-functional-count-workflow-test"
+	wt := "es-functional-count-workflow-test-type"
+	tl := "es-functional-count-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
@@ -1166,9 +1164,9 @@ func (s *advancedVisibilitySuite) TestCountWorkflow() {
 }
 
 func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
-	id := "es-integration-count-groupby-workflow-test"
-	wt := "es-integration-count-groupby-workflow-test-type"
-	tl := "es-integration-count-groupby-workflow-test-taskqueue"
+	id := "es-functional-count-groupby-workflow-test"
+	wt := "es-functional-count-groupby-workflow-test-type"
+	tl := "es-functional-count-groupby-workflow-test-taskqueue"
 
 	numWorkflows := 10
 	numClosedWorkflows := 4
@@ -1249,7 +1247,7 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,
@@ -1265,14 +1263,14 @@ func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 }
 
 func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() {
-	id := "es-integration-upsert-workflow-search-attributes-test"
-	wt := "es-integration-upsert-workflow-search-attributes-test-type"
-	tl := "es-integration-upsert-workflow-search-attributes-test-taskqueue"
+	id := "es-functional-upsert-workflow-search-attributes-test"
+	wt := "es-functional-upsert-workflow-search-attributes-test-type"
+	tl := "es-functional-upsert-workflow-search-attributes-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1364,16 +1362,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
@@ -1414,16 +1410,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1438,16 +1432,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.testListResultForUpsertSearchAttributes(listRequest)
 
 	// process 3rd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1531,16 +1523,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 
 	// process close workflow task and assert search attributes is correct after workflow is closed
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
@@ -1571,14 +1561,14 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 }
 
 func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
-	id := "es-integration-modify-workflow-properties-test"
-	wt := "es-integration-modify-workflow-properties-test-type"
-	tl := "es-integration-modify-workflow-properties-test-taskqueue"
+	id := "es-functional-modify-workflow-properties-test"
+	wt := "es-functional-modify-workflow-properties-test-type"
+	tl := "es-functional-modify-workflow-properties-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1667,16 +1657,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	}
 
 	// process 1st workflow task and assert workflow task is handled correctly.
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
@@ -1717,16 +1705,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 	s.Equal(4, len(newTask.WorkflowTask.History.Events))
@@ -1765,16 +1751,14 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.True(verified)
 
 	// process close workflow task and assert workflow task is handled correctly.
-	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		true,
-		true,
-		0,
-		1,
-		true,
-		nil)
+	res, err = poller.PollAndProcessWorkflowTask(
+		WithPollSticky,
+		WithRespondSticky,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.NoError(err)
+	newTask = res.NewTask
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
@@ -1854,14 +1838,14 @@ func (s *advancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttri
 }
 
 func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
-	id := "es-integration-upsert-workflow-failed-test"
-	wt := "es-integration-upsert-workflow-failed-test-type"
-	tl := "es-integration-upsert-workflow-failed-test-taskqueue"
+	id := "es-functional-upsert-workflow-failed-test"
+	wt := "es-functional-upsert-workflow-failed-test-type"
+	tl := "es-functional-upsert-workflow-failed-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1906,7 +1890,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	if s.isElasticsearchEnabled {
@@ -1938,8 +1922,8 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	}
 
 	id := strings.Repeat("a", 1000)
-	wt := "es-integration-long-workflow-id-test-type"
-	tl := "es-integration-long-workflow-id-test-taskqueue"
+	wt := "es-functional-long-workflow-id-test-type"
+	tl := "es-functional-long-workflow-id-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1952,7 +1936,7 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
-	workflowType := "integration-build-id"
+	workflowType := "functional-build-id"
 	taskQueue := s.randomizeStr(s.T().Name())
 
 	request := s.createStartWorkflowExecutionRequest(id, workflowType, taskQueue)
@@ -2062,7 +2046,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	id := s.randomizeStr(s.T().Name())
 	childId1 := "child1-" + id
 	childId2 := "child2-" + id
-	workflowType := "integration-build-id"
+	workflowType := "functional-build-id"
 	taskQueue := s.randomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 	v11 := s.T().Name() + "-v11"
@@ -2227,7 +2211,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
-	workflowType := "integration-build-id"
+	workflowType := "functional-build-id"
 	taskQueue := s.randomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 
@@ -2314,7 +2298,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
-	workflowType := "integration-build-id"
+	workflowType := "functional-build-id"
 	taskQueue := s.randomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 
@@ -2446,7 +2430,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 		Namespace:    s.namespace,
 		WorkflowId:   s.randomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 
@@ -2456,7 +2440,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	// Complete the workflow and verify it affects reachability of v0.1
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:                 s.namespace,
-		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1},
+		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
 	})
 	s.Require().NoError(err)
@@ -2590,7 +2574,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 		Namespace:    s.namespace,
 		WorkflowId:   s.randomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 
@@ -2599,7 +2583,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())
@@ -2665,7 +2649,9 @@ func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
 		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		IgnoreRetentionTime: true,
+	})
 	s.Require().NoError(err)
 	err = run.Get(ctx, nil)
 	s.Require().NoError(err)
@@ -2734,7 +2720,7 @@ func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 func (s *advancedVisibilitySuite) updateMaxResultWindow() {
 	esConfig := s.testClusterConfig.ESConfig
 
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, s.Logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
 	s.Require().NoError(err)
 
 	acknowledged, err := esClient.IndexPutSettings(

@@ -44,10 +44,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestRateLimitBufferedEvents() {
-	id := "integration-rate-limit-buffered-events-test"
-	wt := "integration-rate-limit-buffered-events-test-type"
-	tl := "integration-rate-limit-buffered-events-test-taskqueue"
+func (s *functionalSuite) TestRateLimitBufferedEvents() {
+	id := "functional-rate-limit-buffered-events-test"
+	wt := "functional-rate-limit-buffered-events-test-type"
+	tl := "functional-rate-limit-buffered-events-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -56,7 +56,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -118,7 +118,7 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -127,14 +127,14 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	}
 
 	// first workflow task to send 101 signals, the last signal will force fail workflow task and flush buffered events.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Equal("Workflow task not found.", err.Error())
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -142,10 +142,10 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
 
-func (s *integrationSuite) TestBufferedEvents() {
-	id := "integration-buffered-events-test"
-	wt := "integration-buffered-events-test-type"
-	tl := "integration-buffered-events-test-taskqueue"
+func (s *functionalSuite) TestBufferedEvents() {
+	id := "functional-buffered-events-test"
+	wt := "functional-buffered-events-test-type"
+	tl := "functional-buffered-events-test-taskqueue"
 	identity := "worker1"
 	signalName := "buffered-signal"
 
@@ -155,7 +155,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -193,7 +193,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "1",
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -221,7 +221,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -230,7 +230,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	}
 
 	// first workflow task, which sends signal and the signal event should be buffered to append after first workflow task closed
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -250,7 +250,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.Equal(histResp.History.Events[5].GetEventType(), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(signalEvent)
@@ -259,10 +259,10 @@ func (s *integrationSuite) TestBufferedEvents() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
-	id := "integration-buffered-events-out-of-order-test"
-	wt := "integration-buffered-events-out-of-order-test-type"
-	tl := "integration-buffered-events-out-of-order-test-taskqueue"
+func (s *functionalSuite) TestBufferedEventsOutOfOrder() {
+	id := "functional-buffered-events-out-of-order-test"
+	wt := "functional-buffered-events-out-of-order-test-type"
+	tl := "functional-buffered-events-out-of-order-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -271,7 +271,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(20 * time.Second),
@@ -310,7 +310,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "Activity-1",
 					ActivityType:           &commonpb.ActivityType{Name: "ActivityType"},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("some random activity input"),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -349,7 +349,7 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -358,16 +358,13 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 	}
 
 	// first workflow task, which will schedule an activity and add marker
-	_, task, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		true,
-		false,
-		false,
-		false,
-		0,
-		1,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithDumpHistory,
+		WithExpectedAttemptCount(0),
+		WithRetries(1),
+		WithForceNewWorkflowTask)
 	s.Logger.Info("pollAndProcessWorkflowTask", tag.Error(err))
+	task := res.NewTask
 	s.NoError(err)
 
 	// This will cause activity start and complete to be buffered

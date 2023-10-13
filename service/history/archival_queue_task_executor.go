@@ -82,16 +82,18 @@ type archivalQueueTaskExecutor struct {
 func (e *archivalQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (tags []metrics.Tag, isActive bool, err error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetArchivalTaskTypeTagValue(task)
-	tags = []metrics.Tag{
+	tags := []metrics.Tag{
 		getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		// OperationTag is for consistency on tags with other executors,
 		// since those tags will be used to emit a common set of metrics.
 		metrics.OperationTag(taskType),
 	}
+
+	var err error
 	switch task := task.(type) {
 	case *tasks.ArchiveExecutionTask:
 		err = e.processArchiveExecutionTask(ctx, task)
@@ -102,7 +104,11 @@ func (e *archivalQueueTaskExecutor) Execute(
 	default:
 		err = fmt.Errorf("task with invalid type sent to archival queue: %+v", task)
 	}
-	return tags, true, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: tags,
+		ExecutedAsActive:    true,
+		ExecutionErr:        err,
+	}
 }
 
 // processArchiveExecutionTask processes a tasks.ArchiveExecutionTask
@@ -251,7 +257,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		e.shardContext.GetConfig(),
 		e.shardContext.GetArchivalMetadata(),
 	)
-	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime, true)
+	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime)
 	if err != nil {
 		return err
 	}
@@ -308,7 +314,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	logger log.Logger,
 	task tasks.Task,
 ) (lockedMutableState *lockedMutableState, err error) {
-	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.workflowCache, task)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.workflowCache, task)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +326,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		// If we don't return an error, the caller will release the mutable state, so we don't need to do it here.
 	}()
 
-	mutableState, err := weContext.LoadMutableState(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return nil, err
 	}

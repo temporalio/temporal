@@ -101,6 +101,10 @@ var (
 	ErrNoNewRunHistory = serviceerror.NewInvalidArgument("no new run history events")
 	// ErrLastEventIsNotContinueAsNew is returned if the last event is not continue as new
 	ErrLastEventIsNotContinueAsNew = serviceerror.NewInvalidArgument("last event is not continue as new")
+	// ErrEmptyEventSlice is returned if any of event slice is empty
+	ErrEmptyEventSlice = serviceerror.NewInvalidArgument("event slice is empty")
+	// ErrEventSlicesNotConsecutive is returned if event slices are not consecutive
+	ErrEventSlicesNotConsecutive = serviceerror.NewInvalidArgument("event slices are not consecutive")
 )
 
 func newReplicationTaskFromRequest(
@@ -444,10 +448,18 @@ func validateUUID(input string) bool {
 }
 
 func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error) {
+	for _, slice := range eventsSlice {
+		if len(slice) == 0 {
+			return 0, ErrEmptyEventSlice
+		}
+	}
+
 	version, err := validateEvents(eventsSlice[0])
 	if err != nil {
 		return 0, err
 	}
+
+	prevSliceLastEventId := eventsSlice[0][len(eventsSlice[0])-1].GetEventId()
 	for i := 1; i < len(eventsSlice); i++ {
 		v, err := validateEvents(eventsSlice[i])
 		if err != nil {
@@ -456,6 +468,10 @@ func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error
 		if v != version {
 			return 0, ErrEventVersionMismatch
 		}
+		if eventsSlice[i][0].GetEventId() != prevSliceLastEventId+1 {
+			return 0, ErrEventSlicesNotConsecutive
+		}
+		prevSliceLastEventId = eventsSlice[i][len(eventsSlice[i])-1].GetEventId()
 	}
 	return version, nil
 }
@@ -492,4 +508,25 @@ func deserializeBlob(
 	})
 
 	return events, err
+}
+
+func DeserializeBlobs(
+	historySerializer serialization.Serializer,
+	blobs []*commonpb.DataBlob,
+) ([][]*historypb.HistoryEvent, error) {
+	eventBatches := make([][]*historypb.HistoryEvent, 0, len(blobs))
+	if blobs == nil {
+		return eventBatches, nil
+	}
+	for _, blob := range blobs {
+		events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         blob.Data,
+		})
+		if err != nil {
+			return nil, err
+		}
+		eventBatches = append(eventBatches, events)
+	}
+	return eventBatches, nil
 }

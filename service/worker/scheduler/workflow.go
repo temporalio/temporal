@@ -65,6 +65,9 @@ const (
 	BatchAndCacheTimeQueries = 1
 	// use cache v2, and include ids in jitter
 	NewCacheAndJitter = 2
+	// Don't put possibly-overlapping runs (from SCHEDULE_OVERLAP_POLICY_ALLOW_ALL) in
+	// RunningWorkflows.
+	DontTrackOverlapping = 3
 )
 
 const (
@@ -191,8 +194,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14, // see note below
-		Version:                           NewCacheAndJitter,
+		NextTimeCacheV2Size:               14,                // see note below
+		Version:                           NewCacheAndJitter, // TODO: switch to DontTrackOverlapping
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -760,6 +763,7 @@ func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
 	// this is a query handler, don't modify s.Info directly
 	infoCopy := *s.Info
 	infoCopy.FutureActionTimes = s.getFutureActionTimes(false, s.tweakables.FutureActionCount)
+	infoCopy.BufferSize = int64(len(s.State.BufferedStarts))
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
@@ -894,6 +898,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 	if s.tweakables.MaxBufferSize > 0 && len(s.State.BufferedStarts) >= s.tweakables.MaxBufferSize {
 		s.logger.Warn("Buffer too large", "start-time", nominalTime, "overlap-policy", overlapPolicy, "manual", manual)
 		s.metrics.Counter(metrics.ScheduleBufferOverruns.GetMetricName()).Inc(1)
+		s.Info.BufferDropped += 1
 		return
 	}
 	s.State.BufferedStarts = append(s.State.BufferedStarts, &schedspb.BufferedStart{
@@ -962,7 +967,8 @@ func (s *scheduler) processBuffer() bool {
 			continue
 		}
 		metricsWithTag.Counter(metrics.ScheduleActionSuccess.GetMetricName()).Inc(1)
-		s.recordAction(result)
+		nonOverlapping := start == action.nonOverlappingStart
+		s.recordAction(result, nonOverlapping)
 	}
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
@@ -991,10 +997,11 @@ func (s *scheduler) processBuffer() bool {
 	return tryAgain
 }
 
-func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
+func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult, nonOverlapping bool) {
 	s.Info.ActionCount++
 	s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
-	if result.StartWorkflowResult != nil {
+	canTrack := nonOverlapping || !s.hasMinVersion(DontTrackOverlapping)
+	if canTrack && result.StartWorkflowResult != nil {
 		s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
 	}
 }
@@ -1027,6 +1034,13 @@ func (s *scheduler) startWorkflow(
 	}
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
+	lastCompletionResult, continuedFailure := s.State.LastCompletionResult, s.State.ContinuedFailure
+	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL && s.hasMinVersion(DontTrackOverlapping) {
+		// ALLOW_ALL runs don't participate in lastCompletionResult/continuedFailure at all
+		lastCompletionResult = nil
+		continuedFailure = nil
+	}
+
 	req := &schedspb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1043,8 +1057,8 @@ func (s *scheduler) startWorkflow(
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
-			LastCompletionResult:     s.State.LastCompletionResult,
-			ContinuedFailure:         s.State.ContinuedFailure,
+			LastCompletionResult:     lastCompletionResult,
+			ContinuedFailure:         continuedFailure,
 		},
 	}
 	for {

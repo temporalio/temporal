@@ -25,6 +25,7 @@
 package history
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -45,9 +47,9 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 // TestQueueModule_ArchivalQueueCreated tests that the archival queue is created if and only if the static config for
@@ -154,12 +156,20 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	archivalMetadata := getArchivalMetadata(controller, c)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()
+	serviceResolver := membership.NewMockServiceResolver(controller)
+	serviceResolver.EXPECT().MemberCount().Return(1).AnyTimes()
+	lazyLoadedOwnershipBasedQuotaScaler := shard.LazyLoadedOwnershipBasedQuotaScaler{
+		Value: &atomic.Value{},
+	}
 	return fx.Supply(
 		compileTimeDependencies{},
 		cfg,
 		fx.Annotate(archivalMetadata, fx.As(new(carchiver.ArchivalMetadata))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
+		fx.Annotate(serviceResolver, fx.As(new(membership.ServiceResolver))),
+		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
+		lazyLoadedOwnershipBasedQuotaScaler,
 	)
 }
 
@@ -169,10 +179,8 @@ type compileTimeDependencies struct {
 	fx.Out
 
 	namespace.Registry
-	clock.TimeSource
 	log.SnTaggedLogger
 	client.Bean
-	archiver.Client
 	sdk.ClientFactory
 	resource.MatchingRawClient
 	resource.HistoryRawClient

@@ -96,7 +96,7 @@ func (s *workflowCacheSuite) TearDownTest() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheBasic() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -107,6 +107,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		execution1,
 		workflow.LockPriorityHigh,
@@ -116,6 +117,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	release(nil)
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		execution1,
 		workflow.LockPriorityHigh,
@@ -130,6 +132,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	}
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		execution2,
 		workflow.LockPriorityHigh,
@@ -140,7 +143,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCachePanic() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -152,6 +155,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		execution1,
 		workflow.LockPriorityHigh,
@@ -163,6 +167,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 		if recover() != nil {
 			ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 				context.Background(),
+				s.mockShard,
 				namespaceID,
 				execution1,
 				workflow.LockPriorityHigh,
@@ -180,7 +185,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.New(),
@@ -188,6 +193,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -202,6 +208,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	// Cache is full because context is pinned, should get an error now
 	_, _, err2 := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we2,
 		workflow.LockPriorityHigh,
@@ -213,6 +220,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 
 	_, release2, err3 := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we2,
 		workflow.LockPriorityHigh,
@@ -223,6 +231,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	// Old context should be evicted.
 	newContext, release, err4 := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -235,7 +244,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.New(),
@@ -243,6 +252,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -260,6 +270,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	// the ms will not be cleared
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -274,6 +285,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	// the ms will be cleared
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		we,
 		workflow.LockPriorityHigh,
@@ -288,7 +300,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	coroutineCount := 50
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -306,6 +318,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		startGroup.Wait()
 		ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 			context.Background(),
+			s.mockShard,
 			namespaceID,
 			commonpb.WorkflowExecution{
 				WorkflowId: workflowId,
@@ -331,6 +344,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
+		s.mockShard,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -352,7 +366,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -378,6 +392,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 		for {
 			_, releaseFn, err = s.cache.GetOrCreateWorkflowExecution(
 				context.Background(),
+				s.mockShard,
 				namespaceID,
 				commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
@@ -407,11 +422,12 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
-	s.cache = NewCache(s.mockShard)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig())
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	_, currentRelease, err := s.cache.GetOrCreateCurrentWorkflowExecution(
 		ctx,
+		s.mockShard,
 		tests.NamespaceID,
 		tests.WorkflowID,
 		workflow.LockPriorityHigh,
@@ -425,6 +441,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 
 	_, release, err := s.cache.GetOrCreateWorkflowExecution(
 		ctx,
+		s.mockShard,
 		tests.NamespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
@@ -485,14 +502,17 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 	}
 	for _, tt := range testSets {
 		s.Run(tt.name, func() {
-			c := NewCache(s.mockShard).(*CacheImpl)
+			c := NewHostLevelCache(s.mockShard.GetConfig()).(*CacheImpl)
 			namespaceID := namespace.ID("test_namespace_id")
 			execution := commonpb.WorkflowExecution{
 				WorkflowId: "some random workflow id",
 				RunId:      uuid.New(),
 			}
-			key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-			workflowCtx := workflow.NewContext(c.shard, key, c.logger)
+			cacheKey := Key{
+				WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+				ShardUUID:   uuid.New(),
+			}
+			workflowCtx := workflow.NewContext(s.mockShard.GetConfig(), cacheKey.WorkflowKey, s.mockShard.GetLogger(), s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler())
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
@@ -503,7 +523,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				s.NoError(err)
 			}
 
-			if err := c.lockWorkflowExecution(ctx, workflowCtx, key, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
+			if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, workflow.LockPriorityHigh); (err != nil) != tt.wantErr {
 				s.T().Errorf("CacheImpl.lockWorkflowExecution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

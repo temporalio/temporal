@@ -50,16 +50,16 @@ import (
 	"go.temporal.io/server/common/rpc"
 )
 
-func (s *integrationSuite) TestSignalWorkflow() {
-	id := "integration-signal-workflow-test"
-	wt := "integration-signal-workflow-test-type"
-	tl := "integration-signal-workflow-test-taskqueue"
+func (s *functionalSuite) TestSignalWorkflow() {
+	id := "functional-signal-workflow-test"
+	wt := "functional-signal-workflow-test-type"
+	tl := "functional-signal-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Send a signal to non-exist workflow
 	header := &commonpb.Header{
@@ -115,7 +115,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -160,7 +160,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -181,7 +181,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -207,7 +207,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -244,16 +244,16 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
-	id := "integration-signal-workflow-test-duplicate"
-	wt := "integration-signal-workflow-test-duplicate-type"
-	tl := "integration-signal-workflow-test-duplicate-taskqueue"
+func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
+	id := "functional-signal-workflow-test-duplicate"
+	wt := "functional-signal-workflow-test-duplicate-type"
+	tl := "functional-signal-workflow-test-duplicate-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -291,7 +291,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -338,7 +338,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -361,7 +361,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -377,7 +377,7 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.NoError(err)
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -386,16 +386,16 @@ func (s *integrationSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Equal(0, numOfSignaledEvent)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
-	id := "integration-signal-external-workflow-test"
-	wt := "integration-signal-external-workflow-test-type"
-	tl := "integration-signal-external-workflow-test-taskqueue"
+func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
+	id := "functional-signal-external-workflow-test"
+	wt := "functional-signal-external-workflow-test-type"
+	tl := "functional-signal-external-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -447,7 +447,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -504,7 +504,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -542,11 +542,11 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -555,7 +555,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -595,7 +595,7 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
+	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -607,16 +607,16 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
-	id := "integration-signal-workflow-test-cron"
-	wt := "integration-signal-workflow-test-cron-type"
-	tl := "integration-signal-workflow-test-cron-taskqueue"
+func (s *functionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
+	id := "functional-signal-workflow-test-cron"
+	wt := "functional-signal-workflow-test-cron-type"
+	tl := "functional-signal-workflow-test-cron-taskqueue"
 	identity := "worker1"
 	cronSpec := "@every 2s"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -678,21 +678,21 @@ func (s *integrationSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	}
 
 	// Make first command to schedule activity
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowTaskDelay > time.Second*2)
 }
 
-func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
-	id := "integration-signal-workflow-test-skip-wft"
-	wt := "integration-signal-workflow-test-skip-wft-type"
-	tl := "integration-signal-workflow-test-skip-wft-taskqueue"
+func (s *functionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
+	id := "functional-signal-workflow-test-skip-wft"
+	wt := "functional-signal-workflow-test-skip-wft-type"
+	tl := "functional-signal-workflow-test-skip-wft-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -740,7 +740,7 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	}
 
 	// process start task
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -773,7 +773,7 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	s.NoError(err)
 
 	// process signal and complete workflow
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -799,13 +799,13 @@ func (s *integrationSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
  10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
 }
 
-func (s *integrationSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
-	id := "integration-signal-workflow-workflow-close-attempted-test"
-	wt := "integration-signal-workflow-workflow-close-attempted-test-type"
-	tl := "integration-signal-workflow-workflow-close-attempted-test-taskqueue"
+func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
+	id := "functional-signal-workflow-workflow-close-attempted-test"
+	wt := "functional-signal-workflow-workflow-close-attempted-test-type"
+	tl := "functional-signal-workflow-workflow-close-attempted-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -876,25 +876,25 @@ func (s *integrationSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
-	id := "integration-signal-external-workflow-test-without-run-id"
-	wt := "integration-signal-external-workflow-test-without-run-id-type"
-	tl := "integration-signal-external-workflow-test-without-run-id-taskqueue"
+func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
+	id := "functional-signal-external-workflow-test-without-run-id"
+	wt := "functional-signal-external-workflow-test-without-run-id-type"
+	tl := "functional-signal-external-workflow-test-without-run-id-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -943,7 +943,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -999,7 +999,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1037,11 +1037,11 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	}
 
 	// Start both current and foreign workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1050,7 +1050,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1089,7 +1089,7 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalSent)
 
 	// Process signal in workflow for foreign workflow
-	_, err = foreignPoller.PollAndProcessWorkflowTask(true, false)
+	_, err = foreignPoller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1100,16 +1100,16 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
-	id := "integration-signal-unknown-workflow-command-test"
-	wt := "integration-signal-unknown-workflow-command-test-type"
-	tl := "integration-signal-unknown-workflow-command-test-taskqueue"
+func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
+	id := "functional-signal-unknown-workflow-command-test"
+	wt := "functional-signal-unknown-workflow-command-test-type"
+	tl := "functional-signal-unknown-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1142,7 +1142,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1183,12 +1183,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1225,16 +1225,16 @@ CheckHistoryLoopForCancelSent:
 	s.True(signalSentFailed)
 }
 
-func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
-	id := "integration-signal-self-workflow-command-test"
-	wt := "integration-signal-self-workflow-command-test-type"
-	tl := "integration-signal-self-workflow-command-test-taskqueue"
+func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
+	id := "functional-signal-self-workflow-command-test"
+	wt := "functional-signal-self-workflow-command-test-type"
+	tl := "functional-signal-self-workflow-command-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1267,7 +1267,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1308,12 +1308,12 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	}
 
 	// Start workflows to make some progress.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Signal the foreign workflow with this command.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1351,16 +1351,16 @@ CheckHistoryLoopForCancelSent:
 
 }
 
-func (s *integrationSuite) TestSignalWithStartWorkflow() {
-	id := "integration-signal-with-start-workflow-test"
-	wt := "integration-signal-with-start-workflow-test-type"
-	tl := "integration-signal-with-start-workflow-test-taskqueue"
+func (s *functionalSuite) TestSignalWithStartWorkflow() {
+	id := "functional-signal-with-start-workflow-test"
+	wt := "functional-signal-with-start-workflow-test-type"
+	tl := "functional-signal-with-start-workflow-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
@@ -1403,7 +1403,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -1463,7 +1463,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	}
 
 	// Make first command to schedule activity
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1491,7 +1491,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(we.GetRunId(), resp.GetRunId())
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1527,7 +1527,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1540,7 +1540,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 
 	// Send signal to not existed workflow
-	id = "integration-signal-with-start-workflow-test-non-exist"
+	id = "functional-signal-with-start-workflow-test-non-exist"
 	signalName = "signal to non exist"
 	signalInput = payloads.EncodeString("signal to non exist input")
 	sRequest.SignalName = signalName
@@ -1552,7 +1552,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	newWorkflowStarted = true
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -1616,16 +1616,16 @@ func (s *integrationSuite) TestSignalWithStartWorkflow() {
 	s.Equal(1, len(listClosedResp.Executions))
 }
 
-func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
-	id := "integration-signal-with-start-workflow-id-reuse-test"
-	wt := "integration-signal-with-start-workflow-id-reuse-test-type"
-	tl := "integration-signal-with-start-workflow-id-reuse-test-taskqueue"
+func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
+	id := "functional-signal-with-start-workflow-id-reuse-test"
+	wt := "functional-signal-with-start-workflow-id-reuse-test-type"
+	tl := "functional-signal-with-start-workflow-id-reuse-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1660,7 +1660,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1696,10 +1696,10 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	}
 
 	// Start workflows, make some progress and complete workflow
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -1791,10 +1791,11 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
-	id := "integration-signal-with-start-workflow-start-delay-test"
-	wt := "integration-signal-with-start-workflow-start-delay-test-type"
-	tl := "integration-signal-with-start-workflow-start-delay-test-taskqueue"
+func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
+	id := "functional-signal-with-start-workflow-start-delay-test"
+	wt := "functional-signal-with-start-workflow-start-delay-test-type"
+	tl := "functional-signal-with-start-workflow-start-delay-test-taskqueue"
+	stickyTq := "functional-signal-with-start-workflow-start-delay-test-sticky-taskqueue"
 	identity := "worker1"
 
 	startDelay := 3 * time.Second
@@ -1807,7 +1808,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -1846,15 +1847,15 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	_, pollErr := poller.PollAndProcessWorkflowTask(true, false)
+	_, pollErr := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(pollErr)
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 	s.NotNil(signalEvent)
@@ -1873,13 +1874,13 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_StartDelay() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
-	id := "integration-signal-with-start-workflow-no-wft-test"
-	wt := "integration-signal-with-start-workflow-no-wft-test-type"
-	tl := "integration-signal-with-start-workflow-no-wft-test-taskqueue"
+func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
+	id := "functional-signal-with-start-workflow-no-wft-test"
+	wt := "functional-signal-with-start-workflow-no-wft-test-type"
+	tl := "functional-signal-with-start-workflow-no-wft-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1927,7 +1928,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	}
 
 	// process start task
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	signalName := "my signal"
@@ -1938,7 +1939,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 		Namespace:                s.namespace,
 		WorkflowId:               id,
 		WorkflowType:             &commonpb.WorkflowType{Name: wt},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:                    nil,
 		WorkflowRunTimeout:       timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
@@ -1966,7 +1967,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	s.NoError(err)
 
 	// process signal and complete workflow
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

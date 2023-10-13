@@ -95,13 +95,15 @@ func (s *streamReceiverSuite) SetupTest() {
 		tasks: nil,
 	}
 
+	processToolBox := ProcessToolBox{
+		ClusterMetadata: s.clusterMetadata,
+		TaskScheduler:   s.taskScheduler,
+		MetricsHandler:  metrics.NoopMetricsHandler,
+		Logger:          log.NewTestLogger(),
+	}
 	s.streamReceiver = NewStreamReceiver(
-		ProcessToolBox{
-			ClusterMetadata: s.clusterMetadata,
-			TaskScheduler:   s.taskScheduler,
-			MetricsHandler:  metrics.NoopMetricsHandler,
-			Logger:          log.NewTestLogger(),
-		},
+		processToolBox,
+		NewExecutableTaskConverter(processToolBox),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
 	)

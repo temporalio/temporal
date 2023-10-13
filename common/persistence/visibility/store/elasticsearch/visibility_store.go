@@ -1322,8 +1322,8 @@ func convertElasticsearchClientError(message string, err error) error {
 	case *elastic.Error:
 		switch e.Status {
 		case 400: // BadRequest
-			// Returning Internal error will prevent retry on a caller side.
-			return serviceerror.NewInternal(errMessage)
+			// Returning InvalidArgument error will prevent retry on a caller side.
+			return serviceerror.NewInvalidArgument(errMessage)
 		}
 	}
 	return serviceerror.NewUnavailable(errMessage)

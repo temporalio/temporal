@@ -242,9 +242,21 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 
 	switch task.TaskType {
 	case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
-		return p.namespaceTaskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
+		attr := task.GetNamespaceTaskAttributes()
+		err := p.namespaceTaskExecutor.Execute(ctx, attr)
+		if err != nil {
+			p.logger.Error("unable to process namespace replication task",
+				tag.WorkflowNamespaceID(attr.Id))
+		}
+		return err
 	case enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA:
-		return p.handleTaskQueueUserDataReplicationTask(ctx, task.GetTaskQueueUserDataAttributes())
+		attr := task.GetTaskQueueUserDataAttributes()
+		err := p.handleTaskQueueUserDataReplicationTask(ctx, attr)
+		if err != nil {
+			p.logger.Error(fmt.Sprintf("unable to process task queue metadata replication task, %v", attr.TaskQueueName),
+				tag.WorkflowNamespaceID(attr.NamespaceId))
+		}
+		return err
 	default:
 		return fmt.Errorf("cannot handle replication task of type %v", task.TaskType)
 	}

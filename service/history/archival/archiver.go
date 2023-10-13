@@ -247,6 +247,11 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		return err
 	}
 
+	var historyArchivalUri string
+	if request.HistoryURI != nil {
+		historyArchivalUri = request.HistoryURI.String()
+	}
+
 	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -260,7 +265,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
-		HistoryArchivalUri: request.HistoryURI.String(),
+		HistoryArchivalUri: historyArchivalUri,
 	})
 }
 

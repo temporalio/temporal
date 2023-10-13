@@ -58,7 +58,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
 		Password:          "",
-		ConnectAddr:       environment.Localhost,
+		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
 		DatabaseName:      "default",
@@ -71,7 +71,7 @@ func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
 		Password:          "",
-		ConnectAddr:       environment.Localhost,
+		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
 		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
@@ -1063,4 +1063,24 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
+}
+
+func TestSQLiteQueueV2(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	t.Cleanup(func() {
+		factory.Close()
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	})
+	t.Run("RunQueueV2TestSuiteForSQL", func(t *testing.T) {
+		t.Parallel()
+		RunQueueV2TestSuiteForSQL(t, factory)
+	})
 }

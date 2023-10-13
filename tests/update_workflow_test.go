@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/tests/testvars"
 )
 
-func (s *integrationSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
+func (s *functionalSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
 	s.T().Helper()
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    tv.Any(),
@@ -65,7 +65,7 @@ func (s *integrationSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVa
 	return tv.WithRunID(startResp.GetRunId())
 }
 
-func (s *integrationSuite) acceptUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *functionalSuite) acceptUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
@@ -75,7 +75,7 @@ func (s *integrationSuite) acceptUpdateCommands(tv *testvars.TestVars, updateID 
 	}}
 }
 
-func (s *integrationSuite) completeUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *functionalSuite) completeUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return []*commandpb.Command{
 		{
@@ -87,12 +87,12 @@ func (s *integrationSuite) completeUpdateCommands(tv *testvars.TestVars, updateI
 	}
 }
 
-func (s *integrationSuite) acceptCompleteUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
+func (s *functionalSuite) acceptCompleteUpdateCommands(tv *testvars.TestVars, updateID string) []*commandpb.Command {
 	s.T().Helper()
 	return append(s.acceptUpdateCommands(tv, updateID), s.completeUpdateCommands(tv, updateID)...)
 }
 
-func (s *integrationSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *functionalSuite) acceptUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -110,7 +110,7 @@ func (s *integrationSuite) acceptUpdateMessages(tv *testvars.TestVars, updReques
 	}
 }
 
-func (s *integrationSuite) completeUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *functionalSuite) completeUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -131,12 +131,12 @@ func (s *integrationSuite) completeUpdateMessages(tv *testvars.TestVars, updRequ
 	}
 }
 
-func (s *integrationSuite) acceptCompleteUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *functionalSuite) acceptCompleteUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	return append(s.acceptUpdateMessages(tv, updRequestMsg, updateID), s.completeUpdateMessages(tv, updRequestMsg, updateID)...)
 }
 
-func (s *integrationSuite) rejectUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
+func (s *functionalSuite) rejectUpdateMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, updateID string) []*protocolpb.Message {
 	s.T().Helper()
 	updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -158,7 +158,7 @@ func (s *integrationSuite) rejectUpdateMessages(tv *testvars.TestVars, updReques
 	}
 }
 
-func (s *integrationSuite) sendUpdateNoError(tv *testvars.TestVars, updateID string) *workflowservice.UpdateWorkflowExecutionResponse {
+func (s *functionalSuite) sendUpdateNoError(tv *testvars.TestVars, updateID string) *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	resp, err := s.sendUpdate(tv, updateID)
 	// It is important to do assert here to fail fast without trying to process update in wtHandler.
@@ -166,7 +166,7 @@ func (s *integrationSuite) sendUpdateNoError(tv *testvars.TestVars, updateID str
 	return resp
 }
 
-func (s *integrationSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
+func (s *functionalSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
 	s.T().Helper()
 	return s.engine.UpdateWorkflowExecution(NewContext(), &workflowservice.UpdateWorkflowExecutionRequest{
 		Namespace:         s.namespace,
@@ -181,7 +181,7 @@ func (s *integrationSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*
 	})
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
 		UseRunID bool
@@ -273,7 +273,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -282,8 +282,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 			}()
 
 			// Process update in workflow.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 			s.NoError(err)
+			updateResp := res.NewTask
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -319,7 +320,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptC
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
 		UseRunID bool
@@ -421,7 +422,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComple
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -430,8 +431,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComple
 			}()
 
 			// Process update in workflow.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 			s.NoError(err)
+			updateResp := res.NewTask
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -468,7 +470,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_AcceptComple
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_AcceptComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
 		Name     string
@@ -559,8 +561,9 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_A
 			}()
 
 			// Process update in workflow.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 			s.NoError(err)
+			updateResp := res.NewTask
 
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -593,7 +596,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_A
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
 		Name     string
@@ -687,7 +690,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 
 			// Send signal to schedule new WT.
@@ -700,8 +703,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 			}()
 
 			// Process update in workflow. It will be attached to existing WT.
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+			res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 			s.NoError(err)
+			updateResp := res.NewTask
 
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -738,7 +742,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Accept
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTask_Rejected() {
+func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowTask_Rejected() {
 
 	tv := testvars.New(s.T().Name())
 
@@ -814,8 +818,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowT
 	}
 
 	// Drain first WT which starts 1st update.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Reject update in 2nd WT.
 	wt2Resp, err := poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), true)
@@ -847,7 +852,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeFromStartedWorkflowT
   8 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Rejected() {
+func (s *functionalSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_Rejected() {
 
 	tv := testvars.New(s.T().Name())
 
@@ -932,8 +937,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_R
 	}
 
 	// Drain first WT which starts 1st update.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Reject update in 2nd WT.
 	wt2Resp, err := poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), true)
@@ -969,7 +975,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalFromStartedWorkflowTask_R
  12 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
+func (s *functionalSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	testCases := []struct {
 		Name                     string
 		RespondWorkflowTaskError string
@@ -1304,7 +1310,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			go updateWorkflowFn(tc.RespondWorkflowTaskError != "")
 
 			// Process update in workflow.
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTask()
 			if tc.RespondWorkflowTaskError != "" {
 				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
 				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
@@ -1316,7 +1322,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
 		UseRunID bool
@@ -1408,7 +1414,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 			}
 
 			// Drain existing first WT from regular task queue, but respond with sticky queue enabled response, next WT will go to sticky queue.
-			_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, true, 1)
+			_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -1418,8 +1424,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 			}()
 
 			// Process update in workflow task (it is sticky).
-			_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, true, false, 1, 1, true, nil)
+			res, err := poller.PollAndProcessWorkflowTask(WithPollSticky, WithRetries(1), WithForceNewWorkflowTask)
 			s.NoError(err)
+			updateResp := res.NewTask
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -1454,7 +1461,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
+func (s *functionalSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -1531,7 +1538,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}
 
 	// Drain existing WT from regular task queue, but respond with sticky enabled response to enable stick task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
 	s.Logger.Info("Sleep 10 seconds to make sure stickyPollerUnavailableWindow time has passed.")
@@ -1547,8 +1554,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
 	}()
 
 	// Process update in workflow task from non-sticky task queue.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -1581,7 +1589,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStickySpeculativeWorkflowTask_A
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Reject() {
+func (s *functionalSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_Reject() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -1649,8 +1657,9 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_R
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -1678,7 +1687,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_R
   8 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject() {
+func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -1749,7 +1758,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -1758,8 +1767,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(3, updateResp.ResetHistoryEventId)
@@ -1786,7 +1796,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_Reject(
   8 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
+func (s *functionalSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -1866,7 +1876,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -1875,8 +1885,9 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId, "no reset of event ID should happened after update rejection if it was delivered with normal workflow task")
@@ -1907,7 +1918,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewNormalWorkflowTask_Reject() {
  12 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1stComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1stComplete() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2011,7 +2022,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	}()
 
 	// Accept update1 in normal WT1.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	// Send 2nd update and create speculative WT2.
@@ -2021,8 +2032,9 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
 	}()
 
 	// Poll for WT2 which 2nd update. Accept update2.
-	_, updateAcceptResp2, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateAcceptResp2 := res.NewTask
 	s.NotNil(updateAcceptResp2)
 	s.EqualValues(0, updateAcceptResp2.ResetHistoryEventId)
 
@@ -2078,7 +2090,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1s
  21 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
+func (s *functionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2172,7 +2184,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	}()
 
 	// Accept update1 in WT1.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	// Send 2nd update and create speculative WT2.
@@ -2182,8 +2194,9 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
 	}()
 
 	// Poll for WT2 which 2nd update. Reject update2.
-	_, updateRejectResp2, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateRejectResp2 := res.NewTask
 	s.NotNil(updateRejectResp2)
 	s.EqualValues(0, updateRejectResp2.ResetHistoryEventId, "no reset of event ID should happened after update rejection if it was delivered with normal workflow task")
 
@@ -2229,7 +2242,7 @@ func (s *integrationSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() 
  16 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
+func (s *functionalSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2338,7 +2351,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -2364,13 +2377,13 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	go updateWorkflowFn()
 
 	// Try to accept update in workflow: get malformed response.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.Contains(err.Error(), "not found")
 	// New normal (but transient) WT will be created but not returned.
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
@@ -2379,12 +2392,12 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
 	<-updateResultCh
 
 	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
 	// Complete workflow.
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	s.Equal(5, wtHandlerCalls)
@@ -2405,7 +2418,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FailSpeculativeWorkflowTask() {
  11 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
+func (s *functionalSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowTaskToNormal_BecauseOfBufferedSignal() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2479,7 +2492,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2488,8 +2501,9 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -2521,7 +2535,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertStartedSpeculativeWorkflowT
  12 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflowTaskToNormal_BecauseOfSignal() {
+func (s *functionalSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflowTaskToNormal_BecauseOfSignal() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2592,7 +2606,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2607,8 +2621,9 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
 	s.NoError(err)
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.Equal(tv.String("update rejected", "1"), updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -2640,7 +2655,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ConvertScheduledSpeculativeWorkflo
  12 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkflowTask() {
+func (s *functionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkflowTask() {
 	tv := testvars.New(s.T().Name())
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -2736,7 +2751,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 	}
 
 	// Drain first WT.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2745,14 +2760,15 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
 	}()
 
 	// Try to process update in workflow, but it takes more than WT timeout. So, WT times out.
-	_, _, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	_, err = poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.Error(err)
 	s.Equal("Workflow task not found.", err.Error())
 
 	// New normal WT was created on server after speculative WT has timed out.
 	// It will accept and complete update first and workflow itself with the same WT.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -2779,7 +2795,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWork
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
+func (s *functionalSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeWorkflowTask() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2850,7 +2866,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 	}
 
 	// Drain first WT and respond with sticky enabled response to enable sticky task queue.
-	_, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetry(false, false, false, true, 1, 1)
+	_, err := poller.PollAndProcessWorkflowTask(WithRespondSticky, WithRetries(1))
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -2862,8 +2878,9 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
 	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
 
 	// Try to process update in workflow, poll from normal task queue.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	s.NotNil(updateResp)
 
 	// Complete workflow.
@@ -2893,7 +2910,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduleToStartTimeoutSpeculativeW
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
+func (s *functionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_TerminateWorkflow() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -2955,7 +2972,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -2982,11 +2999,10 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 	go updateWorkflowFn()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	_, err = poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.Error(err)
 	s.IsType(err, (*serviceerror.NotFound)(nil))
 	s.ErrorContains(err, "Workflow task not found.")
-	s.Nil(updateResp)
 	<-updateResultCh
 
 	s.Equal(2, wtHandlerCalls)
@@ -3012,7 +3028,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ter
 	s.EqualValues(7, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WTFailed event")
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
+func (s *functionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_TerminateWorkflow() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3054,7 +3070,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3112,7 +3128,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_T
 	s.EqualValues(5, msResp.GetDatabaseMutableState().GetExecutionInfo().GetCompletionEventBatchId(), "completion_event_batch_id should point to WFTerminated event")
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
+func (s *functionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() {
 	testCases := []struct {
 		Name         string
 		UpdateErrMsg string
@@ -3194,7 +3210,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan struct{})
@@ -3226,7 +3242,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 			}(tc.UpdateErrMsg)
 
 			// Complete workflow.
-			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			_, err = poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 			<-updateResultCh
 
@@ -3236,7 +3252,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate()
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
+func (s *functionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3315,7 +3331,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3324,8 +3340,9 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
 	}()
 
 	// Heartbeat from workflow.
-	_, heartbeatResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	heartbeatResp := res.NewTask
 
 	// Reject update from workflow.
 	updateResp, err := poller.HandlePartialWorkflowTask(heartbeatResp.GetWorkflowTask(), true)
@@ -3363,7 +3380,7 @@ func (s *integrationSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat(
  14 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
+func (s *functionalSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3421,7 +3438,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3470,7 +3487,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
 	s.NoError(err)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3491,7 +3508,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewScheduledSpeculativeWorkflowTas
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
+func (s *functionalSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskLost_BecauseOfShardMove() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3568,7 +3585,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan struct{})
@@ -3596,11 +3613,10 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	go updateWorkflowFn()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, false, nil)
+	_, err = poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.ErrorContains(err, "Workflow task not found")
-	s.Nil(updateResp)
 
 	<-updateResultCh
 
@@ -3609,7 +3625,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
 	s.NoError(err)
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3630,7 +3646,7 @@ func (s *integrationSuite) TestUpdateWorkflow_NewStartedSpeculativeWorkflowTaskL
   9 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
+func (s *functionalSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_BecauseOfShardMove() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3721,7 +3737,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_
 	go updateWorkflowFn()
 
 	// Process update in workflow. Update won't be found on server due to shard reload and server will fail WT.
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err, "workflow task failure must be an InvalidArgument error")
 	s.ErrorContains(err, fmt.Sprintf("update %q not found", tv.UpdateID("1")))
@@ -3729,7 +3745,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_
 	<-updateResultCh
 
 	// Complete workflow.
-	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+	completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	s.NotNil(completeWorkflowResp)
 
@@ -3749,7 +3765,7 @@ func (s *integrationSuite) TestUpdateWorkflow_FirstNormalWorkflowTaskUpdateLost_
   8 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
+func (s *functionalSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_DeduplicateID() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3820,7 +3836,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3835,8 +3851,9 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	updateResult2 := <-updateResultCh2
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -3871,7 +3888,7 @@ func (s *integrationSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTask_D
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
+func (s *functionalSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_DeduplicateID() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -3947,7 +3964,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 	}
 
 	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -3956,8 +3973,9 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
 	}()
 
 	// Process update in workflow.
-	_, updateResp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	updateResp := res.NewTask
 	updateResult := <-updateResultCh
 	s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 	s.EqualValues(0, updateResp.ResetHistoryEventId)
@@ -3993,7 +4011,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_Ded
  13 WorkflowExecutionCompleted`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_DeduplicateID() {
+func (s *functionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_DeduplicateID() {
 	testCases := []struct {
 		Name       string
 		CloseShard bool
@@ -4072,7 +4090,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			}
 
 			// Drain first WT.
-			_, err := poller.PollAndProcessWorkflowTask(true, false)
+			_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 			s.NoError(err)
 
 			updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
@@ -4081,7 +4099,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			}()
 
 			// Process update in workflow.
-			_, err = poller.PollAndProcessWorkflowTask(false, false)
+			_, err = poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
@@ -4119,7 +4137,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 			s.NoError(err)
 
 			// Complete workflow.
-			completeWorkflowResp, err := poller.PollAndProcessWorkflowTask(false, false)
+			completeWorkflowResp, err := poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 			s.NotNil(completeWorkflowResp)
 
@@ -4147,7 +4165,7 @@ func (s *integrationSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_D
 	}
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseShard_DifferentStartedId_Rejected() {
+func (s *functionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseShard_DifferentStartedId_Rejected() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4200,8 +4218,9 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Close
 	}
 
 	// First WT will schedule activity and create a new WT.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Drain 2nd WT (which is force created as requested) to make all events seen by SDK so following update can be speculative.
 	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
@@ -4322,7 +4341,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Close
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseShard_SameStartedId_SameUpdateId_Accepted() {
+func (s *functionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_CloseShard_SameStartedId_SameUpdateId_Accepted() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4373,8 +4392,9 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Close
 	}
 
 	// First WT will schedule activity and create a new WT.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Drain 2nd WT (which is force created as requested) to make all events seem by SDK so following update can be speculative.
 	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
@@ -4497,7 +4517,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Close
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearMutableState_Accepted() {
+func (s *functionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearMutableState_Accepted() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4550,8 +4570,9 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Clear
 	}
 
 	// First WT will schedule activity and create a new WT.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Drain 2nd WT (which is force created as requested) to make all events seen by SDK so following update can be speculative.
 	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)
@@ -4714,7 +4735,7 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Clear
 	`, events)
 }
 
-func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameStartedId_DifferentUpdateId_Rejected() {
+func (s *functionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameStartedId_DifferentUpdateId_Rejected() {
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4767,8 +4788,9 @@ func (s *integrationSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameS
 	}
 
 	// First WT will schedule activity and create a new WT.
-	_, wt1Resp, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(false, false, false, false, 1, 1, true, nil)
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1), WithForceNewWorkflowTask)
 	s.NoError(err)
+	wt1Resp := res.NewTask
 
 	// Drain 2nd WT (which is force created as requested) to make all events seen by SDK so following update can be speculative.
 	_, err = poller.HandlePartialWorkflowTask(wt1Resp.GetWorkflowTask(), false)

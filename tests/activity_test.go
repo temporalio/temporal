@@ -54,16 +54,16 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
-	id := "integration-heartbeat-test"
-	wt := "integration-heartbeat-test-type"
-	tl := "integration-heartbeat-test-taskqueue"
+func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
+	id := "functional-heartbeat-test"
+	wt := "functional-heartbeat-test-type"
+	tl := "functional-heartbeat-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_timer"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
@@ -103,7 +103,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					Header:                 header,
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
@@ -155,7 +155,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -164,7 +164,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(1, activityExecutedCount)
@@ -181,10 +181,10 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 }
 
-func (s *integrationSuite) TestActivityRetry() {
-	id := "integration-activity-retry-test"
-	wt := "integration-activity-retry-type"
-	tl := "integration-activity-retry-taskqueue"
+func (s *functionalSuite) TestActivityRetry() {
+	id := "functional-activity-retry-test"
+	wt := "functional-activity-retry-type"
+	tl := "functional-activity-retry-taskqueue"
 	identity := "worker1"
 	identity2 := "worker2"
 	activityName := "activity_retry"
@@ -192,7 +192,7 @@ func (s *integrationSuite) TestActivityRetry() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -226,7 +226,7 @@ func (s *integrationSuite) TestActivityRetry() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             "A",
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("1"),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
@@ -245,7 +245,7 @@ func (s *integrationSuite) TestActivityRetry() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             "B",
 						ActivityType:           &commonpb.ActivityType{Name: timeoutActivityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue"},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("2"),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(5 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
@@ -338,7 +338,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		})
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -376,7 +376,7 @@ func (s *integrationSuite) TestActivityRetry() {
 		s.False(workflowComplete)
 
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
-		_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+		_, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
 		if err != nil {
 			s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -394,16 +394,16 @@ func (s *integrationSuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
-func (s *integrationSuite) TestActivityRetry_Infinite() {
-	id := "integration-activity-retry-test"
-	wt := "integration-activity-retry-type"
-	tl := "integration-activity-retry-taskqueue"
+func (s *functionalSuite) TestActivityRetry_Infinite() {
+	id := "functional-activity-retry-test"
+	wt := "functional-activity-retry-type"
+	tl := "functional-activity-retry-taskqueue"
 	identity := "worker1"
 	activityName := "activity_retry"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -436,7 +436,7 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:          "A",
 						ActivityType:        &commonpb.ActivityType{Name: activityName},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:               payloads.EncodeString("1"),
 						StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
@@ -486,7 +486,7 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	for i := 0; i <= activityExecutedLimit; i++ {
@@ -494,21 +494,21 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 		s.NoError(err)
 	}
 
-	_, err = poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithRetries(1))
 	s.NoError(err)
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
-	id := "integration-heartbeat-timeout-test"
-	wt := "integration-heartbeat-timeout-test-type"
-	tl := "integration-heartbeat-timeout-test-taskqueue"
+func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
+	id := "functional-heartbeat-timeout-test"
+	wt := "functional-heartbeat-timeout-test-type"
+	tl := "functional-heartbeat-timeout-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_timer"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -546,7 +546,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -587,7 +587,7 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || err == errNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
@@ -598,21 +598,21 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
 	s.False(workflowComplete)
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
-	id := "integration-activity-cancellation-test"
-	wt := "integration-activity-cancellation-test-type"
-	tl := "integration-activity-cancellation-test-taskqueue"
+func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
+	id := "functional-activity-cancellation-test"
+	wt := "functional-activity-cancellation-test-type"
+	tl := "functional-activity-cancellation-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_timer"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -649,7 +649,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -712,7 +712,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || err == errNoTasks, err)
 
 	cancelCh := make(chan struct{})
@@ -733,7 +733,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 
 		scheduleActivity = false
 		requestCancellation = true
-		_, err2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, err2 := poller.PollAndProcessWorkflowTask()
 		s.NoError(err2)
 		close(cancelCh)
 	}()
@@ -748,16 +748,16 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
-func (s *integrationSuite) TestActivityCancellationNotStarted() {
-	id := "integration-activity-notstarted-cancellation-test"
-	wt := "integration-activity-notstarted-cancellation-test-type"
-	tl := "integration-activity-notstarted-cancellation-test-taskqueue"
+func (s *functionalSuite) TestActivityCancellationNotStarted() {
+	id := "functional-activity-notstarted-cancellation-test"
+	wt := "functional-activity-notstarted-cancellation-test-type"
+	tl := "functional-activity-notstarted-cancellation-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_notstarted"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -794,7 +794,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -841,7 +841,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || err == errNoTasks)
 
 	// Send signal so that worker can send an activity cancel
@@ -862,16 +862,16 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	// Process signal in workflow and send request cancellation
 	scheduleActivity = false
 	requestCancellation = true
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	scheduleActivity = false
 	requestCancellation = false
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || err == errNoTasks)
 }
 
-func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
+func (s *clientFunctionalSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
 	// 1. Start workflow with single activity
 	// 2. First invocation of activity sets heartbeat details and times out.
@@ -934,7 +934,7 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	s.worker.RegisterActivity(activityFn)
 	s.worker.RegisterWorkflow(workflowFn)
 
-	wfId := "integration-test-heartbeat-details-during-retry"
+	wfId := "functional-test-heartbeat-details-during-retry"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
 		TaskQueue:          s.taskQueue,

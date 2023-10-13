@@ -113,35 +113,35 @@ const (
 )
 
 type (
-	transactionMgr interface {
-		createWorkflow(
+	TransactionManager interface {
+		CreateWorkflow(
 			ctx context.Context,
 			targetWorkflow Workflow,
 		) error
-		updateWorkflow(
+		UpdateWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
-		backfillWorkflow(
+		BackfillWorkflow(
 			ctx context.Context,
 			targetWorkflow Workflow,
 			targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 		) error
 
-		checkWorkflowExists(
+		CheckWorkflowExists(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
 		) (bool, error)
-		getCurrentWorkflowRunID(
+		GetCurrentWorkflowRunID(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 		) (string, error)
-		loadWorkflow(
+		LoadWorkflow(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
@@ -150,7 +150,7 @@ type (
 	}
 
 	transactionMgrImpl struct {
-		shard             shard.Context
+		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
@@ -166,25 +166,26 @@ type (
 	}
 )
 
-var _ transactionMgr = (*transactionMgrImpl)(nil)
+var _ TransactionManager = (*transactionMgrImpl)(nil)
 
-func newTransactionMgr(
-	shard shard.Context,
+func NewTransactionManager(
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
+	bypassVersionSemanticsCheck bool,
 ) *transactionMgrImpl {
 
 	transactionMgr := &transactionMgrImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
 		workflowCache:     workflowCache,
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionManager:  shard.GetExecutionManager(),
-		serializer:        shard.GetPayloadSerializer(),
-		metricsHandler:    shard.GetMetricsHandler(),
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		executionManager:  shardContext.GetExecutionManager(),
+		serializer:        shardContext.GetPayloadSerializer(),
+		metricsHandler:    shardContext.GetMetricsHandler(),
 		workflowResetter: NewWorkflowResetter(
-			shard,
+			shardContext,
 			workflowCache,
 			logger,
 		),
@@ -194,12 +195,12 @@ func newTransactionMgr(
 		createMgr: nil,
 		updateMgr: nil,
 	}
-	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(transactionMgr)
-	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(transactionMgr)
+	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
+	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
 	return transactionMgr
 }
 
-func (r *transactionMgrImpl) createWorkflow(
+func (r *transactionMgrImpl) CreateWorkflow(
 	ctx context.Context,
 	targetWorkflow Workflow,
 ) error {
@@ -210,7 +211,7 @@ func (r *transactionMgrImpl) createWorkflow(
 	)
 }
 
-func (r *transactionMgrImpl) updateWorkflow(
+func (r *transactionMgrImpl) UpdateWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
@@ -225,7 +226,7 @@ func (r *transactionMgrImpl) updateWorkflow(
 	)
 }
 
-func (r *transactionMgrImpl) backfillWorkflow(
+func (r *transactionMgrImpl) BackfillWorkflow(
 	ctx context.Context,
 	targetWorkflow Workflow,
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
@@ -242,6 +243,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	sizeSiff, err := targetWorkflow.GetContext().PersistWorkflowEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSlice...,
 	)
 	if err != nil {
@@ -260,6 +262,7 @@ func (r *transactionMgrImpl) backfillWorkflow(
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
+		r.shardContext,
 		updateMode,
 		nil,
 		nil,
@@ -366,6 +369,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	//  find the current & active workflow to reapply
 	if err := targetWorkflow.GetContext().ReapplyEvents(
 		ctx,
+		r.shardContext,
 		targetWorkflowEventsSlice,
 	); err != nil {
 		return 0, workflow.TransactionPolicyActive, err
@@ -377,17 +381,17 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 }
 
-func (r *transactionMgrImpl) checkWorkflowExists(
+func (r *transactionMgrImpl) CheckWorkflowExists(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (bool, error) {
 
-	_, err := r.shard.GetWorkflowExecution(
+	_, err := r.shardContext.GetWorkflowExecution(
 		ctx,
 		&persistence.GetWorkflowExecutionRequest{
-			ShardID:     r.shard.GetShardID(),
+			ShardID:     r.shardContext.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
 			RunID:       runID,
@@ -404,16 +408,16 @@ func (r *transactionMgrImpl) checkWorkflowExists(
 	}
 }
 
-func (r *transactionMgrImpl) getCurrentWorkflowRunID(
+func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 ) (string, error) {
 
-	resp, err := r.shard.GetCurrentExecution(
+	resp, err := r.shardContext.GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
-			ShardID:     r.shard.GetShardID(),
+			ShardID:     r.shardContext.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
 		},
@@ -429,16 +433,16 @@ func (r *transactionMgrImpl) getCurrentWorkflowRunID(
 	}
 }
 
-func (r *transactionMgrImpl) loadWorkflow(
+func (r *transactionMgrImpl) LoadWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (Workflow, error) {
 
-	// we need to check the current workflow execution
 	weContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -450,7 +454,7 @@ func (r *transactionMgrImpl) loadWorkflow(
 		return nil, err
 	}
 
-	ms, err := weContext.LoadMutableState(ctx)
+	ms, err := weContext.LoadMutableState(ctx, r.shardContext)
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)
@@ -477,7 +481,7 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
 
-	currentRunID, err := r.getCurrentWorkflowRunID(
+	currentRunID, err := r.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,

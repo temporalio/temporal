@@ -42,7 +42,6 @@ var (
 		dynamicconfig.FrontendRPS:                                    3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance:   50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance: 50,
-		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:         5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts:  1,
 		dynamicconfig.AdvancedVisibilityWritingMode:                  visibility.SecondaryVisibilityWritingModeOff,
 		dynamicconfig.WorkflowTaskHeartbeatTimeout:                   5 * time.Second,
@@ -87,7 +86,7 @@ func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
 	delete(d.overrides, name)
 }
 
-// newTestDCClient - returns a dynamic config client for integration testing
+// newTestDCClient - returns a dynamic config client for functional testing
 func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
 	return &dcClient{
 		overrides: maps.Clone(staticOverrides),

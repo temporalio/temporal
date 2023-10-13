@@ -65,19 +65,19 @@ type (
 	}
 
 	WorkflowStateReplicatorImpl struct {
-		shard             shard.Context
+		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
-		transactionMgr    transactionMgr
+		transactionMgr    TransactionManager
 		logger            log.Logger
 	}
 )
 
 func NewWorkflowStateReplicator(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
@@ -85,13 +85,13 @@ func NewWorkflowStateReplicator(
 ) *WorkflowStateReplicatorImpl {
 
 	return &WorkflowStateReplicatorImpl{
-		shard:             shard,
-		namespaceRegistry: shard.GetNamespaceRegistry(),
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
 		workflowCache:     workflowCache,
-		clusterMetadata:   shard.GetClusterMetadata(),
-		executionMgr:      shard.GetExecutionManager(),
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		executionMgr:      shardContext.GetExecutionManager(),
 		historySerializer: eventSerializer,
-		transactionMgr:    newTransactionMgr(shard, workflowCache, eventsReapplier, logger),
+		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }
@@ -111,6 +111,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
+		r.shardContext,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: wid,
@@ -131,7 +132,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}()
 
 	// Handle existing workflows
-	ms, err := wfCtx.LoadMutableState(ctx)
+	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
 		// no-op, continue to replicate workflow state
@@ -181,13 +182,13 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 
 	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
 
-	branchInfo, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().ParseHistoryBranchInfo(
+	branchInfo, err := r.shardContext.GetExecutionManager().GetHistoryBranchUtil().ParseHistoryBranchInfo(
 		currentVersionHistory.GetBranchToken(),
 	)
 	if err != nil {
 		return err
 	}
-	newHistoryBranchToken, err := r.shard.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
+	newHistoryBranchToken, err := r.shardContext.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
 		request.NamespaceId,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
@@ -220,8 +221,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}
 
 	mutableState, err := workflow.NewSanitizedMutableState(
-		r.shard,
-		r.shard.GetEventsCache(),
+		r.shardContext,
+		r.shardContext.GetEventsCache(),
 		r.logger,
 		ns,
 		request.GetWorkflowState(),
@@ -237,12 +238,12 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shard, r.shard.GetConfig(), r.namespaceRegistry, r.logger)
+	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.shardContext.GetConfig(), r.namespaceRegistry, r.logger)
 	err = taskRefresh.RefreshTasks(ctx, mutableState)
 	if err != nil {
 		return err
 	}
-	return r.transactionMgr.createWorkflow(
+	return r.transactionMgr.CreateWorkflow(
 		ctx,
 		NewWorkflow(
 			r.clusterMetadata,
@@ -352,12 +353,12 @@ BackfillLoop:
 		if err != nil {
 			return nil, common.EmptyEventTaskID, err
 		}
-		txnID, err := r.shard.GenerateTaskID()
+		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
 			return nil, common.EmptyEventTaskID, err
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
-			ShardID:           r.shard.GetShardID(),
+			ShardID:           r.shardContext.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,
 			BranchToken:       filteredHistoryBranch,
 			History:           historyBlob.rawHistory,
@@ -394,7 +395,7 @@ func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(
 
 	return func(paginationToken []byte) ([]*historypb.History, []byte, error) {
 		response, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
-			ShardID:       r.shard.GetShardID(),
+			ShardID:       r.shardContext.GetShardID(),
 			BranchToken:   branchToken,
 			MinEventID:    common.FirstEventID,
 			MaxEventID:    lastEventID + 1,
@@ -420,7 +421,7 @@ func (r *WorkflowStateReplicatorImpl) getHistoryFromRemotePaginationFn(
 
 	return func(paginationToken []byte) ([]*rawHistoryData, []byte, error) {
 
-		adminClient, err := r.shard.GetRemoteAdminClient(remoteClusterName)
+		adminClient, err := r.shardContext.GetRemoteAdminClient(remoteClusterName)
 		if err != nil {
 			return nil, nil, err
 		}

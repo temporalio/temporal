@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqname"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -85,7 +84,7 @@ func NewLoadBalancer(
 		nReadPartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
 		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
 		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
-		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
+		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
 	}
 	return lb
 }
@@ -136,6 +135,6 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskQueue.GetName()
 	}
 
-	n := util.Max(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
+	n := max(1, nPartitions(nsName.String(), tqName.BaseNameString(), taskQueueType))
 	return tqName.WithPartition(rand.Intn(n)).FullName()
 }

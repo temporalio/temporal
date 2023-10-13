@@ -61,6 +61,26 @@ func (m *MockHistoryServiceClient) EXPECT() *MockHistoryServiceClientMockRecorde
 	return m.recorder
 }
 
+// AddTasks mocks base method.
+func (m *MockHistoryServiceClient) AddTasks(ctx context.Context, in *historyservice.AddTasksRequest, opts ...grpc.CallOption) (*historyservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockHistoryServiceClientMockRecorder) AddTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).AddTasks), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceClient) CloseShard(ctx context.Context, in *historyservice.CloseShardRequest, opts ...grpc.CallOption) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -79,6 +99,26 @@ func (mr *MockHistoryServiceClientMockRecorder) CloseShard(ctx, in interface{}, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).CloseShard), varargs...)
+}
+
+// DeleteDLQTasks mocks base method.
+func (m *MockHistoryServiceClient) DeleteDLQTasks(ctx context.Context, in *historyservice.DeleteDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.DeleteDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteDLQTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteDLQTasks indicates an expected call of DeleteDLQTasks.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteDLQTasks), varargs...)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -261,6 +301,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetDLQReplicationMessages(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetDLQReplicationMessages), varargs...)
 }
 
+// GetDLQTasks mocks base method.
+func (m *MockHistoryServiceClient) GetDLQTasks(ctx context.Context, in *historyservice.GetDLQTasksRequest, opts ...grpc.CallOption) (*historyservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetDLQTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockHistoryServiceClientMockRecorder) GetDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetDLQTasks), varargs...)
+}
+
 // GetMutableState mocks base method.
 func (m *MockHistoryServiceClient) GetMutableState(ctx context.Context, in *historyservice.GetMutableStateRequest, opts ...grpc.CallOption) (*historyservice.GetMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -399,6 +459,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
+}
+
+// ImportWorkflowExecution mocks base method.
+func (m *MockHistoryServiceClient) ImportWorkflowExecution(ctx context.Context, in *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockHistoryServiceClientMockRecorder) ImportWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).ImportWorkflowExecution), varargs...)
 }
 
 // IsActivityTaskValid mocks base method.
@@ -1223,7 +1303,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -1251,7 +1331,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesClientMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesClient) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)
@@ -1301,6 +1381,21 @@ func (m *MockHistoryServiceServer) EXPECT() *MockHistoryServiceServerMockRecorde
 	return m.recorder
 }
 
+// AddTasks mocks base method.
+func (m *MockHistoryServiceServer) AddTasks(arg0 context.Context, arg1 *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockHistoryServiceServerMockRecorder) AddTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).AddTasks), arg0, arg1)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *historyservice.CloseShardRequest) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1314,6 +1409,21 @@ func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *histor
 func (mr *MockHistoryServiceServerMockRecorder) CloseShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).CloseShard), arg0, arg1)
+}
+
+// DeleteDLQTasks mocks base method.
+func (m *MockHistoryServiceServer) DeleteDLQTasks(arg0 context.Context, arg1 *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteDLQTasks indicates an expected call of DeleteDLQTasks.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteDLQTasks), arg0, arg1)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -1451,6 +1561,21 @@ func (mr *MockHistoryServiceServerMockRecorder) GetDLQReplicationMessages(arg0, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQReplicationMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetDLQReplicationMessages), arg0, arg1)
 }
 
+// GetDLQTasks mocks base method.
+func (m *MockHistoryServiceServer) GetDLQTasks(arg0 context.Context, arg1 *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDLQTasks indicates an expected call of GetDLQTasks.
+func (mr *MockHistoryServiceServerMockRecorder) GetDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetDLQTasks), arg0, arg1)
+}
+
 // GetMutableState mocks base method.
 func (m *MockHistoryServiceServer) GetMutableState(arg0 context.Context, arg1 *historyservice.GetMutableStateRequest) (*historyservice.GetMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1554,6 +1679,21 @@ func (m *MockHistoryServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context
 func (mr *MockHistoryServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
+}
+
+// ImportWorkflowExecution mocks base method.
+func (m *MockHistoryServiceServer) ImportWorkflowExecution(arg0 context.Context, arg1 *historyservice.ImportWorkflowExecutionRequest) (*historyservice.ImportWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImportWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ImportWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImportWorkflowExecution indicates an expected call of ImportWorkflowExecution.
+func (mr *MockHistoryServiceServerMockRecorder) ImportWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).ImportWorkflowExecution), arg0, arg1)
 }
 
 // IsActivityTaskValid mocks base method.
@@ -2163,7 +2303,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // RecvMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) RecvMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "RecvMsg", m)
 	ret0, _ := ret[0].(error)
@@ -2205,7 +2345,7 @@ func (mr *MockHistoryService_StreamWorkflowReplicationMessagesServerMockRecorder
 }
 
 // SendMsg mocks base method.
-func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m interface{}) error {
+func (m_2 *MockHistoryService_StreamWorkflowReplicationMessagesServer) SendMsg(m any) error {
 	m_2.ctrl.T.Helper()
 	ret := m_2.ctrl.Call(m_2, "SendMsg", m)
 	ret0, _ := ret[0].(error)

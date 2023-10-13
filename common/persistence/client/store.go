@@ -49,6 +49,7 @@ type (
 		// NewExecutionStore returns a new execution store
 		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
+		NewQueueV2() (p.QueueV2, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
 	}
@@ -79,7 +80,7 @@ func DataStoreFactoryProvider(
 	defaultCfg := config.DataStores[config.DefaultStore]
 	switch {
 	case defaultCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger)
+		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger, metricsHandler)
 	case defaultCfg.SQL != nil:
 		dataStoreFactory = sql.NewFactory(*defaultCfg.SQL, r, string(clusterName), logger)
 	case defaultCfg.CustomDataStoreConfig != nil:

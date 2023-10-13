@@ -47,6 +47,7 @@ var (
 		"GetDLQReplicationMessages":              1,
 		"GetMutableState":                        1,
 		"GetReplicationMessages":                 1,
+		"ImportWorkflowExecution":                1,
 		"IsActivityTaskValid":                    1,
 		"IsWorkflowTaskValid":                    1,
 		"MergeDLQMessages":                       1,
@@ -91,6 +92,9 @@ var (
 		"GetWorkflowExecutionHistoryReverse":     1,
 		"GetWorkflowExecutionRawHistoryV2":       1,
 		"ForceDeleteWorkflowExecution":           1,
+		"GetDLQTasks":                            1,
+		"DeleteDLQTasks":                         1,
+		"AddTasks":                               1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

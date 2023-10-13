@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -128,8 +127,10 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size or count exceed limit
-	FailureReasonHistorySizeExceedsLimit = "Workflow history size / count exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history count exceeds limit
+	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
 	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
@@ -495,7 +496,6 @@ func IsValidContext(ctx context.Context) error {
 
 // GenerateRandomString is used for generate test string
 func GenerateRandomString(n int) string {
-	rand.Seed(time.Now().UnixNano())
 	letterRunes := []rune("random")
 	b := make([]rune, n)
 	for i := range b {
@@ -771,7 +771,7 @@ func OverrideWorkflowRunTimeout(
 	} else if workflowRunTimeout == 0 {
 		return workflowExecutionTimeout
 	}
-	return util.Min(workflowRunTimeout, workflowExecutionTimeout)
+	return min(workflowRunTimeout, workflowExecutionTimeout)
 }
 
 // OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
@@ -786,13 +786,13 @@ func OverrideWorkflowTaskTimeout(
 		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
 	}
 
-	taskStartToCloseTimeout = util.Min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
+	taskStartToCloseTimeout = min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
 
 	if workflowRunTimeout == 0 {
 		return taskStartToCloseTimeout
 	}
 
-	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
 // CloneProto is a generic typed version of proto.Clone from gogoproto.

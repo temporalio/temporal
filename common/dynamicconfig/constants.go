@@ -233,6 +233,8 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
+	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
+	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
@@ -323,10 +325,6 @@ const (
 	SearchAttributesTotalSizeLimit = "frontend.searchAttributesTotalSizeLimit"
 	// VisibilityArchivalQueryMaxPageSize is the maximum page size for a visibility archival query
 	VisibilityArchivalQueryMaxPageSize = "frontend.visibilityArchivalQueryMaxPageSize"
-	// VisibilityArchivalQueryMaxRangeInDays is the maximum number of days for a visibility archival query
-	VisibilityArchivalQueryMaxRangeInDays = "frontend.visibilityArchivalQueryMaxRangeInDays"
-	// VisibilityArchivalQueryMaxQPS is the timeout for a visibility archival query
-	VisibilityArchivalQueryMaxQPS = "frontend.visibilityArchivalQueryMaxQPS"
 	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
 	EnableServerVersionCheck = "frontend.enableServerVersionCheck"
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
@@ -415,6 +413,8 @@ const (
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
+	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB
+	MatchingPersistenceGlobalNamespaceMaxQPS = "matching.persistenceGlobalNamespaceMaxQPS"
 	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
 	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
@@ -485,6 +485,8 @@ const (
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
+	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace in history cluster can query DB
+	HistoryPersistenceGlobalNamespaceMaxQPS = "history.persistenceGlobalNamespaceMaxQPS"
 	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
 	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
@@ -503,6 +505,10 @@ const (
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
 	// will wait on workflow lock acquisition. Requires service restart to take effect.
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
+	// EnableHostHistoryCache controls if the history cache is host level
+	EnableHostHistoryCache = "history.enableHostHistoryCache"
+	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
+	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -562,16 +568,22 @@ const (
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
-	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
+	// TaskSchedulerEnableRateLimiter indicates if task scheduler rate limiter should be enabled
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
 	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
 	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
-	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
-	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
+	// TaskSchedulerRateLimiterStartupDelay is the duration to wait after startup before enforcing task scheduler rate limiting
+	TaskSchedulerRateLimiterStartupDelay = "history.taskSchedulerRateLimiterStartupDelay"
+	// TaskSchedulerGlobalMaxQPS is the max qps all task schedulers in the cluster can schedule tasks
+	// If value less or equal to 0, will fall back to TaskSchedulerMaxQPS
+	TaskSchedulerGlobalMaxQPS = "history.taskSchedulerGlobalMaxQPS"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerGlobalNamespaceMaxQPS is the max qps all task schedulers in the cluster can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS
+	TaskSchedulerGlobalNamespaceMaxQPS = "history.taskSchedulerGlobalNamespaceMaxQPS"
 	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
@@ -604,10 +616,6 @@ const (
 	TimerProcessorPollBackoffInterval = "history.timerProcessorPollBackoffInterval"
 	// TimerProcessorMaxTimeShift is the max shift timer processor can have
 	TimerProcessorMaxTimeShift = "history.timerProcessorMaxTimeShift"
-	// TimerProcessorHistoryArchivalSizeLimit is the max history size for inline archival
-	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
-	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
-	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 
@@ -642,8 +650,6 @@ const (
 	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
-	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
-	TransferProcessorVisibilityArchivalTimeLimit = "history.transferProcessorVisibilityArchivalTimeLimit"
 	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
 	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 
@@ -671,8 +677,6 @@ const (
 	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
-	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
-	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.visibilityProcessorEnsureCloseBeforeDelete"
 	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
@@ -743,12 +747,6 @@ const (
 	EmitShardLagLog = "history.emitShardLagLog"
 	// DefaultEventEncoding is the encoding type for history events
 	DefaultEventEncoding = "history.defaultEventEncoding"
-	// NumArchiveSystemWorkflows is key for number of archive system workflows running in total
-	NumArchiveSystemWorkflows = "history.numArchiveSystemWorkflows"
-	// ArchiveRequestRPS is the rate limit on the number of archive request per second
-	ArchiveRequestRPS = "history.archiveRequestRPS"
-	// ArchiveSignalTimeout is the signal timeout used when starting an archive system workflow
-	ArchiveSignalTimeout = "history.archiveSignalTimeout"
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy = "history.defaultActivityRetryPolicy"
@@ -823,6 +821,9 @@ const (
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
+	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
+	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
@@ -843,6 +844,8 @@ const (
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
+	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB
+	WorkerPersistenceGlobalNamespaceMaxQPS = "worker.persistenceGlobalNamespaceMaxQPS"
 	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
 	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
@@ -861,20 +864,6 @@ const (
 	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
 	WorkerESProcessorAckTimeout = "worker.ESProcessorAckTimeout"
-	// WorkerArchiverMaxConcurrentActivityExecutionSize indicates worker archiver max concurrent activity execution size
-	WorkerArchiverMaxConcurrentActivityExecutionSize = "worker.ArchiverMaxConcurrentActivityExecutionSize"
-	// WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize indicates worker archiver max concurrent workflow execution size
-	WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize = "worker.ArchiverMaxConcurrentWorkflowTaskExecutionSize"
-	// WorkerArchiverMaxConcurrentActivityTaskPollers indicates worker archiver max concurrent activity pollers
-	WorkerArchiverMaxConcurrentActivityTaskPollers = "worker.ArchiverMaxConcurrentActivityTaskPollers"
-	// WorkerArchiverMaxConcurrentWorkflowTaskPollers indicates worker archiver max concurrent workflow pollers
-	WorkerArchiverMaxConcurrentWorkflowTaskPollers = "worker.ArchiverMaxConcurrentWorkflowTaskPollers"
-	// WorkerArchiverConcurrency controls the number of coroutines handling archival work per archival workflow
-	WorkerArchiverConcurrency = "worker.ArchiverConcurrency"
-	// WorkerArchivalsPerIteration controls the number of archivals handled in each iteration of archival workflow
-	WorkerArchivalsPerIteration = "worker.ArchivalsPerIteration"
-	// WorkerTimeLimitPerArchivalIteration controls the time limit of each iteration of archival workflow
-	WorkerTimeLimitPerArchivalIteration = "worker.TimeLimitPerArchivalIteration"
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS = "worker.throttledLogRPS"
 	// WorkerScannerMaxConcurrentActivityExecutionSize indicates worker scanner max concurrent activity execution size

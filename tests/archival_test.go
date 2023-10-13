@@ -64,11 +64,11 @@ const (
 
 type archivalSuite struct {
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 }
 
 func (s *archivalSuite) SetupSuite() {
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/cluster.yaml")
 }
 
 func (s *archivalSuite) TearDownSuite() {
@@ -198,7 +198,7 @@ func (s *archivalSuite) TestVisibilityArchival() {
 	}
 }
 
-func (s *IntegrationBase) getNamespaceID(namespace string) string {
+func (s *FunctionalTestBase) getNamespaceID(namespace string) string {
 	namespaceResp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	})
@@ -283,7 +283,7 @@ func (s *archivalSuite) isHistoryDeleted(execution *commonpb.WorkflowExecution) 
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)
 		s.NoError(err)
-		if len(resp.BranchTokens) == 0 {
+		if len(resp.BranchInfos) == 0 {
 			return true
 		}
 		time.Sleep(retryBackoffTime)
@@ -314,12 +314,8 @@ func (s *archivalSuite) isMutableStateDeleted(namespaceID string, execution *com
 func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceID string, numActivities, numRuns int) []string {
 	identity := "worker1"
 	activityName := "activity_type1"
-	workflowType := &commonpb.WorkflowType{
-		Name: wt,
-	}
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tq,
-	}
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           namespace,
@@ -359,7 +355,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -377,7 +373,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               nil,
 					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -423,7 +419,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 	}
 	for run := 0; run < numRuns; run++ {
 		for i := 0; i < numActivities; i++ {
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTask()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 			if i%2 == 0 {
@@ -435,7 +431,7 @@ func (s *archivalSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespaceI
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessWorkflowTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.NoError(err)
 	}
 

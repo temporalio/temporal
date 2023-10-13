@@ -56,14 +56,14 @@ import (
 
 type rawHistorySuite struct {
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 }
 
 func (s *rawHistorySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.SendRawWorkflowHistory: true,
 	}
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/cluster.yaml")
 }
 
 func (s *rawHistorySuite) TearDownSuite() {
@@ -79,16 +79,16 @@ func TestRawHistorySuite(t *testing.T) {
 	suite.Run(t, new(rawHistorySuite))
 }
 
-func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
-	workflowID := "integration-get-workflow-history-events-long-poll-test-all"
-	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-all-type"
-	taskqueueName := "integration-get-workflow-history-events-long-poll-test-all-taskqueue"
+func (s *functionalSuite) TestGetWorkflowExecutionHistory_All() {
+	workflowID := "functional-get-workflow-history-events-long-poll-test-all"
+	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-all-type"
+	taskqueueName := "functional-get-workflow-history-events-long-poll-test-all-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -194,7 +194,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -210,7 +210,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
@@ -245,16 +245,16 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	s.Equal(11, len(allEvents))
 }
 
-func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
-	workflowID := "integration-get-workflow-history-events-long-poll-test-close"
-	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-close-type"
-	taskqueueName := "integration-get-workflow-history-events-long-poll-test-close-taskqueue"
+func (s *functionalSuite) TestGetWorkflowExecutionHistory_Close() {
+	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
+	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
+	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -361,7 +361,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -377,7 +377,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
@@ -405,15 +405,15 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 }
 
 func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
-	workflowID := "integration-poll-for-workflow-raw-history-events-long-poll-test-all"
-	workflowTypeName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-type"
-	taskqueueName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-taskqueue"
+	workflowID := "functional-poll-for-workflow-raw-history-events-long-poll-test-all"
+	workflowTypeName := "functional-poll-for-workflow-raw-history-events-long-poll-test-all-type"
+	taskqueueName := "functional-poll-for-workflow-raw-history-events-long-poll-test-all-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -552,7 +552,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	// here do a long pull and check # of events and time elapsed
 	// Make first command to schedule activity, this should affect the long poll above
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask1 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
@@ -569,7 +569,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errActivity))
 	})
 	time.AfterFunc(time.Second*8, func() {
-		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask(false, false)
+		_, errWorkflowTask2 := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
@@ -606,7 +606,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	s.Equal(11, len(allEvents))
 }
 
-func (s *clientIntegrationSuite) TestGetHistoryReverse() {
+func (s *clientFunctionalSuite) TestGetHistoryReverse() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -636,7 +636,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse() {
 	s.worker.RegisterActivity(activityFn)
 	s.worker.RegisterWorkflow(workflowFn)
 
-	wfId := "integration-test-gethistoryreverse"
+	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
 		TaskQueue:          s.taskQueue,
@@ -674,12 +674,12 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse() {
 	s.Equal(eventDefaultOrder, events)
 }
 
-func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
+func (s *clientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
 
-	activityId := "integration-test-activity-gethistory-reverse-multiple-branches"
+	activityId := "functional-test-activity-gethistory-reverse-multiple-branches"
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 2,
@@ -713,7 +713,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 	s.worker.RegisterActivity(activityFn)
 	s.worker.RegisterWorkflow(workflowFn)
 
-	wfId := "integration-test-wf-gethistory-reverse-multiple-branches"
+	wfId := "functional-test-wf-gethistory-reverse-multiple-branches"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
 		TaskQueue:          s.taskQueue,
@@ -775,7 +775,7 @@ func reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	return events
 }
 
-func (s *IntegrationBase) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
+func (s *FunctionalTestBase) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistoryReverse(NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       namespace,
 		Execution:       execution,

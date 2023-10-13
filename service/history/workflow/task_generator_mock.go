@@ -146,17 +146,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteExecutionTask() *gomock.C
 }
 
 // GenerateDeleteHistoryEventTask mocks base method.
-func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
+func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateDeleteHistoryEventTask", closeTime, workflowDataAlreadyArchived)
+	ret := m.ctrl.Call(m, "GenerateDeleteHistoryEventTask", closeTime)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateDeleteHistoryEventTask indicates an expected call of GenerateDeleteHistoryEventTask.
-func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime, workflowDataAlreadyArchived interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime, workflowDataAlreadyArchived)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime)
 }
 
 // GenerateHistoryReplicationTasks mocks base method.

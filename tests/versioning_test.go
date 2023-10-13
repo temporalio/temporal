@@ -61,7 +61,7 @@ type versioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
@@ -90,7 +90,7 @@ func (s *versioningIntegSuite) SetupSuite() {
 		// interval so that we don't have to wait so long.
 		dynamicconfig.MatchingLongPollExpirationInterval: longPollTime,
 	}
-	s.setupSuite("testdata/integration_test_cluster.yaml")
+	s.setupSuite("testdata/cluster.yaml")
 }
 
 func (s *versioningIntegSuite) TearDownSuite() {
@@ -101,12 +101,8 @@ func (s *versioningIntegSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	clientAddr := "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		clientAddr = TestFlags.FrontendAddr
-	}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  clientAddr,
+		HostPort:  s.hostPort,
 		Namespace: s.namespace,
 	})
 	if err != nil {
@@ -119,14 +115,14 @@ func (s *versioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func TestVersioningIntegrationSuite(t *testing.T) {
+func TestVersioningFuncSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, new(versioningIntegSuite))
 }
 
 func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
-	tq := "integration-versioning-basic"
+	tq := "functional-versioning-basic"
 
 	foo := s.prefixed("foo")
 	s.addNewDefaultBuildId(ctx, tq, foo)
@@ -142,7 +138,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 
 func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := NewContext()
-	tq := "integration-versioning-series"
+	tq := "functional-versioning-series"
 
 	for i := 0; i < 10; i++ {
 		s.addNewDefaultBuildId(ctx, tq, s.prefixed(fmt.Sprintf("foo-%d", i)))
@@ -162,7 +158,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 
 func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
-	tq := "integration-versioning-compat-not-found"
+	tq := "functional-versioning-compat-not-found"
 
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
@@ -181,7 +177,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 
 func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
-	tq := "integration-versioning-persists"
+	tq := "functional-versioning-persists"
 
 	s.addNewDefaultBuildId(ctx, tq, s.prefixed("foo"))
 
@@ -199,7 +195,7 @@ func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 
 func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 	ctx := NewContext()
-	tq := "integration-versioning-propagate"
+	tq := "functional-versioning-propagate"
 
 	// ensure at least two hops
 	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
@@ -1075,7 +1071,7 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
 
-	started := make(chan struct{}, 2)
+	started := make(chan struct{}, 10)
 
 	wf1 := func(ctx workflow.Context) error {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v1", nil }); err != nil {
@@ -1097,7 +1093,6 @@ func (s *versioningIntegSuite) dispatchQuery() {
 		if err := workflow.SetQueryHandler(ctx, "query", func() (string, error) { return "v2", nil }); err != nil {
 			return err
 		}
-		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		return nil
 	}
 
@@ -1157,8 +1152,30 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	s.NoError(val.Get(&out))
 	s.Equal("v1.1", out)
 
-	// let the workflow exit
+	// let the workflow complete
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait for completion
+	s.NoError(run.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run.GetID(), run.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v1.1", out)
+
+	// start another wf on v2. should complete immediately.
+	run2, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+
+	// wait for completion
+	s.NoError(run2.Get(ctx, nil))
+
+	// query on closed workflow
+	val, err = s.sdkClient.QueryWorkflow(ctx, run2.GetID(), run2.GetRunID(), "query")
+	s.NoError(err)
+	s.NoError(val.Get(&out))
+	s.Equal("v2", out)
 }
 
 func (s *versioningIntegSuite) TestDispatchContinueAsNew() {

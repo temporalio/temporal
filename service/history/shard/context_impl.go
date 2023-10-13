@@ -233,7 +233,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			s.rwLock.Unlock()
 			return nil
 		},
-		MetricsName: metrics.ShardLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardLockLatency.GetMetricName(),
 	}}
 }
 
@@ -827,7 +827,8 @@ func (s *ContextImpl) GetCurrentExecution(
 
 	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
-		return nil, err
+		// also return resp, for RebuildMutableState API
+		return resp, err
 	}
 	return resp, nil
 }
@@ -842,7 +843,8 @@ func (s *ContextImpl) GetWorkflowExecution(
 
 	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
-		return nil, err
+		// also return resp, for RebuildMutableState API
+		return resp, err
 	}
 	return resp, nil
 }

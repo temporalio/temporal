@@ -148,7 +148,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	return r.refreshTasksForWorkflowSearchAttr(taskGenerator)
+	return r.refreshTasksForWorkflowSearchAttr(mutableState, taskGenerator)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
@@ -408,8 +408,11 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
+	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
-
-	return taskGenerator.GenerateUpsertVisibilityTask()
+	if mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return taskGenerator.GenerateUpsertVisibilityTask()
+	}
+	return nil
 }
