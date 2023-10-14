@@ -68,7 +68,7 @@ type (
 		TaskQueueLimitPerBuildId          dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout        dynamicconfig.DurationPropertyFn
 		BacklogNegligibleAge              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		MaxWaitForPollerBeforeFwd              dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		MaxWaitForPollerBeforeFwd         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -102,10 +102,10 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration func() time.Duration
-		BacklogNegligibleAge func() time.Duration
+		SyncMatchWaitDuration     func() time.Duration
+		BacklogNegligibleAge      func() time.Duration
 		MaxWaitForPollerBeforeFwd func() time.Duration
-		TestDisableSyncMatch  func() bool
+		TestDisableSyncMatch      func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
