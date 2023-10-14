@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -436,7 +438,7 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 
 // DEPRECATED: TBD
 func (wh *WorkflowHandler) pollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-	//callTime := time.Now().UTC()
+	callTime := time.Now().UTC()
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -475,15 +477,15 @@ func (wh *WorkflowHandler) pollWorkflowTaskQueue(ctx context.Context, request *w
 		}
 
 		// For all other errors log an error and return it back to client.
-		//ctxTimeout := "not-set"
-		//ctxDeadline, ok := ctx.Deadline()
-		//if ok {
-		//	ctxTimeout = ctxDeadline.Sub(callTime).String()
-		//}
-		//wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-		//	tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-		//	tag.Timeout(ctxTimeout),
-		//	tag.Error(err))
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
 		return nil, err
 	}
 

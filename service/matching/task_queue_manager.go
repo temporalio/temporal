@@ -121,10 +121,11 @@ type (
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
 		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
-		// GetTask blocks waiting for a task Returns error when context deadline is exceeded
+		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
+		// forwarded indicates if this poll was further forwarded to a parent partition
+		PollTask(ctx context.Context, pollMetadata *pollMetadata) (task *internalTask, forwarded bool, err error)
 		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
@@ -281,7 +282,7 @@ func newTaskQueueManager(
 		forwardTaskQueue := newTaskQueueIDWithVersionSet(taskQueue, "")
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, forwardTaskQueue, stickyInfo.kind, e.matchingRawClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler, taskQueue)
+	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
@@ -478,14 +479,15 @@ func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	return err
 }
 
-// GetTask blocks waiting for a task.
+// PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
 // to be dispatched from this task queue to pollers
-func (c *taskQueueManagerImpl) GetTask(
+// forwarded indicates if this poll was further forwarded to a parent partition
+func (c *taskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
-) (*internalTask, bool, error) {
+) (task *internalTask, forwarded bool, err error) {
 	c.liveness.markAlive()
 
 	c.currentPolls.Add(1)
@@ -507,7 +509,7 @@ func (c *taskQueueManagerImpl) GetTask(
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
 
-	task, forwarded, err := c.matcher.Poll(ctx, pollMetadata)
+	task, forwarded, err = c.matcher.Poll(ctx, pollMetadata)
 	if err != nil {
 		return nil, forwarded, err
 	}

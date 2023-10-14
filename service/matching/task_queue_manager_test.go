@@ -370,12 +370,12 @@ func TestReaderSignaling(t *testing.T) {
 		"Sync match should not signal taskReader")
 }
 
-// runOneShotPoller spawns a goroutine to call tqm.GetTask on the provided tqm.
+// runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
-		task, err := tqm.GetTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
+		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
 		if task == nil {
 			out <- err
 			return nil
@@ -384,7 +384,7 @@ func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, 
 		out <- task
 		return nil
 	})
-	// tqm.GetTask() needs some time to attach the goro started above to the
+	// tqm.PollTask() needs some time to attach the goro started above to the
 	// internal task channel. Sorry for this but it appears unavoidable.
 	time.Sleep(10 * time.Millisecond)
 	return handle, out

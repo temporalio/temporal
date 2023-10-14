@@ -103,6 +103,7 @@ type (
 	pollMetadata struct {
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+		forwardedFrom             string
 	}
 
 	namespaceUpdateLocks struct {
@@ -491,8 +492,9 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, forwarded, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, forwardedPoll, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
@@ -500,9 +502,7 @@ pollLoop:
 			return nil, err
 		}
 
-		if !forwarded {
-			e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
-		}
+		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource(), forwardedPoll)
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -608,11 +608,12 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, forwarded, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, forwardedPoll, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
@@ -620,9 +621,7 @@ pollLoop:
 			return nil, err
 		}
 
-		if !forwarded {
-			e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
-		}
+		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource(), forwardedPoll)
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -1188,7 +1187,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	return partitionKeys, nil
 }
 
-func (e *matchingEngineImpl) getTask(
+func (e *matchingEngineImpl) pollTask(
 	ctx context.Context,
 	origTaskQueue *taskQueueID,
 	stickyInfo stickyInfo,
@@ -1226,7 +1225,7 @@ func (e *matchingEngineImpl) getTask(
 		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	return tqm.GetTask(ctx, pollMetadata)
+	return tqm.PollTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
@@ -1418,7 +1417,14 @@ func (e *matchingEngineImpl) emitForwardedSourceStats(
 	metricsHandler metrics.Handler,
 	isTaskForwarded bool,
 	pollForwardedSource string,
+	forwardedPoll bool,
 ) {
+	if forwardedPoll {
+		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
+		// Only the partition in which the match happened should emit this metric.
+		return
+	}
+
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
