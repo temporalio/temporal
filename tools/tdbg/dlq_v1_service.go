@@ -26,30 +26,31 @@ package tdbg
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/urfave/cli/v2"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-
-	replicationspb "go.temporal.io/server/api/replication/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
+	"go.uber.org/multierr"
 )
 
-const (
-	defaultPageSize = 1000
-)
+type DLQV1Service struct {
+	clientFactory ClientFactory
+}
 
-// AdminGetDLQMessages gets DLQ metadata
-func AdminGetDLQMessages(c *cli.Context, clientFactory ClientFactory) (err error) {
+func NewDLQV1Service(clientFactory ClientFactory) *DLQV1Service {
+	return &DLQV1Service{
+		clientFactory: clientFactory,
+	}
+}
+
+func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	adminClient := clientFactory.AdminClient(c)
+	adminClient := ac.clientFactory.AdminClient(c)
 	dlqType := c.String(FlagDLQType)
 	sourceCluster := c.String(FlagCluster)
 	shardID := c.Int(FlagShardID)
@@ -102,7 +103,7 @@ func AdminGetDLQMessages(c *cli.Context, clientFactory ClientFactory) (err error
 			return fmt.Errorf("unable to read dlq message. Last read message id: %v", lastReadMessageID)
 		}
 
-		task := item.(*replicationspb.ReplicationTask)
+		task := item.(*repication.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -119,8 +120,7 @@ func AdminGetDLQMessages(c *cli.Context, clientFactory ClientFactory) (err error
 	return nil
 }
 
-// AdminPurgeDLQMessages deletes messages from DLQ
-func AdminPurgeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
+func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -135,7 +135,7 @@ func AdminPurgeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 		prompt("Are you sure to purge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
-	adminClient := clientFactory.AdminClient(c)
+	adminClient := ac.clientFactory.AdminClient(c)
 	t, err := toQueueType(dlqType)
 	if err != nil {
 		return err
@@ -152,8 +152,7 @@ func AdminPurgeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 	return nil
 }
 
-// AdminMergeDLQMessages merges message from DLQ
-func AdminMergeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
+func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -168,7 +167,7 @@ func AdminMergeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 		prompt("Are you sure to merge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
-	adminClient := clientFactory.AdminClient(c)
+	adminClient := ac.clientFactory.AdminClient(c)
 
 	t, err := toQueueType(dlqType)
 	if err != nil {
@@ -195,26 +194,4 @@ func AdminMergeDLQMessages(c *cli.Context, clientFactory ClientFactory) error {
 	}
 	fmt.Println("Successfully merged all messages.")
 	return nil
-}
-
-func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
-	switch dlqType {
-	case "namespace":
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE, nil
-	case "history":
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION, nil
-	default:
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported Tueue type %v", dlqType)
-	}
-}
-
-func getOutputFile(outputFile string) (*os.File, error) {
-	if len(outputFile) == 0 {
-		return os.Stdout, nil
-	}
-	f, err := os.Create(outputFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create output file: %s", err)
-	}
-	return f, nil
 }

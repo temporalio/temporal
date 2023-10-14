@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
@@ -50,8 +50,8 @@ func TestInvoke_InvalidQueueCategory(t *testing.T) {
 	t.Parallel()
 
 	_, err := getdlqtasks.Invoke(context.Background(), nil, &historyservice.GetDLQTasksRequest{
-		DlqKey: &historyservice.HistoryDLQKey{
-			Category: -1,
+		DlqKey: &commonspb.HistoryDLQKey{
+			TaskCategory: -1,
 		},
 	})
 
@@ -69,8 +69,8 @@ func TestInvoke_ZeroPageSize(t *testing.T) {
 		context.Background(),
 		new(persistence.HistoryTaskQueueManagerImpl),
 		&historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category: enumsspb.TaskCategory(tasks.CategoryTransfer.ID()),
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory: tasks.CategoryTransfer.ID(),
 			},
 			PageSize: 0,
 		},
@@ -86,8 +86,8 @@ func TestInvoke_UnavailableError(t *testing.T) {
 		context.Background(),
 		failingHistoryTaskQueueManager{},
 		&historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category: enumsspb.TaskCategory(tasks.CategoryTransfer.ID()),
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory: tasks.CategoryTransfer.ID(),
 			},
 			PageSize: 0,
 		},

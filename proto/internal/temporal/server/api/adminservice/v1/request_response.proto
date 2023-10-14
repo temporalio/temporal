@@ -47,6 +47,7 @@ import "temporal/server/api/persistence/v1/cluster_metadata.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/common/v1/dlq.proto";
 
 message RebuildMutableStateRequest {
     string namespace = 1;
@@ -421,40 +422,15 @@ message GetNamespaceResponse {
     bool is_global_namespace = 9;
 }
 
-message HistoryTask {
-    // shard_id is included to avoid having to deserialize the task blob.
-    int32 shard_id = 1;
-    temporal.api.common.v1.DataBlob task = 2;
-}
-
-message HistoryDLQTaskMetadata {
-    // message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
-    int64 message_id = 1;
-}
-
-// HistoryDLQTask is a history task that has been moved to the DLQ, so it also has a message ID (index within that
-// queue).
-message HistoryDLQTask {
-    HistoryDLQTaskMetadata metadata = 1;
-    HistoryTask task = 2;
-}
-
-// HistoryDLQKey is a compound key that identifies a history DLQ.
-message HistoryDLQKey {
-    temporal.server.api.enums.v1.TaskCategory category = 1;
-    string source_cluster = 2;
-    string target_cluster = 3;
-}
-
 message GetDLQTasksRequest {
-    HistoryDLQKey dlq_key = 1;
+    temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
     // page_size must be positive. Up to this many tasks will be returned.
     int32 page_size = 2;
     bytes next_page_token = 3;
 }
 
 message GetDLQTasksResponse {
-    repeated HistoryDLQTask dlq_tasks = 1;
+    repeated temporal.server.api.common.v1.HistoryDLQTask dlq_tasks = 1;
     // next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
     // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
     // there are more results.

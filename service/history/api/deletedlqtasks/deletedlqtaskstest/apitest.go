@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
@@ -61,12 +61,12 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			require.NoError(t, err)
 		}
 		_, err = deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enumsspb.TaskCategory(queueKey.Category.ID()),
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  queueKey.Category.ID(),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
 			},
-			InclusiveMaxTaskMetadata: &historyservice.HistoryDLQTaskMetadata{
+			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: persistence.FirstQueueMessageID + 1,
 			},
 		})
@@ -84,12 +84,12 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 
 		queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
 		_, err := deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enumsspb.TaskCategory(queueKey.Category.ID()),
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  queueKey.Category.ID(),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
 			},
-			InclusiveMaxTaskMetadata: &historyservice.HistoryDLQTaskMetadata{
+			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: persistence.FirstQueueMessageID,
 			},
 		})
