@@ -53,18 +53,12 @@ func newTaskRequestTracker() *taskRequestTracker {
 	}
 	return &taskRequestTracker{
 		pendingTaskKeys: outstandingTaskKeys,
-		waitChannels:    make([]chan<- struct{}, 0),
 	}
 }
 
 func (t *taskRequestTracker) track(
 	taskMaps ...map[tasks.Category][]tasks.Task,
 ) taskRequestCompletionFn {
-	t.Lock()
-	defer t.Unlock()
-
-	t.inflightRequestCount++
-
 	minKeyByCategory := make(map[tasks.Category]tasks.Key)
 	for _, taskMap := range taskMaps {
 		for category, tasksPerCategory := range taskMap {
@@ -85,6 +79,12 @@ func (t *taskRequestTracker) track(
 			}
 		}
 	}
+
+	t.Lock()
+	defer t.Unlock()
+
+	t.inflightRequestCount++
+
 	for category, minKey := range minKeyByCategory {
 		t.pendingTaskKeys[category][minKey] = struct{}{}
 	}
