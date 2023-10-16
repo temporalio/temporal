@@ -107,6 +107,8 @@ func GetPartitionForQueueV2(
 	return partition, nil
 }
 
+// ClampLastIDToDeleteForQueueV2 returns the ID of the last message in the queue that has to be deleted.
+// It returns -1 if no message has to be deleted.
 func ClampLastIDToDeleteForQueueV2(
 	lastIDToDelete int64,
 	nextMessageID int64,

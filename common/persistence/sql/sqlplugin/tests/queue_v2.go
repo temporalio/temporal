@@ -286,7 +286,7 @@ func testCommitTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "EnqueueMessage failed. Failed to commit transaction.")
+	assert.ErrorContains(t, err, "EnqueueMessage failed")
 	assert.Equal(t, db.commitCalls, 1)
 }
 
@@ -341,7 +341,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to get last enqueued message id")
+	assert.ErrorContains(t, err, "Failed to get next messageId")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
@@ -504,7 +504,7 @@ func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin
 		PageSize:  10,
 	})
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrSelectMetadataFailed)
+	assert.ErrorContains(t, err, ErrSelectMetadataFailed.Error())
 	_, err = q.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: persistence.QueueTypeHistoryNormal,
 		QueueName: "test-queue-" + t.Name(),
@@ -514,7 +514,7 @@ func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin
 		},
 	})
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrSelectMetadataFailed)
+	assert.ErrorContains(t, err, ErrSelectMetadataFailed.Error())
 	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
 		QueueType:                   queueType,
 		QueueName:                   queueName,
