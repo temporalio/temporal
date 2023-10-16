@@ -7,6 +7,8 @@ services:
       services-network:
         aliases:
           - cassandra
+    security_opt:
+      - no-new-privileges:true
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -18,6 +20,8 @@ services:
       services-network:
         aliases:
           - mysql
+    security_opt:
+      - no-new-privileges:true
 
   postgresql:
     image: postgres:13.5
@@ -30,6 +34,8 @@ services:
       services-network:
         aliases:
           - postgresql
+    security_opt:
+      - no-new-privileges:true
 
   elasticsearch:
     image: elasticsearch:7.10.1
@@ -39,6 +45,8 @@ services:
           - elasticsearch
     environment:
       - discovery.type=single-node
+    security_opt:
+      - no-new-privileges:true
 
   build:
     build:

@@ -7,6 +7,8 @@ services:
       services-network:
         aliases:
           - cassandra
+    security_opt:
+      - no-new-privileges:true
 
   opensearch:
     image: opensearchproject/opensearch:2.6.0
@@ -17,6 +19,8 @@ services:
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
+    security_opt:
+      - no-new-privileges:true
 
   integration-test-cassandra:
     build:

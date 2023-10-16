@@ -11,3 +11,5 @@ services:
       - "16686:16686"
     networks:
       - temporal-dev-network
+    security_opt:
+      - no-new-privileges:true
