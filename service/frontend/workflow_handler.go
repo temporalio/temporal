@@ -109,7 +109,7 @@ type (
 		tokenSerializer                 common.TaskTokenSerializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
-		namespaceHandler                NamespaceHandler
+		namespaceHandler                *namespaceHandler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		visibilityMrg                   manager.VisibilityManager
 		logger                          log.Logger
