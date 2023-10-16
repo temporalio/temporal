@@ -129,27 +129,51 @@ func ContainsVersionHistoryItem(v *historyspb.VersionHistory, item *historyspb.V
 
 // FindLCAVersionHistoryItem returns the lowest common ancestor VersionHistoryItem.
 func FindLCAVersionHistoryItem(v *historyspb.VersionHistory, remote *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	localIndex := len(v.Items) - 1
-	remoteIndex := len(remote.Items) - 1
+	return FindLCAVersionHistoryItemFromItemSlice(v.Items, remote.Items)
+}
 
-	for localIndex >= 0 && remoteIndex >= 0 {
-		localVersionItem := v.Items[localIndex]
-		remoteVersionItem := remote.Items[remoteIndex]
+func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
+	aIndex := len(versionHistoryItemsA) - 1
+	bIndex := len(versionHistoryItemsB) - 1
 
-		if localVersionItem.Version == remoteVersionItem.Version {
-			if localVersionItem.GetEventId() > remoteVersionItem.GetEventId() {
-				return CopyVersionHistoryItem(remoteVersionItem), nil
+	for aIndex >= 0 && bIndex >= 0 {
+		aVersionItem := versionHistoryItemsA[aIndex]
+		bVersionItem := versionHistoryItemsB[bIndex]
+
+		if aVersionItem.Version == bVersionItem.Version {
+			if aVersionItem.GetEventId() > bVersionItem.GetEventId() {
+				return CopyVersionHistoryItem(bVersionItem), nil
 			}
-			return localVersionItem, nil
-		} else if localVersionItem.Version > remoteVersionItem.Version {
-			localIndex--
+			return aVersionItem, nil
+		} else if aVersionItem.Version > bVersionItem.Version {
+			aIndex--
 		} else {
-			// localVersionItem.Version < remoteVersionItem.Version
-			remoteIndex--
+			// aVersionItem.Version < bVersionItem.Version
+			bIndex--
 		}
 	}
 
 	return nil, serviceerror.NewInternal("version history is malformed. No joint point found.")
+}
+
+// IsVersionHistoryItemsInSameBranch checks if two version history items are in the same branch
+func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) bool {
+	lowestCommonAncestor, err := FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA, versionHistoryItemsB)
+	if err != nil {
+		return false
+	}
+
+	aLastItem, err := getLastVersionHistoryItem(versionHistoryItemsA)
+	if err != nil {
+		return false
+	}
+
+	bLastItem, err := getLastVersionHistoryItem(versionHistoryItemsB)
+	if err != nil {
+		return false
+	}
+
+	return lowestCommonAncestor.Equal(aLastItem) || lowestCommonAncestor.Equal(bLastItem)
 }
 
 // IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.
@@ -174,10 +198,14 @@ func GetFirstVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.Versi
 
 // GetLastVersionHistoryItem return the last VersionHistoryItem.
 func GetLastVersionHistoryItem(v *historyspb.VersionHistory) (*historyspb.VersionHistoryItem, error) {
-	if len(v.Items) == 0 {
+	return getLastVersionHistoryItem(v.Items)
+}
+
+func getLastVersionHistoryItem(v []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, error) {
+	if len(v) == 0 {
 		return nil, serviceerror.NewInternal("version history is empty.")
 	}
-	return CopyVersionHistoryItem(v.Items[len(v.Items)-1]), nil
+	return CopyVersionHistoryItem(v[len(v)-1]), nil
 }
 
 // GetVersionHistoryEventVersion return the corresponding event version of an event ID.
