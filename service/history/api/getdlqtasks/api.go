@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -45,7 +46,7 @@ func Invoke(
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
 	req *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(req.DlqKey.Category)
+	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory))
 	if err != nil {
 		return nil, err
 	}
@@ -68,13 +69,13 @@ func Invoke(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetDLQTasks failed. Error: %v", err))
 	}
 
-	dlqTasks := make([]*historyservice.HistoryDLQTask, len(response.Tasks))
+	dlqTasks := make([]*commonspb.HistoryDLQTask, len(response.Tasks))
 	for i, task := range response.Tasks {
-		dlqTasks[i] = &historyservice.HistoryDLQTask{
-			Metadata: &historyservice.HistoryDLQTaskMetadata{
+		dlqTasks[i] = &commonspb.HistoryDLQTask{
+			Metadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: task.MessageMetadata.ID,
 			},
-			Task: &historyservice.HistoryTask{
+			Task: &commonspb.HistoryTask{
 				ShardId: task.Task.ShardId,
 				Task:    task.Task.Blob,
 			},
