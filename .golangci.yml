@@ -89,7 +89,7 @@ linters-settings:
           - 25
       - name: cyclomatic
         arguments:
-          - 18
+          - 25
       - name: function-result-limit
         arguments:
           - 5

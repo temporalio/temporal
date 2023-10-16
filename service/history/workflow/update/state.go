@@ -30,7 +30,7 @@ type (
 )
 
 const (
-	stateAdmitted state = (1 << iota)
+	stateAdmitted state = 1 << iota
 	stateProvisionallyRequested
 	stateRequested
 	stateProvisionallyAccepted

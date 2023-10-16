@@ -1765,31 +1765,15 @@ func (adh *AdminHandler) GetDLQTasks(
 	request *adminservice.GetDLQTasksRequest,
 ) (*adminservice.GetDLQTasksResponse, error) {
 	response, err := adh.historyClient.GetDLQTasks(ctx, &historyservice.GetDLQTasksRequest{
-		DlqKey: &historyservice.HistoryDLQKey{
-			Category:      request.DlqKey.Category,
-			SourceCluster: request.DlqKey.SourceCluster,
-			TargetCluster: request.DlqKey.TargetCluster,
-		},
+		DlqKey:        request.DlqKey,
 		PageSize:      request.PageSize,
 		NextPageToken: request.NextPageToken,
 	})
 	if err != nil {
 		return nil, err
 	}
-	dlqTasks := make([]*adminservice.HistoryDLQTask, len(response.DlqTasks))
-	for i, task := range response.DlqTasks {
-		dlqTasks[i] = &adminservice.HistoryDLQTask{
-			Metadata: &adminservice.HistoryDLQTaskMetadata{
-				MessageId: task.Metadata.MessageId,
-			},
-			Task: &adminservice.HistoryTask{
-				ShardId: task.Task.ShardId,
-				Task:    task.Task.Task,
-			},
-		}
-	}
 	return &adminservice.GetDLQTasksResponse{
-		DlqTasks:      dlqTasks,
+		DlqTasks:      response.DlqTasks,
 		NextPageToken: response.NextPageToken,
 	}, nil
 }

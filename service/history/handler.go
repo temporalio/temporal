@@ -2166,6 +2166,22 @@ func (h *Handler) DeleteDLQTasks(
 	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request)
 }
 
+// AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.
+func (h *Handler) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (*historyservice.AddTasksResponse, error) {
+	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return engine.AddTasks(ctx, request)
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

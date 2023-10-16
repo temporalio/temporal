@@ -65,7 +65,7 @@ func (s *functionalSuite) TestStartWithMemo() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -76,7 +76,7 @@ func (s *functionalSuite) TestStartWithMemo() {
 	fn := func() (RunIdGetter, error) {
 		return s.engine.StartWorkflowExecution(NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl}, memo)
+	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo)
 }
 
 func (s *functionalSuite) TestSignalWithStartWithMemo() {
@@ -98,7 +98,7 @@ func (s *functionalSuite) TestSignalWithStartWithMemo() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -111,7 +111,7 @@ func (s *functionalSuite) TestSignalWithStartWithMemo() {
 	fn := func() (RunIdGetter, error) {
 		return s.engine.SignalWithStartWorkflowExecution(NewContext(), request)
 	}
-	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl}, memo)
+	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo)
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code

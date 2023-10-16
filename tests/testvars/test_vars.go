@@ -130,8 +130,9 @@ func (tv *TestVars) WithTaskQueue(taskQueue string, key ...string) *TestVars {
 
 func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
-		Name: tv.getOrCreate("sticky_task_queue", key),
-		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
+		Name:       tv.getOrCreate("sticky_task_queue", key),
+		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
+		NormalName: tv.getOrCreate("task_queue", key),
 	}
 }
 

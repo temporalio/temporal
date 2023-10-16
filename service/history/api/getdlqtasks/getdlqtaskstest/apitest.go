@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -69,8 +69,8 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		context.Background(),
 		manager,
 		&historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enumsspb.TASK_CATEGORY_TRANSFER,
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  tasks.CategoryTransfer.ID(),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},
