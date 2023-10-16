@@ -37,15 +37,17 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/sdk/temporal"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -54,6 +56,20 @@ import (
 )
 
 type (
+	activities struct {
+		historyShardCount              int32
+		executionManager               persistence.ExecutionManager
+		taskManager                    persistence.TaskManager
+		namespaceRegistry              namespace.Registry
+		historyClient                  historyservice.HistoryServiceClient
+		frontendClient                 workflowservice.WorkflowServiceClient
+		clientFactory                  serverClient.Factory
+		logger                         log.Logger
+		metricsHandler                 metrics.Handler
+		forceReplicationMetricsHandler metrics.Handler
+		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
+	}
+
 	SkippedWorkflowExecution struct {
 		WorkflowExecution commonpb.WorkflowExecution
 		Reason            string
