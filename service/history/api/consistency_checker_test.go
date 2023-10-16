@@ -272,6 +272,17 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
+	wfContext := workflow.NewMockContext(s.controller)
+	released := false
+	releaseFn := func(err error) { released = true }
+
+	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		s.workflowID,
+		workflow.LockPriorityHigh,
+	).Return(wfContext, releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -284,12 +295,24 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.NoError(err)
 	s.Equal(s.currentRunID, runID)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_OwnershipAsserted() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
+	wfContext := workflow.NewMockContext(s.controller)
+	released := false
+	releaseFn := func(err error) { released = true }
+
+	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		s.workflowID,
+		workflow.LockPriorityHigh,
+	).Return(wfContext, releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -303,12 +326,24 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Empty(runID)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_OwnershipLost() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
+	wfContext := workflow.NewMockContext(s.controller)
+	released := false
+	releaseFn := func(err error) { released = true }
+
+	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		s.workflowID,
+		workflow.LockPriorityHigh,
+	).Return(wfContext, releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -322,12 +357,24 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_NotFound_Ownership
 	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
 	s.Empty(runID)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
+	wfContext := workflow.NewMockContext(s.controller)
+	released := false
+	releaseFn := func(err error) { released = true }
+
+	s.workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+		ctx,
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		s.workflowID,
+		workflow.LockPriorityHigh,
+	).Return(wfContext, releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -340,6 +387,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 	runID, err := s.checker.getCurrentRunID(ctx, &shardOwnershipAsserted, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Empty(runID)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestAssertShardOwnership_FirstTime() {
