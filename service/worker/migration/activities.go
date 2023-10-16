@@ -64,6 +64,7 @@ type (
 		historyClient                  historyservice.HistoryServiceClient
 		frontendClient                 workflowservice.WorkflowServiceClient
 		clientFactory                  serverClient.Factory
+		clientBean                     serverClient.Bean
 		logger                         log.Logger
 		metricsHandler                 metrics.Handler
 		forceReplicationMetricsHandler metrics.Handler
@@ -746,13 +747,24 @@ const (
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(request.Namespace))
-	remoteClient := a.clientFactory.NewRemoteAdminClientWithTimeout(
-		request.TargetClusterEndpoint,
-		admin.DefaultTimeout,
-		admin.DefaultLargeTimeout,
-	)
-
 	var response verifyReplicationTasksResponse
+	var remoteClient adminservice.AdminServiceClient
+	var err error
+
+	if len(request.TargetClusterName) > 0 {
+		remoteClient, err = a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
+		if err != nil {
+			return response, err
+		}
+	} else {
+		// TODO: remove once TargetClusterEndpoint is no longer used.
+		remoteClient = a.clientFactory.NewRemoteAdminClientWithTimeout(
+			request.TargetClusterEndpoint,
+			admin.DefaultTimeout,
+			admin.DefaultLargeTimeout,
+		)
+	}
+
 	var details replicationTasksHeartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {
