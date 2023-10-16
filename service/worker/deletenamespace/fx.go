@@ -25,14 +25,18 @@
 package deletenamespace
 
 import (
+	"context"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
@@ -76,30 +80,52 @@ func newComponent(
 		}}
 }
 
-func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
+func (wc *deleteNamespaceComponent) RegisterWorkflow(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
-	worker.RegisterActivity(wc.deleteNamespaceActivities())
+	worker.RegisterActivity(wc.deleteNamespaceLocalActivities())
 
 	worker.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
-	worker.RegisterActivity(wc.reclaimResourcesActivities())
+	worker.RegisterActivity(wc.reclaimResourcesLocalActivities())
 
 	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
-	worker.RegisterActivity(wc.deleteExecutionsActivities())
+	worker.RegisterActivity(wc.deleteExecutionsLocalActivities())
 }
 
-func (wc *deleteNamespaceComponent) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	// use default worker
 	return nil
 }
 
-func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {
-	return NewActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
+func (wc *deleteNamespaceComponent) RegisterActivities(worker sdkworker.Worker) {
+	worker.RegisterActivity(wc.reclaimResourcesActivities())
+	worker.RegisterActivity(wc.deleteExecutionsActivities())
+}
+
+func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: primitives.DeleteNamespaceActivityTQ,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+		},
+	}
+}
+
+func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
+	return NewLocalActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
-	return reclaimresources.NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
+}
+
+func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimresources.LocalActivities {
+	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
 	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsHandler, wc.logger)
+}
+
+func (wc *deleteNamespaceComponent) deleteExecutionsLocalActivities() *deleteexecutions.LocalActivities {
+	return deleteexecutions.NewLocalActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
 }

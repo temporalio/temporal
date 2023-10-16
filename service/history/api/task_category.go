@@ -29,15 +29,14 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func GetTaskCategory(categoryEnum enums.TaskCategory) (tasks.Category, error) {
-	category, ok := tasks.GetCategoryByID(int32(categoryEnum))
+func GetTaskCategory(categoryID int) (tasks.Category, error) {
+	category, ok := tasks.GetCategoryByID(int32(categoryID))
 	if !ok {
 		return tasks.Category{}, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("Invalid queue category: %v", categoryEnum.String()),
+			fmt.Sprintf("Invalid queue category id: %d", categoryID),
 		)
 	}
 	return category, nil

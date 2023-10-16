@@ -70,7 +70,6 @@ type (
 		// not merely log an error
 		*require.Assertions
 		FunctionalTestBase
-		hostPort                  string
 		sdkClient                 sdkclient.Client
 		worker                    worker.Worker
 		taskQueue                 string
@@ -105,11 +104,6 @@ func (s *clientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
-
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
 }
 
 func (s *clientFunctionalSuite) TearDownSuite() {

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -61,6 +62,9 @@ type (
 
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
+
+		batchLock sync.Mutex
+		batchable bool
 	}
 	eventsDeserializeResponse struct {
 		events       []*historypb.HistoryEvent
@@ -71,6 +75,7 @@ type (
 
 var _ ctasks.Task = (*ExecutableHistoryTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableHistoryTask)(nil)
+var _ BatchableTask = (*ExecutableHistoryTask)(nil)
 
 func NewExecutableHistoryTask(
 	processToolBox ProcessToolBox,
@@ -96,6 +101,7 @@ func NewExecutableHistoryTask(
 		versionHistoryItems: task.VersionHistoryItems,
 		eventsBlob:          task.GetEvents(),
 		newRunEventsBlob:    task.GetNewRunEvents(),
+		batchable:           true,
 	}
 }
 
@@ -298,4 +304,156 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryE
 		err:          nil,
 	}
 	return events, newRunEvents, err
+}
+
+func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
+	if !e.batchable {
+		return nil, false
+	}
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+
+	if !e.batchable || !incomingTask.CanBatch() {
+		return nil, false
+	}
+
+	incomingHistoryTask, err := e.validateIncomingBatchTask(incomingTask)
+	if err != nil {
+		e.Logger.Debug("Failed to batch task", tag.Error(err))
+		return nil, false
+	}
+
+	currentEvents, currentNewRunEvents, _ := e.getDeserializedEvents()
+	incomingEvents, incomingNewRunEvents, _ := incomingHistoryTask.getDeserializedEvents()
+
+	return &ExecutableHistoryTask{
+		ProcessToolBox:      e.ProcessToolBox,
+		WorkflowKey:         e.WorkflowKey,
+		ExecutableTask:      e.ExecutableTask,
+		baseExecutionInfo:   e.baseExecutionInfo,
+		versionHistoryItems: e.getFresherVersionHistoryItems(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
+		eventsDesResponse: &eventsDeserializeResponse{
+			events:       append(currentEvents, incomingEvents...),
+			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
+			err:          nil,
+		},
+		batchable: true,
+	}, true
+}
+
+func (e *ExecutableHistoryTask) getFresherVersionHistoryItems(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	fresherVersionHistoryItems := versionHistoryItemsA
+	if versionHistoryItemsA[len(versionHistoryItemsA)-1].GetEventId() < versionHistoryItemsB[len(versionHistoryItemsB)-1].GetEventId() {
+		fresherVersionHistoryItems = versionHistoryItemsB
+	}
+	var items []*historyspb.VersionHistoryItem
+	for _, item := range fresherVersionHistoryItems {
+		items = append(items, versionhistory.CopyVersionHistoryItem(item))
+	}
+	return items
+}
+
+func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask BatchableTask) (*ExecutableHistoryTask, error) {
+	incomingHistoryTask, isHistoryTask := incomingTask.(*ExecutableHistoryTask)
+	if !isHistoryTask {
+		return nil, serviceerror.NewInvalidArgument("Unsupported Batch type")
+	}
+	if err := e.checkSourceCluster(incomingHistoryTask.SourceClusterName()); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkWorkflowKey(incomingHistoryTask.WorkflowKey); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkVersionHistoryItem(incomingHistoryTask.versionHistoryItems); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkBaseExecutionInfo(incomingHistoryTask.baseExecutionInfo); err != nil {
+		return nil, err
+	}
+
+	events, newRunEvents, err := incomingHistoryTask.getDeserializedEvents()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = e.checkEvents(events, newRunEvents); err != nil {
+		return nil, err
+	}
+
+	return incomingHistoryTask, nil
+}
+
+func (e *ExecutableHistoryTask) checkSourceCluster(incomingTaskSourceCluster string) error {
+	if e.SourceClusterName() != incomingTaskSourceCluster {
+		return serviceerror.NewInvalidArgument("source cluster does not match")
+	}
+	return nil
+}
+
+// checkVersionHistoryItem will check if incoming tasks Version history is on the same branch as the current one
+func (e *ExecutableHistoryTask) checkVersionHistoryItem(incomingHistoryItems []*historyspb.VersionHistoryItem) error {
+	if versionhistory.IsVersionHistoryItemsInSameBranch(e.versionHistoryItems, incomingHistoryItems) {
+		return nil
+	}
+	return serviceerror.NewInvalidArgument("version history does not match")
+}
+
+func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWorkflowKey definition.WorkflowKey) error {
+	if e.WorkflowKey != incomingWorkflowKey {
+		return serviceerror.NewInvalidArgument("workflow key does not match")
+	}
+	return nil
+}
+
+func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo *workflowpb.BaseExecutionInfo) error {
+	if e.baseExecutionInfo == nil && incomingTaskExecutionInfo == nil {
+		return nil
+	}
+	if e.baseExecutionInfo == nil || incomingTaskExecutionInfo == nil {
+		return serviceerror.NewInvalidArgument("one of base execution is nil")
+	}
+
+	if !e.baseExecutionInfo.Equal(incomingTaskExecutionInfo) {
+		return serviceerror.NewInvalidArgument("base execution is not equal")
+	}
+	return nil
+}
+
+func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryEvent, incomingNewRunEvents []*historypb.HistoryEvent) error {
+	if len(incomingEvents) == 0 {
+		return serviceerror.NewInvalidArgument("incoming task is empty")
+	}
+	currentEvents, currentNewRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
+
+	if currentNewRunEvents != nil {
+		return serviceerror.NewInvalidArgument("Current Task is expected to be the last event of a workflow")
+	}
+	currentLastEvent := currentEvents[len(currentEvents)-1]
+	incomingFirstEvent := incomingEvents[0]
+	if currentLastEvent.Version != incomingFirstEvent.Version {
+		return serviceerror.NewInvalidArgument("events version mismatch")
+	}
+	if currentLastEvent.EventId+1 != incomingFirstEvent.EventId {
+		return serviceerror.NewInvalidArgument("events id is not consecutive")
+	}
+
+	return nil
+}
+
+func (e *ExecutableHistoryTask) CanBatch() bool {
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+	return e.batchable
+}
+
+func (e *ExecutableHistoryTask) MarkUnbatchable() {
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+	e.batchable = false
 }

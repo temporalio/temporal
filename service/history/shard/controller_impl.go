@@ -165,7 +165,7 @@ func (c *ControllerImpl) GetPingChecks() []common.PingCheck {
 			}
 			return out
 		},
-		MetricsName: metrics.ShardControllerLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardControllerLockLatency.GetMetricName(),
 	}}
 }
 

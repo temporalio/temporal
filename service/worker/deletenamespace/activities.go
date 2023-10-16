@@ -42,7 +42,7 @@ import (
 )
 
 type (
-	activities struct {
+	localActivities struct {
 		metadataManager persistence.MetadataManager
 		metricsHandler  metrics.Handler
 		logger          log.Logger
@@ -54,19 +54,19 @@ type (
 	}
 )
 
-func NewActivities(
+func NewLocalActivities(
 	metadataManager persistence.MetadataManager,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *activities {
-	return &activities{
+) *localActivities {
+	return &localActivities{
 		metadataManager: metadataManager,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteNamespaceWorkflowScope)),
 		logger:          logger,
 	}
 }
 
-func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
+func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
@@ -89,7 +89,7 @@ func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespac
 	}, nil
 }
 
-func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
+func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
@@ -127,7 +127,7 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 	return nil
 }
 
-func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
+func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	const initialSuffixLength = 5
@@ -159,7 +159,7 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 	panic(fmt.Sprintf("Unable to generate new name for deleted namespace %s. ID %q is not unique.", nsName, nsID))
 }
 
-func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
 	if newName == previousName {
 		return nil
 	}

@@ -39,11 +39,11 @@ func Invoke(
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
 	req *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	categoryEnum := req.DlqKey.Category
-	category, err := api.GetTaskCategory(categoryEnum)
+	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory))
 	if err != nil {
 		return nil, err
 	}
+
 	if req.InclusiveMaxTaskMetadata == nil {
 		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
 	}
@@ -62,5 +62,6 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
 	return &historyservice.DeleteDLQTasksResponse{}, nil
 }

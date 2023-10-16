@@ -96,6 +96,8 @@ const (
 	rateLimitedErrorType = "RateLimited"
 
 	nextTimeCacheV1Size = 10
+
+	impossibleHistorySize = 1e6 // just for testing, no real history can be this long
 )
 
 type (
@@ -194,8 +196,8 @@ var (
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
-		NextTimeCacheV2Size:               14,                // see note below
-		Version:                           NewCacheAndJitter, // TODO: switch to DontTrackOverlapping
+		NextTimeCacheV2Size:               14, // see note below
+		Version:                           DontTrackOverlapping,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -249,7 +251,14 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
+	iters := s.tweakables.IterationsBeforeContinueAsNew
+	for {
+		// TODO: use the real GetContinueAsNewSuggested
+		continueAsNewSuggested := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= impossibleHistorySize
+		if continueAsNewSuggested && s.pendingUpdate == nil && s.pendingPatch == nil {
+			break
+		}
+		iters--
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
@@ -288,7 +297,6 @@ func (s *scheduler) run() error {
 		// 3. a workflow that we were watching finished
 		s.sleep(nextWakeup)
 		s.updateTweakables()
-
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
