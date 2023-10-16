@@ -39,7 +39,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -87,7 +86,6 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.shardContext = shard.NewMockContext(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.shardID = rand.Int31()
 	s.namespaceID = uuid.New().String()
