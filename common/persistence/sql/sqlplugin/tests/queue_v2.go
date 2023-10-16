@@ -341,7 +341,7 @@ func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplug
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "Failed to get next messageId")
+	assert.ErrorContains(t, err, "failed to get next messageId")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
