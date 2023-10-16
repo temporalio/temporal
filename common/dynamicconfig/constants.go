@@ -509,6 +509,8 @@ const (
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
 	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
 	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
+	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"

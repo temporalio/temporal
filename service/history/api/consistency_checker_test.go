@@ -39,10 +39,13 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -55,6 +58,7 @@ type (
 		controller    *gomock.Controller
 		shardContext  *shard.MockContext
 		workflowCache *wcache.MockCache
+		config        *configs.Config
 
 		shardID      int32
 		namespaceID  string
@@ -82,6 +86,8 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.shardContext = shard.NewMockContext(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.config = tests.NewDynamicConfig()
+	s.config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.shardID = rand.Int31()
 	s.namespaceID = uuid.New().String()
@@ -89,6 +95,7 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.currentRunID = uuid.New().String()
 
 	s.shardContext.EXPECT().GetShardID().Return(s.shardID).AnyTimes()
+	s.shardContext.EXPECT().GetConfig().Return(s.config).AnyTimes()
 
 	s.checker = NewWorkflowConsistencyChecker(s.shardContext, s.workflowCache)
 }
