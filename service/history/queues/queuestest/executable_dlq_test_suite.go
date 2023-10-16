@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,7 +76,9 @@ func TestExecutable(t *testing.T, tqm persistence.HistoryTaskQueueManager) {
 			clusterName := "test-cluster-" + t.Name()
 
 			var executable queues.Executable = NewFakeExecutable(task, tc.err)
-			executable = queues.NewExecutableDLQ(executable, tqm, clock.NewEventTimeSource(), clusterName)
+			ts := clock.NewEventTimeSource()
+			ts.Update(time.Now())
+			executable = queues.NewExecutableDLQ(executable, tqm, ts, clusterName)
 			err := executable.Execute()
 			assert.ErrorContains(t, err, tc.err.Error())
 			if tc.shouldDLQ {
