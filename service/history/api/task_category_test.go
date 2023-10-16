@@ -34,17 +34,18 @@ import (
 
 	enumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func TestGetTaskCategory(t *testing.T) {
 	t.Parallel()
 
-	category, err := api.GetTaskCategory(enumspb.TASK_CATEGORY_TRANSFER)
+	category, err := api.GetTaskCategory(int(tasks.CategoryTransfer.ID()))
 	require.NoError(t, err)
 	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), int(category.ID()))
 
-	_, err = api.GetTaskCategory(enumspb.TASK_CATEGORY_UNSPECIFIED)
+	_, err = api.GetTaskCategory(-1)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "Unspecified")
+	assert.ErrorContains(t, err, "-1")
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
