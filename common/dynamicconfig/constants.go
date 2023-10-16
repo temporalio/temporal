@@ -841,6 +841,8 @@ const (
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
 	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
+	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
+	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
 
 	// keys for worker
 

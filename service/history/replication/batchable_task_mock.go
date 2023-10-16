@@ -85,11 +85,11 @@ func (mr *MockBatchableTaskMockRecorder) Ack() *gomock.Call {
 }
 
 // BatchWith mocks base method.
-func (m *MockBatchableTask) BatchWith(task BatchableTask) (TrackableExecutableTask, error) {
+func (m *MockBatchableTask) BatchWith(task BatchableTask) (TrackableExecutableTask, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchWith", task)
 	ret0, _ := ret[0].(TrackableExecutableTask)
-	ret1, _ := ret[1].(error)
+	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 

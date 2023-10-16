@@ -35,11 +35,10 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
-
-const DefaultWorkerTaskQueue = "default-worker-tq"
 
 type (
 	// workerManager maintains list of SDK workers.
@@ -81,19 +80,31 @@ func (wm *workerManager) Start() {
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
-	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
+	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {
-		workerOptions := wc.DedicatedWorkerOptions()
-		if workerOptions == nil {
+		wfWorkerOptions := wc.DedicatedWorkflowWorkerOptions()
+		if wfWorkerOptions == nil {
 			// use default worker
-			wc.Register(defaultWorker)
+			wc.RegisterWorkflow(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker
-			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
-			wc.Register(dedicatedWorker)
+			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
+			wc.RegisterWorkflow(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
+		}
+
+		activityWorkerOptions := wc.DedicatedActivityWorkerOptions()
+		if activityWorkerOptions == nil {
+			// use default worker
+			wc.RegisterActivities(defaultWorker)
+		} else {
+			// this worker component requires a dedicated worker for activities
+			activityWorkerOptions.Options.DisableWorkflowWorker = true
+			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
+			wc.RegisterActivities(activityWorker)
+			wm.workers = append(wm.workers, activityWorker)
 		}
 	}
 

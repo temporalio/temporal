@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 
@@ -219,7 +218,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 "force-replication-wf",
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,

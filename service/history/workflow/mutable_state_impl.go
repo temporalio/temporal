@@ -4606,7 +4606,7 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 	ms.appliedEvents[id] = struct{}{}
 }
 
-func (ms *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
+func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
 }
 
