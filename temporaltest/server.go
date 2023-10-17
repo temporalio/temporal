@@ -137,7 +137,11 @@ func (ts *TestServer) Stop() {
 	for _, c := range ts.clients {
 		c.Close()
 	}
-	ts.server.Stop()
+	if err := ts.server.Stop(); err != nil {
+		// Log instead of throwing error because there's no need to fail the test
+		// if it already succeeded.
+		ts.t.Logf("error shutting down Temporal server: %s", err)
+	}
 }
 
 // NewServer starts and returns a new TestServer.

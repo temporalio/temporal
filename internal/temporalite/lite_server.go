@@ -327,10 +327,10 @@ func (s *LiteServer) Start() error {
 }
 
 // Stop the server.
-func (s *LiteServer) Stop() {
+func (s *LiteServer) Stop() error {
 	// We wrap Server instead of simply embedding it in the LiteServer struct so
 	// that it's possible to add additional lifecycle hooks here if necessary.
-	s.internal.Stop()
+	return s.internal.Stop()
 }
 
 // NewClient initializes a client ready to communicate with the Temporal
@@ -346,7 +346,7 @@ func (s *LiteServer) NewClient(ctx context.Context, namespace string) (client.Cl
 // Note that options.HostPort will always be overridden.
 func (s *LiteServer) NewClientWithOptions(ctx context.Context, options client.Options) (client.Client, error) {
 	options.HostPort = s.frontendHostPort
-	return client.NewClient(options)
+	return client.Dial(options)
 }
 
 // FrontendHostPort returns the host:port for this server.
