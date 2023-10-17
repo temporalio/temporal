@@ -163,7 +163,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return &pollToken{fullName: taskQueue.GetName()}
 	}
 
-	tqlb := lb.getTaskQueLoadBalancer(namespaceID, parsedName, taskQueueType)
+	tqlb := lb.getTaskQueueLoadBalancer(namespaceID, parsedName, taskQueueType)
 
 	// For read path it's safer to return global default partition count instead of root partition, when we fail to
 	// map namespace ID to name.
@@ -177,7 +177,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	return tqlb.pickReadPartition(partitionCount, lb.forceReadPartition())
 }
 
-func (lb *defaultLoadBalancer) getTaskQueLoadBalancer(
+func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(
 	namespaceID namespace.ID, parsedName tqname.Name, tqType enumspb.TaskQueueType,
 	) *tqLoadBalancer {
 	key := taskQueueKey{NamespaceID: namespaceID, Name: parsedName, Type: tqType}
