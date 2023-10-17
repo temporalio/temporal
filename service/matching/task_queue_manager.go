@@ -1082,7 +1082,6 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	return ctx.Err()
 }
 
-
 func (c *taskQueueManagerImpl) emitForwardedSourceStats(
 	isTaskForwarded bool,
 	pollForwardedSource string,

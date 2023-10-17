@@ -96,8 +96,8 @@ func TestDeliverBufferTasks(t *testing.T) {
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 				Data: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
+					CreateTime: timestamp.TimePtr(time.Now().UTC()),
+				},
 			}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
@@ -292,10 +292,10 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
 }
@@ -315,10 +315,10 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// without a poller to consume the one task ID from the reserved block.
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.False(t, sync)
 	require.NoError(t, err)
 
@@ -329,10 +329,10 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
+		source: enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.NoError(t, err)
 	require.False(t, sync)
@@ -361,10 +361,10 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.False(t, sync)
 	require.Len(t, readerNotifications, 1,
@@ -376,10 +376,10 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY})
+		source: enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
 	require.Len(t, readerNotifications, 0,
@@ -581,10 +581,10 @@ func TestAddTaskStandby(t *testing.T) {
 
 	addTaskParam := addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 		},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
+		source: enumsspb.TASK_SOURCE_HISTORY,
 	}
 
 	syncMatch, err := tlm.AddTask(context.Background(), addTaskParam)
