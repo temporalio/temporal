@@ -73,6 +73,7 @@ message PollWorkflowTaskQueueResponse {
     // are sent to workers who have signaled that they are using a sticky queue when completing
     // a workflow task. Sticky query tasks will not include any history.
     temporal.api.history.v1.History history = 19;
+    bytes next_page_token = 20;
 }
 
 message PollActivityTaskQueueRequest {
