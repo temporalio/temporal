@@ -35,7 +35,10 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.uber.org/fx"
 	"go.uber.org/multierr"
+
+	"go.temporal.io/server/common/primitives"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -63,14 +66,14 @@ import (
 )
 
 type (
-	// TestCluster is a base struct for integration tests
+	// TestCluster is a base struct for functional tests
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
 		host         *temporalImpl
 	}
 
-	// ArchiverBase is a base struct for archiver provider being used in integration tests
+	// ArchiverBase is a base struct for archiver provider being used in functional tests
 	ArchiverBase struct {
 		metadata                 archiver.ArchivalMetadata
 		provider                 provider.ArchiverProvider
@@ -96,6 +99,8 @@ type (
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
+		// ServiceFxOptions can be populated using WithFxOptionsForService.
+		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -139,8 +144,12 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ops = persistencetests.GetMySQL8TestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNamePGX:
+			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
 		case postgresql.PluginNameV12:
 			ops = persistencetests.GetPostgreSQL12TestClusterOption()
+		case postgresql.PluginNameV12PGX:
+			ops = persistencetests.GetPostgreSQL12PGXTestClusterOption()
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
@@ -193,7 +202,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
 			switch storeConfig.SQL.PluginName {
-			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+			case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 				indexName = storeConfig.SQL.DatabaseName
 			}
 		}
@@ -259,6 +268,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
+		ServiceFxOptions:                 options.ServiceFxOptions,
 	}
 
 	if options.EnableMetricsCapture {
@@ -279,7 +289,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}
@@ -328,7 +338,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 }
 
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}

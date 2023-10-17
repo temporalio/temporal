@@ -113,35 +113,35 @@ const (
 )
 
 type (
-	transactionMgr interface {
-		createWorkflow(
+	TransactionManager interface {
+		CreateWorkflow(
 			ctx context.Context,
 			targetWorkflow Workflow,
 		) error
-		updateWorkflow(
+		UpdateWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
-		backfillWorkflow(
+		BackfillWorkflow(
 			ctx context.Context,
 			targetWorkflow Workflow,
 			targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
 		) error
 
-		checkWorkflowExists(
+		CheckWorkflowExists(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
 		) (bool, error)
-		getCurrentWorkflowRunID(
+		GetCurrentWorkflowRunID(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
 		) (string, error)
-		loadWorkflow(
+		LoadWorkflow(
 			ctx context.Context,
 			namespaceID namespace.ID,
 			workflowID string,
@@ -166,13 +166,14 @@ type (
 	}
 )
 
-var _ transactionMgr = (*transactionMgrImpl)(nil)
+var _ TransactionManager = (*transactionMgrImpl)(nil)
 
-func newTransactionMgr(
+func NewTransactionManager(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
+	bypassVersionSemanticsCheck bool,
 ) *transactionMgrImpl {
 
 	transactionMgr := &transactionMgrImpl{
@@ -194,12 +195,12 @@ func newTransactionMgr(
 		createMgr: nil,
 		updateMgr: nil,
 	}
-	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr)
-	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr)
+	transactionMgr.createMgr = newTransactionMgrForNewWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
+	transactionMgr.updateMgr = newNDCTransactionMgrForExistingWorkflow(shardContext, transactionMgr, bypassVersionSemanticsCheck)
 	return transactionMgr
 }
 
-func (r *transactionMgrImpl) createWorkflow(
+func (r *transactionMgrImpl) CreateWorkflow(
 	ctx context.Context,
 	targetWorkflow Workflow,
 ) error {
@@ -210,7 +211,7 @@ func (r *transactionMgrImpl) createWorkflow(
 	)
 }
 
-func (r *transactionMgrImpl) updateWorkflow(
+func (r *transactionMgrImpl) UpdateWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
@@ -225,7 +226,7 @@ func (r *transactionMgrImpl) updateWorkflow(
 	)
 }
 
-func (r *transactionMgrImpl) backfillWorkflow(
+func (r *transactionMgrImpl) BackfillWorkflow(
 	ctx context.Context,
 	targetWorkflow Workflow,
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
@@ -380,7 +381,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 }
 
-func (r *transactionMgrImpl) checkWorkflowExists(
+func (r *transactionMgrImpl) CheckWorkflowExists(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -407,7 +408,7 @@ func (r *transactionMgrImpl) checkWorkflowExists(
 	}
 }
 
-func (r *transactionMgrImpl) getCurrentWorkflowRunID(
+func (r *transactionMgrImpl) GetCurrentWorkflowRunID(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -432,7 +433,7 @@ func (r *transactionMgrImpl) getCurrentWorkflowRunID(
 	}
 }
 
-func (r *transactionMgrImpl) loadWorkflow(
+func (r *transactionMgrImpl) LoadWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -480,7 +481,7 @@ func (r *transactionMgrImpl) isWorkflowCurrent(
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
 
-	currentRunID, err := r.getCurrentWorkflowRunID(
+	currentRunID, err := r.GetCurrentWorkflowRunID(
 		ctx,
 		namespaceID,
 		workflowID,

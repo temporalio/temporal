@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -42,6 +41,7 @@ type (
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
@@ -158,6 +158,7 @@ func NewConfig(
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
 		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
+		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceGlobalNamespaceMaxQPS, 0),
 		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.MatchingPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
@@ -239,10 +240,10 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: func() int {
-			return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 		},
 		NumReadPartitions: func() int {
-			return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+			return max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
@@ -261,7 +262,7 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),

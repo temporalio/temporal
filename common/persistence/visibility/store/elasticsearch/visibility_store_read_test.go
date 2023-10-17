@@ -1103,9 +1103,9 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	s.Error(err)
-	var internalErr *serviceerror.Internal
-	s.ErrorAs(err, &internalErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", internalErr.Message)
+	var invalidArgErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgErr)
+	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {

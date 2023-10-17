@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 )
@@ -75,6 +76,8 @@ func (s *VisibilityManagerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.visibilityStore = store.NewMockVisibilityStore(s.controller)
+	s.visibilityStore.EXPECT().GetName().Return(mysql.PluginNameV8).AnyTimes()
+	s.visibilityStore.EXPECT().GetIndexName().Return("test-index-name").AnyTimes()
 	s.metricsHandler = metrics.NewMockHandler(s.controller)
 	s.visibilityManager = newVisibilityManager(
 		s.visibilityStore,
@@ -82,7 +85,7 @@ func (s *VisibilityManagerSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(1),
 		dynamicconfig.GetFloatPropertyFn(0.2),
 		s.metricsHandler,
-		metrics.StandardVisibilityTypeTag(),
+		metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		log.NewNoopLogger())
 }
 
@@ -104,7 +107,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	s.metricsHandler.EXPECT().
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
@@ -130,7 +133,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
@@ -149,7 +152,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutions() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutions(context.Background(), request)
@@ -170,7 +173,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutions() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutions(context.Background(), request)
@@ -194,7 +197,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByType() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByType(context.Background(), request)
@@ -218,7 +221,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByType() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByType(context.Background(), request)
@@ -242,7 +245,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
@@ -266,7 +269,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByWorkflowID() 
 	s.metricsHandler.EXPECT().
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
@@ -290,7 +293,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
 	s.metricsHandler.EXPECT().
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
@@ -316,7 +319,7 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 	s.metricsHandler.EXPECT().
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
-			metrics.StandardVisibilityTypeTag(),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)

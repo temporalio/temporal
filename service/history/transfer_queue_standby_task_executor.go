@@ -94,7 +94,7 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
 	metricsTags := []metrics.Tag{
@@ -127,7 +127,11 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = errUnknownTransferTask
 	}
 
-	return metricsTags, false, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    false,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(

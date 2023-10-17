@@ -27,6 +27,7 @@ package queues
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -96,10 +97,18 @@ func (s *executableSuite) TearDownSuite() {
 func (s *executableSuite) TestExecute_TaskExecuted() {
 	executable := s.newTestExecutable()
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        errors.New("some random error"),
+	})
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	})
 	s.NoError(executable.Execute())
 }
 
@@ -160,7 +169,11 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 
 			now = now.Add(attemptLatency)
 			s.timeSource.Update(now)
-		}).Return(nil, true, tc.taskErr)
+		}).Return(ExecuteResponse{
+			ExecutionMetricTags: nil,
+			ExecutedAsActive:    true,
+			ExecutionErr:        tc.taskErr,
+		})
 
 		err := executable.Execute()
 		if err != nil {
@@ -218,7 +231,11 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 
 			now = now.Add(attemptLatencies[i])
 			s.timeSource.Update(now)
-		}).Return(nil, true, taskErrors[i])
+		}).Return(ExecuteResponse{
+			ExecutionMetricTags: nil,
+			ExecutedAsActive:    true,
+			ExecutionErr:        taskErrors[i],
+		})
 
 		err := executable.Execute()
 		if err != nil {
@@ -241,7 +258,7 @@ func (s *executableSuite) TestExecute_CapturePanic() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(_ context.Context, _ Executable) ExecuteResponse {
 			panic("test panic during execution")
 		},
 	)
@@ -252,9 +269,13 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(ctx context.Context, _ Executable) ExecuteResponse {
 			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
-			return nil, true, nil
+			return ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        nil,
+			}
 		},
 	)
 	s.NoError(executable.Execute())
@@ -262,9 +283,13 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	// force set to low priority
 	executable.(*executableImpl).priority = ctasks.PriorityLow
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(ctx context.Context, _ Executable) ExecuteResponse {
 			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
-			return nil, true, nil
+			return ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        nil,
+			}
 		},
 	)
 	s.NoError(executable.Execute())
@@ -272,14 +297,22 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	executable := s.newTestExecutable()
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        errors.New("some random error"),
+	})
 	err := executable.Execute()
 	s.Error(err)
 	s.Error(executable.HandleErr(err))
 	s.Equal(2, executable.Attempt())
 
 	// isActive changed to false, should reset attempt
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, false, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        nil,
+	})
 	s.NoError(executable.Execute())
 	s.Equal(1, executable.Attempt())
 }
@@ -288,7 +321,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ([]metrics.Tag, bool, error) {
+		func(_ context.Context, _ Executable) ExecuteResponse {
 			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)
@@ -348,28 +381,73 @@ func (s *executableSuite) TestTaskAck() {
 	s.Equal(ctasks.TaskStateAcked, executable.State())
 }
 
-func (s *executableSuite) TestTaskNack_Resubmit() {
+func (s *executableSuite) TestTaskNack_Resubmit_Success() {
 	executable := s.newTestExecutable()
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	s.mockScheduler.EXPECT().TrySubmit(executable).DoAndReturn(func(_ Executable) bool {
+		s.Equal(ctasks.TaskStatePending, executable.State())
+
+		go func() {
+			// access internal state in a separate goroutine to check if there's any race condition
+			// between reschdule and nack.
+			s.accessInternalState(executable)
+		}()
+		return true
+	})
 
 	executable.Nack(errors.New("some random error"))
-	s.Equal(ctasks.TaskStatePending, executable.State())
+}
+
+func (s *executableSuite) TestTaskNack_Resubmit_Fail() {
+	executable := s.newTestExecutable()
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+		s.Equal(ctasks.TaskStatePending, executable.State())
+
+		go func() {
+			// access internal state in a separate goroutine to check if there's any race condition
+			// between reschdule and nack.
+			s.accessInternalState(executable)
+		}()
+	}).Times(1)
+
+	executable.Nack(errors.New("some random error"))
 }
 
 func (s *executableSuite) TestTaskNack_Reschedule() {
-	executable := s.newTestExecutable()
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).MinTimes(1)
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{
+			name:    "ErrTaskRetry",
+			taskErr: consts.ErrTaskRetry, // this error won't trigger re-submit
+		},
+		{
+			name:    "ErrDeleteOpenExecErr",
+			taskErr: consts.ErrDependencyTaskNotCompleted, // this error won't trigger re-submit
+		},
+	}
 
-	s.Run("ErrTaskRetry", func() {
-		executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
-		s.Equal(ctasks.TaskStatePending, executable.State())
-	})
-	s.Run("ErrDeleteOpenExecErr", func() {
-		executable.Nack(consts.ErrDependencyTaskNotCompleted) // this error won't trigger re-submit
-		s.Equal(ctasks.TaskStatePending, executable.State())
-	})
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+
+			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+				s.Equal(ctasks.TaskStatePending, executable.State())
+
+				go func() {
+					// access internal state in a separate goroutine to check if there's any race condition
+					// between reschdule and nack.
+					s.accessInternalState(executable)
+				}()
+			}).Times(1)
+
+			executable.Nack(tc.taskErr)
+		})
+	}
 }
 
 func (s *executableSuite) TestTaskAbort() {
@@ -430,4 +508,8 @@ func (s *executableSuite) newTestExecutable() Executable {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
+}
+
+func (s *executableSuite) accessInternalState(executable Executable) {
+	_ = fmt.Sprintf("%v", executable)
 }

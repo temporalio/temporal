@@ -106,6 +106,8 @@ type (
 			newMutableState MutableState,
 			currentContext Context,
 			currentMutableState MutableState,
+			resetWorkflowTransactionPolicy TransactionPolicy,
+			newWorkflowTransactionPolicy *TransactionPolicy,
 			currentTransactionPolicy *TransactionPolicy,
 		) error
 		UpdateWorkflowExecutionAsActive(
@@ -134,7 +136,7 @@ type (
 			updateMode persistence.UpdateWorkflowMode,
 			newContext Context,
 			newMutableState MutableState,
-			currentWorkflowTransactionPolicy TransactionPolicy,
+			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
 		SetWorkflowExecution(
@@ -366,6 +368,8 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	newMutableState MutableState,
 	currentContext Context,
 	currentMutableState MutableState,
+	resetWorkflowTransactionPolicy TransactionPolicy,
+	newWorkflowTransactionPolicy *TransactionPolicy,
 	currentTransactionPolicy *TransactionPolicy,
 ) (retError error) {
 
@@ -376,7 +380,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}()
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
-		TransactionPolicyPassive,
+		resetWorkflowTransactionPolicy,
 	)
 	if err != nil {
 		return err
@@ -384,7 +388,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	var newWorkflow *persistence.WorkflowSnapshot
 	var newWorkflowEventsSeq []*persistence.WorkflowEvents
-	if newContext != nil && newMutableState != nil {
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
 
 		defer func() {
 			if retError != nil {
@@ -393,7 +397,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}()
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
-			TransactionPolicyPassive,
+			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
 			return err
@@ -458,12 +462,19 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 ) error {
 
 	// We only perform this check on active cluster for the namespace
-	historyForceTerminate, err := c.enforceHistorySizeCheck(ctx, shardContext)
+	historySizeForceTerminate, err := c.enforceHistorySizeCheck(ctx, shardContext)
 	if err != nil {
 		return err
 	}
+	historyCountForceTerminate := false
+	if !historySizeForceTerminate {
+		historyCountForceTerminate, err = c.enforceHistoryCountCheck(ctx, shardContext)
+		if err != nil {
+			return err
+		}
+	}
 	msForceTerminate := false
-	if !historyForceTerminate {
+	if !historySizeForceTerminate && !historyCountForceTerminate {
 		msForceTerminate, err = c.enforceMutableStateSizeCheck(ctx, shardContext)
 		if err != nil {
 			return err
@@ -486,8 +497,11 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
 	// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
 	// execution being closed.
-	if historyForceTerminate {
+	if historySizeForceTerminate {
 		return consts.ErrHistorySizeExceedsLimit
+	}
+	if historyCountForceTerminate {
+		return consts.ErrHistoryCountExceedsLimit
 	}
 	if msForceTerminate {
 		return consts.ErrMutableStateSizeExceedsLimit
@@ -554,7 +568,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	updateMode persistence.UpdateWorkflowMode,
 	newContext Context,
 	newMutableState MutableState,
-	currentWorkflowTransactionPolicy TransactionPolicy,
+	updateWorkflowTransactionPolicy TransactionPolicy,
 	newWorkflowTransactionPolicy *TransactionPolicy,
 ) (retError error) {
 
@@ -564,8 +578,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
-	currentWorkflow, currentWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
-		currentWorkflowTransactionPolicy,
+	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
+		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
 		return err
@@ -590,7 +604,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	if err := c.mergeContinueAsNewReplicationTasks(
 		updateMode,
-		currentWorkflow,
+		updateWorkflow,
 		newWorkflow,
 	); err != nil {
 		return err
@@ -600,7 +614,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
 		updateMode,
-		currentWorkflowEventsSeq,
+		updateWorkflowEventsSeq,
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -610,8 +624,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		ctx,
 		updateMode,
 		c.MutableState.GetCurrentVersion(),
-		currentWorkflow,
-		currentWorkflowEventsSeq,
+		updateWorkflow,
+		updateWorkflowEventsSeq,
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
@@ -839,7 +853,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	if c.updateRegistry == nil {
 		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
 		c.updateRegistry = update.NewRegistry(
-			func() update.UpdateStore { return c.MutableState },
+			func() update.Store { return c.MutableState },
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -863,7 +877,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (bool, error) {
-	// Hard terminate workflow if still running and breached history size or history count limits
+	// Hard terminate workflow if still running and breached history size limit
 	if c.maxHistorySizeExceeded(shardContext) {
 		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistorySizeExceedsLimit); err != nil {
 			return false, err
@@ -874,36 +888,73 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 	return false, nil
 }
 
-// Returns true if the workflow is running and history size or event count should trigger a forced termination
-// Prints a log message if history size or history event count are over the error or warn limits
+// Returns true if the workflow is running and history size should trigger a forced termination
+// Prints a log message if history size is over the error or warn limits
 func (c *ContextImpl) maxHistorySizeExceeded(shardContext shard.Context) bool {
 	namespaceName := c.GetNamespace(shardContext).String()
 	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
 	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
-	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
-	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
-
 	historySize := int(c.MutableState.GetExecutionInfo().ExecutionStats.HistorySize)
-	historyCount := int(c.MutableState.GetNextEventID() - 1)
 
-	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
-		c.MutableState.IsWorkflowExecutionRunning() {
+	if historySize > historySizeLimitError && c.MutableState.IsWorkflowExecutionRunning() {
 		c.logger.Warn("history size exceeds error limit.",
 			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
 			tag.WorkflowID(c.workflowKey.WorkflowID),
 			tag.WorkflowRunID(c.workflowKey.RunID),
-			tag.WorkflowHistorySize(historySize),
+			tag.WorkflowHistorySize(historySize))
+
+		return true
+	}
+
+	if historySize > historySizeLimitWarn {
+		c.throttledLogger.Warn("history size exceeds warn limit.",
+			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
+			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
+			tag.WorkflowHistorySize(historySize))
+	}
+
+	return false
+}
+
+func (c *ContextImpl) enforceHistoryCountCheck(
+	ctx context.Context,
+	shardContext shard.Context,
+) (bool, error) {
+	// Hard terminate workflow if still running and breached history count limit
+	if c.maxHistoryCountExceeded(shardContext) {
+		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistoryCountExceedsLimit); err != nil {
+			return false, err
+		}
+		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
+		return true, nil
+	}
+	return false, nil
+}
+
+// Returns true if the workflow is running and history event count should trigger a forced termination
+// Prints a log message if history event count is over the error or warn limits
+func (c *ContextImpl) maxHistoryCountExceeded(shardContext shard.Context) bool {
+	namespaceName := c.GetNamespace(shardContext).String()
+	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
+	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
+	historyCount := int(c.MutableState.GetNextEventID() - 1)
+
+	if historyCount > historyCountLimitError && c.MutableState.IsWorkflowExecutionRunning() {
+		c.logger.Warn("history count exceeds error limit.",
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowEventCount(historyCount))
 
 		return true
 	}
 
-	if historySize > historySizeLimitWarn || historyCount > historyCountLimitWarn {
-		c.throttledLogger.Warn("history size exceeds warn limit.",
+	if historyCount > historyCountLimitWarn {
+		c.throttledLogger.Warn("history count exceeds warn limit.",
 			tag.WorkflowNamespaceID(c.MutableState.GetExecutionInfo().NamespaceId),
 			tag.WorkflowID(c.MutableState.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(c.MutableState.GetExecutionState().RunId),
-			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 	}
 

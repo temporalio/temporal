@@ -51,10 +51,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
-	id := "integration-wf-cron-failed-infinite-test"
-	wt := "integration-wf-cron-failed-infinite-type"
-	tl := "integration-wf-cron-failed-infinite-taskqueue"
+func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
+	id := "functional-wf-cron-failed-infinite-test"
+	wt := "functional-wf-cron-failed-infinite-type"
+	tl := "functional-wf-cron-failed-infinite-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 5s"
 
@@ -63,7 +63,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(5 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -114,7 +114,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -122,20 +122,20 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 	}
 
 	s.Logger.Info("Process first cron run which fails")
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	s.Logger.Info("Process first cron run which completes")
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 
 	s.True(seeRetry)
 }
 
-func (s *integrationSuite) TestCronWorkflow() {
-	id := "integration-wf-cron-test"
-	wt := "integration-wf-cron-type"
-	tl := "integration-wf-cron-taskqueue"
+func (s *functionalSuite) TestCronWorkflow() {
+	id := "functional-wf-cron-test"
+	wt := "functional-wf-cron-type"
+	tl := "functional-wf-cron-taskqueue"
 	identity := "worker1"
 	cronSchedule := "@every 3s"
 
@@ -163,7 +163,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -229,7 +229,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	executionInfo := resp.GetExecutions()[0]
 	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
@@ -265,10 +265,10 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.True(backoffDuration > targetBackoffDuration)
 	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	s.Equal(3, len(executions))
@@ -364,7 +364,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	}
 }
 
-func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
+func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	// Run a cron workflow that completes in (almost) all the possible ways:
 	// Run 1: succeeds
 	// Run 2: fails
@@ -375,7 +375,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 
 	// Continue-as-new is not tested (behavior is currently not correct)
 
-	id := "integration-wf-cron-failed-test"
+	id := "functional-wf-cron-failed-test"
 	cronSchedule := "@every 3s"
 
 	targetBackoffDuration := 3 * time.Second
@@ -558,7 +558,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 	s.Equal("test is over", attrs4.GetReason())
 }
 
-func (s *clientIntegrationSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *clientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListOpenWorkflow(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -579,7 +579,7 @@ func (s *clientIntegrationSuite) listOpenWorkflowExecutions(start, end time.Time
 	panic("unreached")
 }
 
-func (s *clientIntegrationSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *clientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListClosedWorkflow(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{

@@ -29,26 +29,25 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
-
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	postgresqlschemaV96 "go.temporal.io/server/schema/postgresql/v96"
 )
 
-// ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
-// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
-const ErrDupEntryCode = pq.ErrorCode("23505")
-
 func (pdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*pq.Error)
-	return ok && sqlErr.Code == ErrDupEntryCode
+	return pdb.dbDriver.IsDupEntryError(err)
 }
 
-// db represents a logical connection to mysql database
+func (pdb *db) IsDupDatabaseError(err error) bool {
+	return pdb.dbDriver.IsDupDatabaseError(err)
+}
+
+// db represents a logical connection to postgresql database
 type db struct {
-	dbKind sqlplugin.DbKind
-	dbName string
+	dbKind   sqlplugin.DbKind
+	dbName   string
+	dbDriver driver.Driver
 
 	db        *sqlx.DB
 	tx        *sqlx.Tx
@@ -64,14 +63,16 @@ var _ sqlplugin.Tx = (*db)(nil)
 func newDB(
 	dbKind sqlplugin.DbKind,
 	dbName string,
+	dbDriver driver.Driver,
 	xdb *sqlx.DB,
 	tx *sqlx.Tx,
 ) *db {
 	mdb := &db{
-		dbKind: dbKind,
-		dbName: dbName,
-		db:     xdb,
-		tx:     tx,
+		dbKind:   dbKind,
+		dbName:   dbName,
+		dbDriver: dbDriver,
+		db:       xdb,
+		tx:       tx,
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -87,7 +88,7 @@ func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDB(pdb.dbKind, pdb.dbName, pdb.db, xtx), nil
+	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.db, xtx), nil
 }
 
 // Commit commits a previously started transaction

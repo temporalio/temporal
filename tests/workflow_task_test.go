@@ -41,22 +41,16 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
+func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	id := uuid.New()
-	wt := "integration-workflow-workflow-task-heartbeating-local-activities"
+	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	stikyTaskQueue := &taskqueuepb.TaskQueue{
-		Name: "test-sticky-taskqueue",
-		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-	}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -99,7 +93,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			TaskToken: taskToken,
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-				WorkerTaskQueue:        stikyTaskQueue,
+				WorkerTaskQueue:        stickyTaskQueue,
 				ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 			},
 			ReturnNewWorkflowTask:      true,
@@ -137,7 +131,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -149,22 +143,16 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.assertLastHistoryEvent(we, 47, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
-func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
+func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
 	id := uuid.New()
-	wt := "integration-workflow-workflow-task-heartbeating-local-activities"
+	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	stikyTaskQueue := &taskqueuepb.TaskQueue{
-		Name: "test-sticky-taskqueue",
-		Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-	}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -204,7 +192,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 		TaskToken: resp1.GetTaskToken(),
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -226,7 +214,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -248,7 +236,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 					}}},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -268,7 +256,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 				},
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        stikyTaskQueue,
+			WorkerTaskQueue:        stickyTaskQueue,
 			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
@@ -298,15 +286,15 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
+func (s *functionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -371,15 +359,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTas
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
+func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -444,15 +432,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
+func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -530,15 +518,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTask
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
+func (s *functionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -634,15 +622,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowT
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
+func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -735,15 +723,15 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
+func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
-	wt := "integration-workflow-transient-workflow-task-test-type"
+	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -847,7 +835,7 @@ func (s *integrationSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTa
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *integrationSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []enumspb.EventType) {
+func (s *functionalSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []enumspb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,
@@ -863,7 +851,7 @@ func (s *integrationSuite) assertHistory(we *commonpb.WorkflowExecution, expecte
 	}
 }
 
-func (s *integrationSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType enumspb.EventType) {
+func (s *functionalSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType enumspb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,

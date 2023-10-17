@@ -87,6 +87,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
@@ -142,6 +143,7 @@ type GrpcServerOptions struct {
 
 func GrpcServerOptionsProvider(
 	logger log.Logger,
+	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -201,6 +203,8 @@ func GrpcServerOptionsProvider(
 			metricsHandler,
 			logger,
 			audienceGetter,
+			cfg.Global.Authorization.AuthHeaderName,
+			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -311,10 +315,10 @@ func RateLimitInterceptorProvider(
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},
@@ -411,15 +415,18 @@ func CallerInfoInterceptorProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
+		persistenceLazyLoadedServiceResolver,
 	)
 }
 

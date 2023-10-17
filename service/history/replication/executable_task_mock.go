@@ -182,17 +182,18 @@ func (mr *MockExecutableTaskMockRecorder) Reschedule() *gomock.Call {
 }
 
 // Resend mocks base method.
-func (m *MockExecutableTask) Resend(ctx context.Context, remoteCluster string, retryErr *serviceerror.RetryReplication) error {
+func (m *MockExecutableTask) Resend(ctx context.Context, remoteCluster string, retryErr *serviceerror.RetryReplication, remainingAttempt int) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Resend", ctx, remoteCluster, retryErr)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Resend", ctx, remoteCluster, retryErr, remainingAttempt)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Resend indicates an expected call of Resend.
-func (mr *MockExecutableTaskMockRecorder) Resend(ctx, remoteCluster, retryErr interface{}) *gomock.Call {
+func (mr *MockExecutableTaskMockRecorder) Resend(ctx, remoteCluster, retryErr, remainingAttempt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resend", reflect.TypeOf((*MockExecutableTask)(nil).Resend), ctx, remoteCluster, retryErr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resend", reflect.TypeOf((*MockExecutableTask)(nil).Resend), ctx, remoteCluster, retryErr, remainingAttempt)
 }
 
 // RetryPolicy mocks base method.

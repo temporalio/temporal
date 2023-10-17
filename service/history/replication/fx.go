@@ -27,9 +27,10 @@ package replication
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -48,10 +49,12 @@ var Module = fx.Options(
 	fx.Provide(ReplicationTaskConverterFactoryProvider),
 	fx.Provide(ReplicationTaskExecutorProvider),
 	fx.Provide(ReplicationStreamSchedulerProvider),
+	fx.Provide(ExecutableTaskConverterProvider),
 	fx.Provide(StreamReceiverMonitorProvider),
 	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
 	fx.Provide(NDCHistoryResenderProvider),
 	fx.Provide(EagerNamespaceRefresherProvider),
+	fx.Provide(SequentialTaskQueueFactoryProvider),
 )
 
 func ReplicationTaskFetcherFactoryProvider(
@@ -117,16 +120,30 @@ func ReplicationTaskExecutorProvider() TaskExecutorProvider {
 func ReplicationStreamSchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
+	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
 ) ctasks.Scheduler[TrackableExecutableTask] {
 	return ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
 		},
-		TaskHashFn,
-		NewSequentialTaskQueue,
+		WorkflowKeyHashFn,
+		queueFactory,
 		logger,
 	)
+}
+
+func SequentialTaskQueueFactoryProvider(
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	config *configs.Config,
+) ctasks.SequentialTaskQueueFactory[TrackableExecutableTask] {
+	return func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+		if config.EnableReplicationTaskBatching() {
+			return NewSequentialTaskQueue(task)
+		}
+		return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
+	}
 }
 
 func ReplicationStreamSchedulerLifetimeHooks(
@@ -147,11 +164,19 @@ func ReplicationStreamSchedulerLifetimeHooks(
 	)
 }
 
+func ExecutableTaskConverterProvider(
+	processToolBox ProcessToolBox,
+) ExecutableTaskConverter {
+	return NewExecutableTaskConverter(processToolBox)
+}
+
 func StreamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
+	taskConverter ExecutableTaskConverter,
 ) StreamReceiverMonitor {
 	return NewStreamReceiverMonitor(
 		processToolBox,
+		taskConverter,
 		processToolBox.Config.EnableReplicationStream(),
 	)
 }

@@ -43,15 +43,15 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
-	id := "integration-request-cancel-workflow-test"
-	wt := "integration-request-cancel-workflow-test-type"
-	tl := "integration-request-cancel-workflow-test-taskqueue"
+func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
+	id := "functional-request-cancel-workflow-test"
+	wt := "functional-request-cancel-workflow-test-type"
+	tl := "functional-request-cancel-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -119,7 +119,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -138,15 +138,15 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.Equal("Cancelled", s.decodePayloadsString(cancelledEventAttributes.GetDetails()))
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
-	id := "integration-cancel-workflow-command-target-running-test"
-	wt := "integration-cancel-workflow-command-target-running-test-type"
-	tl := "integration-cancel-workflow-command-target-running-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
+	id := "functional-cancel-workflow-command-target-running-test"
+	wt := "functional-cancel-workflow-command-target-running-test-type"
+	tl := "functional-cancel-workflow-command-target-running-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -257,32 +257,32 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunni
 	}
 
 	// Cancel the foreign workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Accept cancellation.
-	_, err = foreignPoller.PollAndProcessWorkflowTask(false, false)
+	_, err = foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
-	id := "integration-cancel-workflow-command-target-finished-test"
-	wt := "integration-cancel-workflow-command-target-finished-test-type"
-	tl := "integration-cancel-workflow-command-target-finished-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
+	id := "functional-cancel-workflow-command-target-finished-test"
+	wt := "functional-cancel-workflow-command-target-finished-test-type"
+	tl := "functional-cancel-workflow-command-target-finished-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -389,32 +389,32 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinis
 	}
 
 	// Complete target workflow
-	_, err := foreignPoller.PollAndProcessWorkflowTask(false, false)
+	_, err := foreignPoller.PollAndProcessWorkflowTask()
 	s.Logger.Info("foreign PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Cancel the target workflow with this workflow task request.
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
-	id := "integration-cancel-workflow-command-target-not-found-test"
-	wt := "integration-cancel-workflow-command-target-not-found-test-type"
-	tl := "integration-cancel-workflow-command-target-not-found-test-taskqueue"
+func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
+	id := "functional-cancel-workflow-command-target-not-found-test"
+	wt := "functional-cancel-workflow-command-target-not-found-test-type"
+	tl := "functional-cancel-workflow-command-target-not-found-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -474,29 +474,29 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFo
 	}
 
 	// Cancel the target workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
 
-func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
-	id := "integration-immediate-child-cancellation-workflow-task-failed-test"
-	wt := "integration-immediate-child-cancellation-workflow-task-failed-test-type"
-	tl := "integration-immediate-child-cancellation-workflow-task-failed-test-taskqueue"
-	childWorkflowID := "integration-immediate-child-cancellation-workflow-task-failed-child-test"
-	childTaskQueue := "integration-immediate-child-cancellation-workflow-task-failed-child-test-taskqueue"
+func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
+	id := "functional-immediate-child-cancellation-workflow-task-failed-test"
+	wt := "functional-immediate-child-cancellation-workflow-task-failed-test-type"
+	tl := "functional-immediate-child-cancellation-workflow-task-failed-test-taskqueue"
+	childWorkflowID := "functional-immediate-child-cancellation-workflow-task-failed-child-test"
+	childTaskQueue := "functional-immediate-child-cancellation-workflow-task-failed-child-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -556,7 +556,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 					Namespace:    s.namespace,
 					WorkflowId:   childWorkflowID,
 					WorkflowType: &commonpb.WorkflowType{Name: "childTypeA"},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: childTaskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: childTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:        payloads.EncodeBytes([]byte{1}),
 				}},
 			}, {
@@ -622,7 +622,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	}
 
 	s.Logger.Info("Process first workflow task which starts and request cancels child workflow")
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task.", err.Error())
@@ -632,7 +632,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	})
 
 	s.Logger.Info("Process second workflow task which observes child workflow is cancelled and completes")
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{

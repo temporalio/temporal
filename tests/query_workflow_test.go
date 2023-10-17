@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_Sticky() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -88,7 +88,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Sticky() {
 	s.Equal(int32(1), replayCount)
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -144,7 +144,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "should-reach-here", nil
@@ -197,7 +197,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	// stop the worker, so the workflow won't be started before query
 	s.worker.Stop()
 
@@ -259,7 +259,7 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryBeforeStart() {
 	wg.Wait()
 }
 
-func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -298,4 +298,30 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.Error(err)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
+}
+
+func (s *clientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		return "", nil
+	}
+	id := "test-query-after-terminate"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: s.taskQueue,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	err = s.sdkClient.TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
+	s.NoError(err)
+
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	s.Error(err)
+	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
 }

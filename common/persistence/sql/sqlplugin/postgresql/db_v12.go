@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	postgresqlschemaV12 "go.temporal.io/server/schema/postgresql/v12"
 )
 
@@ -48,15 +49,17 @@ var _ sqlplugin.Tx = (*dbV12)(nil)
 func newDBV12(
 	dbKind sqlplugin.DbKind,
 	dbName string,
+	dbDriver driver.Driver,
 	xdb *sqlx.DB,
 	tx *sqlx.Tx,
 ) *dbV12 {
 	mdb := &dbV12{
 		db: db{
-			dbKind: dbKind,
-			dbName: dbName,
-			db:     xdb,
-			tx:     tx,
+			dbKind:   dbKind,
+			dbName:   dbName,
+			dbDriver: dbDriver,
+			db:       xdb,
+			tx:       tx,
 		},
 	}
 	mdb.conn = xdb
@@ -73,7 +76,7 @@ func (pdb *dbV12) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDB(pdb.dbKind, pdb.dbName, pdb.db.db, xtx), nil
+	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.db.db, xtx), nil
 }
 
 // PluginName returns the name of the mysql plugin

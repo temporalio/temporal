@@ -28,7 +28,6 @@ import (
 	"math"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -82,11 +81,9 @@ func TestTaskProcessorManagerSuite(t *testing.T) {
 }
 
 func (s *taskProcessorManagerSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *taskProcessorManagerSuite) TearDownSuite() {
-
 }
 
 func (s *taskProcessorManagerSuite) SetupTest() {

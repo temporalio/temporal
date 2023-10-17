@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
-	id := "integration-relay-workflow-task-timeout-test"
-	wt := "integration-relay-workflow-task-timeout-test-type"
-	tl := "integration-relay-workflow-task-timeout-test-taskqueue"
+func (s *functionalSuite) TestRelayWorkflowTaskTimeout() {
+	id := "functional-relay-workflow-task-timeout-test"
+	wt := "functional-relay-workflow-task-timeout-test-type"
+	tl := "functional-relay-workflow-task-timeout-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -51,7 +51,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -88,7 +88,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -97,17 +97,13 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	}
 
 	// First workflow task complete with a marker command, and request to relay workflow task (immediately return a new workflow task)
-	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		false,
-		false,
-		false,
-		false,
-		0,
-		3,
-		true,
-		nil)
+	res, err := poller.PollAndProcessWorkflowTask(
+		WithExpectedAttemptCount(0),
+		WithRetries(3),
+		WithForceNewWorkflowTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
+	newTask := res.NewTask
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
@@ -127,7 +123,7 @@ func (s *integrationSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 2)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

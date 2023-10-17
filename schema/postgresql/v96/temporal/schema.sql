@@ -310,6 +310,30 @@ CREATE TABLE cluster_membership
     PRIMARY KEY (membership_partition, host_id)
 );
 
+CREATE TABLE queues (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    metadata_payload BYTEA NOT NULL,
+    metadata_encoding VARCHAR(16) NOT NULL,
+    version BIGINT NOT NULL,
+    PRIMARY KEY (queue_type, queue_name)
+);
+
+CREATE TABLE queue_messages (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    queue_partition BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    message_payload BYTEA NOT NULL,
+    message_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (
+        queue_type,
+        queue_name,
+        queue_partition,
+        message_id
+    )
+);
+
 CREATE UNIQUE INDEX cm_idx_rolehost ON cluster_membership (role, host_id);
 CREATE INDEX cm_idx_rolelasthb ON cluster_membership (role, last_heartbeat);
 CREATE INDEX cm_idx_rpchost ON cluster_membership (rpc_address, role);

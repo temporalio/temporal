@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -349,7 +350,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if request.GetStartEventId() == common.EmptyVersion || request.GetStartEventVersion() == common.EmptyVersion {
+	if request.GetStartEventId() == common.EmptyEventID || request.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
 		// As the API is exclusive-exclusive, use first event id - 1 here
 		request.StartEventId = common.FirstEventID - 1

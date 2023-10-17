@@ -82,7 +82,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 )
 
@@ -305,7 +304,7 @@ func (adh *AdminHandler) addSearchAttributesElasticsearch(
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: primitives.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
@@ -1758,6 +1757,24 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
 	}
 	return nsResponse, nil
+}
+
+func (adh *AdminHandler) GetDLQTasks(
+	ctx context.Context,
+	request *adminservice.GetDLQTasksRequest,
+) (*adminservice.GetDLQTasksResponse, error) {
+	response, err := adh.historyClient.GetDLQTasks(ctx, &historyservice.GetDLQTasksRequest{
+		DlqKey:        request.DlqKey,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.GetDLQTasksResponse{
+		DlqTasks:      response.DlqTasks,
+		NextPageToken: response.NextPageToken,
+	}, nil
 }
 
 func convertClusterReplicationConfigToProto(

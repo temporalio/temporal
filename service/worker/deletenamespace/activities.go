@@ -27,6 +27,7 @@ package deletenamespace
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -41,7 +42,7 @@ import (
 )
 
 type (
-	activities struct {
+	localActivities struct {
 		metadataManager persistence.MetadataManager
 		metricsHandler  metrics.Handler
 		logger          log.Logger
@@ -53,19 +54,19 @@ type (
 	}
 )
 
-func NewActivities(
+func NewLocalActivities(
 	metadataManager persistence.MetadataManager,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *activities {
-	return &activities{
+) *localActivities {
+	return &localActivities{
 		metadataManager: metadataManager,
 		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteNamespaceWorkflowScope)),
 		logger:          logger,
 	}
 }
 
-func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
+func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
@@ -88,7 +89,7 @@ func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespac
 	}, nil
 }
 
-func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
+func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
@@ -126,13 +127,18 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 	return nil
 }
 
-func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
+func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	const initialSuffixLength = 5
 
 	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
-		newName := fmt.Sprintf("%s-deleted-%s", nsName, nsID.String()[:suffixLength])
+		suffix := fmt.Sprintf("-deleted-%s", nsID.String()[:suffixLength])
+		if strings.HasSuffix(nsName.String(), suffix) {
+			a.logger.Info("Namespace is already renamed for deletion")
+			return nsName, nil
+		}
+		newName := fmt.Sprintf("%s%s", nsName, suffix)
 
 		_, err := a.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 			Name: newName,
@@ -153,7 +159,11 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 	panic(fmt.Sprintf("Unable to generate new name for deleted namespace %s. ID %q is not unique.", nsName, nsID))
 }
 
-func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+	if newName == previousName {
+		return nil
+	}
+
 	ctx = headers.SetCallerName(ctx, previousName.String())
 
 	renameNamespaceRequest := &persistence.RenameNamespaceRequest{

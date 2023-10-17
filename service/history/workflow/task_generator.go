@@ -96,7 +96,7 @@ type (
 		GenerateHistoryReplicationTasks(
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateMigrationTasks() (tasks.Task, int64, error)
+		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -604,7 +604,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
+func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
@@ -615,21 +615,37 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, int64, error) 
 		return nil, 0, err
 	}
 
+	workflowKey := r.mutableState.GetWorkflowKey()
+
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return &tasks.SyncWorkflowStateTask{
+		return []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey: r.mutableState.GetWorkflowKey(),
+			WorkflowKey: workflowKey,
 			Version:     lastItem.GetVersion(),
-		}, 1, nil
-	} else {
-		return &tasks.HistoryReplicationTask{
-			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:  r.mutableState.GetWorkflowKey(),
-			FirstEventID: executionInfo.LastFirstEventId,
-			NextEventID:  lastItem.GetEventId() + 1,
-			Version:      lastItem.GetVersion(),
-		}, executionInfo.StateTransitionCount, nil
+		}}, 1, nil
 	}
+
+	now := time.Now().UTC()
+	replicationTasks := make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
+	replicationTasks = append(replicationTasks, &tasks.HistoryReplicationTask{
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:  workflowKey,
+		FirstEventID: executionInfo.LastFirstEventId,
+		NextEventID:  lastItem.GetEventId() + 1,
+		Version:      lastItem.GetVersion(),
+	})
+	activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
+	for activityID := range r.mutableState.GetPendingActivityInfos() {
+		activityIDs[activityID] = struct{}{}
+	}
+	replicationTasks = append(replicationTasks, convertSyncActivityInfos(
+		now,
+		workflowKey,
+		r.mutableState.GetPendingActivityInfos(),
+		activityIDs,
+	)...)
+	return replicationTasks, executionInfo.StateTransitionCount, nil
+
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {

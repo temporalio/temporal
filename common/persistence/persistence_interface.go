@@ -726,4 +726,82 @@ type (
 		ClusterMember
 		RecordExpiry time.Time
 	}
+
+	// QueueV2 is an interface for a generic FIFO queue. It should eventually supersede the Queue interface.
+	QueueV2 interface {
+		// EnqueueMessage adds a message to the back of the queue.
+		EnqueueMessage(
+			ctx context.Context,
+			request *InternalEnqueueMessageRequest,
+		) (*InternalEnqueueMessageResponse, error)
+		// ReadMessages returns messages in order of increasing message ID.
+		ReadMessages(
+			ctx context.Context,
+			request *InternalReadMessagesRequest,
+		) (*InternalReadMessagesResponse, error)
+		// CreateQueue creates a new queue. An error will be returned if the queue already exists. In addition, an error
+		// will be returned if you attempt to operate on a queue with something like EnqueueMessage or ReadMessages
+		// before the queue is created.
+		CreateQueue(
+			ctx context.Context,
+			request *InternalCreateQueueRequest,
+		) (*InternalCreateQueueResponse, error)
+		RangeDeleteMessages(
+			ctx context.Context,
+			request *InternalRangeDeleteMessagesRequest,
+		) (*InternalRangeDeleteMessagesResponse, error)
+	}
+
+	QueueV2Type int
+
+	MessageMetadata struct {
+		ID int64
+	}
+
+	QueueV2Message struct {
+		MetaData MessageMetadata
+		Data     commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+		Blob      commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageResponse struct {
+		Metadata MessageMetadata
+	}
+
+	InternalReadMessagesRequest struct {
+		QueueType     QueueV2Type
+		QueueName     string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalReadMessagesResponse struct {
+		Messages      []QueueV2Message
+		NextPageToken []byte
+	}
+
+	InternalCreateQueueRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+	}
+
+	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	// InternalRangeDeleteMessagesRequest deletes all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
+		// empty
+	}
 )

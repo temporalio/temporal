@@ -1289,3 +1289,101 @@ func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, r
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), ctx, request)
 }
+
+// MockHistoryTaskQueueManager is a mock of HistoryTaskQueueManager interface.
+type MockHistoryTaskQueueManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockHistoryTaskQueueManagerMockRecorder
+}
+
+// MockHistoryTaskQueueManagerMockRecorder is the mock recorder for MockHistoryTaskQueueManager.
+type MockHistoryTaskQueueManagerMockRecorder struct {
+	mock *MockHistoryTaskQueueManager
+}
+
+// NewMockHistoryTaskQueueManager creates a new mock instance.
+func NewMockHistoryTaskQueueManager(ctrl *gomock.Controller) *MockHistoryTaskQueueManager {
+	mock := &MockHistoryTaskQueueManager{ctrl: ctrl}
+	mock.recorder = &MockHistoryTaskQueueManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHistoryTaskQueueManager) EXPECT() *MockHistoryTaskQueueManagerMockRecorder {
+	return m.recorder
+}
+
+// CreateQueue mocks base method.
+func (m *MockHistoryTaskQueueManager) CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateQueue", ctx, request)
+	ret0, _ := ret[0].(*CreateQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateQueue indicates an expected call of CreateQueue.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) CreateQueue(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQueue", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).CreateQueue), ctx, request)
+}
+
+// DeleteTasks mocks base method.
+func (m *MockHistoryTaskQueueManager) DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteTasks", ctx, request)
+	ret0, _ := ret[0].(*DeleteTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteTasks indicates an expected call of DeleteTasks.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) DeleteTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTasks", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).DeleteTasks), ctx, request)
+}
+
+// EnqueueTask mocks base method.
+func (m *MockHistoryTaskQueueManager) EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnqueueTask", ctx, request)
+	ret0, _ := ret[0].(*EnqueueTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EnqueueTask indicates an expected call of EnqueueTask.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) EnqueueTask(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueTask", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).EnqueueTask), ctx, request)
+}
+
+// ReadRawTasks mocks base method.
+func (m *MockHistoryTaskQueueManager) ReadRawTasks(ctx context.Context, request *ReadRawTasksRequest) (*ReadRawTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadRawTasks", ctx, request)
+	ret0, _ := ret[0].(*ReadRawTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadRawTasks indicates an expected call of ReadRawTasks.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) ReadRawTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawTasks", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).ReadRawTasks), ctx, request)
+}
+
+// ReadTasks mocks base method.
+func (m *MockHistoryTaskQueueManager) ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadTasks", ctx, request)
+	ret0, _ := ret[0].(*ReadTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadTasks indicates an expected call of ReadTasks.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) ReadTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadTasks", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).ReadTasks), ctx, request)
+}

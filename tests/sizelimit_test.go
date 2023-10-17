@@ -50,42 +50,42 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-type sizeLimitIntegrationSuite struct {
+type sizeLimitFunctionalSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
-	IntegrationBase
+	FunctionalTestBase
 }
 
 // This cluster use customized threshold for history config
-func (s *sizeLimitIntegrationSuite) SetupSuite() {
-	s.setupSuite("testdata/integration_sizelimit_cluster.yaml")
+func (s *sizeLimitFunctionalSuite) SetupSuite() {
+	s.setupSuite("testdata/sizelimit_cluster.yaml")
 }
 
-func (s *sizeLimitIntegrationSuite) TearDownSuite() {
+func (s *sizeLimitFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *sizeLimitIntegrationSuite) SetupTest() {
+func (s *sizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
-func TestSizeLimitIntegrationSuite(t *testing.T) {
+func TestSizeLimitFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(sizeLimitIntegrationSuite))
+	suite.Run(t, new(sizeLimitFunctionalSuite))
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
-	id := "integration-terminate-workflow-by-history-size-limit-test"
-	wt := "integration-terminate-workflow-by-history-size-limit-test-type"
-	tq := "integration-terminate-workflow-by-history-size-limit-test-taskqueue"
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+	id := "functional-terminate-workflow-by-history-count-limit-test"
+	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
+	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -118,7 +118,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimi
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -165,7 +165,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByHistorySizeLimi
 
 		// Poll workflow task only if it is running
 		if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			_, err := poller.PollAndProcessWorkflowTask(false, false)
+			_, err := poller.PollAndProcessWorkflowTask()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)
 
@@ -198,7 +198,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, "Workflow history size / count exceeds limit.")
+	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
@@ -244,11 +244,11 @@ SignalLoop:
 	s.True(isCloseCorrect)
 }
 
-func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
-	id := "integration-workflow-failed-large-payload"
-	wt := "integration-workflow-failed-large-payload-type"
-	tl := "integration-workflow-failed-large-payload-taskqueue"
+	id := "functional-workflow-failed-large-payload"
+	wt := "functional-workflow-failed-large-payload-type"
+	tl := "functional-workflow-failed-large-payload-taskqueue"
 	identity := "worker1"
 
 	largePayload := make([]byte, 1001)
@@ -281,7 +281,7 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -294,7 +294,7 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
 		Identity:            identity,
@@ -304,7 +304,7 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.NoError(err)
 
 	go func() {
-		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	}()
 
@@ -342,16 +342,16 @@ func (s *sizeLimitIntegrationSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.Fail("Missing signal event")
 }
 
-func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
-	id := "integration-terminate-workflow-by-ms-size-limit-test"
-	wt := "integration-terminate-workflow-by-ms-size-limit-test-type"
-	tq := "integration-terminate-workflow-by-ms-size-limit-test-taskqueue"
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
+	id := "functional-terminate-workflow-by-ms-size-limit-test"
+	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
+	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -383,7 +383,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             convert.Int32ToString(int32(i)),
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  activityLargePayload,
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -431,7 +431,7 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	// Poll workflow task only if it is running
 	if dwResp.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 
 		// Workflow should be force terminated at this point
@@ -451,6 +451,101 @@ func (s *sizeLimitIntegrationSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.IsType(&serviceerror.NotFound{}, signalErr)
+
+	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.GetRunId(),
+	})
+
+	// verify last event is terminated event
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	history := historyResponse.History
+	lastEvent := history.Events[len(history.Events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, lastEvent.GetEventType())
+
+	// verify visibility is correctly processed from open to close
+	isCloseCorrect := false
+	for i := 0; i < 10; i++ {
+		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 100,
+			StartTimeFilter: &filterpb.StartTimeFilter{
+				EarliestTime: timestamp.TimePtr(time.Time{}),
+				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			},
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+				WorkflowId: id,
+			}},
+		})
+		s.NoError(err1)
+		if len(resp.Executions) == 1 {
+			isCloseCorrect = true
+			break
+		}
+		s.Logger.Info("Closed WorkflowExecution is not yet visible")
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.True(isCloseCorrect)
+}
+
+func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
+	id := "functional-terminate-workflow-by-history-size-limit-test"
+	wt := "functional-terminate-workflow-by-history-size-limit-test-type"
+	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"
+	identity := "worker1"
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	var signalErr error
+	// Send signals until workflow is force terminated
+	largePayload := make([]byte, 900)
+SignalLoop:
+	for i := 0; i < 10; i++ {
+		// Send another signal without RunID
+		signalName := "another signal"
+		signalInput, err := payloads.Encode(largePayload)
+		s.NoError(err)
+		_, signalErr = s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+			},
+			SignalName: signalName,
+			Input:      signalInput,
+			Identity:   identity,
+		})
+
+		if signalErr != nil {
+			break SignalLoop
+		}
+	}
+	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
+	// error. InvalidArgument is returned by the client.
+	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
+	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,

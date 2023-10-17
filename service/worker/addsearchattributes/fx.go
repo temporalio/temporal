@@ -25,13 +25,17 @@
 package addsearchattributes
 
 import (
+	"context"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -69,14 +73,26 @@ func NewResult(params initParams) fxResult {
 	}
 }
 
-func (wc *addSearchAttributes) Register(worker sdkworker.Worker) {
+func (wc *addSearchAttributes) RegisterWorkflow(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+}
+
+func (wc *addSearchAttributes) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	// use default worker
+	return nil
+}
+
+func (wc *addSearchAttributes) RegisterActivities(worker sdkworker.Worker) {
 	worker.RegisterActivity(wc.activities())
 }
 
-func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
-	// use default worker
-	return nil
+func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: primitives.AddSearchAttributesActivityTQ,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
+		},
+	}
 }
 
 func (wc *addSearchAttributes) activities() *activities {

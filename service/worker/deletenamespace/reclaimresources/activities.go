@@ -46,6 +46,12 @@ import (
 type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
+		metricsHandler    metrics.Handler
+		logger            log.Logger
+	}
+
+	LocalActivities struct {
+		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		metricsHandler    metrics.Handler
 		logger            log.Logger
@@ -54,11 +60,23 @@ type (
 
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
-	metadataManager persistence.MetadataManager,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.ReclaimResourcesWorkflowScope)),
+		logger:            logger,
+	}
+}
+
+func NewLocalActivities(
+	visibilityManager manager.VisibilityManager,
+	metadataManager persistence.MetadataManager,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *LocalActivities {
+	return &LocalActivities{
 		visibilityManager: visibilityManager,
 		metadataManager:   metadataManager,
 		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.ReclaimResourcesWorkflowScope)),
@@ -66,16 +84,16 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
+func (a *LocalActivities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
 	switch a.visibilityManager.GetReadStoreName(nsName) {
-	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+	case elasticsearch.PersistenceName, mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		return true, nil
 	default:
 		return false, nil
 	}
 }
 
-func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
+func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	req := &manager.CountWorkflowExecutionsRequest{
@@ -173,7 +191,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 	return nil
 }
 
-func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
 	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{

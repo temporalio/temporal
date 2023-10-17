@@ -62,20 +62,14 @@ func NewVisibilityQueueFactory(
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewNamespacePriorityScheduler(
+			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.NamespacePrioritySchedulerOptions{
-					WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
-					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-					EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-					DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+				queues.SchedulerOptions{
+					WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 				},
 				params.NamespaceRegistry,
-				params.SchedulerRateLimiter,
-				params.TimeSource,
-				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -98,8 +92,25 @@ func (f *visibilityQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			f.ClusterMetadata.GetCurrentClusterName(),
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
+		shardScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
@@ -118,13 +129,22 @@ func (f *visibilityQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := f.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewImmediateQueue(
 		shard,
 		tasks.CategoryVisibility,
-		f.HostScheduler,
+		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
@@ -146,5 +166,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.HostReaderRateLimiter,
 		logger,
 		metricsHandler,
+		factory,
 	)
 }

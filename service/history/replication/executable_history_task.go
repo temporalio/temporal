@@ -26,22 +26,25 @@ package replication
 
 import (
 	"context"
+	"sync"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -52,12 +55,27 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req *historyservice.ReplicateEventsV2Request
+		baseExecutionInfo   *workflowpb.BaseExecutionInfo
+		versionHistoryItems []*historyspb.VersionHistoryItem
+		eventsBlob          *common.DataBlob
+		newRunEventsBlob    *common.DataBlob
+
+		deserializeLock   sync.Mutex
+		eventsDesResponse *eventsDeserializeResponse
+
+		batchLock sync.Mutex
+		batchable bool
+	}
+	eventsDeserializeResponse struct {
+		events       []*historypb.HistoryEvent
+		newRunEvents []*historypb.HistoryEvent
+		err          error
 	}
 )
 
 var _ ctasks.Task = (*ExecutableHistoryTask)(nil)
 var _ TrackableExecutableTask = (*ExecutableHistoryTask)(nil)
+var _ BatchableTask = (*ExecutableHistoryTask)(nil)
 
 func NewExecutableHistoryTask(
 	processToolBox ProcessToolBox,
@@ -78,18 +96,12 @@ func NewExecutableHistoryTask(
 			time.Now().UTC(),
 			sourceClusterName,
 		),
-		req: &historyservice.ReplicateEventsV2Request{
-			NamespaceId: task.NamespaceId,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowId,
-				RunId:      task.RunId,
-			},
-			BaseExecutionInfo:   task.BaseExecutionInfo,
-			VersionHistoryItems: task.VersionHistoryItems,
-			Events:              task.Events,
-			// new run events does not need version history since there is no prior events
-			NewRunEvents: task.NewRunEvents,
-		},
+
+		baseExecutionInfo:   task.BaseExecutionInfo,
+		versionHistoryItems: task.VersionHistoryItems,
+		eventsBlob:          task.GetEvents(),
+		newRunEventsBlob:    task.GetNewRunEvents(),
+		batchable:           true,
 	}
 }
 
@@ -130,7 +142,19 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateEventsV2(ctx, e.req)
+	events, newRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
+
+	return engine.ReplicateHistoryEvents(
+		ctx,
+		e.WorkflowKey,
+		e.baseExecutionInfo,
+		e.versionHistoryItems,
+		[][]*historypb.HistoryEvent{events},
+		newRunEvents,
+	)
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
@@ -148,11 +172,12 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 		ctx, cancel := newTaskContext(namespaceName)
 		defer cancel()
 
-		if resendErr := e.Resend(
+		if doContinue, resendErr := e.Resend(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
 			retryErr,
-		); resendErr != nil {
+			ResendAttempt,
+		); resendErr != nil || !doContinue {
 			return err
 		}
 		return e.Execute()
@@ -177,7 +202,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return err
 	}
 
-	events, err := serialization.NewSerializer().DeserializeEvents(e.req.Events)
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
 	if err != nil {
 		e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
 			tag.ShardID(shardContext.GetShardID()),
@@ -227,4 +252,208 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	defer cancel()
 
 	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+}
+
+func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+	e.deserializeLock.Lock()
+	defer e.deserializeLock.Unlock()
+
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	}
+
+	defer func() {
+		if retError != nil {
+			e.eventsDesResponse = &eventsDeserializeResponse{
+				events:       nil,
+				newRunEvents: nil,
+				err:          retError,
+			}
+		}
+	}()
+
+	events, err := e.EventSerializer.DeserializeEvents(e.eventsBlob)
+	if err != nil {
+		e.Logger.Error("unable to deserialize history events",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	}
+
+	newRunEvents, err := e.EventSerializer.DeserializeEvents(e.newRunEventsBlob)
+	if err != nil {
+		e.Logger.Error("unable to deserialize new run history events",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	}
+	e.eventsDesResponse = &eventsDeserializeResponse{
+		events:       events,
+		newRunEvents: newRunEvents,
+		err:          nil,
+	}
+	return events, newRunEvents, err
+}
+
+func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
+	if !e.batchable {
+		return nil, false
+	}
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+
+	if !e.batchable || !incomingTask.CanBatch() {
+		return nil, false
+	}
+
+	incomingHistoryTask, err := e.validateIncomingBatchTask(incomingTask)
+	if err != nil {
+		e.Logger.Debug("Failed to batch task", tag.Error(err))
+		return nil, false
+	}
+
+	currentEvents, currentNewRunEvents, _ := e.getDeserializedEvents()
+	incomingEvents, incomingNewRunEvents, _ := incomingHistoryTask.getDeserializedEvents()
+
+	return &ExecutableHistoryTask{
+		ProcessToolBox:      e.ProcessToolBox,
+		WorkflowKey:         e.WorkflowKey,
+		ExecutableTask:      e.ExecutableTask,
+		baseExecutionInfo:   e.baseExecutionInfo,
+		versionHistoryItems: e.getFresherVersionHistoryItems(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
+		eventsDesResponse: &eventsDeserializeResponse{
+			events:       append(currentEvents, incomingEvents...),
+			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
+			err:          nil,
+		},
+		batchable: true,
+	}, true
+}
+
+func (e *ExecutableHistoryTask) getFresherVersionHistoryItems(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	fresherVersionHistoryItems := versionHistoryItemsA
+	if versionHistoryItemsA[len(versionHistoryItemsA)-1].GetEventId() < versionHistoryItemsB[len(versionHistoryItemsB)-1].GetEventId() {
+		fresherVersionHistoryItems = versionHistoryItemsB
+	}
+	var items []*historyspb.VersionHistoryItem
+	for _, item := range fresherVersionHistoryItems {
+		items = append(items, versionhistory.CopyVersionHistoryItem(item))
+	}
+	return items
+}
+
+func (e *ExecutableHistoryTask) validateIncomingBatchTask(incomingTask BatchableTask) (*ExecutableHistoryTask, error) {
+	incomingHistoryTask, isHistoryTask := incomingTask.(*ExecutableHistoryTask)
+	if !isHistoryTask {
+		return nil, serviceerror.NewInvalidArgument("Unsupported Batch type")
+	}
+	if err := e.checkSourceCluster(incomingHistoryTask.SourceClusterName()); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkWorkflowKey(incomingHistoryTask.WorkflowKey); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkVersionHistoryItem(incomingHistoryTask.versionHistoryItems); err != nil {
+		return nil, err
+	}
+
+	if err := e.checkBaseExecutionInfo(incomingHistoryTask.baseExecutionInfo); err != nil {
+		return nil, err
+	}
+
+	events, newRunEvents, err := incomingHistoryTask.getDeserializedEvents()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = e.checkEvents(events, newRunEvents); err != nil {
+		return nil, err
+	}
+
+	return incomingHistoryTask, nil
+}
+
+func (e *ExecutableHistoryTask) checkSourceCluster(incomingTaskSourceCluster string) error {
+	if e.SourceClusterName() != incomingTaskSourceCluster {
+		return serviceerror.NewInvalidArgument("source cluster does not match")
+	}
+	return nil
+}
+
+// checkVersionHistoryItem will check if incoming tasks Version history is on the same branch as the current one
+func (e *ExecutableHistoryTask) checkVersionHistoryItem(incomingHistoryItems []*historyspb.VersionHistoryItem) error {
+	if versionhistory.IsVersionHistoryItemsInSameBranch(e.versionHistoryItems, incomingHistoryItems) {
+		return nil
+	}
+	return serviceerror.NewInvalidArgument("version history does not match")
+}
+
+func (e *ExecutableHistoryTask) checkWorkflowKey(incomingWorkflowKey definition.WorkflowKey) error {
+	if e.WorkflowKey != incomingWorkflowKey {
+		return serviceerror.NewInvalidArgument("workflow key does not match")
+	}
+	return nil
+}
+
+func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo *workflowpb.BaseExecutionInfo) error {
+	if e.baseExecutionInfo == nil && incomingTaskExecutionInfo == nil {
+		return nil
+	}
+	if e.baseExecutionInfo == nil || incomingTaskExecutionInfo == nil {
+		return serviceerror.NewInvalidArgument("one of base execution is nil")
+	}
+
+	if !e.baseExecutionInfo.Equal(incomingTaskExecutionInfo) {
+		return serviceerror.NewInvalidArgument("base execution is not equal")
+	}
+	return nil
+}
+
+func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryEvent, incomingNewRunEvents []*historypb.HistoryEvent) error {
+	if len(incomingEvents) == 0 {
+		return serviceerror.NewInvalidArgument("incoming task is empty")
+	}
+	currentEvents, currentNewRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return err
+	}
+
+	if currentNewRunEvents != nil {
+		return serviceerror.NewInvalidArgument("Current Task is expected to be the last event of a workflow")
+	}
+	currentLastEvent := currentEvents[len(currentEvents)-1]
+	incomingFirstEvent := incomingEvents[0]
+	if currentLastEvent.Version != incomingFirstEvent.Version {
+		return serviceerror.NewInvalidArgument("events version mismatch")
+	}
+	if currentLastEvent.EventId+1 != incomingFirstEvent.EventId {
+		return serviceerror.NewInvalidArgument("events id is not consecutive")
+	}
+
+	return nil
+}
+
+func (e *ExecutableHistoryTask) CanBatch() bool {
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+	return e.batchable
+}
+
+func (e *ExecutableHistoryTask) MarkUnbatchable() {
+	e.batchLock.Lock()
+	defer e.batchLock.Unlock()
+	e.batchable = false
 }

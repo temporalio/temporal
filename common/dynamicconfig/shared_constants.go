@@ -36,6 +36,30 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 		Value: 1,
 	},
 
+	// The system activity worker task queues in the system local namespace should only have
+	// one partition, since we'll only run one worker per task queue.
+	{
+		Constraints: Constraints{
+			TaskQueueName: primitives.AddSearchAttributesActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
+		},
+		Value: 1,
+	},
+	{
+		Constraints: Constraints{
+			TaskQueueName: primitives.DeleteNamespaceActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
+		},
+		Value: 1,
+	},
+	{
+		Constraints: Constraints{
+			TaskQueueName: primitives.MigrationActivityTQ,
+			Namespace:     primitives.SystemLocalNamespace,
+		},
+		Value: 1,
+	},
+
 	// TODO: After we have a solution for ensuring no tasks are lost, add a constraint here for
 	// all task queues in SystemLocalNamespace to have one partition.
 
@@ -68,6 +92,12 @@ const (
 	// dynamicRateLimitIncreaseStepSizeKey the amount the rate limit multiplier is increased when the system is healthy. should be between 0 and 1
 	dynamicRateLimitIncreaseStepSizeKey     = "rateIncreaseStepSize"
 	dynamicRateLimitIncreaseStepSizeDefault = 0.1
+	// dynamicRateLimitMultiMinKey is the minimum the rate limit multiplier can be reduced to
+	dynamicRateLimitMultiMinKey     = "rateMultiMin"
+	dynamicRateLimitMultiMinDefault = 0.8
+	// dynamicRateLimitMultiMaxKey is the maximum the rate limit multiplier can be increased to
+	dynamicRateLimitMultiMaxKey     = "rateMultiMax"
+	dynamicRateLimitMultiMaxDefault = 1.0
 )
 
 var DefaultDynamicRateLimitingParams = map[string]interface{}{
@@ -77,4 +107,6 @@ var DefaultDynamicRateLimitingParams = map[string]interface{}{
 	dynamicRateLimitErrorThresholdKey:   dynamicRateLimitErrorThresholdDefault,
 	dynamicRateLimitBackoffStepSizeKey:  dynamicRateLimitBackoffStepSizeDefault,
 	dynamicRateLimitIncreaseStepSizeKey: dynamicRateLimitIncreaseStepSizeDefault,
+	dynamicRateLimitMultiMinKey:         dynamicRateLimitMultiMinDefault,
+	dynamicRateLimitMultiMaxKey:         dynamicRateLimitMultiMaxDefault,
 }

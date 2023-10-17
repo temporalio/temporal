@@ -89,7 +89,7 @@ linters-settings:
           - 25
       - name: cyclomatic
         arguments:
-          - 18
+          - 25
       - name: function-result-limit
         arguments:
           - 5
@@ -105,6 +105,10 @@ issues:
       text: "(cyclomatic|cognitive)"
       linters:
         - revive
-    - path: _test\.go
+    - path: _test\.go|^common/persistence\/tests\/.+\.go # Ignore things like err = errors.New("test error") in tests
       linters:
         - goerr113
+    - path: ^tools\/.+\.go
+      linters:
+        - goerr113
+        - revive

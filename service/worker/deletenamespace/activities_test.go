@@ -42,7 +42,7 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 
-	a := &activities{
+	a := &localActivities{
 		metadataManager: metadataManager,
 		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          log.NewNoopLogger(),
@@ -52,6 +52,10 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 		Name: "namespace-deleted-names",
 	}).Return(nil, serviceerror.NewNamespaceNotFound("namespace-deleted-names"))
 	deletedName, err := a.GenerateDeletedNamespaceNameActivity(context.Background(), "namespace-id", "namespace")
+	require.NoError(t, err)
+	require.Equal(t, namespace.Name("namespace-deleted-names"), deletedName)
+
+	deletedName, err = a.GenerateDeletedNamespaceNameActivity(context.Background(), "namespace-id", "namespace-deleted-names")
 	require.NoError(t, err)
 	require.Equal(t, namespace.Name("namespace-deleted-names"), deletedName)
 

@@ -60,11 +60,9 @@ type (
 		PendingPerNamespace map[namespace.ID]int
 	}
 
-	ExecutableInitializer func(readerID int64, t tasks.Task) Executable
-
 	SliceImpl struct {
-		paginationFnProvider  PaginationFnProvider
-		executableInitializer ExecutableInitializer
+		paginationFnProvider PaginationFnProvider
+		executableFactory    ExecutableFactory
 
 		destroyed bool
 
@@ -78,14 +76,14 @@ type (
 
 func NewSlice(
 	paginationFnProvider PaginationFnProvider,
-	executableInitializer ExecutableInitializer,
+	executableFactory ExecutableFactory,
 	monitor Monitor,
 	scope Scope,
 ) *SliceImpl {
 	return &SliceImpl{
-		paginationFnProvider:  paginationFnProvider,
-		executableInitializer: executableInitializer,
-		scope:                 scope,
+		paginationFnProvider: paginationFnProvider,
+		executableFactory:    executableFactory,
+		scope:                scope,
 		iterators: []Iterator{
 			NewIterator(paginationFnProvider, scope.Range),
 		},
@@ -346,13 +344,13 @@ func (s *SliceImpl) shrinkPredicate() {
 		return
 	}
 
-	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
+	if len(s.executableTracker.pendingPerNamespace) > shrinkPredicateMaxPendingNamespaces {
 		// only shrink predicate if there're few namespaces left
 		return
 	}
 
-	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
-	for namespaceID := range s.executableTracker.pendingPerNamesapce {
+	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamespace))
+	for namespaceID := range s.executableTracker.pendingPerNamespace {
 		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
 	}
 	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
@@ -394,7 +392,7 @@ func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, er
 				continue
 			}
 
-			executable := s.executableInitializer(readerID, task)
+			executable := s.executableFactory.NewExecutable(task, readerID)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
@@ -415,7 +413,7 @@ func (s *SliceImpl) TaskStats() TaskStats {
 	s.stateSanityCheck()
 
 	return TaskStats{
-		PendingPerNamespace: s.executableTracker.pendingPerNamesapce,
+		PendingPerNamespace: s.executableTracker.pendingPerNamespace,
 	}
 }
 
@@ -451,12 +449,12 @@ func (s *SliceImpl) newSlice(
 	tracker *executableTracker,
 ) *SliceImpl {
 	slice := &SliceImpl{
-		paginationFnProvider:  s.paginationFnProvider,
-		executableInitializer: s.executableInitializer,
-		scope:                 scope,
-		iterators:             iterators,
-		executableTracker:     tracker,
-		monitor:               s.monitor,
+		paginationFnProvider: s.paginationFnProvider,
+		executableFactory:    s.executableFactory,
+		scope:                scope,
+		iterators:            iterators,
+		executableTracker:    tracker,
+		monitor:              s.monitor,
 	}
 	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
 

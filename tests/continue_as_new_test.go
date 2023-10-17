@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestContinueAsNewWorkflow() {
-	id := "integration-continue-as-new-workflow-test"
-	wt := "integration-continue-as-new-workflow-test-type"
-	tl := "integration-continue-as-new-workflow-test-taskqueue"
+func (s *functionalSuite) TestContinueAsNewWorkflow() {
+	id := "functional-continue-as-new-workflow-test"
+	wt := "functional-continue-as-new-workflow-test-type"
+	tl := "functional-continue-as-new-workflow-test-taskqueue"
 	identity := "worker1"
 	saName := "CustomKeywordField"
 	// Uncomment this line to test with mapper.
@@ -56,7 +56,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
@@ -107,7 +107,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					Header:              header,
 					Memo:                memo,
@@ -139,13 +139,13 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
@@ -155,15 +155,15 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal("Keyword", string(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 }
 
-func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
-	id := "integration-continue-as-new-workflow-timeout-test"
-	wt := "integration-continue-as-new-workflow-timeout-test-type"
-	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
+func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
+	id := "functional-continue-as-new-workflow-timeout-test"
+	wt := "functional-continue-as-new-workflow-timeout-test-type"
+	tl := "functional-continue-as-new-workflow-timeout-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -196,7 +196,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set timeout to 1
 					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -224,7 +224,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 	}
 
 	// process the workflow task and continue as new
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -256,15 +256,15 @@ GetHistoryLoop:
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
-	id := "integration-wf-continue-as-new-task-id-test"
-	wt := "integration-wf-continue-as-new-task-id-type"
-	tl := "integration-wf-continue-as-new-task-id-taskqueue"
+func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
+	id := "functional-wf-continue-as-new-task-id-test"
+	wt := "functional-wf-continue-as-new-task-id-type"
+	tl := "functional-wf-continue-as-new-task-id-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -325,7 +325,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 	}
 
 	minTaskID := int64(0)
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events := s.getHistory(s.namespace, executions[0])
 	s.True(len(events) != 0)
@@ -334,7 +334,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		minTaskID = event.GetTaskId()
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(s.namespace, executions[1])
 	s.True(len(events) != 0)
@@ -346,7 +346,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 
 type (
 	ParentWithChildContinueAsNew struct {
-		suite *integrationSuite
+		suite *functionalSuite
 
 		parentID           string
 		parentType         string
@@ -366,7 +366,7 @@ type (
 	}
 )
 
-func newParentWithChildContinueAsNew(s *integrationSuite,
+func newParentWithChildContinueAsNew(s *functionalSuite,
 	parentID, parentType, childID, childType string,
 	closePolicy enumspb.ParentClosePolicy) *ParentWithChildContinueAsNew {
 	workflow := &ParentWithChildContinueAsNew{
@@ -466,15 +466,15 @@ func (w *ParentWithChildContinueAsNew) workflow(
 	return nil, nil
 }
 
-func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
-	parentID := "integration-child-workflow-with-continue-as-new-test-parent"
-	childID := "integration-child-workflow-with-continue-as-new-test-child"
-	wtParent := "integration-child-workflow-with-continue-as-new-test-parent-type"
-	wtChild := "integration-child-workflow-with-continue-as-new-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-test-taskqueue"
+func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
+	parentID := "functional-child-workflow-with-continue-as-new-test-parent"
+	childID := "functional-child-workflow-with-continue-as-new-test-child"
+	wtParent := "functional-child-workflow-with-continue-as-new-test-parent-type"
+	wtChild := "functional-child-workflow-with-continue-as-new-test-child-type"
+	tl := "functional-child-workflow-with-continue-as-new-test-taskqueue"
 	identity := "worker1"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	definition := newParentWithChildContinueAsNew(s, parentID, wtParent, childID, wtChild, enumspb.PARENT_CLOSE_POLICY_ABANDON)
 
@@ -505,7 +505,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	}
 
 	// Make first command to start child execution
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childExecutionStarted)
@@ -513,7 +513,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.Logger.Info("workflow task", tag.Counter(i))
-		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -522,13 +522,13 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(definition.startedEvent)
 
 	// Process Child Execution final workflow task to complete it
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(definition.completedEvent)
@@ -549,15 +549,15 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	})
 }
 
-func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
-	parentID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent"
-	childID := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child"
-	wtParent := "integration-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"
-	wtChild := "integration-child-workflow-with-continue-as-new-parent-terminate-test-child-type"
-	tl := "integration-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
+func (s *functionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
+	parentID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent"
+	childID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child"
+	wtParent := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"
+	wtChild := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child-type"
+	tl := "functional-child-workflow-with-continue-as-new-parent-terminate-test-taskqueue"
 	identity := "worker1"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	definition := newParentWithChildContinueAsNew(s, parentID, wtParent, childID, wtChild, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
@@ -588,7 +588,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	}
 
 	// Make first command to start child execution
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(definition.childExecutionStarted)
@@ -596,7 +596,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	// Process ChildExecution Started event and all generations of child executions
 	for i := 0; i < 11; i++ {
 		s.Logger.Info("workflow task", tag.Counter(i))
-		_, err = poller.PollAndProcessWorkflowTask(false, false)
+		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}

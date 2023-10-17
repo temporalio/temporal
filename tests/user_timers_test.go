@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/timer"
 )
 
-func (s *integrationSuite) TestUserTimers_Sequential() {
-	id := "integration-user-timers-sequential-test"
-	wt := "integration-user-timers-sequential-test-type"
-	tl := "integration-user-timers-sequential-test-taskqueue"
+func (s *functionalSuite) TestUserTimers_Sequential() {
+	id := "functional-user-timers-sequential-test"
+	wt := "functional-user-timers-sequential-test-type"
+	tl := "functional-user-timers-sequential-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -56,7 +56,7 @@ func (s *integrationSuite) TestUserTimers_Sequential() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -98,7 +98,7 @@ func (s *integrationSuite) TestUserTimers_Sequential() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -107,29 +107,29 @@ func (s *integrationSuite) TestUserTimers_Sequential() {
 	}
 
 	for i := 0; i < 4; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestUserTimers_CapDuration() {
-	id := "integration-user-timers-cap-duration-test"
-	wt := "integration-user-timers-cap-duration-test-type"
-	tl := "integration-user-timers-cap-duration-test-taskqueue"
-	identity := "integration-user-timers-cap-duration-test-worker"
+func (s *functionalSuite) TestUserTimers_CapDuration() {
+	id := "functional-user-timers-cap-duration-test"
+	wt := "functional-user-timers-cap-duration-test-type"
+	tl := "functional-user-timers-cap-duration-test-taskqueue"
+	identity := "functional-user-timers-cap-duration-test-worker"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(timer.MaxAllowedTimer * 2),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -170,7 +170,7 @@ func (s *integrationSuite) TestUserTimers_CapDuration() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -179,7 +179,7 @@ func (s *integrationSuite) TestUserTimers_CapDuration() {
 	}
 
 	// poll workflow task to schedule the timer
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 

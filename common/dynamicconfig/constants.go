@@ -233,6 +233,8 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
+	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace in frontend cluster can query DB
+	FrontendPersistenceGlobalNamespaceMaxQPS = "frontend.persistenceGlobalNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
@@ -368,8 +370,8 @@ const (
 	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
-	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
+	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
@@ -411,6 +413,8 @@ const (
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
+	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace in matching cluster can query DB
+	MatchingPersistenceGlobalNamespaceMaxQPS = "matching.persistenceGlobalNamespaceMaxQPS"
 	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
 	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params
@@ -481,6 +485,8 @@ const (
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
+	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace in history cluster can query DB
+	HistoryPersistenceGlobalNamespaceMaxQPS = "history.persistenceGlobalNamespaceMaxQPS"
 	// HistoryPersistencePerShardNamespaceMaxQPS is the max qps each namespace on a shard can query DB
 	HistoryPersistencePerShardNamespaceMaxQPS = "history.persistencePerShardNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
@@ -562,18 +568,22 @@ const (
 	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
 	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
-	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
+	// TaskSchedulerEnableRateLimiter indicates if task scheduler rate limiter should be enabled
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
 	// TaskSchedulerEnableRateLimiterShadowMode indicates if task scheduler rate limiter should run in shadow mode
 	// i.e. through rate limiter and emit metrics but do not actually block/throttle task scheduling
 	TaskSchedulerEnableRateLimiterShadowMode = "history.taskSchedulerEnableRateLimiterShadowMode"
 	// TaskSchedulerRateLimiterStartupDelay is the duration to wait after startup before enforcing task scheduler rate limiting
 	TaskSchedulerRateLimiterStartupDelay = "history.taskSchedulerRateLimiterStartupDelay"
-	// TaskSchedulerThrottleDuration is the throttle duration when task scheduled exceeds max qps
-	TaskSchedulerThrottleDuration = "history.taskSchedulerThrottleDuration"
+	// TaskSchedulerGlobalMaxQPS is the max qps all task schedulers in the cluster can schedule tasks
+	// If value less or equal to 0, will fall back to TaskSchedulerMaxQPS
+	TaskSchedulerGlobalMaxQPS = "history.taskSchedulerGlobalMaxQPS"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
 	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerGlobalNamespaceMaxQPS is the max qps all task schedulers in the cluster can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS
+	TaskSchedulerGlobalNamespaceMaxQPS = "history.taskSchedulerGlobalNamespaceMaxQPS"
 	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
@@ -811,6 +821,9 @@ const (
 	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 	// ReplicationEnableDLQMetrics is the flag to emit DLQ metrics
 	ReplicationEnableDLQMetrics = "history.ReplicationEnableDLQMetrics"
+	// HistoryTaskDLQEnabled enables the history task DLQ. This applies to internal tasks like transfer and timer tasks.
+	// Do not turn this on if you aren't using Cassandra as the history task DLQ is not implemented for other databases.
+	HistoryTaskDLQEnabled = "history.TaskDLQEnabled"
 
 	// ReplicationStreamSyncStatusDuration sync replication status duration
 	ReplicationStreamSyncStatusDuration = "history.ReplicationStreamSyncStatusDuration"
@@ -822,6 +835,8 @@ const (
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
 	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
+	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
+	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
 
 	// keys for worker
 
@@ -831,6 +846,8 @@ const (
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
+	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace in worker cluster can query DB
+	WorkerPersistenceGlobalNamespaceMaxQPS = "worker.persistenceGlobalNamespaceMaxQPS"
 	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
 	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerPersistenceDynamicRateLimitingParams is a map that contains all adjustable dynamic rate limiting params

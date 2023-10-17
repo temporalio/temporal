@@ -30,9 +30,12 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
-
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
+	historyspb "go.temporal.io/server/api/history/v1"
+	workflowpb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/service/history/api/addtasks"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -114,7 +117,7 @@ type (
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCHistoryReplicator       ndc.HistoryReplicator
-		nDCHistoryBackfiller       ndc.HistoryImporter
+		nDCHistoryImporter         ndc.HistoryImporter
 		nDCActivityStateReplicator ndc.ActivityStateReplicator
 		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
@@ -220,7 +223,7 @@ func NewEngineWithShardContext(
 			eventSerializer,
 			logger,
 		)
-		historyEngImpl.nDCHistoryBackfiller = ndc.NewHistoryImporter(
+		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
 			shard,
 			workflowCache,
 			logger,
@@ -390,6 +393,7 @@ func (e *historyEngineImpl) PollMutableState(
 			Execution:           request.Execution,
 			ExpectedNextEventId: request.ExpectedNextEventId,
 			CurrentBranchToken:  request.CurrentBranchToken,
+			VersionHistoryItem:  request.GetVersionHistoryItem(),
 		},
 		e.workflowConsistencyChecker,
 		e.eventNotifier,
@@ -634,6 +638,24 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	return e.nDCHistoryReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
+func (e *historyEngineImpl) ReplicateHistoryEvents(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	historyEvents [][]*historypb.HistoryEvent,
+	newEvents []*historypb.HistoryEvent,
+) error {
+	return e.nDCHistoryReplicator.ReplicateHistoryEvents(
+		ctx,
+		workflowKey,
+		baseExecutionInfo,
+		versionHistoryItems,
+		historyEvents,
+		newEvents,
+	)
+}
+
 func (e *historyEngineImpl) SyncActivity(
 	ctx context.Context,
 	request *historyservice.SyncActivityRequest,
@@ -657,7 +679,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	token, err := e.nDCHistoryBackfiller.ImportWorkflow(
+	token, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
@@ -867,4 +889,11 @@ func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (_ *historyservice.AddTasksResponse, retError error) {
+	return addtasks.Invoke(ctx, e.shardContext, e.eventSerializer, int(e.config.NumberOfShards), request)
 }

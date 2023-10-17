@@ -38,6 +38,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -952,15 +954,14 @@ type (
 
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
-		BranchToken []byte
-		ForkTime    *time.Time
-		Info        string
+		BranchInfo *persistencespb.HistoryBranch
+		ForkTime   *time.Time
+		Info       string
 	}
 
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
-		// all branches of a tree
-		BranchTokens [][]byte
+		BranchInfos []*persistencespb.HistoryBranch
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -1203,6 +1204,93 @@ type (
 		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
+	}
+
+	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
+	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
+	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
+	HistoryTaskQueueManager interface {
+		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
+		ReadRawTasks(
+			ctx context.Context,
+			request *ReadRawTasksRequest,
+		) (*ReadRawTasksResponse, error)
+		ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error)
+		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
+		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
+		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+	}
+
+	HistoryTaskQueueManagerImpl struct {
+		queue            QueueV2
+		serializer       *serialization.TaskSerializer
+		numHistoryShards int
+	}
+
+	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.
+	QueueKey struct {
+		QueueType     QueueV2Type
+		Category      tasks.Category
+		SourceCluster string
+		// TargetCluster is only used for cross-cluster replication tasks.
+		TargetCluster string
+	}
+
+	// EnqueueTaskRequest does not include a QueueKey because it does not need the QueueKey.Category field, as that can
+	// already be inferred from the Task field.
+	EnqueueTaskRequest struct {
+		QueueType     QueueV2Type
+		SourceCluster string
+		TargetCluster string
+		Task          tasks.Task
+	}
+
+	EnqueueTaskResponse struct {
+		Metadata MessageMetadata
+	}
+
+	ReadTasksRequest struct {
+		QueueKey      QueueKey
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	HistoryTask struct {
+		MessageMetadata MessageMetadata
+		Task            tasks.Task
+	}
+
+	ReadTasksResponse struct {
+		Tasks         []HistoryTask
+		NextPageToken []byte
+	}
+
+	ReadRawTasksRequest = ReadTasksRequest
+
+	RawHistoryTask struct {
+		MessageMetadata MessageMetadata
+		Task            *persistencespb.HistoryTask
+	}
+
+	ReadRawTasksResponse struct {
+		Tasks         []RawHistoryTask
+		NextPageToken []byte
+	}
+
+	CreateQueueRequest struct {
+		QueueKey QueueKey
+	}
+
+	CreateQueueResponse struct {
+	}
+
+	DeleteTasksRequest struct {
+		QueueKey                    QueueKey
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	DeleteTasksResponse struct {
+		// empty
 	}
 )
 

@@ -37,24 +37,39 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/sdk/temporal"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/util"
 )
 
 type (
+	activities struct {
+		historyShardCount              int32
+		executionManager               persistence.ExecutionManager
+		taskManager                    persistence.TaskManager
+		namespaceRegistry              namespace.Registry
+		historyClient                  historyservice.HistoryServiceClient
+		frontendClient                 workflowservice.WorkflowServiceClient
+		clientFactory                  serverClient.Factory
+		logger                         log.Logger
+		metricsHandler                 metrics.Handler
+		forceReplicationMetricsHandler metrics.Handler
+		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
+	}
+
 	SkippedWorkflowExecution struct {
 		WorkflowExecution commonpb.WorkflowExecution
 		Reason            string
@@ -316,10 +331,14 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, rateLi
 		return err
 	}
 
-	stateTransitionCount := resp.StateTransitionCount
-	for stateTransitionCount > 0 {
-		token := util.Min(int(stateTransitionCount), rateLimiter.Burst())
-		stateTransitionCount -= int64(token)
+	// If workflow has many activity retries (bug in activity code e.g.,), the state transition count can be
+	// large but the number of actual state transition that is applied on target cluster can be very small.
+	// Take the minimum between StateTransitionCount and HistoryLength as heuristic to avoid unnecessary throttling
+	// in such situation.
+	count := min(resp.StateTransitionCount, resp.HistoryLength)
+	for count > 0 {
+		token := min(int(count), rateLimiter.Burst())
+		count -= int64(token)
 		_ = rateLimiter.ReserveN(time.Now(), token)
 	}
 

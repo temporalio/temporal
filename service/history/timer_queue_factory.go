@@ -71,20 +71,14 @@ func NewTimerQueueFactory(
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewNamespacePriorityScheduler(
+			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.NamespacePrioritySchedulerOptions{
-					WorkerCount:                 params.Config.TimerProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:      params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:     params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
-					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-					EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-					DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+				queues.SchedulerOptions{
+					WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 				},
 				params.NamespaceRegistry,
-				params.SchedulerRateLimiter,
-				params.TimeSource,
-				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -116,8 +110,25 @@ func (f *timerQueueFactory) CreateQueue(
 		f.VisibilityManager,
 	)
 
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			currentClusterName,
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
+		shardScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
@@ -173,13 +184,23 @@ func (f *timerQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := f.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewScheduledQueue(
 		shard,
 		tasks.CategoryTimer,
-		f.HostScheduler,
+		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
+		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.TimerTaskBatchSize,

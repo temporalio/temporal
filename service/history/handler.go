@@ -63,7 +63,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
+	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -97,6 +99,7 @@ type (
 		hostInfoProvider             membership.HostInfoProvider
 		controller                   shard.Controller
 		tracer                       trace.Tracer
+		taskQueueManager             persistence.HistoryTaskQueueManager
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -124,6 +127,7 @@ type (
 		ShardController              shard.Controller
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
+		TaskQueueManager             persistence.HistoryTaskQueueManager
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -742,6 +746,9 @@ func (h *Handler) ImportWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
+	if !shardContext.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+		return nil, serviceerror.NewUnimplemented("ImportWorkflowExecution must be used in global namespace mode")
+	}
 	resp, err := engine.ImportWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2143,6 +2150,36 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		h.persistenceVisibilityManager,
 		h.logger,
 	)
+}
+
+func (h *Handler) GetDLQTasks(
+	ctx context.Context,
+	request *historyservice.GetDLQTasksRequest,
+) (*historyservice.GetDLQTasksResponse, error) {
+	return getdlqtasks.Invoke(ctx, h.taskQueueManager, request)
+}
+
+func (h *Handler) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request)
+}
+
+// AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.
+func (h *Handler) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (*historyservice.AddTasksResponse, error) {
+	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return engine.AddTasks(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

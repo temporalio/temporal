@@ -73,20 +73,14 @@ func NewTransferQueueFactory(
 	return &transferQueueFactory{
 		transferQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewNamespacePriorityScheduler(
+			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.NamespacePrioritySchedulerOptions{
-					WorkerCount:                 params.Config.TransferProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:      params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:     params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
-					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-					EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-					DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+				queues.SchedulerOptions{
+					WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 				},
 				params.NamespaceRegistry,
-				params.SchedulerRateLimiter,
-				params.TimeSource,
-				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -109,14 +103,32 @@ func (f *transferQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope))
 
+	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
+
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			currentClusterName,
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
+		shardScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
 	)
 
-	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 	activeExecutor := newTransferQueueActiveTaskExecutor(
 		shard,
 		workflowCache,
@@ -165,13 +177,22 @@ func (f *transferQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := f.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.ExecutableWrapper,
+		shard.GetClusterMetadata(),
+		shard.GetNamespaceRegistry(),
+		logger,
+		metricsHandler,
+		shard.GetTimeSource(),
+	)
 	return queues.NewImmediateQueue(
 		shard,
 		tasks.CategoryTransfer,
-		f.HostScheduler,
+		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.TransferTaskBatchSize,
@@ -193,5 +214,6 @@ func (f *transferQueueFactory) CreateQueue(
 		f.HostReaderRateLimiter,
 		logger,
 		metricsHandler,
+		factory,
 	)
 }

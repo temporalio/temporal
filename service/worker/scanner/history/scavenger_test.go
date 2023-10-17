@@ -127,12 +127,6 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	s.scavenger.isInTest = true
 }
 
-func (s *ScavengerTestSuite) toBranchToken(treeID string, branchID string) []byte {
-	data, err := persistence.NewHistoryBranch(treeID, &branchID, []*persistencepb.HistoryBranchRange{})
-	s.NoError(err)
-	return data
-}
-
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
@@ -140,14 +134,20 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
@@ -158,14 +158,20 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
@@ -186,14 +192,20 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
@@ -204,14 +216,20 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
@@ -232,14 +250,20 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
@@ -250,14 +274,20 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
@@ -321,14 +351,20 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken(treeID1, branchID1),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken(treeID2, branchID2),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
@@ -338,14 +374,20 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken(treeID3, branchID3),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken(treeID4, branchID4),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
@@ -421,15 +463,21 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				// skip
-				BranchToken: s.toBranchToken(treeID1, branchID1),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				// split error
-				BranchToken: s.toBranchToken(treeID2, branchID2),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
@@ -440,21 +488,30 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				// delete succ
-				BranchToken: s.toBranchToken(treeID3, branchID3),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
-				BranchToken: s.toBranchToken(treeID4, branchID4),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
-				BranchToken: s.toBranchToken(treeID5, branchID5),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID5,
+					BranchId: branchID5,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
 	}, nil)
@@ -528,14 +585,20 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
@@ -546,19 +609,28 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID5", "branchID5"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID5,
+					BranchId: branchID5,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
 	}, nil)

@@ -76,6 +76,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
@@ -110,7 +111,9 @@ func ServiceProvider(
 	)
 }
 
-func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
+func ServiceResolverProvider(
+	membershipMonitor membership.Monitor,
+) (membership.ServiceResolver, error) {
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
@@ -136,6 +139,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                   args.ShardController,
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
+		taskQueueManager:             args.TaskQueueManager,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -215,16 +219,33 @@ func ESProcessorConfigProvider(
 
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 ) service.PersistenceRateLimitingParams {
-	return service.NewPersistenceRateLimitingParams(
+	calculator := shard.NewOwnershipAwareQuotaCalculator(
+		ownershipBasedQuotaScaler,
+		persistenceLazyLoadedServiceResolver,
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.PersistenceNamespaceMaxQPS,
-		serviceConfig.PersistencePerShardNamespaceMaxQPS,
-		serviceConfig.EnablePersistencePriorityRateLimiting,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.PersistenceDynamicRateLimitingParams,
 	)
+	namespaceCalculator := shard.NewOwnershipAwareNamespaceQuotaCalculator(
+		ownershipBasedQuotaScaler,
+		persistenceLazyLoadedServiceResolver,
+		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
+	)
+	return service.PersistenceRateLimitingParams{
+		PersistenceMaxQps: func() int {
+			return int(calculator.GetQuota())
+		},
+		PersistenceNamespaceMaxQps: func(namespace string) int {
+			return int(namespaceCalculator.GetQuota(namespace))
+		},
+		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(serviceConfig.PersistencePerShardNamespaceMaxQPS),
+		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(serviceConfig.EnablePersistencePriorityRateLimiting),
+		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(serviceConfig.OperatorRPSRatio),
+		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(serviceConfig.PersistenceDynamicRateLimitingParams),
+	}
 }
 
 func VisibilityManagerProvider(

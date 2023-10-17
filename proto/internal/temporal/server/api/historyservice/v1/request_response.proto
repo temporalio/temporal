@@ -50,6 +50,7 @@ import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
+import "temporal/server/api/common/v1/dlq.proto";
 
 message StartWorkflowExecutionRequest {
     string namespace_id = 1;
@@ -80,6 +81,7 @@ message GetMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message GetMutableStateResponse {
@@ -115,6 +117,7 @@ message PollMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message PollMutableStateResponse {
@@ -608,6 +611,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
     int64 state_transition_count = 1;
+    int64 history_length = 2;
 }
 
 message GetReplicationStatusRequest {
@@ -744,3 +748,44 @@ message ForceDeleteWorkflowExecutionRequest {
 message ForceDeleteWorkflowExecutionResponse {
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
 }
+
+message GetDLQTasksRequest {
+    temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+    // page_size must be positive. Up to this many tasks will be returned.
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message GetDLQTasksResponse {
+    repeated temporal.server.api.common.v1.HistoryDLQTask dlq_tasks = 1;
+    // next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+    // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+    // there are more results.
+    bytes next_page_token = 2;
+}
+
+message DeleteDLQTasksRequest {
+    temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+    temporal.server.api.common.v1.HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message DeleteDLQTasksResponse {}
+
+message AddTasksRequest {
+  // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
+  // not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
+  // request, which would be more complicated.
+  int32 shard_id = 1;
+
+  message Task {
+    // category is needed to deserialize the tasks. Examples include "transfer", "timer", etc. See the history/tasks
+    // package for a definitive list. Warning: this is not the same as the stringified value of a TaskCategory enum.
+    string category = 1;
+    // blob is the serialized task.
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}

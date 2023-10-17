@@ -44,14 +44,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestResetWorkflow() {
-	id := "integration-reset-workflow-test"
-	wt := "integration-reset-workflow-test-type"
-	tq := "integration-reset-workflow-test-taskqueue"
+func (s *functionalSuite) TestResetWorkflow() {
+	id := "functional-reset-workflow-test"
+	wt := "functional-reset-workflow-test-type"
+	tq := "functional-reset-workflow-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -94,7 +94,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             strconv.Itoa(i),
 						ActivityType:           &commonpb.ActivityType{Name: "ResetActivity"},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeBytes(buf.Bytes()),
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -146,7 +146,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	}
 
 	// Process first workflow task to schedule activities
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -156,7 +156,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.NoError(err)
 
 	// Process second workflow task which checks activity completion
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
 
@@ -193,7 +193,7 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.Logger.Info("Poll and process third activity", tag.Error(err))
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("Poll and process final workflow task", tag.Error(err))
 	s.NoError(err)
 
@@ -201,23 +201,23 @@ func (s *integrationSuite) TestResetWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *integrationSuite) TestResetWorkflow_ReapplyAll() {
-	workflowID := "integration-reset-workflow-test-reapply-all"
-	workflowTypeName := "integration-reset-workflow-test-reapply-all-type"
-	taskQueueName := "integration-reset-workflow-test-reapply-all-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_ReapplyAll() {
+	workflowID := "functional-reset-workflow-test-reapply-all"
+	workflowTypeName := "functional-reset-workflow-test-reapply-all-type"
+	taskQueueName := "functional-reset-workflow-test-reapply-all-taskqueue"
 
 	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *integrationSuite) TestResetWorkflow_ReapplyNone() {
-	workflowID := "integration-reset-workflow-test-reapply-none"
-	workflowTypeName := "integration-reset-workflow-test-reapply-none-type"
-	taskQueueName := "integration-reset-workflow-test-reapply-none-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_ReapplyNone() {
+	workflowID := "functional-reset-workflow-test-reapply-none"
+	workflowTypeName := "functional-reset-workflow-test-reapply-none-type"
+	taskQueueName := "functional-reset-workflow-test-reapply-none-taskqueue"
 
 	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
-func (s *integrationSuite) testResetWorkflowReapply(
+func (s *functionalSuite) testResetWorkflowReapply(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -228,7 +228,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -296,7 +296,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -305,7 +305,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 		_, err = s.engine.SignalWorkflowExecution(NewContext(), signalRequest)
 		s.NoError(err)
 
-		_, err = poller.PollAndProcessWorkflowTask(true, false)
+		_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
 	}
@@ -349,23 +349,23 @@ func (s *integrationSuite) testResetWorkflowReapply(
 
 }
 
-func (s *integrationSuite) TestResetWorkflow_ReapplyBufferAll() {
-	workflowID := "integration-reset-workflow-test-reapply-buffer-all"
-	workflowTypeName := "integration-reset-workflow-test-reapply-buffer-all-type"
-	taskQueueName := "integration-reset-workflow-test-reapply-buffer-all-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_ReapplyBufferAll() {
+	workflowID := "functional-reset-workflow-test-reapply-buffer-all"
+	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-all-type"
+	taskQueueName := "functional-reset-workflow-test-reapply-buffer-all-taskqueue"
 
 	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *integrationSuite) TestResetWorkflow_ReapplyBufferNone() {
-	workflowID := "integration-reset-workflow-test-reapply-buffer-none"
-	workflowTypeName := "integration-reset-workflow-test-reapply-buffer-none-type"
-	taskQueueName := "integration-reset-workflow-test-reapply-buffer-none-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_ReapplyBufferNone() {
+	workflowID := "functional-reset-workflow-test-reapply-buffer-none"
+	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-none-type"
+	taskQueueName := "functional-reset-workflow-test-reapply-buffer-none-taskqueue"
 
 	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
-func (s *integrationSuite) testResetWorkflowReapplyBuffer(
+func (s *functionalSuite) testResetWorkflowReapplyBuffer(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -374,7 +374,7 @@ func (s *integrationSuite) testResetWorkflowReapplyBuffer(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -463,11 +463,11 @@ func (s *integrationSuite) testResetWorkflowReapplyBuffer(
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err) // due to workflow termination (reset)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -494,28 +494,28 @@ func (s *integrationSuite) testResetWorkflowReapplyBuffer(
 
 }
 
-func (s *integrationSuite) TestResetWorkflow_WorkflowTask_Schedule() {
-	workflowID := "integration-reset-workflow-test-schedule"
-	workflowTypeName := "integration-reset-workflow-test-schedule-type"
-	taskQueueName := "integration-reset-workflow-test-schedule-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
+	workflowID := "functional-reset-workflow-test-schedule"
+	workflowTypeName := "functional-reset-workflow-test-schedule-type"
+	taskQueueName := "functional-reset-workflow-test-schedule-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 3)
 }
 
-func (s *integrationSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
-	workflowID := "integration-reset-workflow-test-schedule-to-start"
-	workflowTypeName := "integration-reset-workflow-test-schedule-to-start-type"
-	taskQueueName := "integration-reset-workflow-test-schedule-to-start-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
+	workflowID := "functional-reset-workflow-test-schedule-to-start"
+	workflowTypeName := "functional-reset-workflow-test-schedule-to-start-type"
+	taskQueueName := "functional-reset-workflow-test-schedule-to-start-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 4)
 }
 
-func (s *integrationSuite) TestResetWorkflow_WorkflowTask_Start() {
-	workflowID := "integration-reset-workflow-test-start"
-	workflowTypeName := "integration-reset-workflow-test-start-type"
-	taskQueueName := "integration-reset-workflow-test-start-taskqueue"
+func (s *functionalSuite) TestResetWorkflow_WorkflowTask_Start() {
+	workflowID := "functional-reset-workflow-test-start"
+	workflowTypeName := "functional-reset-workflow-test-start-type"
+	taskQueueName := "functional-reset-workflow-test-start-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 5)
 }
 
-func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
+func (s *functionalSuite) testResetWorkflowRangeScheduleToStart(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -524,7 +524,7 @@ func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -590,7 +590,7 @@ func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -614,7 +614,7 @@ func (s *integrationSuite) testResetWorkflowRangeScheduleToStart(
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)

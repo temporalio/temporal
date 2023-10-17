@@ -47,12 +47,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestWorkflowTimeout() {
+func (s *functionalSuite) TestWorkflowTimeout() {
 	startTime := time.Now().UTC()
 
-	id := "integration-workflow-timeout"
-	wt := "integration-workflow-timeout-type"
-	tl := "integration-workflow-timeout-taskqueue"
+	id := "functional-workflow-timeout"
+	wt := "functional-workflow-timeout-type"
+	tl := "functional-workflow-timeout-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -60,7 +60,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -128,10 +128,10 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *integrationSuite) TestWorkflowTaskFailed() {
-	id := "integration-workflowtask-failed-test"
-	wt := "integration-workflowtask-failed-test-type"
-	tl := "integration-workflowtask-failed-test-taskqueue"
+func (s *functionalSuite) TestWorkflowTaskFailed() {
+	id := "functional-workflowtask-failed-test"
+	wt := "functional-workflowtask-failed-test-type"
+	tl := "functional-workflowtask-failed-test-taskqueue"
 	identity := "worker1"
 	activityName := "activity_type1"
 
@@ -141,7 +141,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -197,7 +197,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -236,7 +236,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -245,7 +245,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	}
 
 	// Make first workflow task to schedule activity
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -256,7 +256,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 5 times
 	for i := 1; i <= 5; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 
@@ -264,7 +264,7 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
-	_, err = poller.PollAndProcessWorkflowTask(true, false)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
@@ -275,26 +275,26 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 2 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed workflow task
 	sendSignal = true
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(3))
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
 	// fail workflow task 1 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTaskWithAttempt(false, false, false, false, int32(i))
+		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 3)
+	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
@@ -325,10 +325,10 @@ func (s *integrationSuite) TestWorkflowTaskFailed() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
 }
 
-func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
-	id := "integration-respond-workflow-task-completed-test"
-	wt := "integration-respond-workflow-task-completed-test-type"
-	tq := "integration-respond-workflow-task-completed-test-taskqueue"
+func (s *functionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+	id := "functional-respond-workflow-task-completed-test"
+	wt := "functional-respond-workflow-task-completed-test-type"
+	tq := "functional-respond-workflow-task-completed-test-taskqueue"
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -336,7 +336,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 		Namespace:          s.namespace,
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
 		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
 		Identity:           identity,
@@ -364,7 +364,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -372,7 +372,7 @@ func (s *integrationSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvali
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())

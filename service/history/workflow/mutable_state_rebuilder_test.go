@@ -92,11 +92,9 @@ func TestStateBuilderSuite(t *testing.T) {
 }
 
 func (s *stateBuilderSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *stateBuilderSuite) TearDownSuite() {
-
 }
 
 func (s *stateBuilderSuite) SetupTest() {

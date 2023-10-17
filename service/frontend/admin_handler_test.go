@@ -32,7 +32,12 @@ import (
 	"sync"
 	"testing"
 
+	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+
+	commonspb "go.temporal.io/server/api/common/v1"
+	"go.temporal.io/server/service/history/tasks"
+
 	"google.golang.org/grpc/metadata"
 
 	historyclient "go.temporal.io/server/client/history"
@@ -1135,4 +1140,79 @@ func (s *adminHandlerSuite) TestGetNamespace_EmptyRequest() {
 	v := &adminservice.GetNamespaceRequest{}
 	_, err := s.handler.GetNamespace(context.Background(), v)
 	s.Equal(errRequestNotSet, err)
+}
+
+func (s *adminHandlerSuite) TestGetDLQTasks() {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "success",
+			err:  nil,
+		},
+		{
+			name: "failed to get dlq tasks",
+			err:  serviceerror.NewNotFound("failed to get dlq tasks"),
+		},
+	} {
+		s.Run(tc.name, func() {
+			blob := &commonpb.DataBlob{}
+			expectation := s.mockHistoryClient.EXPECT().GetDLQTasks(gomock.Any(), &historyservice.GetDLQTasksRequest{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  tasks.CategoryTransfer.ID(),
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				PageSize:      1,
+				NextPageToken: []byte{13},
+			})
+			if tc.err != nil {
+				expectation.Return(nil, tc.err)
+			} else {
+				expectation.Return(&historyservice.GetDLQTasksResponse{
+					DlqTasks: []*commonspb.HistoryDLQTask{
+						{
+							Metadata: &commonspb.HistoryDLQTaskMetadata{
+								MessageId: 21,
+							},
+							Task: &commonspb.HistoryTask{
+								ShardId: 34,
+								Task:    blob,
+							},
+						},
+					},
+					NextPageToken: []byte{55},
+				}, nil)
+			}
+			response, err := s.handler.GetDLQTasks(context.Background(), &adminservice.GetDLQTasksRequest{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  tasks.CategoryTransfer.ID(),
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				PageSize:      1,
+				NextPageToken: []byte{13},
+			})
+			if tc.err != nil {
+				s.ErrorIs(err, tc.err)
+				return
+			}
+			s.NoError(err)
+			s.Equal(&adminservice.GetDLQTasksResponse{
+				DlqTasks: []*commonspb.HistoryDLQTask{
+					{
+						Metadata: &commonspb.HistoryDLQTaskMetadata{
+							MessageId: 21,
+						},
+						Task: &commonspb.HistoryTask{
+							ShardId: 34,
+							Task:    blob,
+						},
+					},
+				},
+				NextPageToken: []byte{55},
+			}, response)
+		})
+	}
 }
