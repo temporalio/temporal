@@ -29,9 +29,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -82,12 +84,7 @@ func (q *queueV2) EnqueueMessage(
 			err),
 		)
 	}
-	lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
-		QueueType: request.QueueType,
-		QueueName: request.QueueName,
-		Partition: defaultPartition,
-	})
-	nextMessageID, err := q.getNextMessageId(lastMessageID, err)
+	nextMessageID, err := q.getNextMessageID(ctx, request.QueueType, request.QueueName, tx)
 	if err != nil {
 		rollBackErr := tx.Rollback()
 		if rollBackErr != nil {
@@ -264,34 +261,35 @@ func (q *queueV2) RangeDeleteMessages(
 		if err != nil {
 			return err
 		}
-		minMessageID := partition.MinMessageId
-		lastIDToDelete := request.InclusiveMaxMessageMetadata.ID
-		lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
-			QueueType: request.QueueType,
-			QueueName: request.QueueName,
-			Partition: defaultPartition,
-		})
-		nextMessageID, err := q.getNextMessageId(lastMessageID, err)
+		maxMessageID, ok, err := q.getMaxMessageID(ctx, request.QueueType, request.QueueName, tx)
 		if err != nil {
 			return err
 		}
-		lastIDToDelete = persistence.ClampLastIDToDeleteForQueueV2(lastIDToDelete, nextMessageID, minMessageID)
-		if lastIDToDelete < 0 {
+		if !ok {
+			return nil
+		}
+		deleteRange, ok := persistence.GetDeleteRange(persistence.DeleteRequest{
+			LastIDToDeleteInclusive: request.InclusiveMaxMessageMetadata.ID,
+			ExistingMessageRange: persistence.InclusiveMessageRange{
+				MinMessageID: partition.MinMessageId,
+				MaxMessageID: maxMessageID,
+			},
+		})
+		if !ok {
 			return nil
 		}
 		msgFilter := sqlplugin.QueueV2MessagesFilter{
 			QueueType:    request.QueueType,
 			QueueName:    request.QueueName,
 			Partition:    defaultPartition,
-			MinMessageID: minMessageID,
-			MaxMessageID: lastIDToDelete,
-			PageSize:     0,
+			MinMessageID: deleteRange.MinMessageID,
+			MaxMessageID: deleteRange.MaxMessageID,
 		}
 		_, err = tx.RangeDeleteFromQueueV2Messages(ctx, msgFilter)
 		if err != nil {
 			return err
 		}
-		partition.MinMessageId = lastIDToDelete + 1
+		partition.MinMessageId = deleteRange.NewMinMessageID
 		bytes, _ := qm.Metadata.Marshal()
 		row := sqlplugin.QueueV2MetadataRow{
 			QueueType:        request.QueueType,
@@ -357,16 +355,29 @@ func (q *queueV2) getQueueMetadata(
 	}, nil
 }
 
-func (q *queueV2) getNextMessageId(
-	lastMessageID int64,
-	err error,
-) (int64, error) {
+func (q *queueV2) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tx sqlplugin.Tx) (int64, bool, error) {
+	lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
+		QueueType: queueType,
+		QueueName: queueName,
+		Partition: defaultPartition,
+	})
 	switch {
 	case err == nil:
-		return lastMessageID + 1, nil
+		return lastMessageID, true, nil
 	case errors.Is(err, sql.ErrNoRows):
-		return persistence.FirstQueueMessageID, nil
+		return 0, false, nil
 	default:
+		return 0, false, err
+	}
+}
+
+func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tx sqlplugin.Tx) (int64, error) {
+	maxMessageID, ok, err := q.getMaxMessageID(ctx, queueType, queueName, tx)
+	if err != nil {
 		return 0, err
 	}
+	if !ok {
+		return persistence.FirstQueueMessageID, nil
+	}
+	return maxMessageID + 1, nil
 }

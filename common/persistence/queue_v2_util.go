@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"fmt"
+
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -107,38 +108,40 @@ func GetPartitionForQueueV2(
 	return partition, nil
 }
 
-// ClampLastIDToDeleteForQueueV2 returns the ID of the last message in the queue that has to be deleted.
-// It returns -1 if no message has to be deleted.
-func ClampLastIDToDeleteForQueueV2(
-	lastIDToDelete int64,
-	nextMessageID int64,
-	minMessageID int64,
-) int64 {
-	if lastIDToDelete >= nextMessageID {
-		// We need to clamp the lastIDToDelete to the last message ID in the queue. This is because we never actually
-		// delete the last message (so that we can keep track of the max message ID). If we don't do this, a request to
-		// delete messages with a lastIDToDelete that is greater than the last message ID will delete all messages in
-		// the queue, and we will lose track of the max message ID, so the next message ID from an enqueue request will
-		// be wrong.
-		return nextMessageID - 1
+type DeleteRequest struct {
+	// LastIDToDeleteInclusive represents the maximum message ID that the user wants to delete, inclusive.
+	LastIDToDeleteInclusive int64
+	// ExistingMessageRange represents an inclusive range of the minimum message ID and the maximum message ID in the queue.
+	ExistingMessageRange InclusiveMessageRange
+}
+
+type InclusiveMessageRange struct {
+	MinMessageID int64
+	MaxMessageID int64
+}
+
+type DeleteRange struct {
+	InclusiveMessageRange
+	NewMinMessageID int64
+}
+
+// GetDeleteRange returns the range of messages to delete, and a boolean indicating whether any messages should be deleted.
+func GetDeleteRange(request DeleteRequest) (DeleteRange, bool) {
+	lastID := request.LastIDToDeleteInclusive
+	newMinMessageID := lastID + 1
+	if lastID >= request.ExistingMessageRange.MaxMessageID {
+		// Never actually delete the last message
+		lastID = request.ExistingMessageRange.MaxMessageID - 1
 	}
-	if lastIDToDelete < minMessageID {
-		// This is more than just an optimization; we need it for correctness. If the lastIDToDelete is more than one
-		// less than the minMessageID, then if we update the minMessageID to be lastIDToDelete + 1, we will have
-		// decreased the minMessageID, which doesn't make sense because there would be messages >= minMessageID that
-		// have not been deleted. For example, if the minMessageID is 10 and the lastIDToDelete is 7, then we would
-		// update the minMessageID to 8, which is incorrect because messages 8 and 9 have been deleted.
-		//
-		// If lastIDToDelete = minMessageID - 1, then we wouldn't update the minMessageID to something incorrect, but we
-		// would waste two queries because we wouldn't delete anything, and the queue metadata would be updated to be
-		// the same as it was before. For example, if the minMessageID is 10 and the lastIDToDelete is 9, then we would
-		// send a query to delete messages < 9 (there are none), and then we would update the minMessageID to 10, which
-		// is the same as it was before.
-		//
-		// If the lastIDToDelete is 10, then we would send a query to delete messages < 10 (there would be one because
-		// we never delete all elements from the queue), and then we would update the minMessageID to be 11, which is
-		// necessary because subsequent queries would need to start at 11.
-		return -1
+	if lastID < request.ExistingMessageRange.MinMessageID {
+		// Nothing to delete
+		return DeleteRange{}, false
 	}
-	return lastIDToDelete
+	return DeleteRange{
+		InclusiveMessageRange: InclusiveMessageRange{
+			MinMessageID: request.ExistingMessageRange.MinMessageID,
+			MaxMessageID: lastID,
+		},
+		NewMinMessageID: newMinMessageID,
+	}, true
 }

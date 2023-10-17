@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -287,28 +288,36 @@ func (s *queueV2Store) RangeDeleteMessages(
 	if err != nil {
 		return nil, err
 	}
-	minMessageID := partition.MinMessageId
-	lastIDToDelete := request.InclusiveMaxMessageMetadata.ID
-	nextMessageID, err := s.getNextMessageID(ctx, queueType, queueName)
+	maxMessageID, ok, err := s.getMaxMessageID(ctx, queueType, queueName)
 	if err != nil {
 		return nil, err
 	}
-	lastIDToDelete = persistence.ClampLastIDToDeleteForQueueV2(lastIDToDelete, nextMessageID, minMessageID)
-	if lastIDToDelete < 0 {
+	if !ok {
+		// Nothing in the queue to delete.
+		return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+	}
+	deleteRange, ok := persistence.GetDeleteRange(persistence.DeleteRequest{
+		LastIDToDeleteInclusive: request.InclusiveMaxMessageMetadata.ID,
+		ExistingMessageRange: persistence.InclusiveMessageRange{
+			MinMessageID: partition.MinMessageId,
+			MaxMessageID: maxMessageID,
+		},
+	})
+	if !ok {
 		return &persistence.InternalRangeDeleteMessagesResponse{}, nil
 	}
 	err = s.session.Query(
 		TemplateRangeDeleteMessagesQuery,
 		queueType,
 		queueName,
-		0,                // partition
-		minMessageID-1,   // We have to subtract 1 because we never delete the last message
-		lastIDToDelete-1, // Always preserve the last message
+		0, // partition
+		deleteRange.MinMessageID,
+		deleteRange.MaxMessageID,
 	).WithContext(ctx).Exec()
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2RangeDeleteMessages", err)
 	}
-	partition.MinMessageId = lastIDToDelete + 1
+	partition.MinMessageId = deleteRange.NewMinMessageID
 	err = s.updateQueue(ctx, q, queueType, queueName)
 	if err != nil {
 		return nil, err
@@ -438,17 +447,28 @@ func GetQueue(
 }
 
 func (s *queueV2Store) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, error) {
+	maxMessageID, ok, err := s.getMaxMessageID(ctx, queueType, queueName)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return persistence.FirstQueueMessageID, nil
+	}
+
+	// The next message ID is the max message ID + 1.
+	return maxMessageID + 1, nil
+}
+
+func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, bool, error) {
 	var maxMessageID int64
 
 	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).WithContext(ctx).Scan(&maxMessageID)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			// There are no messages in the queue, so the next message ID is the first message ID.
-			return persistence.FirstQueueMessageID, nil
+			return 0, false, nil
 		}
-		return 0, gocql.ConvertError("QueueV2GetMaxMessageID", err)
+		return 0, false, gocql.ConvertError("QueueV2GetMaxMessageID", err)
 	}
-
-	// The next message ID is the max message ID + 1.
-	return maxMessageID + 1, nil
+	return maxMessageID, true, nil
 }

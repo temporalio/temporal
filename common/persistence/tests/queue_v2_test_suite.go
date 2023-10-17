@@ -29,14 +29,14 @@ import (
 	"strconv"
 	"testing"
 
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/persistence/persistencetest"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
@@ -44,13 +44,13 @@ import (
 
 // RunQueueV2TestSuite executes interface-level tests for a queue persistence-layer implementation. There should be more
 // implementation-specific tests that will not be covered by this suite elsewhere.
-func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
+func RunQueueV2TestSuite(t *testing.T, q persistence.QueueV2) {
 	ctx := context.Background()
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
 
-	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
 	})
@@ -59,12 +59,12 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
 
-		testHappyPath(ctx, t, queue, queueType, queueName)
+		testHappyPath(ctx, t, q, queueType, queueName)
 	})
 	t.Run("TestInvalidPageToken", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		_, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType:     queueType,
 			QueueName:     queueName,
 			PageSize:      1,
@@ -75,7 +75,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("TestNonPositivePageSize", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		_, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType:     queueType,
 			QueueName:     queueName,
 			PageSize:      0,
@@ -86,7 +86,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("TestEnqueueMessageToNonExistentQueue", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
+		_, err := q.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 			QueueType: queueType,
 			QueueName: "non-existent-queue",
 		})
@@ -97,7 +97,7 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("TestCreateQueueTwice", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 		})
@@ -109,21 +109,16 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("InvalidEncodingForQueueMessage", func(t *testing.T) {
 		queueType := persistence.QueueTypeHistoryNormal
 		queueName := "test-queue-" + t.Name()
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			Blob: commonpb.DataBlob{
-				EncodingType: 4,
-				Data:         []byte("1"),
-			},
+		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName, func(p *persistencetest.EnqueueParams) {
+			p.EncodingType = -1
 		})
 		require.NoError(t, err)
-		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		_, err = q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			PageSize:  10,
@@ -134,21 +129,16 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	t.Run("InvalidEncodingForQueueMetadata", func(t *testing.T) {
 		queueType := persistence.QueueTypeHistoryNormal
 		queueName := "test-queue-" + t.Name()
-		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			Blob: commonpb.DataBlob{
-				EncodingType: 4,
-				Data:         []byte("1"),
-			},
+		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName, func(p *persistencetest.EnqueueParams) {
+			p.EncodingType = -1
 		})
 		require.NoError(t, err)
-		_, err = queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		_, err = q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			PageSize:  10,
@@ -158,11 +148,11 @@ func RunQueueV2TestSuite(t *testing.T, queue persistence.QueueV2) {
 	})
 	t.Run("TestRangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
-		testRangeDeleteMessages(ctx, t, queue)
+		testRangeDeleteMessages(ctx, t, q)
 	})
 	t.Run("HistoryTaskQueueManagerImpl", func(t *testing.T) {
 		t.Parallel()
-		RunHistoryTaskQueueManagerTestSuite(t, queue)
+		RunHistoryTaskQueueManagerTestSuite(t, q)
 	})
 }
 
@@ -183,11 +173,11 @@ func testHappyPath(
 	assert.Equal(t, 0, len(response.Messages))
 
 	encodingType := enums.ENCODING_TYPE_JSON
-	_, err = enqueueMessage(ctx, queue, queueType, queueName)
+	_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 	require.NoError(t, err)
 
-	_, err = enqueueMessage(ctx, queue, queueType, queueName, func(p *enqueueParams) {
-		p.data = []byte("2")
+	_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName, func(p *persistencetest.EnqueueParams) {
+		p.Data = []byte("2")
 	})
 	require.NoError(t, err)
 
@@ -276,7 +266,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		})
 		require.NoError(t, err)
 		for i := 0; i < 3; i++ {
-			_, err := enqueueMessage(ctx, queue, queueType, queueName)
+			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
 		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
@@ -307,7 +297,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		msg, err := enqueueMessage(ctx, queue, queueType, queueName)
+		msg, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID), msg.Metadata.ID)
 		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
@@ -318,7 +308,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
-		msg, err = enqueueMessage(ctx, queue, queueType, queueName)
+		msg, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), msg.Metadata.ID, "Even though all"+
 			" messages are deleted, the next message ID should still be incremented")
@@ -335,7 +325,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		})
 		require.NoError(t, err)
 		for i := 0; i < 2; i++ {
-			_, err := enqueueMessage(ctx, queue, queueType, queueName)
+			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
 
@@ -357,33 +347,6 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		require.NoError(t, err)
 		require.Len(t, response.Messages, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), response.Messages[0].MetaData.ID)
-	})
-}
-
-type enqueueParams struct {
-	data []byte
-}
-
-func enqueueMessage(
-	ctx context.Context,
-	queue persistence.QueueV2,
-	queueType persistence.QueueV2Type,
-	queueName string,
-	opts ...func(p *enqueueParams),
-) (*persistence.InternalEnqueueMessageResponse, error) {
-	params := enqueueParams{
-		data: []byte("1"),
-	}
-	for _, opt := range opts {
-		opt(&params)
-	}
-	return queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-		Blob: commonpb.DataBlob{
-			EncodingType: enums.ENCODING_TYPE_JSON,
-			Data:         params.data,
-		},
 	})
 }
 
