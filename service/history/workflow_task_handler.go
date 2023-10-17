@@ -215,6 +215,12 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	command *commandpb.Command,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
+
+	handler.metricsHandler.Counter(metrics.CommandCounter.GetMetricName()).Record(
+		1,
+		metrics.NamespaceTag(handler.mutableState.GetExecutionInfo().NamespaceId),
+		metrics.CommandTypeTag(command.GetCommandType().String()))
+
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
