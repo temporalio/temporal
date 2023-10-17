@@ -1574,6 +1574,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 			setStateStopped()
 			return nil
 		}
+	case contextStateStopped:
+		switch request.(type) {
+		case contextRequestStop, contextRequestFinishStop:
+			// nothing to do, already stopped
+			return nil
+		}
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
