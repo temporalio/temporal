@@ -72,7 +72,7 @@ type (
 		forceReadPartition  dynamicconfig.IntPropertyFn
 		forceWritePartition dynamicconfig.IntPropertyFn
 
-		lock         sync.Mutex
+		lock         sync.RWMutex
 		taskQueueLBs map[taskQueueKey]*tqLoadBalancer
 	}
 
@@ -108,7 +108,7 @@ func NewLoadBalancer(
 		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
 		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
 		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
-		lock:                sync.Mutex{},
+		lock:                sync.RWMutex{},
 		taskQueueLBs:        make(map[taskQueueKey]*tqLoadBalancer),
 	}
 	return lb
@@ -163,15 +163,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return &pollToken{fullName: taskQueue.GetName()}
 	}
 
-	key := taskQueueKey{NamespaceID: namespaceID, Name: parsedName, Type: taskQueueType}
-
-	lb.lock.Lock()
-	tqlb, ok := lb.taskQueueLBs[key]
-	if !ok {
-		tqlb = newTaskQueueLoadBalancer(key)
-		lb.taskQueueLBs[key] = tqlb
-	}
-	lb.lock.Unlock()
+	tqlb := lb.getTaskQueueLoadBalancer(namespaceID, parsedName, taskQueueType)
 
 	// For read path it's safer to return global default partition count instead of root partition, when we fail to
 	// map namespace ID to name.
@@ -183,6 +175,28 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	}
 
 	return tqlb.pickReadPartition(partitionCount, lb.forceReadPartition())
+}
+
+func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(
+	namespaceID namespace.ID, parsedName tqname.Name, tqType enumspb.TaskQueueType,
+	) *tqLoadBalancer {
+	key := taskQueueKey{NamespaceID: namespaceID, Name: parsedName, Type: tqType}
+
+	lb.lock.RLock()
+	tqlb, ok := lb.taskQueueLBs[key]
+	lb.lock.RUnlock()
+	if ok {
+		return tqlb
+	}
+
+	lb.lock.Lock()
+	tqlb, ok = lb.taskQueueLBs[key]
+	if !ok {
+		tqlb = newTaskQueueLoadBalancer(key)
+		lb.taskQueueLBs[key] = tqlb
+	}
+	lb.lock.Unlock()
+	return tqlb
 }
 
 func newTaskQueueLoadBalancer(key taskQueueKey) *tqLoadBalancer {
