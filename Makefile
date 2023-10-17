@@ -107,7 +107,7 @@ FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/
 
 # Only prints output if the exit code is non-zero
 define silent_exec
-    @output=$$( $(1) 2>&1); \
+    @output=`$(1) 2>&1`; \
     status=$$?; \
     if [ $$status -ne 0 ]; then \
         echo "$$output"; \
