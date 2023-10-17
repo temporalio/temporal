@@ -1676,6 +1676,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
+	// test default is 100ms, but make it longer for this test so it's not flaky
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Second)
+
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1702,20 +1705,20 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
-	ctx.finish(errors.New("test error"))
+	task.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
-	s.NotEqual(ctx.event.GetTaskId(), ctx2.event.GetTaskId())
-	s.Equal(ctx.event.Data.GetWorkflowId(), ctx2.event.Data.GetWorkflowId())
-	s.Equal(ctx.event.Data.GetRunId(), ctx2.event.Data.GetRunId())
-	s.Equal(ctx.event.Data.GetScheduledEventId(), ctx2.event.Data.GetScheduledEventId())
+	s.NotEqual(task.event.GetTaskId(), task2.event.GetTaskId())
+	s.Equal(task.event.Data.GetWorkflowId(), task2.event.Data.GetWorkflowId())
+	s.Equal(task.event.Data.GetRunId(), task2.event.Data.GetRunId())
+	s.Equal(task.event.Data.GetScheduledEventId(), task2.event.Data.GetScheduledEventId())
 
-	ctx2.finish(nil)
+	task2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 }
 
