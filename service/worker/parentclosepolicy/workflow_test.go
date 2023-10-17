@@ -99,7 +99,7 @@ func (s *parentClosePolicyWorkflowSuite) TearDownTest() {
 
 func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 	env := s.NewTestActivityEnvironment()
-	env.SetWorkerOptions(getWorkerOptions(s.processor))
+	env.SetWorkerOptions(getActivityWorkerOptions(s.processor))
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{
@@ -143,7 +143,7 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 
 func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 	env := s.NewTestActivityEnvironment()
-	env.SetWorkerOptions(getWorkerOptions(s.processor))
+	env.SetWorkerOptions(getActivityWorkerOptions(s.processor))
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{

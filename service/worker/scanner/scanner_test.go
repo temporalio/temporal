@@ -56,25 +56,30 @@ func TestScanner(t *testing.T) {
 
 func (s *scannerTestSuite) TestScannerEnabled() {
 	type expectedScanner struct {
-		WFTypeName    string
-		TaskQueueName string
+		WFTypeName            string
+		TaskQueueName         string
+		ActivityTaskQueueName string
 	}
 	executionScanner := expectedScanner{
-		WFTypeName:    executionsScannerWFTypeName,
-		TaskQueueName: executionsScannerTaskQueueName,
+		WFTypeName:            executionsScannerWFTypeName,
+		TaskQueueName:         executionsScannerTaskQueueName,
+		ActivityTaskQueueName: executionsScannerActivityTaskQueueName,
 	}
 	_ = executionScanner
 	taskQueueScanner := expectedScanner{
-		WFTypeName:    tqScannerWFTypeName,
-		TaskQueueName: tqScannerTaskQueueName,
+		WFTypeName:            tqScannerWFTypeName,
+		TaskQueueName:         tqScannerTaskQueueName,
+		ActivityTaskQueueName: tqScannerActivityTaskQueueName,
 	}
 	historyScanner := expectedScanner{
-		WFTypeName:    historyScannerWFTypeName,
-		TaskQueueName: historyScannerTaskQueueName,
+		WFTypeName:            historyScannerWFTypeName,
+		TaskQueueName:         historyScannerTaskQueueName,
+		ActivityTaskQueueName: historyScannerActivityTaskQueueName,
 	}
 	buildIdScavenger := expectedScanner{
-		WFTypeName:    build_ids.BuildIdScavangerWorkflowName,
-		TaskQueueName: build_ids.BuildIdScavengerTaskQueueName,
+		WFTypeName:            build_ids.BuildIdScavangerWorkflowName,
+		TaskQueueName:         build_ids.BuildIdScavengerTaskQueueName,
+		ActivityTaskQueueName: build_ids.BuildIdScavengerActivityTaskQueueName,
 	}
 
 	type testCase struct {
@@ -192,6 +197,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ctrl := gomock.NewController(s.T())
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
+			mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 			mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
 			scanner := New(
@@ -232,11 +238,13 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			for _, sc := range c.ExpectedScanners {
 				wg.Add(1)
 				worker := mocksdk.NewMockWorker(ctrl)
-				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
+				atWorker := mocksdk.NewMockWorker(ctrl)
+				atWorker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+				atWorker.EXPECT().Start()
 				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
-				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.ActivityTaskQueueName, gomock.Any()).Return(atWorker)
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
 					gomock.Any()).Do(func(
 					_ context.Context,
