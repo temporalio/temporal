@@ -95,7 +95,9 @@ func TestDeliverBufferTasks(t *testing.T) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{},
+				Data: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 			}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
@@ -117,7 +119,9 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{},
+		Data: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 	}
 	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
@@ -139,6 +143,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsVersionedToDlq(t *testing.T) {
 
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 			VersionDirective: &taskqueue.TaskVersionDirective{
 				Value: &taskqueue.TaskVersionDirective_BuildId{BuildId: "asdf"},
 			},
@@ -175,6 +180,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing
 
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
 			VersionDirective: &taskqueue.TaskVersionDirective{
 				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
 			},
@@ -286,7 +292,9 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
@@ -307,7 +315,9 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// without a poller to consume the one task ID from the reserved block.
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.False(t, sync)
 	require.NoError(t, err)
@@ -319,7 +329,9 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.NoError(t, err)
@@ -349,7 +361,9 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.False(t, sync)
@@ -362,7 +376,9 @@ func TestReaderSignaling(t *testing.T) {
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.True(t, sync)
@@ -565,7 +581,9 @@ func TestAddTaskStandby(t *testing.T) {
 
 	addTaskParam := addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
+		taskInfo:  &persistencespb.TaskInfo{
+			CreateTime: timestamp.TimePtr(time.Now().UTC()),
+		},
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	}
 

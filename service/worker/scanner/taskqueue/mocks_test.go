@@ -123,6 +123,7 @@ func (tbl *mockTaskTable) generate(count int, expired bool) {
 				NamespaceId:      tbl.namespaceID,
 				WorkflowId:       tbl.workflowID,
 				RunId:            tbl.runID,
+				CreateTime: timestamp.TimePtr(time.Now().UTC()),
 				ScheduledEventId: 3,
 				ExpiryTime:       &exp,
 			},

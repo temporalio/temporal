@@ -222,7 +222,7 @@ func (m *MockExecutable) GetTask() tasks0.Task {
 // GetTask indicates an expected call of GetTask.
 func (mr *MockExecutableMockRecorder) GetTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollTask", reflect.TypeOf((*MockExecutable)(nil).GetTask))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTask", reflect.TypeOf((*MockExecutable)(nil).GetTask))
 }
 
 // GetTaskID mocks base method.

@@ -124,8 +124,7 @@ type (
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		// forwarded indicates if this poll was further forwarded to a parent partition
-		PollTask(ctx context.Context, pollMetadata *pollMetadata) (task *internalTask, forwarded bool, err error)
+		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
@@ -483,11 +482,10 @@ func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
 // to be dispatched from this task queue to pollers
-// forwarded indicates if this poll was further forwarded to a parent partition
 func (c *taskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
-) (task *internalTask, forwarded bool, err error) {
+) (*internalTask, error) {
 	c.liveness.markAlive()
 
 	c.currentPolls.Add(1)
@@ -495,7 +493,7 @@ func (c *taskQueueManagerImpl) PollTask(
 
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// the desired global rate limit for the task queue comes from the
@@ -505,18 +503,24 @@ func (c *taskQueueManagerImpl) PollTask(
 	// value. Last poller wins if different pollers provide different values
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
+	var task *internalTask
+	var forwardedPoll bool
+
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-		return c.matcher.PollForQuery(ctx, pollMetadata)
+		task, forwardedPoll, err = c.matcher.PollForQuery(ctx, pollMetadata)
+	} else {
+		task, forwardedPoll, err = c.matcher.Poll(ctx, pollMetadata)
 	}
 
-	task, forwarded, err = c.matcher.Poll(ctx, pollMetadata)
 	if err != nil {
-		return nil, forwarded, err
+		return nil, err
 	}
+
+	c.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom, forwardedPoll)
 
 	task.namespace = c.namespace
 	task.backlogCountHint = c.taskAckManager.getBacklogCountHint
-	return task, forwarded, nil
+	return task, nil
 }
 
 func (c *taskQueueManagerImpl) MarkAlive() {
@@ -1076,4 +1080,29 @@ func (c *taskQueueManagerImpl) fetchUserData(ctx context.Context) error {
 	}
 
 	return ctx.Err()
+}
+
+
+func (c *taskQueueManagerImpl) emitForwardedSourceStats(
+	isTaskForwarded bool,
+	pollForwardedSource string,
+	forwardedPoll bool,
+) {
+	if forwardedPoll {
+		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
+		// Only the partition in which the match happened should emit this metric.
+		return
+	}
+
+	isPollForwarded := len(pollForwardedSource) > 0
+	switch {
+	case isTaskForwarded && isPollForwarded:
+		c.metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	case isTaskForwarded:
+		c.metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	case isPollForwarded:
+		c.metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	default:
+		c.metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	}
 }

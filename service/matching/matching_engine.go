@@ -494,15 +494,13 @@ pollLoop:
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, forwardedPoll, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource(), forwardedPoll)
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -613,15 +611,13 @@ pollLoop:
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, forwardedPoll, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource(), forwardedPoll)
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -1192,10 +1188,10 @@ func (e *matchingEngineImpl) pollTask(
 	origTaskQueue *taskQueueID,
 	stickyInfo stickyInfo,
 	pollMetadata *pollMetadata,
-) (*internalTask, bool, error) {
+) (*internalTask, error) {
 	baseTqm, err := e.getTaskQueueManager(ctx, origTaskQueue, stickyInfo, true)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	tqm, err := baseTqm.RedirectToVersionedQueueForPoll(ctx, pollMetadata.workerVersionCapabilities)
@@ -1204,7 +1200,7 @@ func (e *matchingEngineImpl) pollTask(
 			// Rewrite to nicer error message
 			err = serviceerror.NewFailedPrecondition("Operations on versioned workflows are disabled")
 		}
-		return nil, false, err
+		return nil, err
 	}
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
@@ -1411,31 +1407,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	})
-}
-
-func (e *matchingEngineImpl) emitForwardedSourceStats(
-	metricsHandler metrics.Handler,
-	isTaskForwarded bool,
-	pollForwardedSource string,
-	forwardedPoll bool,
-) {
-	if forwardedPoll {
-		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
-		// Only the partition in which the match happened should emit this metric.
-		return
-	}
-
-	isPollForwarded := len(pollForwardedSource) > 0
-	switch {
-	case isTaskForwarded && isPollForwarded:
-		metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isTaskForwarded:
-		metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isPollForwarded:
-		metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	default:
-		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	}
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {
