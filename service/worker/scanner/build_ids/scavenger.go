@@ -129,6 +129,7 @@ func BuildIdScavangerWorkflow(ctx workflow.Context, input BuildIdScavangerInput)
 		// Give the activity enough time to scan the entire namespace
 		StartToCloseTimeout: 6 * time.Hour,
 		HeartbeatTimeout:    30 * time.Second,
+		TaskQueue:           BuildIdScavengerActivityTaskQueueName,
 	})
 	return workflow.ExecuteActivity(activityCtx, BuildIdScavangerActivityName, input).Get(ctx, nil)
 }

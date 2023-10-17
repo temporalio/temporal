@@ -107,8 +107,9 @@ var (
 func TaskQueueScannerWorkflow(
 	ctx workflow.Context,
 ) error {
-
-	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), taskQueueScavengerActivityName)
+	atCtx := workflow.WithActivityOptions(ctx, activityOptions)
+	atCtx = workflow.WithTaskQueue(atCtx, tqScannerActivityTaskQueueName)
+	future := workflow.ExecuteActivity(atCtx, taskQueueScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
@@ -116,11 +117,9 @@ func TaskQueueScannerWorkflow(
 func HistoryScannerWorkflow(
 	ctx workflow.Context,
 ) error {
-
-	future := workflow.ExecuteActivity(
-		workflow.WithActivityOptions(ctx, activityOptions),
-		historyScavengerActivityName,
-	)
+	atCtx := workflow.WithActivityOptions(ctx, activityOptions)
+	atCtx = workflow.WithTaskQueue(atCtx, historyScannerActivityTaskQueueName)
+	future := workflow.ExecuteActivity(atCtx, historyScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
@@ -128,7 +127,9 @@ func HistoryScannerWorkflow(
 func ExecutionsScannerWorkflow(
 	ctx workflow.Context,
 ) error {
-	future := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, activityOptions), executionsScavengerActivityName)
+	atCtx := workflow.WithActivityOptions(ctx, activityOptions)
+	atCtx = workflow.WithTaskQueue(atCtx, executionsScannerActivityTaskQueueName)
+	future := workflow.ExecuteActivity(atCtx, executionsScavengerActivityName)
 	return future.Get(ctx, nil)
 }
 
