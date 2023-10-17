@@ -179,7 +179,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(
 	namespaceID namespace.ID, parsedName tqname.Name, tqType enumspb.TaskQueueType,
-	) *tqLoadBalancer {
+) *tqLoadBalancer {
 	key := taskQueueKey{NamespaceID: namespaceID, Name: parsedName, Type: tqType}
 
 	lb.lock.RLock()
