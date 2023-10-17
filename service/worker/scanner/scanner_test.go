@@ -277,9 +277,9 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	logger := log.NewTestLogger()
 	mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 	mockSdkClient := mocksdk.NewMockClient(ctrl)
+	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 	mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 	mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
-	worker := mocksdk.NewMockWorker(ctrl)
 	scanner := New(
 		logger,
 		&Config{
@@ -311,11 +311,14 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockNamespaceRegistry,
 		"active-cluster",
 	)
-	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
-	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker := mocksdk.NewMockWorker(ctrl)
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
 	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
+	atWorker := mocksdk.NewMockWorker(ctrl)
+	atWorker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	atWorker.EXPECT().Start()
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(atWorker)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(
