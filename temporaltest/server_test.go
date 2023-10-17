@@ -356,17 +356,18 @@ func TestSearchAttributeRegistration(t *testing.T) {
 		if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
 			t.Logf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
 			return false
-		} else {
-			searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
-			if !ok {
-				t.Fatal("Workflow missing test search attr")
-			}
-			var searchAttrValue string
-			if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
-				t.Fatal(err)
-			}
-			assert.Equal(t, "foo", searchAttrValue)
 		}
+
+		searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
+		if !ok {
+			t.Fatal("Workflow missing test search attr")
+		}
+		var searchAttrValue string
+		if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "foo", searchAttrValue)
+
 		return true
 	}, 30*time.Second, 100*time.Millisecond)
 }
