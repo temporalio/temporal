@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sdk
+package rpc
 
 import (
 	"context"
@@ -31,19 +31,21 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type HeadersProvider interface {
+type ClientHeadersProvider interface {
 	GetHeaders(ctx context.Context) (map[string]string, error)
 }
 
-func HeadersProviderInterceptor(headersProvider HeadersProvider) grpc.UnaryClientInterceptor {
+func ClientHeadersProviderInterceptor(clientHeadersProvider ClientHeadersProvider) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		headers, err := headersProvider.GetHeaders(ctx)
+		headers, err := clientHeadersProvider.GetHeaders(ctx)
 		if err != nil {
 			return err
 		}
+		kvs := make([]string, 0, len(headers)*2)
 		for k, v := range headers {
-			ctx = metadata.AppendToOutgoingContext(ctx, k, v)
+			kvs = append(kvs, k, v)
 		}
+		ctx = metadata.AppendToOutgoingContext(ctx, kvs...)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }

@@ -40,8 +40,8 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -74,7 +74,7 @@ type (
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
-		headersProvider            sdk.HeadersProvider
+		clientHeadersProvider      rpc.ClientHeadersProvider
 		metricHandler              metrics.Handler
 	}
 )

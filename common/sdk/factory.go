@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc"
 )
 
 type (
@@ -53,15 +54,15 @@ type (
 	}
 
 	clientFactory struct {
-		hostPort        string
-		tlsConfig       *tls.Config
-		headersProvider HeadersProvider
-		metricsHandler  *MetricsHandler
-		logger          log.Logger
-		sdklogger       sdklog.Logger
-		systemSdkClient sdkclient.Client
-		stickyCacheSize dynamicconfig.IntPropertyFn
-		once            sync.Once
+		hostPort              string
+		tlsConfig             *tls.Config
+		clientHeadersProvider rpc.ClientHeadersProvider
+		metricsHandler        *MetricsHandler
+		logger                log.Logger
+		sdklogger             sdklog.Logger
+		systemSdkClient       sdkclient.Client
+		stickyCacheSize       dynamicconfig.IntPropertyFn
+		once                  sync.Once
 	}
 )
 
@@ -72,25 +73,25 @@ var (
 func NewClientFactory(
 	hostPort string,
 	tlsConfig *tls.Config,
-	headersProvider HeadersProvider,
+	clientHeadersProvider rpc.ClientHeadersProvider,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	stickyCacheSize dynamicconfig.IntPropertyFn,
 ) *clientFactory {
 	return &clientFactory{
-		hostPort:        hostPort,
-		tlsConfig:       tlsConfig,
-		headersProvider: headersProvider,
-		metricsHandler:  NewMetricsHandler(metricsHandler),
-		logger:          logger,
-		sdklogger:       log.NewSdkLogger(logger),
-		stickyCacheSize: stickyCacheSize,
+		hostPort:              hostPort,
+		tlsConfig:             tlsConfig,
+		clientHeadersProvider: clientHeadersProvider,
+		metricsHandler:        NewMetricsHandler(metricsHandler),
+		logger:                logger,
+		sdklogger:             log.NewSdkLogger(logger),
+		stickyCacheSize:       stickyCacheSize,
 	}
 }
 
 func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.HostPort = f.hostPort
-	options.HeadersProvider = f.headersProvider
+	options.HeadersProvider = f.clientHeadersProvider
 	options.MetricsHandler = f.metricsHandler
 	options.Logger = f.sdklogger
 	options.ConnectionOptions = sdkclient.ConnectionOptions{
