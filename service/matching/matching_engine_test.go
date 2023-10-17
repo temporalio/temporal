@@ -353,6 +353,16 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 			}
 			return response, nil
 		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			response := &historyservice.GetWorkflowExecutionHistoryResponse{
+				Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+					History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+					NextPageToken: nil,
+				}}
+			return response, nil
+		}).AnyTimes()
 
 	addRequest := matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:            namespaceID.String(),
@@ -409,10 +419,72 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		ScheduledTime: nil,
 		StartedTime:   nil,
 		Queries:       nil,
+		History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken: nil,
 	}
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
+	namespaceID := namespace.ID(uuid.New())
+	tl := "makeToast"
+	identity := "selfDrivingToaster"
+	fakeErr := serviceerror.NewDataLoss("fake data loss error")
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowType := &commonpb.WorkflowType{
+		Name: "workflow",
+	}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	scheduledEventID := int64(0)
+
+	// History service is using mock
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
+			response := &historyservice.RecordWorkflowTaskStartedResponse{
+				WorkflowType:               workflowType,
+				PreviousStartedEventId:     scheduledEventID,
+				ScheduledEventId:           scheduledEventID + 1,
+				Attempt:                    1,
+				StickyExecutionEnabled:     true,
+				WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			}
+			return response, nil
+		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			return nil, fakeErr
+		}).AnyTimes()
+
+	addRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:            namespaceID.String(),
+		Execution:              execution,
+		ScheduledEventId:       scheduledEventID,
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+	}
+	_, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
+	s.NoError(err)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  identity,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.ErrorIs(err, fakeErr)
+	s.Nil(resp)
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
@@ -1286,6 +1358,17 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				Attempt:                1,
 			}, nil
 		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			response := &historyservice.GetWorkflowExecutionHistoryResponse{
+				Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+					History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+					NextPageToken: nil,
+				}}
+			return response, nil
+		}).AnyTimes()
+
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
@@ -1614,6 +1697,17 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				Attempt:                1,
 			}, nil
 		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			response := &historyservice.GetWorkflowExecutionHistoryResponse{
+				Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+					History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+					NextPageToken: nil,
+				}}
+			return response, nil
+		}).AnyTimes()
+
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]

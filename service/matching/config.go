@@ -50,6 +50,7 @@ type (
 		RPS                                   dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
 		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
+		HistoryMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		// taskQueueManager configuration
 
@@ -165,6 +166,7 @@ func NewConfig(
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		TestDisableSyncMatch:                  dc.GetBoolProperty(dynamicconfig.TestMatchingDisableSyncMatch, false),
 		LoadUserData:                          dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLoadUserData, true),
+		HistoryMaxPageSize:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
 		RangeSize:                             100000,

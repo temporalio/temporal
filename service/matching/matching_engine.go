@@ -37,9 +37,11 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/api"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -536,7 +538,15 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 			}
-			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
+
+			getHistResp, err := e.getHistoryForPollWorkflowTaskQueue(ctx, namespaceID, task, resp)
+			if err != nil {
+				// will notify query client that the query task failed
+				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				return emptyPollWorkflowTaskQueueResponse, nil
+			}
+
+			return e.createPollWorkflowTaskQueueResponse(task, resp, getHistResp, opMetrics), nil
 		}
 
 		resp, err := e.recordWorkflowTaskStarted(ctx, request, task)
@@ -569,9 +579,68 @@ pollLoop:
 
 			continue pollLoop
 		}
+
+		getHistResp, err := e.getHistoryForPollWorkflowTaskQueue(ctx, namespaceID, task, resp)
+		if err != nil {
+			return nil, err
+		}
+
 		task.finish(nil)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, getHistResp, opMetrics), nil
 	}
+}
+
+// getHistoryForPollWorkflowTaskQueue retrieves history associated with a task returned
+// by PollWorkflowTaskQueue. There are 4 possible cases where different histories are returned:
+//  1. sticky query task -> send empty history
+//  2. sticky non-query task -> send partial history
+//  3. non-sticky query task -> send full history
+//  4. non-sticky non-query task -> send full history
+func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueue(
+	ctx context.Context,
+	nsID namespace.ID,
+	task *internalTask,
+	recordStartedResp *historyservice.RecordWorkflowTaskStartedResponse,
+) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+	if task.isQuery() && recordStartedResp.StickyExecutionEnabled {
+		// Case 1: sticky query task -> send empty history
+		return &historyservice.GetWorkflowExecutionHistoryResponse{
+			Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+				History: &history.History{Events: []*history.HistoryEvent{}},
+			}}, nil
+	}
+
+	continuation := &tokenspb.HistoryContinuation{
+		RunId:                 task.workflowExecution().GetRunId(),
+		FirstEventId:          common.FirstEventID, // Case 3+4: default to sending full history
+		NextEventId:           recordStartedResp.GetNextEventId(),
+		TransientWorkflowTask: recordStartedResp.GetTransientWorkflowTask(),
+		BranchToken:           recordStartedResp.GetBranchToken(),
+	}
+
+	if recordStartedResp.StickyExecutionEnabled {
+		// Case 2: sticky non-query task -> send partial history
+		continuation.FirstEventId = recordStartedResp.GetPreviousStartedEventId() + 1
+	}
+
+	continueToken, err := api.SerializeHistoryToken(continuation)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := e.historyClient.GetWorkflowExecutionHistory(ctx,
+		&historyservice.GetWorkflowExecutionHistoryRequest{
+			NamespaceId: nsID.String(),
+			Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace:       task.namespace.String(),
+				Execution:       task.workflowExecution(),
+				MaximumPageSize: int32(e.config.HistoryMaxPageSize(task.namespace.String())),
+				NextPageToken:   continueToken,
+				WaitNewEvent:    false,
+				SkipArchival:    true,
+			},
+		})
+	return resp, err
 }
 
 // PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
@@ -1272,7 +1341,8 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta in
 // Populate the workflow task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
-	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
+	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
+	getHistoryResp *historyservice.GetWorkflowExecutionHistoryResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
 
@@ -1291,12 +1361,12 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			task.event.Data.GetNamespaceId(),
 			task.event.Data.GetWorkflowId(),
 			task.event.Data.GetRunId(),
-			historyResponse.GetScheduledEventId(),
-			historyResponse.GetStartedEventId(),
-			historyResponse.GetStartedTime(),
-			historyResponse.GetAttempt(),
-			historyResponse.GetClock(),
-			historyResponse.GetVersion(),
+			recordStartResp.GetScheduledEventId(),
+			recordStartResp.GetStartedEventId(),
+			recordStartResp.GetStartedTime(),
+			recordStartResp.GetAttempt(),
+			recordStartResp.GetClock(),
+			recordStartResp.GetVersion(),
 		)
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
@@ -1306,9 +1376,12 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	}
 
 	response := common.CreateMatchingPollWorkflowTaskQueueResponse(
-		historyResponse,
+		recordStartResp,
 		task.workflowExecution(),
 		serializedToken)
+
+	response.History = getHistoryResp.GetResponse().GetHistory()
+	response.NextPageToken = getHistoryResp.GetResponse().GetNextPageToken()
 
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
