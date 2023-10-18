@@ -180,6 +180,8 @@ message RecordWorkflowTaskStartedResponse {
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
     int64 version = 17;
+    temporal.api.history.v1.History history = 18;
+    bytes next_page_token = 19;
 }
 
 message RecordActivityTaskStartedRequest {
