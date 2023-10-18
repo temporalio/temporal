@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -108,7 +107,6 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		ExecutionMgr              *persistence.MockExecutionManager
-		PersistenceBean           *persistenceClient.MockBean
 
 		Logger log.Logger
 	}
@@ -146,13 +144,6 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
-	persistenceBean := persistenceClient.NewMockBean(controller)
-	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
-	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
-	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
-	persistenceBean.EXPECT().GetExecutionManager().Return(executionMgr).AnyTimes()
-	persistenceBean.EXPECT().GetNamespaceReplicationQueue().Return(namespaceReplicationQueue).AnyTimes()
-	persistenceBean.EXPECT().GetClusterMetadataManager().Return(clusterMetadataManager).AnyTimes()
 
 	membershipMonitor := membership.NewMockMonitor(controller)
 	hostInfoProvider := membership.NewMockHostInfoProvider(controller)
@@ -218,7 +209,6 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 		NamespaceReplicationQueue: namespaceReplicationQueue,
 		ShardMgr:                  shardMgr,
 		ExecutionMgr:              executionMgr,
-		PersistenceBean:           persistenceBean,
 
 		// logger
 
@@ -412,11 +402,6 @@ func (t *Test) GetShardManager() persistence.ShardManager {
 // GetExecutionManager for testing
 func (t *Test) GetExecutionManager() persistence.ExecutionManager {
 	return t.ExecutionMgr
-}
-
-// GetPersistenceBean for testing
-func (t *Test) GetPersistenceBean() persistenceClient.Bean {
-	return t.PersistenceBean
 }
 
 // loggers

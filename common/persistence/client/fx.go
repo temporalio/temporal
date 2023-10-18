@@ -27,9 +27,9 @@ package client
 import (
 	"time"
 
+	"go.temporal.io/server/common/cluster"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -41,16 +41,7 @@ import (
 )
 
 type (
-	PersistenceMaxQps                  dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
-	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
-
-	DynamicRateLimitingParams dynamicconfig.MapPropertyFn
-
-	ClusterName string
-
+	// NewFactoryParams are the dependencies needed for FactoryProvider.
 	NewFactoryParams struct {
 		fx.In
 
@@ -70,30 +61,89 @@ type (
 		DynamicRateLimitingParams          DynamicRateLimitingParams
 	}
 
-	FactoryProviderFn func(NewFactoryParams) Factory
+	// The below are type aliases which make it easy to distinguish between multiple instances of the same type or to
+	// bind to one-off types without repeating their definitions.
+
+	PersistenceMaxQps                  dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQps         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnablePriorityRateLimiting         dynamicconfig.BoolPropertyFn
+	OperatorRPSRatio                   dynamicconfig.FloatPropertyFn
+	DynamicRateLimitingParams          dynamicconfig.MapPropertyFn
+	FactoryProviderFn                  func(NewFactoryParams) Factory
+	ClusterName                        string
 )
 
-var Module = fx.Options(
-	BeanModule,
-	fx.Provide(ClusterNameProvider),
-	fx.Provide(DataStoreFactoryProvider),
-	fx.Provide(HealthSignalAggregatorProvider),
-	fx.Provide(EventBlobCacheProvider),
+// Module provides all the clients from the persistence layer, given the dependencies specified by NewFactoryParams,
+// by creating a single Factory, constructing its clients, adding their lifecycle hooks, and then providing them to the graph.
+var Module = fx.Provide(
+	DataStoreFactoryProvider,
+	healthSignalAggregatorProvider,
+	eventBlobCacheProvider,
+	func(cfg *cluster.Config) ClusterName {
+		return ClusterName(cfg.CurrentClusterName)
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.ClusterMetadataManager, error) {
+		clusterMetadataManager, err := f.NewClusterMetadataManager()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(clusterMetadataManager.Close))
+		return clusterMetadataManager, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.MetadataManager, error) {
+		metadataManager, err := f.NewMetadataManager()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(metadataManager.Close))
+		return metadataManager, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.TaskManager, error) {
+		taskManager, err := f.NewTaskManager()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(taskManager.Close))
+		return taskManager, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.NamespaceReplicationQueue, error) {
+		namespaceReplicationQueue, err := f.NewNamespaceReplicationQueue()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(namespaceReplicationQueue.Stop))
+		return namespaceReplicationQueue, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.ShardManager, error) {
+		shardManager, err := f.NewShardManager()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(shardManager.Close))
+		return shardManager, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.ExecutionManager, error) {
+		executionManager, err := f.NewExecutionManager()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.StopHook(executionManager.Close))
+		return executionManager, nil
+	},
+	func(f Factory, lc fx.Lifecycle) (persistence.HistoryTaskQueueManager, error) {
+		manager, err := f.NewHistoryTaskQueueManager()
+		if err != nil {
+			return nil, err
+		}
+		return manager, nil
+	},
 )
 
-func ClusterNameProvider(config *cluster.Config) ClusterName {
-	return ClusterName(config.CurrentClusterName)
-}
-
-func EventBlobCacheProvider(
-	dc *dynamicconfig.Collection,
-) persistence.XDCCache {
-	return persistence.NewEventsBlobCache(
-		dc.GetIntProperty(dynamicconfig.XDCCacheMaxSizeBytes, 8*1024*1024)(),
-		20*time.Second,
-	)
-}
-
+// FactoryProvider is similar to NewFactory, but it also provides a request rate limiter based on the params.
+// TODO: get rid of FactoryProviderFn and make this function un-exported.
+// Clients should provide their own factory just by using fx graph modifications on the factory directly instead of
+// needing to override a factory provider.
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
@@ -129,7 +179,16 @@ func FactoryProvider(
 	)
 }
 
-func HealthSignalAggregatorProvider(
+func eventBlobCacheProvider(
+	dc *dynamicconfig.Collection,
+) persistence.XDCCache {
+	return persistence.NewEventsBlobCache(
+		dc.GetIntProperty(dynamicconfig.XDCCacheMaxSizeBytes, 8*1024*1024)(),
+		20*time.Second,
+	)
+}
+
+func healthSignalAggregatorProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
 	logger log.ThrottledLogger,
