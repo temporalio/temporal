@@ -122,6 +122,8 @@ type (
 
 		// DEPRECATED
 		persistenceExecutionManager persistence.ExecutionManager
+
+		taskCategoryRegistry tasks.TaskCategoryRegistry
 	}
 
 	NewAdminHandlerArgs struct {
@@ -152,6 +154,8 @@ type (
 
 		// DEPRECATED
 		PersistenceExecutionManager persistence.ExecutionManager
+
+		CategoryRegistry tasks.TaskCategoryRegistry
 	}
 )
 
@@ -201,6 +205,7 @@ func NewAdminHandler(
 		saManager:                   args.SaManager,
 		clusterMetadata:             args.ClusterMetadata,
 		healthServer:                args.HealthServer,
+		taskCategoryRegistry:        args.CategoryRegistry,
 	}
 }
 
@@ -793,7 +798,7 @@ func (adh *AdminHandler) ListHistoryTasks(
 		return nil, errTaskRangeNotSet
 	}
 
-	taskCategory, ok := tasks.GetCategoryByID(int32(request.Category))
+	taskCategory, ok := adh.taskCategoryRegistry.GetCategoryByID(int(request.Category))
 	if !ok {
 		return nil, &serviceerror.InvalidArgument{
 			Message: fmt.Sprintf("unknown task category: %v", request.Category),

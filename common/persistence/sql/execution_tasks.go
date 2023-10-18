@@ -146,7 +146,7 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 
 	rows, err := m.Db.RangeSelectFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
-		CategoryID:         categoryID,
+		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		PageSize:           request.BatchSize,
@@ -200,7 +200,7 @@ func (m *sqlExecutionStore) completeHistoryImmediateTask(
 
 	if _, err := m.Db.DeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksFilter{
 		ShardID:    request.ShardID,
-		CategoryID: categoryID,
+		CategoryID: int32(categoryID),
 		TaskID:     request.TaskKey.TaskID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(
@@ -229,7 +229,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 
 	if _, err := m.Db.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
-		CategoryID:         categoryID,
+		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
@@ -263,7 +263,7 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 
 	rows, err := m.Db.RangeSelectFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
-		CategoryID:                      categoryID,
+		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: pageToken.Timestamp,
 		InclusiveMinTaskID:              pageToken.TaskID,
 		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
@@ -313,7 +313,7 @@ func (m *sqlExecutionStore) completeHistoryScheduledTask(
 
 	if _, err := m.Db.DeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksFilter{
 		ShardID:             request.ShardID,
-		CategoryID:          categoryID,
+		CategoryID:          int32(categoryID),
 		VisibilityTimestamp: request.TaskKey.FireTime,
 		TaskID:              request.TaskKey.TaskID,
 	}); err != nil {
@@ -338,7 +338,7 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 	end := request.ExclusiveMaxTaskKey.FireTime
 	if _, err := m.Db.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
-		CategoryID:                      categoryID,
+		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: start,
 		ExclusiveMaxVisibilityTimestamp: end,
 	}); err != nil {

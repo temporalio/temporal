@@ -27,10 +27,11 @@ package main
 import (
 	"os"
 
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tools/tdbg"
 )
 
 func main() {
-	app := tdbg.NewCliApp(tdbg.NewClientFactory())
+	app := tdbg.NewCliApp(tdbg.NewClientFactory(), tasks.NewDefaultTaskCategoryRegistry())
 	_ = app.Run(os.Args)
 }

@@ -46,6 +46,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -70,6 +71,7 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -138,21 +140,24 @@ type (
 
 var (
 	TopLevelModule = fx.Options(
+		fx.Provide(
+			NewServerFxImpl,
+			ServerOptionsProvider,
+			dynamicconfig.NewCollection,
+			resource.ArchivalMetadataProvider,
+			TaskCategoryRegistryProvider,
+			PersistenceFactoryProvider,
+			HistoryServiceProvider,
+			MatchingServiceProvider,
+			FrontendServiceProvider,
+			InternalFrontendServiceProvider,
+			WorkerServiceProvider,
+			ApplyClusterMetadataConfigProvider,
+		),
 		pprof.Module,
-		fx.Provide(NewServerFxImpl),
-		fx.Provide(ServerOptionsProvider),
 		TraceExportModule,
-
-		fx.Provide(PersistenceFactoryProvider),
-		fx.Provide(HistoryServiceProvider),
-		fx.Provide(MatchingServiceProvider),
-		fx.Provide(FrontendServiceProvider),
-		fx.Provide(InternalFrontendServiceProvider),
-		fx.Provide(WorkerServiceProvider),
-
-		fx.Provide(ApplyClusterMetadataConfigProvider),
-		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
+		fx.Invoke(ServerLifetimeHooks),
 	)
 )
 
@@ -352,17 +357,18 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
 		InstanceID                 resource.InstanceID `optional:"true"`
+		TaskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
 
-// getCommonServiceOptions returns an fx.Option which combines all the common dependencies for a service. Why do we need
+// GetCommonServiceOptions returns an fx.Option which combines all the common dependencies for a service. Why do we need
 // this? We are propagating dependencies from one fx graph to another. This is not ideal, since we should instead either
 // have one shared fx graph, or propagate the individual fx options. So, in the server graph, dependencies exist as fx
 // providers, and, in the process of building the server graph, we build the individual service graphs. We realize the
 // dependencies in the server graph implicitly into the ServiceProviderParamsCommon object. Then, we convert them back
 // into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
 // service graphs. This is a workaround to achieve something similar.
-func (params ServiceProviderParamsCommon) getCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(
 		fx.Supply(
 			serviceName,
@@ -373,29 +379,74 @@ func (params ServiceProviderParamsCommon) getCommonServiceOptions(serviceName pr
 			params.SpanExporters,
 		),
 		fx.Provide(
-			func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory },
-			func() client.FactoryProvider { return params.ClientFactoryProvider },
-			func() authorization.JWTAudienceMapper { return params.AudienceGetter },
-			func() resolver.ServiceResolver { return params.PersistenceServiceResolver },
-			func() searchattribute.Mapper { return params.SearchAttributesMapper },
-			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
-			func() authorization.Authorizer { return params.Authorizer },
-			func() authorization.ClaimMapper { return params.ClaimMapper },
-			func() encryption.TLSConfigProvider { return params.TlsConfigProvider },
-			func() dynamicconfig.Client { return params.DynamicConfigClient },
-			func() log.Logger { return params.Logger },
 			resource.DefaultSnTaggedLoggerProvider,
+			params.PersistenceFactoryProvider,
+			func() persistenceClient.AbstractDataStoreFactory {
+				return params.DataStoreFactory
+			},
+			func() client.FactoryProvider {
+				return params.ClientFactoryProvider
+			},
+			func() authorization.JWTAudienceMapper {
+				return params.AudienceGetter
+			},
+			func() resolver.ServiceResolver {
+				return params.PersistenceServiceResolver
+			},
+			func() searchattribute.Mapper {
+				return params.SearchAttributesMapper
+			},
+			func() []grpc.UnaryServerInterceptor {
+				return params.CustomInterceptors
+			},
+			func() authorization.Authorizer {
+				return params.Authorizer
+			},
+			func() authorization.ClaimMapper {
+				return params.ClaimMapper
+			},
+			func() encryption.TLSConfigProvider {
+				return params.TlsConfigProvider
+			},
+			func() dynamicconfig.Client {
+				return params.DynamicConfigClient
+			},
+			func() log.Logger {
+				return params.Logger
+			},
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},
-			func() esclient.Client { return params.EsClient },
-			func() resource.NamespaceLogger { return params.NamespaceLogger },
-			params.PersistenceFactoryProvider,
+			func() esclient.Client {
+				return params.EsClient
+			},
+			func() resource.NamespaceLogger {
+				return params.NamespaceLogger
+			},
+			func() tasks.TaskCategoryRegistry {
+				return params.TaskCategoryRegistry
+			},
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		FxLogAdapter,
 	)
+}
+
+// TaskCategoryRegistryProvider provides an immutable tasks.TaskCategoryRegistry to the server, which is intended to be
+// shared by each service. Why do we need to initialize this at the top-level? Because, even though the presence of the
+// archival task category is only needed by the history service, which must conditionally start a queue processor for
+// it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
+// registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
+// history service's graph.
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
+	registry := tasks.NewDefaultTaskCategoryRegistry()
+	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
+		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
+		return registry
+	}
+	registry.AddCategory(tasks.CategoryArchival)
+	return registry
 }
 
 func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
@@ -419,7 +470,7 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		params.getCommonServiceOptions(serviceName),
+		params.GetCommonServiceOptions(serviceName),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
 		history.QueueModule,
 		history.Module,
@@ -440,7 +491,7 @@ func MatchingServiceProvider(
 	}
 
 	app := fx.New(
-		params.getCommonServiceOptions(serviceName),
+		params.GetCommonServiceOptions(serviceName),
 		matching.Module,
 	)
 
@@ -469,7 +520,7 @@ func genericFrontendServiceProvider(
 	}
 
 	app := fx.New(
-		params.getCommonServiceOptions(serviceName),
+		params.GetCommonServiceOptions(serviceName),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -506,7 +557,7 @@ func WorkerServiceProvider(
 	}
 
 	app := fx.New(
-		params.getCommonServiceOptions(serviceName),
+		params.GetCommonServiceOptions(serviceName),
 		worker.Module,
 	)
 

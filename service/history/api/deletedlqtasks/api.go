@@ -32,14 +32,16 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func Invoke(
 	ctx context.Context,
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
 	req *historyservice.DeleteDLQTasksRequest,
+	registry tasks.TaskCategoryRegistry,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory))
+	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory), registry)
 	if err != nil {
 		return nil, err
 	}

@@ -170,6 +170,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetExecutionManager(),
+		tasks.NewDefaultTaskCategoryRegistry(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.handler = NewAdminHandler(args)
@@ -1160,7 +1161,7 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 			blob := &commonpb.DataBlob{}
 			expectation := s.mockHistoryClient.EXPECT().GetDLQTasks(gomock.Any(), &historyservice.GetDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
-					TaskCategory:  tasks.CategoryTransfer.ID(),
+					TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 					SourceCluster: "test-source-cluster",
 					TargetCluster: "test-target-cluster",
 				},
@@ -1187,7 +1188,7 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 			}
 			response, err := s.handler.GetDLQTasks(context.Background(), &adminservice.GetDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
-					TaskCategory:  tasks.CategoryTransfer.ID(),
+					TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 					SourceCluster: "test-source-cluster",
 					TargetCluster: "test-target-cluster",
 				},

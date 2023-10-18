@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
@@ -72,6 +73,7 @@ type (
 		SaProvider                  searchattribute.Provider
 		ThrottledLogger             log.ThrottledLogger
 		TimeSource                  clock.TimeSource
+		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 	}
 
 	contextFactoryImpl struct {
@@ -109,6 +111,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ClusterMetadata,
 		c.ArchivalMetadata,
 		c.HostInfoProvider,
+		c.TaskCategoryRegistry,
 	)
 	if err != nil {
 		return nil, err
