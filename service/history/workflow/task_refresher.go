@@ -44,7 +44,6 @@ import (
 type (
 	TaskRefresher interface {
 		RefreshTasks(ctx context.Context, mutableState MutableState) error
-		RefreshTasksOnClosedWorkflow(ctx context.Context, mutableState MutableState) error
 	}
 
 	TaskRefresherImpl struct {
@@ -152,44 +151,16 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	return r.refreshTasksForWorkflowSearchAttr(mutableState, taskGenerator)
 }
 
-func (r *TaskRefresherImpl) RefreshTasksOnClosedWorkflow(
-	ctx context.Context,
-	mutableState MutableState,
-) error {
-
-	if mutableState.IsWorkflowExecutionRunning() {
-		return serviceerror.NewInternal("Cannot refresh closed workflow tasks with a running workflow")
-	}
-
-	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
-		r.shard,
-		mutableState,
-	)
-
-	if err := r.refreshTasksForWorkflowClose(
-		ctx,
-		mutableState,
-		taskGenerator,
-	); err != nil {
-		return err
-	}
-
-	if err := r.refreshTasksForChildWorkflow(
-		ctx,
-		mutableState,
-		taskGenerator,
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	ctx context.Context,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
+
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
 
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -221,19 +192,18 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		closeEventTime, err := mutableState.GetWorkflowCloseTime(ctx)
-		if err != nil {
-			return err
-		}
-
-		return taskGenerator.GenerateWorkflowCloseTasks(
-			closeEventTime,
-			false,
-		)
+	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
+	closeEventTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	return taskGenerator.GenerateWorkflowCloseTasks(
+		closeEventTime,
+		false,
+	)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
@@ -243,25 +213,29 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 ) error {
 
 	executionState := mutableState.GetExecutionState()
-
-	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		startEvent, err := mutableState.GetStartEvent(ctx)
-		if err != nil {
-			return err
-		}
-
-		return taskGenerator.GenerateRecordWorkflowStartedTasks(
-			startEvent,
-		)
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
 	}
 
-	return nil
+	startEvent, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		return err
+	}
+
+	return taskGenerator.GenerateRecordWorkflowStartedTasks(
+		startEvent,
+	)
 }
 
 func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
+
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
 
 	if !mutableState.HasPendingWorkflowTask() {
 		// no workflow task at all
@@ -297,6 +271,11 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
+
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
 
 	pendingActivityInfos := mutableState.GetPendingActivityInfos()
 
@@ -341,8 +320,12 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	mutableState MutableState,
 ) error {
 
-	pendingTimerInfos := mutableState.GetPendingTimerInfos()
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
 
+	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 	for _, timerInfo := range pendingTimerInfos {
 		// clear all timer task mask for later timer task re-generation
 		timerInfo.TaskStatus = TimerTaskStatusNone
@@ -398,6 +381,11 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	taskGenerator TaskGenerator,
 ) error {
 
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
+
 	pendingRequestCancelInfos := mutableState.GetPendingRequestCancelExternalInfos()
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
@@ -422,6 +410,11 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	taskGenerator TaskGenerator,
 ) error {
 
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
+	}
+
 	pendingSignalInfos := mutableState.GetPendingSignalExternalInfos()
 
 	for _, signalInfo := range pendingSignalInfos {
@@ -445,8 +438,10 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
-	if mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return taskGenerator.GenerateUpsertVisibilityTask()
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil
 	}
-	return nil
+
+	return taskGenerator.GenerateUpsertVisibilityTask()
 }
