@@ -42,7 +42,9 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -54,6 +56,10 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
+	dlq.Module,
+	fx.Provide(func(c resource.HistoryClient) dlq.HistoryServiceClient {
+		return c
+	}),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -62,7 +68,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewService),
-	fx.Provide(NewWorkerManager),
+	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
 	fx.Provide(NewPerNamespaceWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )

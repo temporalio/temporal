@@ -380,6 +380,21 @@ func (c *retryableClient) PurgeDLQMessages(
 	return resp, err
 }
 
+func (c *retryableClient) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQTasksResponse, error) {
+	var resp *adminservice.PurgeDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PurgeDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,

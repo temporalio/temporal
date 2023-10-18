@@ -90,6 +90,8 @@ var (
 	errUpdateIDTooLong        = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
 	errUpdateRefNotSet        = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
 	errUpdateWaitPolicyNotSet = serviceerror.NewInvalidArgument("WaitPolicy is not set on request.")
+	errSourceClusterNotSet    = serviceerror.NewInvalidArgument("SourceCluster is not set on request.")
+	errTargetClusterNotSet    = serviceerror.NewInvalidArgument("TargetCluster is not set on request.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 

@@ -22,39 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package common
 
-import (
-	"fmt"
+import "go.uber.org/fx"
 
-	"go.temporal.io/api/serviceerror"
-)
+// WorkerComponentTag is the fx group tag for worker components. This is used to allow those who use Temporal as a
+// library to dynamically register their own system workers. Use this to annotate a worker component consumer. Use the
+// AnnotateWorkerComponentProvider function to annotate a worker component provider.
+const WorkerComponentTag = `group:"workerComponent"`
 
-const (
-	QueueTypeUnspecified   QueueV2Type = 0
-	QueueTypeHistoryNormal QueueV2Type = 1
-	QueueTypeHistoryDLQ    QueueV2Type = 2
-
-	// FirstQueueMessageID is the ID of the first message written to a queue partition.
-	FirstQueueMessageID = 0
-)
-
-var (
-	ErrInvalidReadQueueMessagesNextPageToken = &InvalidPersistenceRequestError{
-		Msg: "invalid next-page token for reading queue messages",
-	}
-	ErrNonPositiveReadQueueMessagesPageSize = &InvalidPersistenceRequestError{
-		Msg: "non-positive page size for reading queue messages",
-	}
-	ErrInvalidQueueRangeDeleteMaxMessageID = &InvalidPersistenceRequestError{
-		Msg: "max message id for queue range delete is invalid",
-	}
-)
-
-func NewQueueNotFoundError(queueType QueueV2Type, queueName string) error {
-	return serviceerror.NewNotFound(fmt.Sprintf(
-		"queue not found: type = %v and name = %v",
-		queueType,
-		queueName,
-	))
+// AnnotateWorkerComponentProvider converts a WorkerComponent factory function into an fx provider which will add the
+// WorkerComponentTag to the result.
+func AnnotateWorkerComponentProvider[T any](f func(t T) WorkerComponent) fx.Option {
+	return fx.Provide(fx.Annotate(f, fx.ResultTags(WorkerComponentTag)))
 }

@@ -88,27 +88,27 @@ func (mr *MockWorkerComponentMockRecorder) DedicatedWorkflowWorkerOptions() *gom
 }
 
 // RegisterActivities mocks base method.
-func (m *MockWorkerComponent) RegisterActivities(arg0 worker.Worker) {
+func (m *MockWorkerComponent) RegisterActivities(registry worker.Registry) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterActivities", arg0)
+	m.ctrl.Call(m, "RegisterActivities", registry)
 }
 
 // RegisterActivities indicates an expected call of RegisterActivities.
-func (mr *MockWorkerComponentMockRecorder) RegisterActivities(arg0 interface{}) *gomock.Call {
+func (mr *MockWorkerComponentMockRecorder) RegisterActivities(registry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivities", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterActivities), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivities", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterActivities), registry)
 }
 
 // RegisterWorkflow mocks base method.
-func (m *MockWorkerComponent) RegisterWorkflow(arg0 worker.Worker) {
+func (m *MockWorkerComponent) RegisterWorkflow(registry worker.Registry) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterWorkflow", arg0)
+	m.ctrl.Call(m, "RegisterWorkflow", registry)
 }
 
 // RegisterWorkflow indicates an expected call of RegisterWorkflow.
-func (mr *MockWorkerComponentMockRecorder) RegisterWorkflow(arg0 interface{}) *gomock.Call {
+func (mr *MockWorkerComponentMockRecorder) RegisterWorkflow(registry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflow", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterWorkflow), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterWorkflow", reflect.TypeOf((*MockWorkerComponent)(nil).RegisterWorkflow), registry)
 }
 
 // MockPerNSWorkerComponent is a mock of PerNSWorkerComponent interface.
@@ -149,7 +149,7 @@ func (mr *MockPerNSWorkerComponentMockRecorder) DedicatedWorkerOptions(arg0 inte
 }
 
 // Register mocks base method.
-func (m *MockPerNSWorkerComponent) Register(arg0 worker.Worker, arg1 *namespace.Namespace, arg2 RegistrationDetails) {
+func (m *MockPerNSWorkerComponent) Register(arg0 worker.Registry, arg1 *namespace.Namespace, arg2 RegistrationDetails) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Register", arg0, arg1, arg2)
 }
