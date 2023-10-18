@@ -366,7 +366,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 
 	tm.metricsHandler.Timer(metrics.TaskDispatchLatencyPerTaskQueue.GetMetricName()).Record(
 		time.Since(*task.event.Data.CreateTime),
-		metrics.StringTag("source", task.source.String()),
+		metrics.StringTag("source", source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
 }
