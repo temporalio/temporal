@@ -202,7 +202,6 @@ func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(
 func newTaskQueueLoadBalancer(key taskQueueKey) *tqLoadBalancer {
 	return &tqLoadBalancer{
 		taskQueue: key,
-		lock:      sync.Mutex{},
 	}
 }
 
@@ -247,13 +246,13 @@ func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) in
 
 // caller to ensure that lock is obtained before call this function
 func (b *tqLoadBalancer) ensurePartitionCountLocked(partitionCount int) {
-	if len(b.pollerCounts) == int(partitionCount) {
+	if len(b.pollerCounts) == partitionCount {
 		return
 	}
 
-	if len(b.pollerCounts) < int(partitionCount) {
+	if len(b.pollerCounts) < partitionCount {
 		// add more partition entries
-		for i := len(b.pollerCounts); i < int(partitionCount); i++ {
+		for i := len(b.pollerCounts); i < partitionCount; i++ {
 			b.pollerCounts = append(b.pollerCounts, 0)
 		}
 	} else {
