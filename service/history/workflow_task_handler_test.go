@@ -83,7 +83,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any()).Times(1)
-		out.updates = update.NewRegistry(func() update.UpdateStore { return out.ms })
+		out.updates = update.NewRegistry(func() update.Store { return out.ms })
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(

@@ -355,6 +355,49 @@ type (
 	}
 )
 
+// getCommonServiceOptions returns an fx.Option which combines all the common dependencies for a service. Why do we need
+// this? We are propagating dependencies from one fx graph to another. This is not ideal, since we should instead either
+// have one shared fx graph, or propagate the individual fx options. So, in the server graph, dependencies exist as fx
+// providers, and, in the process of building the server graph, we build the individual service graphs. We realize the
+// dependencies in the server graph implicitly into the ServiceProviderParamsCommon object. Then, we convert them back
+// into fx providers here. Essentially, we want an `fx.In` object in the server graph, and an `fx.Out` object in the
+// service graphs. This is a workaround to achieve something similar.
+func (params ServiceProviderParamsCommon) getCommonServiceOptions(serviceName primitives.ServiceName) fx.Option {
+	return fx.Options(
+		fx.Supply(
+			serviceName,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
+			params.SpanExporters,
+		),
+		fx.Provide(
+			func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory },
+			func() client.FactoryProvider { return params.ClientFactoryProvider },
+			func() authorization.JWTAudienceMapper { return params.AudienceGetter },
+			func() resolver.ServiceResolver { return params.PersistenceServiceResolver },
+			func() searchattribute.Mapper { return params.SearchAttributesMapper },
+			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
+			func() authorization.Authorizer { return params.Authorizer },
+			func() authorization.ClaimMapper { return params.ClaimMapper },
+			func() encryption.TLSConfigProvider { return params.TlsConfigProvider },
+			func() dynamicconfig.Client { return params.DynamicConfigClient },
+			func() log.Logger { return params.Logger },
+			resource.DefaultSnTaggedLoggerProvider,
+			func() metrics.Handler {
+				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+			},
+			func() esclient.Client { return params.EsClient },
+			func() resource.NamespaceLogger { return params.NamespaceLogger },
+			params.PersistenceFactoryProvider,
+		),
+		ServiceTracingModule,
+		resource.DefaultOptions,
+		FxLogAdapter,
+	)
+}
+
 func NewService(app *fx.App, serviceName primitives.ServiceName, logger log.Logger) ServicesGroupOut {
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
@@ -376,38 +419,11 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Supply(
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
+		params.getCommonServiceOptions(serviceName),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
 		history.QueueModule,
 		history.Module,
 		replication.Module,
-		FxLogAdapter,
 	)
 
 	return NewService(app, serviceName, params.Logger), app.Err()
@@ -424,35 +440,8 @@ func MatchingServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Supply(
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
+		params.getCommonServiceOptions(serviceName),
 		matching.Module,
-		FxLogAdapter,
 	)
 
 	return NewService(app, serviceName, params.Logger), app.Err()
@@ -480,21 +469,8 @@ func genericFrontendServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Supply(
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper {
+		params.getCommonServiceOptions(serviceName),
+		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
 				return params.ClaimMapper
@@ -504,10 +480,7 @@ func genericFrontendServiceProvider(
 				panic("Unexpected frontend service name")
 			}
 		}),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() log.SnTaggedLogger {
+		fx.Decorate(func() log.SnTaggedLogger {
 			// Use "frontend" for logs even if serviceName is "internal-frontend", but add an
 			// extra tag to differentiate.
 			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
@@ -516,18 +489,7 @@ func genericFrontendServiceProvider(
 			}
 			return log.With(params.Logger, tags...)
 		}),
-		fx.Provide(func() metrics.Handler {
-			// Use either "frontend" or "internal-frontend" for metrics
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
 		frontend.Module,
-		FxLogAdapter,
 	)
 
 	return NewService(app, serviceName, params.Logger), app.Err()
@@ -544,35 +506,8 @@ func WorkerServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Supply(
-			params.EsConfig,
-			params.PersistenceConfig,
-			params.ClusterMetadata,
-			params.Cfg,
-			serviceName,
-		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
-		fx.Provide(func() metrics.Handler {
-			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
-		}),
-		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Supply(params.SpanExporters),
-		ServiceTracingModule,
-		resource.DefaultOptions,
+		params.getCommonServiceOptions(serviceName),
 		worker.Module,
-		FxLogAdapter,
 	)
 
 	return NewService(app, serviceName, params.Logger), app.Err()

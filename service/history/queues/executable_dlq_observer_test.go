@@ -125,7 +125,7 @@ func TestExecutableDLQObserver(t *testing.T) {
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 	dlqObserver := queues.NewExecutableDLQObserver(executableDLQ, numHistoryShards, namespaceRegistry, timeSource, logger, metricsHandler)
-	dlq.Err = errors.New("some error writing to DLQ")
+	dlq.EnqueueTaskErr = errors.New("some error writing to DLQ")
 
 	// 1. First call to execute should indicate that the task failed, logging the task and cause of the failure.
 	err := dlqObserver.Execute()
@@ -170,7 +170,7 @@ func TestExecutableDLQObserver(t *testing.T) {
 
 	// 3. The third call to Execute should successfully send the task to the DLQ, recording the time it took from when
 	// the task originally failed to when it was finally sent to the DLQ.
-	dlq.Err = nil
+	dlq.EnqueueTaskErr = nil
 	err = dlqObserver.Execute()
 	assert.NoError(t, err)
 	snapshot = capture.Snapshot()
@@ -223,7 +223,7 @@ func TestExecutableDLQObserver_GetNamespaceByIDErr(t *testing.T) {
 	getNsErr := errors.New("some error getting namespace")
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(nil, getNsErr)
 	dlqObserver := queues.NewExecutableDLQObserver(executableDLQ, 1, namespaceRegistry, timeSource, logger, metricsHandler)
-	dlq.Err = errors.New("some error writing to DLQ")
+	dlq.EnqueueTaskErr = errors.New("some error writing to DLQ")
 
 	err := dlqObserver.Execute()
 	assert.ErrorIs(t, err, queues.ErrTerminalTaskFailure)

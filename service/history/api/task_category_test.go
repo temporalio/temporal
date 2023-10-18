@@ -22,24 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package api_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/persistence/sql"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/codes"
+
+	enumspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/tasks"
 )
 
-func TestNewQueueV2(t *testing.T) {
+func TestGetTaskCategory(t *testing.T) {
 	t.Parallel()
 
-	q := sql.NewQueueV2()
-	_, err := q.EnqueueMessage(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "EnqueueMessage")
-	_, err = q.ReadMessages(context.Background(), nil)
-	assert.ErrorIs(t, err, sql.ErrNotImplemented)
-	assert.ErrorContains(t, err, "ReadMessages")
+	category, err := api.GetTaskCategory(int(tasks.CategoryTransfer.ID()))
+	require.NoError(t, err)
+	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), int(category.ID()))
+
+	_, err = api.GetTaskCategory(-1)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "-1")
+	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }

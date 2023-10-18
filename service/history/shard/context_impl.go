@@ -233,7 +233,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			s.rwLock.Unlock()
 			return nil
 		},
-		MetricsName: metrics.ShardLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardLockLatency.GetMetricName(),
 	}}
 }
 
@@ -1572,6 +1572,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
+			return nil
+		}
+	case contextStateStopped:
+		switch request.(type) {
+		case contextRequestStop, contextRequestFinishStop:
+			// nothing to do, already stopped
 			return nil
 		}
 	}

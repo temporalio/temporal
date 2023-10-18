@@ -111,11 +111,11 @@ func NewManager(
 		isPrimaryAdvancedSQL := false
 		isSecondaryAdvancedSQL := false
 		switch visibilityManager.GetStoreNames()[0] {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 			isPrimaryAdvancedSQL = true
 		}
 		switch secondaryVisibilityManager.GetStoreNames()[0] {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 			isSecondaryAdvancedSQL = true
 		}
 		if isPrimaryAdvancedSQL && !isSecondaryAdvancedSQL {
@@ -243,7 +243,7 @@ func newVisibilityStoreFromDataStoreConfig(
 	)
 	if dsConfig.SQL != nil {
 		switch dsConfig.SQL.PluginName {
-		case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+		case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 			visStore, err = sql.NewSQLVisibilityStore(
 				*dsConfig.SQL,
 				persistenceResolver,

@@ -30,6 +30,7 @@ import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
@@ -68,6 +69,11 @@ message PollWorkflowTaskQueueResponse {
     google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
     repeated temporal.api.protocol.v1.Message messages = 18;
+    // The history for this workflow, which will either be complete or partial. Partial histories
+    // are sent to workers who have signaled that they are using a sticky queue when completing
+    // a workflow task. Sticky query tasks will not include any history.
+    temporal.api.history.v1.History history = 19;
+    bytes next_page_token = 20;
 }
 
 message PollActivityTaskQueueRequest {

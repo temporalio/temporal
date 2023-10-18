@@ -29,6 +29,10 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -43,10 +47,6 @@ import (
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
-
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 )
 
 type (
@@ -148,5 +148,12 @@ func (t *testHistoryTaskQueueManager) EnqueueTask(
 	request *persistence.EnqueueTaskRequest,
 ) (*persistence.EnqueueTaskResponse, error) {
 	t.requests = append(t.requests, request)
+	return nil, nil
+}
+
+func (t *testHistoryTaskQueueManager) CreateQueue(
+	context.Context,
+	*persistence.CreateQueueRequest,
+) (*persistence.CreateQueueResponse, error) {
 	return nil, nil
 }

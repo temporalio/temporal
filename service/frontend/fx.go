@@ -143,6 +143,7 @@ type GrpcServerOptions struct {
 
 func GrpcServerOptionsProvider(
 	logger log.Logger,
+	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -202,6 +203,8 @@ func GrpcServerOptionsProvider(
 			metricsHandler,
 			logger,
 			audienceGetter,
+			cfg.Global.Authorization.AuthHeaderName,
+			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -312,10 +315,10 @@ func RateLimitInterceptorProvider(
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{},

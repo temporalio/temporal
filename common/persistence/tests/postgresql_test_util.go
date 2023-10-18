@@ -38,7 +38,6 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
@@ -68,9 +67,9 @@ type (
 	}
 )
 
-func setUpPostgreSQLTest(t *testing.T) (PostgreSQLTestData, func()) {
+func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, func()) {
 	var testData PostgreSQLTestData
-	testData.Cfg = NewPostgreSQLConfig()
+	testData.Cfg = NewPostgreSQLConfig(pluginName)
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
 	SetupPostgreSQLDatabase(testData.Cfg)
 	SetupPostgreSQLSchema(testData.Cfg)
@@ -91,7 +90,7 @@ func setUpPostgreSQLTest(t *testing.T) (PostgreSQLTestData, func()) {
 }
 
 // NewPostgreSQLConfig returns a new MySQL config for test
-func NewPostgreSQLConfig() *config.SQL {
+func NewPostgreSQLConfig(pluginName string) *config.SQL {
 	return &config.SQL{
 		User:     testPostgreSQLUser,
 		Password: testPostgreSQLPassword,
@@ -100,7 +99,7 @@ func NewPostgreSQLConfig() *config.SQL {
 			strconv.Itoa(environment.GetPostgreSQLPort()),
 		),
 		ConnectProtocol: testPostgreSQLConnectionProtocol,
-		PluginName:      postgresql.PluginNameV12,
+		PluginName:      pluginName,
 		DatabaseName:    testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
 	}
 }

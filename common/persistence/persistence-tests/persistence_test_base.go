@@ -145,7 +145,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		switch options.SQLDBPluginName {
 		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNameV12:
+		case postgresql.PluginName, postgresql.PluginNamePGX, postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -157,7 +157,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		switch options.SQLDBPluginName {
 		case mysql.PluginName, mysql.PluginNameV8:
 			options.DBHost = environment.GetMySQLAddress()
-		case postgresql.PluginName:
+		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
 		case sqlite.PluginName:
 			options.DBHost = environment.GetLocalhostIP()
@@ -416,10 +416,8 @@ func randString(length int) string {
 // GenerateRandomDBName helper
 // Format: MMDDHHMMSS_abc
 func GenerateRandomDBName(n int) string {
-	now := time.Now().UTC()
-	rand.Seed(now.UnixNano())
 	var prefix strings.Builder
-	prefix.WriteString(now.Format("0102150405"))
+	prefix.WriteString(time.Now().UTC().Format("0102150405"))
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()

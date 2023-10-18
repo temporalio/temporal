@@ -73,11 +73,9 @@ func TestStreamSenderSuite(t *testing.T) {
 }
 
 func (s *streamSenderSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *streamSenderSuite) TearDownSuite() {
-
 }
 
 func (s *streamSenderSuite) SetupTest() {

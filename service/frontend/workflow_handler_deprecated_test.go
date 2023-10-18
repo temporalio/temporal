@@ -37,6 +37,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -224,20 +226,23 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
 	branchToken := []byte{1, 2, 3}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
-
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(1, 1)
+	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
+	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespaceName).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
 		NamespaceId:         namespaceID.String(),
 		Execution:           &we,
 		ExpectedNextEventId: common.EndEventID,
 		CurrentBranchToken:  nil,
+		VersionHistoryItem:  nil,
 	}).Return(&historyservice.PollMutableStateResponse{
 		Execution:           &we,
 		WorkflowType:        &commonpb.WorkflowType{Name: "mytype"},
 		NextEventId:         6,
 		LastFirstEventId:    5,
 		CurrentBranchToken:  branchToken,
-		VersionHistories:    nil,
+		VersionHistories:    versionHistories,
 		WorkflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		LastFirstEventTxnId: 100,

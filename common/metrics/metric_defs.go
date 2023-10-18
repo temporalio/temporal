@@ -813,6 +813,7 @@ var (
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
+	BatchableTaskBatchCount                       = NewCounterDef("batchable_task_batch_count")
 	ConcurrencyUpdateFailureCounter               = NewCounterDef("concurrency_update_failure")
 	ServiceErrShardOwnershipLostCounter           = NewCounterDef("service_errors_shard_ownership_lost")
 	HeartbeatTimeoutCounter                       = NewCounterDef("heartbeat_timeout")
@@ -907,16 +908,18 @@ var (
 	MutableStateDirty                              = NewCounterDef("mutable_state_dirty")
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
-	ClusterMetadataLockLatency                     = NewTimerDef("cluster_metadata_lock_latency")
-	ClusterMetadataCallbackLockLatency             = NewTimerDef("cluster_metadata_callback_lock_latency")
-	ShardControllerLockLatency                     = NewTimerDef("shard_controller_lock_latency")
-	ShardLockLatency                               = NewTimerDef("shard_lock_latency")
-	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
+
+	// Deadlock detector latency metrics
+	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
+	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
+	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
+	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")

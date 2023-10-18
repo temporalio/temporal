@@ -71,11 +71,9 @@ func NewShardSuite(
 }
 
 func (s *ShardSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *ShardSuite) TearDownSuite() {
-
 }
 
 func (s *ShardSuite) SetupTest() {

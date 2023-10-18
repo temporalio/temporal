@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/configs"
@@ -2156,6 +2157,29 @@ func (h *Handler) GetDLQTasks(
 	request *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
 	return getdlqtasks.Invoke(ctx, h.taskQueueManager, request)
+}
+
+func (h *Handler) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request)
+}
+
+// AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.
+func (h *Handler) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (*historyservice.AddTasksResponse, error) {
+	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return engine.AddTasks(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

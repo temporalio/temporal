@@ -64,8 +64,17 @@ var _ Client = (*clientImpl)(nil)
 
 // newClient create a ES client
 func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+	var urls []string
+	if len(cfg.URLs) > 0 {
+		urls = make([]string, len(cfg.URLs))
+		for i, u := range cfg.URLs {
+			urls[i] = u.String()
+		}
+	} else {
+		urls = []string{cfg.URL.String()}
+	}
 	options := []elastic.ClientOptionFunc{
-		elastic.SetURL(cfg.URL.String()),
+		elastic.SetURL(urls...),
 		elastic.SetBasicAuth(cfg.Username, cfg.Password),
 		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
 		elastic.SetHealthcheck(false),

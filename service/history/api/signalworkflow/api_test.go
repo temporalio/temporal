@@ -26,9 +26,7 @@ package signalworkflow
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 
@@ -75,7 +73,6 @@ func TestSignalWorkflowSuite(t *testing.T) {
 }
 
 func (s *signalWorkflowSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *signalWorkflowSuite) TearDownSuite() {

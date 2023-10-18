@@ -344,13 +344,13 @@ func (s *SliceImpl) shrinkPredicate() {
 		return
 	}
 
-	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
+	if len(s.executableTracker.pendingPerNamespace) > shrinkPredicateMaxPendingNamespaces {
 		// only shrink predicate if there're few namespaces left
 		return
 	}
 
-	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
-	for namespaceID := range s.executableTracker.pendingPerNamesapce {
+	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamespace))
+	for namespaceID := range s.executableTracker.pendingPerNamespace {
 		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
 	}
 	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
@@ -413,7 +413,7 @@ func (s *SliceImpl) TaskStats() TaskStats {
 	s.stateSanityCheck()
 
 	return TaskStats{
-		PendingPerNamespace: s.executableTracker.pendingPerNamesapce,
+		PendingPerNamespace: s.executableTracker.pendingPerNamespace,
 	}
 }
 

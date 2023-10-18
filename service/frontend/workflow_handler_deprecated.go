@@ -37,6 +37,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 )
@@ -75,24 +77,34 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
+		verionHistoryItem *historyspb.VersionHistoryItem,
+	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
+			VersionHistoryItem:  verionHistoryItem,
 		})
-
 		if err != nil {
-			return nil, "", 0, 0, false, err
+			return nil, "", 0, 0, false, nil, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
+		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, "", 0, 0, false, nil, err
+		}
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, "", 0, 0, false, nil, err
+		}
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
 			response.GetNextEventId(),
 			isWorkflowRunning,
+			lastVersionHistoryItem,
 			nil
 	}
 
@@ -124,8 +136,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem)
 			if err != nil {
 				return nil, err
 			}
@@ -138,8 +150,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+			queryHistory(namespaceID, execution, queryNextEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -320,21 +332,32 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
+		versionHistoryItem *historyspb.VersionHistoryItem,
+	) ([]byte, string, int64, *historyspb.VersionHistoryItem, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
+			VersionHistoryItem:  versionHistoryItem,
 		})
-
 		if err != nil {
-			return nil, "", 0, err
+			return nil, "", 0, nil, err
+		}
+
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, "", 0, nil, err
+		}
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, "", 0, nil, err
 		}
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventTxnId(),
+			lastVersionHistoryItem,
 			nil
 	}
 
@@ -346,8 +369,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 
 	if request.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, err =
-			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstTxnID, continuationToken.VersionHistoryItem, err =
+			queryMutableState(namespaceID, execution, common.FirstEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}

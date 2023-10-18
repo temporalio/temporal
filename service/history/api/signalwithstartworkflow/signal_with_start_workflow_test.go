@@ -26,9 +26,7 @@ package signalwithstartworkflow
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/golang/mock/gomock"
@@ -73,7 +71,6 @@ func TestSignalWithStartWorkflowSuite(t *testing.T) {
 }
 
 func (s *signalWithStartWorkflowSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *signalWithStartWorkflowSuite) TearDownSuite() {

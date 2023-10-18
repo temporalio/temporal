@@ -28,12 +28,14 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/resolver"
 )
 
 const (
 	// PluginName is the name of the plugin
-	PluginNameV12 = "postgres12"
+	PluginNameV12    = "postgres12"
+	PluginNameV12PGX = "postgres12_pgx"
 )
 
 type pluginV12 struct {
@@ -43,7 +45,9 @@ type pluginV12 struct {
 var _ sqlplugin.Plugin = (*pluginV12)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginNameV12, &pluginV12{})
+	sql.RegisterPlugin(PluginNameV12, &pluginV12{plugin{&driver.PQDriver{}}})
+	sql.RegisterPlugin(PluginNameV12PGX, &pluginV12{plugin{&driver.PGXDriver{}}})
+
 }
 
 // CreateDB initialize the db object
@@ -56,7 +60,7 @@ func (d *pluginV12) CreateDB(
 	if err != nil {
 		return nil, err
 	}
-	db := newDBV12(dbKind, cfg.DatabaseName, conn, nil)
+	db := newDBV12(dbKind, cfg.DatabaseName, d.d, conn, nil)
 	return db, nil
 }
 
@@ -70,6 +74,6 @@ func (d *pluginV12) CreateAdminDB(
 	if err != nil {
 		return nil, err
 	}
-	db := newDBV12(dbKind, cfg.DatabaseName, conn, nil)
+	db := newDBV12(dbKind, cfg.DatabaseName, d.d, conn, nil)
 	return db, nil
 }

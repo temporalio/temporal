@@ -35,13 +35,8 @@ import (
 	"github.com/temporalio/tctl-kit/pkg/color"
 )
 
-// SetFactory is used to set the ClientFactory global
-func SetFactory(factory ClientFactory) {
-	cFactory = factory
-}
-
 // NewCliApp instantiates a new instance of the CLI application.
-func NewCliApp() *cli.App {
+func NewCliApp(clientFactory ClientFactory) *cli.App {
 	app := cli.NewApp()
 	app.Name = "tdbg"
 	app.Usage = "A command-line tool for Temporal server debugging"
@@ -106,13 +101,8 @@ func NewCliApp() *cli.App {
 			Value: string(color.Auto),
 		},
 	}
-	app.Commands = commands
+	app.Commands = getCommands(clientFactory)
 	app.ExitErrHandler = handleError
-
-	// set builder if not customized
-	if cFactory == nil {
-		SetFactory(NewClientFactory())
-	}
 
 	return app
 }
