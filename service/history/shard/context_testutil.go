@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type ContextTest struct {
@@ -108,6 +109,7 @@ func NewTestContext(
 		payloadSerializer:       resourceTest.GetPayloadSerializer(),
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
+		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
 	}
 	return &ContextTest{
 		Resource:        resourceTest,

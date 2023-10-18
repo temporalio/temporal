@@ -62,6 +62,7 @@ const (
 var (
 	ErrReadTasksNonPositivePageSize = errors.New("page size to read history tasks must be positive")
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
+	ErrEnqueueTaskRequestTaskIsNil  = errors.New("enqueue task request task is nil")
 	ErrQueueAlreadyExists           = errors.New("queue already exists")
 )
 
@@ -77,6 +78,9 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	ctx context.Context,
 	request *EnqueueTaskRequest,
 ) (*EnqueueTaskResponse, error) {
+	if request.Task == nil {
+		return nil, ErrEnqueueTaskRequestTaskIsNil
+	}
 	blob, err := m.serializer.SerializeTask(request.Task)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)

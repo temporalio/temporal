@@ -22,22 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package api
+package common
 
-import (
-	"fmt"
+import "go.uber.org/fx"
 
-	"go.temporal.io/api/serviceerror"
+// WorkerComponentTag is the fx group tag for worker components. This is used to allow those who use Temporal as a
+// library to dynamically register their own system workers. Use this to annotate a worker component consumer. Use the
+// AnnotateWorkerComponentProvider function to annotate a worker component provider.
+const WorkerComponentTag = `group:"workerComponent"`
 
-	"go.temporal.io/server/service/history/tasks"
-)
-
-func GetTaskCategory(categoryID int, registry tasks.TaskCategoryRegistry) (tasks.Category, error) {
-	category, ok := registry.GetCategoryByID(categoryID)
-	if !ok {
-		return tasks.Category{}, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("Invalid task category id: %v", categoryID),
-		)
-	}
-	return category, nil
+// AnnotateWorkerComponentProvider converts a WorkerComponent factory function into an fx provider which will add the
+// WorkerComponentTag to the result.
+func AnnotateWorkerComponentProvider[T any](f func(t T) WorkerComponent) fx.Option {
+	return fx.Provide(fx.Annotate(f, fx.ResultTags(WorkerComponentTag)))
 }

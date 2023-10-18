@@ -52,43 +52,39 @@ type (
 		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
-
-	component struct {
-		fx.Out
-		DeleteNamespaceComponent workercommon.WorkerComponent `group:"workerComponent"`
+	componentParams struct {
+		fx.In
+		VisibilityManager manager.VisibilityManager
+		MetadataManager   persistence.MetadataManager
+		HistoryClient     resource.HistoryClient
+		MetricsHandler    metrics.Handler
+		Logger            log.Logger
 	}
 )
 
-var Module = fx.Options(
-	fx.Provide(newComponent),
-)
+var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
 func newComponent(
-	visibilityManager manager.VisibilityManager,
-	metadataManager persistence.MetadataManager,
-	historyClient resource.HistoryClient,
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-) component {
-	return component{
-		DeleteNamespaceComponent: &deleteNamespaceComponent{
-			visibilityManager: visibilityManager,
-			metadataManager:   metadataManager,
-			historyClient:     historyClient,
-			metricsHandler:    metricsHandler,
-			logger:            logger,
-		}}
+	params componentParams,
+) workercommon.WorkerComponent {
+	return &deleteNamespaceComponent{
+		visibilityManager: params.VisibilityManager,
+		metadataManager:   params.MetadataManager,
+		historyClient:     params.HistoryClient,
+		metricsHandler:    params.MetricsHandler,
+		logger:            params.Logger,
+	}
 }
 
-func (wc *deleteNamespaceComponent) RegisterWorkflow(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
-	worker.RegisterActivity(wc.deleteNamespaceLocalActivities())
+func (wc *deleteNamespaceComponent) RegisterWorkflow(registry sdkworker.Registry) {
+	registry.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+	registry.RegisterActivity(wc.deleteNamespaceLocalActivities())
 
-	worker.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
-	worker.RegisterActivity(wc.reclaimResourcesLocalActivities())
+	registry.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
+	registry.RegisterActivity(wc.reclaimResourcesLocalActivities())
 
-	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
-	worker.RegisterActivity(wc.deleteExecutionsLocalActivities())
+	registry.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
+	registry.RegisterActivity(wc.deleteExecutionsLocalActivities())
 }
 
 func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -96,9 +92,9 @@ func (wc *deleteNamespaceComponent) DedicatedWorkflowWorkerOptions() *workercomm
 	return nil
 }
 
-func (wc *deleteNamespaceComponent) RegisterActivities(worker sdkworker.Worker) {
-	worker.RegisterActivity(wc.reclaimResourcesActivities())
-	worker.RegisterActivity(wc.deleteExecutionsActivities())
+func (wc *deleteNamespaceComponent) RegisterActivities(registry sdkworker.Registry) {
+	registry.RegisterActivity(wc.reclaimResourcesActivities())
+	registry.RegisterActivity(wc.deleteExecutionsActivities())
 }
 
 func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {

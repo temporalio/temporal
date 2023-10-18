@@ -68,9 +68,10 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	res, err := getdlqtasks.Invoke(
 		context.Background(),
 		manager,
+		tasks.NewDefaultTaskCategoryRegistry(),
 		&historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
-				TaskCategory:  tasks.CategoryTransfer.ID(),
+				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},

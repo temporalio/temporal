@@ -110,6 +110,7 @@ func NewTestController(
 		SaProvider:                  resource.GetSearchAttributesProvider(),
 		ThrottledLogger:             resource.GetThrottledLogger(),
 		TimeSource:                  resource.GetTimeSource(),
+		TaskCategoryRegistry:        tasks.NewDefaultTaskCategoryRegistry(),
 	})
 
 	return ControllerProvider(
@@ -931,21 +932,21 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 	return map[int32]*persistencespb.QueueState{
-		tasks.CategoryTransfer.ID(): {
+		int32(tasks.CategoryTransfer.ID()): {
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: &tasks.DefaultFireTime,
 				TaskId:   rand.Int63(),
 			},
 		},
-		tasks.CategoryTimer.ID(): {
+		int32(tasks.CategoryTimer.ID()): {
 			ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: timestamp.TimeNowPtrUtc(),
 				TaskId:   rand.Int63(),
 			},
 		},
-		tasks.CategoryReplication.ID(): {
+		int32(tasks.CategoryReplication.ID()): {
 			ReaderStates: map[int64]*persistencespb.QueueReaderState{
 				0: {
 					Scopes: []*persistencespb.QueueSliceScope{

@@ -778,9 +778,10 @@ message AddTasksRequest {
   int32 shard_id = 1;
 
   message Task {
-    // category is needed to deserialize the tasks. Examples include "transfer", "timer", etc. See the history/tasks
-    // package for a definitive list. Warning: this is not the same as the stringified value of a TaskCategory enum.
-    string category = 1;
+    // category_id is needed to deserialize the tasks. See TaskCategory for a list of options here. However, keep in mind
+    // that the list of valid options is registered dynamically with the server in the history/tasks package, so that
+    // enum is not comprehensive.
+    int32 category_id = 1;
     // blob is the serialized task.
     temporal.api.common.v1.DataBlob blob = 2;
   }
