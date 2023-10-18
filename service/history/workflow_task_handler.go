@@ -129,7 +129,6 @@ func newWorkflowTaskHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
-
 	return &workflowTaskHandlerImpl{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
@@ -152,10 +151,13 @@ func newWorkflowTaskHandler(
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope)),
-		config:            config,
-		shard:             shard,
-		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
+		metricsHandler: metricsHandler.WithTags(
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
+		),
+		config:          config,
+		shard:           shard,
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 	}
 }
 
@@ -216,10 +218,8 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
 
-	handler.metricsHandler.Counter(metrics.CommandCounter.GetMetricName()).Record(
-		1,
-		metrics.NamespaceTag(handler.mutableState.GetExecutionInfo().NamespaceId),
-		metrics.CommandTypeTag(command.GetCommandType().String()))
+	handler.metricsHandler.Counter(metrics.CommandCounter.GetMetricName()).
+		Record(1, metrics.CommandTypeTag(command.GetCommandType().String()))
 
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
