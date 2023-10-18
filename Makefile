@@ -105,6 +105,16 @@ SQL_PASSWORD ?= temporal
 INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
 FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
 
+# Only prints output if the exit code is non-zero
+define silent_exec
+    @output=$$($(1) 2>&1); \
+    status=$$?; \
+    if [ $$status -ne 0 ]; then \
+        echo "$$output"; \
+    fi; \
+    exit $$status
+endef
+
 ##### Tools #####
 update-goimports:
 	@printf $(COLOR) "Install/update goimports..."
@@ -166,15 +176,15 @@ install-proto-submodule:
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
-# Run protoc separately for each directory because of different package names.
+	@# Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
-		protoc --fatal_warnings $(PROTO_IMPORTS) \
+		@protoc --fatal_warnings $(PROTO_IMPORTS) \
 		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
 			$(PROTO_DIR)*.proto \
 	$(NEWLINE))
 
 fix-proto-path:
-	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
+	@mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
@@ -184,7 +194,7 @@ mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))
 proto-mocks: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
-		cd $(PROTO_OUT) && \
+		@cd $(PROTO_OUT) && \
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
@@ -251,7 +261,7 @@ lint:
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
-	@api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+	$(call silent_exec, api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."
