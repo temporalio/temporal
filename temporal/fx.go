@@ -769,7 +769,7 @@ func initCurrentClusterMetadataRecord(
 		return err
 	}
 	if !applied {
-		logger.Error("Failed to apple cluster metadata.", tag.ClusterName(currentClusterName))
+		logger.Error("Failed to apply cluster metadata.", tag.ClusterName(currentClusterName))
 		return clusterMetadataInitErr
 	}
 	return nil
