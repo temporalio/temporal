@@ -100,7 +100,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 		func(paginationToken []byte) ([]*commonspb.HistoryDLQTask, []byte, error) {
 			request := &adminservice.GetDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
-					TaskCategory:  ac.category.ID(),
+					TaskCategory:  int32(ac.category.ID()),
 					SourceCluster: ac.sourceCluster,
 					TargetCluster: ac.targetCluster,
 				},
@@ -149,9 +149,9 @@ func (ac *DLQV2Service) MergeMessages(*cli.Context) error {
 	return errors.New("merge is not yet implemented for DLQ v2")
 }
 
-func getSupportedDLQTaskCategories() []tasks.Category {
-	categories := make([]tasks.Category, 0, len(tasks.GetCategories())-1)
-	for _, c := range tasks.GetCategories() {
+func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {
+	categories := make([]tasks.Category, 0, len(taskCategoryRegistry.GetCategories())-1)
+	for _, c := range taskCategoryRegistry.GetCategories() {
 		if c != tasks.CategoryMemoryTimer {
 			categories = append(categories, c)
 		}
@@ -162,9 +162,9 @@ func getSupportedDLQTaskCategories() []tasks.Category {
 	return categories
 }
 
-func getCategoriesList() string {
+func getCategoriesList(taskCategoryRegistry tasks.TaskCategoryRegistry) string {
 	var categoryString strings.Builder
-	categories := getSupportedDLQTaskCategories()
+	categories := getSupportedDLQTaskCategories(taskCategoryRegistry)
 	for i, c := range categories {
 		if i == len(categories)-1 {
 			categoryString.WriteString(" and ")
@@ -176,7 +176,10 @@ func getCategoriesList() string {
 	return categoryString.String()
 }
 
-func getCategoryByID(categoryIDString string) (tasks.Category, bool, error) {
+func getCategoryByID(
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	categoryIDString string,
+) (tasks.Category, bool, error) {
 	id, err := strconv.Atoi(categoryIDString)
 	if err != nil {
 		return tasks.Category{}, false, fmt.Errorf(
@@ -185,8 +188,8 @@ func getCategoryByID(categoryIDString string) (tasks.Category, bool, error) {
 			categoryIDString,
 		)
 	}
-	for _, c := range getSupportedDLQTaskCategories() {
-		if c.ID() == int32(id) {
+	for _, c := range getSupportedDLQTaskCategories(taskCategoryRegistry) {
+		if c.ID() == id {
 			return c, true, nil
 		}
 	}

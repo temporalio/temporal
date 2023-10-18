@@ -53,28 +53,16 @@ type (
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
 	}
-
-	fxResult struct {
-		fx.Out
-		Component workercommon.WorkerComponent `group:"workerComponent"`
-	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
-)
+var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
-func NewResult(params initParams) fxResult {
-	component := &addSearchAttributes{
-		initParams: params,
-	}
-	return fxResult{
-		Component: component,
-	}
+func newComponent(params initParams) workercommon.WorkerComponent {
+	return &addSearchAttributes{initParams: params}
 }
 
-func (wc *addSearchAttributes) RegisterWorkflow(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+func (wc *addSearchAttributes) RegisterWorkflow(registry sdkworker.Registry) {
+	registry.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 }
 
 func (wc *addSearchAttributes) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -82,8 +70,8 @@ func (wc *addSearchAttributes) DedicatedWorkflowWorkerOptions() *workercommon.De
 	return nil
 }
 
-func (wc *addSearchAttributes) RegisterActivities(worker sdkworker.Worker) {
-	worker.RegisterActivity(wc.activities())
+func (wc *addSearchAttributes) RegisterActivities(registry sdkworker.Registry) {
+	registry.RegisterActivity(wc.activities())
 }
 
 func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {

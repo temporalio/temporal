@@ -37,6 +37,7 @@ import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
+import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -47,7 +48,6 @@ import "temporal/server/api/persistence/v1/cluster_metadata.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
-import "temporal/server/api/common/v1/dlq.proto";
 
 message RebuildMutableStateRequest {
     string namespace = 1;
@@ -435,4 +435,21 @@ message GetDLQTasksResponse {
     // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
     // there are more results.
     bytes next_page_token = 2;
+}
+
+message PurgeDLQTasksRequest {
+  temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+  temporal.server.api.common.v1. HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message PurgeDLQTasksResponse {
+    // job_token is a token that can be used to query the status of the purge operation.
+    // TODO: add DescribeDLQJob an CancelDLQJob APIs for clients to use these tokens.
+    bytes job_token = 1;
+}
+
+// DLQJobToken identifies a DLQ job. This proto is for internal use only and clients should not use it.
+message DLQJobToken {
+    string workflow_id = 1;
+    string run_id = 2;
 }

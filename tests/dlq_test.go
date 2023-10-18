@@ -133,7 +133,7 @@ func (s *dlqSuite) TestTDBG() {
 	s.T().Cleanup(func() {
 		s.NoError(os.Remove(file.Name()))
 	})
-	app := tdbg.NewCliApp(tdbg.NewClientFactory(tdbg.WithFrontendAddress("membership://frontend")))
+	app := tdbg.NewCliApp(tdbg.NewClientFactory(tdbg.WithFrontendAddress("membership://frontend")), tasks.NewDefaultTaskCategoryRegistry())
 	app.ExitErrHandler = func(c *cli.Context, err error) {
 		s.Fail("TDBG command failed", err.Error())
 	}

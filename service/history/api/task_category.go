@@ -32,11 +32,11 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func GetTaskCategory(categoryID int) (tasks.Category, error) {
-	category, ok := tasks.GetCategoryByID(int32(categoryID))
+func GetTaskCategory(categoryID int, registry tasks.TaskCategoryRegistry) (tasks.Category, error) {
+	category, ok := registry.GetCategoryByID(categoryID)
 	if !ok {
 		return tasks.Category{}, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("Invalid queue category id: %d", categoryID),
+			fmt.Sprintf("Invalid task category id: %v", categoryID),
 		)
 	}
 	return category, nil

@@ -53,7 +53,7 @@ var (
 
 func NewQueueNotFoundError(queueType QueueV2Type, queueName string) error {
 	return serviceerror.NewNotFound(fmt.Sprintf(
-		"queue with type %v and name %v not found",
+		"queue not found: type = %v and name = %v",
 		queueType,
 		queueName,
 	))

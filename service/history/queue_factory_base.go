@@ -29,7 +29,6 @@ import (
 
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -137,19 +136,12 @@ type additionalQueueFactories struct {
 // added to the `group:"queueFactory"` group. The factories are added to the group only if they are enabled, which
 // is why we must return a list here.
 func getOptionalQueueFactories(
-	archivalMetadata archiver.ArchivalMetadata,
+	registry tasks.TaskCategoryRegistry,
 	params ArchivalQueueFactoryParams,
 ) additionalQueueFactories {
-
-	c := tasks.CategoryArchival
-	// Removing this category will only affect tests because this method is only called once in production,
-	// but it may be called many times across test runs, which would leave the archival queue as a dangling category
-	tasks.RemoveCategory(c.ID())
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
+	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); !ok {
 		return additionalQueueFactories{}
 	}
-	tasks.NewCategory(c.ID(), c.Type(), c.Name())
 	return additionalQueueFactories{
 		Factories: []QueueFactory{
 			NewArchivalQueueFactory(params),

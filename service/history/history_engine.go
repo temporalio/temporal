@@ -141,6 +141,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
+		taskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
 
@@ -162,6 +163,7 @@ func NewEngineWithShardContext(
 	tracerProvider trace.TracerProvider,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	eventBlobCache persistence.XDCCache,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -198,6 +200,7 @@ func NewEngineWithShardContext(
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
+		taskCategoryRegistry:       taskCategoryRegistry,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -895,5 +898,12 @@ func (e *historyEngineImpl) AddTasks(
 	ctx context.Context,
 	request *historyservice.AddTasksRequest,
 ) (_ *historyservice.AddTasksResponse, retError error) {
-	return addtasks.Invoke(ctx, e.shardContext, e.eventSerializer, int(e.config.NumberOfShards), request)
+	return addtasks.Invoke(
+		ctx,
+		e.shardContext,
+		e.eventSerializer,
+		int(e.config.NumberOfShards),
+		request,
+		e.taskCategoryRegistry,
+	)
 }
