@@ -28,16 +28,8 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -58,20 +50,6 @@ type (
 
 		// how long to wait for handover to complete before rollback
 		HandoverTimeoutSeconds int
-	}
-
-	activities struct {
-		historyShardCount              int32
-		executionManager               persistence.ExecutionManager
-		taskManager                    persistence.TaskManager
-		namespaceRegistry              namespace.Registry
-		historyClient                  historyservice.HistoryServiceClient
-		frontendClient                 workflowservice.WorkflowServiceClient
-		clientFactory                  serverClient.Factory
-		logger                         log.Logger
-		metricsHandler                 metrics.Handler
-		forceReplicationMetricsHandler metrics.Handler
-		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
 	}
 
 	replicationStatus struct {

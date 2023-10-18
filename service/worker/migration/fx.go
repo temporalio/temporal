@@ -49,6 +49,7 @@ type (
 		HistoryClient             resource.HistoryClient
 		FrontendClient            workflowservice.WorkflowServiceClient
 		ClientFactory             serverClient.Factory
+		ClientBean                serverClient.Bean
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
@@ -98,6 +99,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		historyClient:                  wc.HistoryClient,
 		frontendClient:                 wc.FrontendClient,
 		clientFactory:                  wc.ClientFactory,
+		clientBean:                     wc.ClientBean,
 		namespaceReplicationQueue:      wc.NamespaceReplicationQueue,
 		taskManager:                    wc.TaskManager,
 		logger:                         wc.Logger,
