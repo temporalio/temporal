@@ -263,6 +263,16 @@ func (c *clientImpl) PurgeDLQMessages(
 	return c.client.PurgeDLQMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PurgeDLQTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,

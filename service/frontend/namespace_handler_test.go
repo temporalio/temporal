@@ -72,7 +72,7 @@ type (
 		mockArchiverProvider    *provider.MockArchiverProvider
 		fakeClock               *clock.EventTimeSource
 
-		handler *namespaceHandlerImpl
+		handler *namespaceHandler
 	}
 )
 

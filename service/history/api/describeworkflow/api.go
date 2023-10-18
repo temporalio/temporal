@@ -126,62 +126,58 @@ func Invoke(
 		result.WorkflowExecutionInfo.CloseTime = closeTime
 	}
 
-	if len(mutableState.GetPendingActivityInfos()) > 0 {
-		for _, ai := range mutableState.GetPendingActivityInfos() {
-			p := &workflowpb.PendingActivityInfo{
-				ActivityId: ai.ActivityId,
-			}
-			if ai.CancelRequested {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-			} else if ai.StartedEventId != common.EmptyEventID {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-			} else {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-			}
-			if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
-				p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-				p.HeartbeatDetails = ai.LastHeartbeatDetails
-			}
-			p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
-			if err != nil {
-				return nil, err
-			}
-			if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-				p.ScheduledTime = ai.ScheduledTime
-			} else {
-				p.LastStartedTime = ai.StartedTime
-			}
-			p.LastWorkerIdentity = ai.StartedIdentity
-			if ai.HasRetryPolicy {
-				p.Attempt = ai.Attempt
-				p.ExpirationTime = ai.RetryExpirationTime
-				if ai.RetryMaximumAttempts != 0 {
-					p.MaximumAttempts = ai.RetryMaximumAttempts
-				}
-				if ai.RetryLastFailure != nil {
-					p.LastFailure = ai.RetryLastFailure
-				}
-				if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-					p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-				}
-			} else {
-				p.Attempt = 1
-			}
-			result.PendingActivities = append(result.PendingActivities, p)
+	for _, ai := range mutableState.GetPendingActivityInfos() {
+		p := &workflowpb.PendingActivityInfo{
+			ActivityId: ai.ActivityId,
 		}
+		if ai.CancelRequested {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+		} else if ai.StartedEventId != common.EmptyEventID {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
+		} else {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+		}
+		if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
+			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
+			p.HeartbeatDetails = ai.LastHeartbeatDetails
+		}
+		p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
+		if err != nil {
+			return nil, err
+		}
+		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			p.ScheduledTime = ai.ScheduledTime
+		} else {
+			p.LastStartedTime = ai.StartedTime
+		}
+		p.LastWorkerIdentity = ai.StartedIdentity
+		if ai.HasRetryPolicy {
+			p.Attempt = ai.Attempt
+			p.ExpirationTime = ai.RetryExpirationTime
+			if ai.RetryMaximumAttempts != 0 {
+				p.MaximumAttempts = ai.RetryMaximumAttempts
+			}
+			if ai.RetryLastFailure != nil {
+				p.LastFailure = ai.RetryLastFailure
+			}
+			if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
+				p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
+			}
+		} else {
+			p.Attempt = 1
+		}
+		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
-	if len(mutableState.GetPendingChildExecutionInfos()) > 0 {
-		for _, ch := range mutableState.GetPendingChildExecutionInfos() {
-			p := &workflowpb.PendingChildExecutionInfo{
-				WorkflowId:        ch.StartedWorkflowId,
-				RunId:             ch.StartedRunId,
-				WorkflowTypeName:  ch.WorkflowTypeName,
-				InitiatedId:       ch.InitiatedEventId,
-				ParentClosePolicy: ch.ParentClosePolicy,
-			}
-			result.PendingChildren = append(result.PendingChildren, p)
+	for _, ch := range mutableState.GetPendingChildExecutionInfos() {
+		p := &workflowpb.PendingChildExecutionInfo{
+			WorkflowId:        ch.StartedWorkflowId,
+			RunId:             ch.StartedRunId,
+			WorkflowTypeName:  ch.WorkflowTypeName,
+			InitiatedId:       ch.InitiatedEventId,
+			ParentClosePolicy: ch.ParentClosePolicy,
 		}
+		result.PendingChildren = append(result.PendingChildren, p)
 	}
 
 	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {

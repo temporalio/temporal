@@ -25,6 +25,8 @@
 package migration
 
 import (
+	"context"
+
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -32,10 +34,12 @@ import (
 
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -55,39 +59,41 @@ type (
 		MetricsHandler            metrics.Handler
 	}
 
-	fxResult struct {
-		fx.Out
-		Component workercommon.WorkerComponent `group:"workerComponent"`
-	}
-
 	replicationWorkerComponent struct {
 		initParams
 	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
-)
+var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
-func NewResult(params initParams) fxResult {
-	component := &replicationWorkerComponent{
-		initParams: params,
-	}
-	return fxResult{
-		Component: component,
-	}
+func newComponent(params initParams) workercommon.WorkerComponent {
+	return &replicationWorkerComponent{initParams: params}
 }
 
-func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
-	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
-	worker.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
-	worker.RegisterActivity(wc.activities())
+func (wc *replicationWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) {
+	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
+	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	registry.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+
+	registry.RegisterActivity(wc.activities().GetMetadata) // may be run locally
 }
 
-func (wc *replicationWorkerComponent) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	// use default worker
 	return nil
+}
+
+func (wc *replicationWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
+	registry.RegisterActivity(wc.activities())
+}
+
+func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: primitives.MigrationActivityTQ,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+		},
+	}
 }
 
 func (wc *replicationWorkerComponent) activities() *activities {

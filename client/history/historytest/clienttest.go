@@ -39,7 +39,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -96,14 +96,14 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 		})
 		require.NoError(t, err)
 		enqueueTasks(t, historyTaskQueueManager, 2, queueKey.SourceCluster, queueKey.TargetCluster)
-		dlqKey := &historyservice.HistoryDLQKey{
-			Category:      enums.TASK_CATEGORY_TRANSFER,
+		dlqKey := &commonspb.HistoryDLQKey{
+			TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 		}
 		_, err = client.DeleteDLQTasks(context.Background(), &historyservice.DeleteDLQTasksRequest{
 			DlqKey: dlqKey,
-			InclusiveMaxTaskMetadata: &historyservice.HistoryDLQTaskMetadata{
+			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: persistence.FirstQueueMessageID,
 			},
 		})
@@ -138,8 +138,8 @@ func readTasks(
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
 	for i := 0; i < numTasks; i++ {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enums.TASK_CATEGORY_TRANSFER,
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},
@@ -156,8 +156,9 @@ func readTasks(
 func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
 	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
-		TaskQueueManager: historyTaskQueueManager,
-		TracerProvider:   fakeTracerProvider{},
+		TaskQueueManager:     historyTaskQueueManager,
+		TracerProvider:       fakeTracerProvider{},
+		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 	})
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)

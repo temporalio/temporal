@@ -38,6 +38,7 @@ message HistoryContinuation {
     temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 7;
     bytes branch_token = 8;
     reserved 9;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
 }
 
 message RawHistoryContinuation{

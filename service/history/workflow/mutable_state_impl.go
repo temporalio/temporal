@@ -4606,7 +4606,7 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 	ms.appliedEvents[id] = struct{}{}
 }
 
-func (ms *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
+func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
 }
 
@@ -4632,7 +4632,7 @@ func (ms *MutableStateImpl) prepareCloseTransaction(
 		return err
 	}
 
-	ms.closeTransactionCollapseUpsertVisibilityTasks()
+	ms.closeTransactionCollapseVisibilityTasks()
 
 	// TODO merge active & passive task generation
 	// NOTE: this function must be the last call
@@ -5113,27 +5113,47 @@ func (ms *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	}
 }
 
-func (ms *MutableStateImpl) closeTransactionCollapseUpsertVisibilityTasks() {
-	// check if we have >= 2 tasks that are identical upsert visibility tasks
-	// note that VisibilityTimestamp and TaskID are not assigned yet
+// Visibility tasks are collapsed into a single one: START < UPSERT < CLOSE < DELETE
+// Their enum values are already in order, so using them to make the code simpler.
+// Any other task type is preserved in order.
+// Eg: [START, UPSERT, TP1, CLOSE, TP2, TP3] -> [TP1, CLOSE, TP2, TP3]
+func (ms *MutableStateImpl) closeTransactionCollapseVisibilityTasks() {
 	visTasks := ms.InsertTasks[tasks.CategoryVisibility]
 	if len(visTasks) < 2 {
 		return
 	}
-	var task0 *tasks.UpsertExecutionVisibilityTask
+	var visTaskToKeep tasks.Task
+	lastIndex := -1
 	for i, task := range visTasks {
-		task, ok := task.(*tasks.UpsertExecutionVisibilityTask)
-		if !ok {
-			return
-		}
-		if i == 0 {
-			task0 = task
-		} else if *task != *task0 {
-			return
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+			if visTaskToKeep == nil || task.GetType() >= visTaskToKeep.GetType() {
+				visTaskToKeep = task
+			}
+			lastIndex = i
 		}
 	}
-	// collapse to one
-	ms.InsertTasks[tasks.CategoryVisibility] = visTasks[:1]
+	if visTaskToKeep == nil {
+		return
+	}
+	collapsedVisTasks := make([]tasks.Task, 0, len(visTasks))
+	for i, task := range visTasks {
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+			if i == lastIndex {
+				collapsedVisTasks = append(collapsedVisTasks, visTaskToKeep)
+			}
+		default:
+			collapsedVisTasks = append(collapsedVisTasks, task)
+		}
+	}
+	ms.InsertTasks[tasks.CategoryVisibility] = collapsedVisTasks
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {

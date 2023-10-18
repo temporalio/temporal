@@ -424,10 +424,10 @@ func GetQueue(
 
 	if queueEncodingStr != enums.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
-			"queue with type %v and name %v has invalid encoding: %w",
+			"%w: invalid queue encoding type: queue with type %v and name %v has invalid encoding",
+			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enums.ENCODING_TYPE_PROTO3),
 			queueType,
 			queueName,
-			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enums.ENCODING_TYPE_PROTO3),
 		)
 	}
 
@@ -436,7 +436,8 @@ func GetQueue(
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
 			enums.ENCODING_TYPE_PROTO3,
-			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w", queueType, queueName, err),
+			fmt.Errorf("%w: unmarshal queue payload: failed for queue with type %v and name %v",
+				err, queueType, queueName),
 		)
 	}
 

@@ -94,9 +94,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
-	worker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
-	worker.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
+	registry.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
+	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))
 }
 
 func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {

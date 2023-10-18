@@ -61,7 +61,7 @@ func (s *functionalSuite) TestStartWorkflowExecution() {
 		Namespace:          s.namespace,
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
 		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
 		Identity:           identity,
@@ -92,7 +92,7 @@ func (s *functionalSuite) TestStartWorkflowExecution() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -115,7 +115,7 @@ func (s *functionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 		Namespace:          s.namespace,
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
 		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
 		Identity:           identity,
@@ -155,6 +155,7 @@ func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
 	id := "functional-start-workflow-with-delay-test"
 	wt := "functional-start-workflow-with-delay-test-type"
 	tl := "functional-start-workflow-with-delay-test-taskqueue"
+	stickyTq := "functional-start-workflow-with-delay-test-sticky-taskqueue"
 	identity := "worker1"
 
 	startDelay := 3 * time.Second
@@ -164,7 +165,7 @@ func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
 		Namespace:          s.namespace,
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
 		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
 		Identity:           identity,
@@ -190,8 +191,8 @@ func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -225,7 +226,7 @@ func (s *functionalSuite) TestTerminateWorkflow() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -251,7 +252,7 @@ func (s *functionalSuite) TestTerminateWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -342,7 +343,7 @@ StartNewExecutionLoop:
 			Namespace:           s.namespace,
 			WorkflowId:          id,
 			WorkflowType:        &commonpb.WorkflowType{Name: wt},
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Input:               nil,
 			WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 			WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -377,7 +378,7 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -404,7 +405,7 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -439,7 +440,7 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -477,7 +478,7 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -514,20 +515,14 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
-	res, err := poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+	res, err := poller.PollAndProcessWorkflowTask(WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
@@ -554,7 +549,7 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -582,7 +577,7 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(1 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -614,7 +609,7 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
@@ -673,7 +668,7 @@ func (s *functionalSuite) TestWorkflowRetry() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -721,7 +716,7 @@ func (s *functionalSuite) TestWorkflowRetry() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -851,7 +846,7 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -875,7 +870,7 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -906,7 +901,7 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -930,7 +925,7 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 	poller = &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,

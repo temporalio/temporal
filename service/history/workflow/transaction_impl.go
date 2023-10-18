@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -602,11 +601,6 @@ func NotifyNewHistorySnapshotEvent(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-	currentBranchToken := currentVersionHistory.BranchToken
 	workflowState := executionState.State
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
@@ -624,9 +618,9 @@ func NotifyNewHistorySnapshotEvent(
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
-		currentBranchToken,
 		workflowState,
 		workflowStatus,
+		executionInfo.VersionHistories,
 	))
 	return nil
 }
@@ -646,11 +640,6 @@ func NotifyNewHistoryMutationEvent(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-	currentBranchToken := currentVersionHistory.BranchToken
 	workflowState := executionState.State
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
@@ -668,9 +657,9 @@ func NotifyNewHistoryMutationEvent(
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
-		currentBranchToken,
 		workflowState,
 		workflowStatus,
+		executionInfo.VersionHistories,
 	))
 	return nil
 }

@@ -216,7 +216,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 	tl := "xdc-search-attr-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			s.testSearchAttributeKey: payload.EncodeString(s.testSearchAttributeVal),

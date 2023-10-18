@@ -153,5 +153,8 @@ service AdminService {
 
     rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
     }
+    // (-- api-linter: core::0165::response-message-name=disabled
+    //     aip.dev/not-precedent:  --)
+    rpc PurgeDLQTasks (PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {}
 }
 

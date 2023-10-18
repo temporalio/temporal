@@ -30,13 +30,15 @@ import (
 	"runtime/debug"
 
 	"github.com/urfave/cli/v2"
+
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/service/history/tasks"
 
 	"github.com/temporalio/tctl-kit/pkg/color"
 )
 
 // NewCliApp instantiates a new instance of the CLI application.
-func NewCliApp(clientFactory ClientFactory) *cli.App {
+func NewCliApp(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.App {
 	app := cli.NewApp()
 	app.Name = "tdbg"
 	app.Usage = "A command-line tool for Temporal server debugging"
@@ -101,7 +103,7 @@ func NewCliApp(clientFactory ClientFactory) *cli.App {
 			Value: string(color.Auto),
 		},
 	}
-	app.Commands = getCommands(clientFactory)
+	app.Commands = getCommands(clientFactory, taskCategoryRegistry)
 	app.ExitErrHandler = handleError
 
 	return app
