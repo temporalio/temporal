@@ -44,6 +44,7 @@ import (
 type (
 	TaskRefresher interface {
 		RefreshTasks(ctx context.Context, mutableState MutableState) error
+		RefreshTasksOnClosedWorkflow(ctx context.Context, mutableState MutableState) error
 	}
 
 	TaskRefresherImpl struct {
@@ -149,6 +150,39 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	}
 
 	return r.refreshTasksForWorkflowSearchAttr(mutableState, taskGenerator)
+}
+
+func (r *TaskRefresherImpl) RefreshTasksOnClosedWorkflow(
+	ctx context.Context,
+	mutableState MutableState,
+) error {
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		return serviceerror.NewInternal("Cannot refresh closed workflow tasks with a running workflow")
+	}
+
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
+		r.shard,
+		mutableState,
+	)
+
+	if err := r.refreshTasksForWorkflowClose(
+		ctx,
+		mutableState,
+		taskGenerator,
+	); err != nil {
+		return err
+	}
+
+	if err := r.refreshTasksForChildWorkflow(
+		ctx,
+		mutableState,
+		taskGenerator,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(

@@ -71,3 +71,17 @@ func (mr *MockTaskRefresherMockRecorder) RefreshTasks(ctx, mutableState interfac
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockTaskRefresher)(nil).RefreshTasks), ctx, mutableState)
 }
+
+// RefreshTasksOnClosedWorkflow mocks base method.
+func (m *MockTaskRefresher) RefreshTasksOnClosedWorkflow(ctx context.Context, mutableState MutableState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshTasksOnClosedWorkflow", ctx, mutableState)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RefreshTasksOnClosedWorkflow indicates an expected call of RefreshTasksOnClosedWorkflow.
+func (mr *MockTaskRefresherMockRecorder) RefreshTasksOnClosedWorkflow(ctx, mutableState interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasksOnClosedWorkflow", reflect.TypeOf((*MockTaskRefresher)(nil).RefreshTasksOnClosedWorkflow), ctx, mutableState)
+}
