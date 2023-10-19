@@ -54,11 +54,11 @@ func TestDLQExecutable_TerminalErrors(t *testing.T) {
 		err  error
 	}{
 		{
-			name: "Deserialization Error",
+			name: "DeserializationError",
 			err:  new(serialization.DeserializationError),
 		},
 		{
-			name: "Unknown Encoding Type Error",
+			name: "UnknownEncodingTypeError",
 			err:  new(serialization.UnknownEncodingTypeError),
 		},
 	} {
@@ -66,10 +66,10 @@ func TestDLQExecutable_TerminalErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			dlq := &queuestest.FakeDLQ{}
+			w := &queuestest.FakeQueueWriter{}
 			executable := newExecutable(tc.err)
 
-			dlqExecutable := newExecutableDLQ(executable, dlq)
+			dlqExecutable := newExecutableDLQ(executable, w)
 			err := dlqExecutable.Execute()
 			assert.ErrorIs(t, err, queues.ErrTerminalTaskFailure)
 			assert.ErrorContains(t, err, tc.err.Error())
@@ -78,13 +78,13 @@ func TestDLQExecutable_TerminalErrors(t *testing.T) {
 			assert.Equal(t, 1, executable.GetCalls())
 			assert.NoError(t, err)
 
-			require.Len(t, dlq.Requests, 1)
+			require.Len(t, w.EnqueueTaskRequests, 1)
 			assert.Equal(t, &persistence.EnqueueTaskRequest{
 				QueueType:     persistence.QueueTypeHistoryDLQ,
 				SourceCluster: "test-cluster-name",
 				TargetCluster: "test-cluster-name",
 				Task:          testTask,
-			}, dlq.Requests[0])
+			}, w.EnqueueTaskRequests[0])
 		})
 	}
 }
@@ -93,12 +93,12 @@ func TestDLQExecutable_NilError(t *testing.T) {
 	// Verify that successful calls to Execute do not send the task to the DLQ
 
 	t.Parallel()
-	dlq := &queuestest.FakeDLQ{}
+	dlq := &queuestest.FakeQueueWriter{}
 	executable := newExecutable(nil)
 	dlqExecutable := newExecutableDLQ(executable, dlq)
 	err := dlqExecutable.Execute()
 	assert.NoError(t, err)
-	assert.Empty(t, dlq.Requests, "Nil error should not be sent to DLQ")
+	assert.Empty(t, dlq.EnqueueTaskRequests, "Nil error should not be sent to DLQ")
 }
 
 func TestDLQExecutable_RandomErr(t *testing.T) {
@@ -107,7 +107,7 @@ func TestDLQExecutable_RandomErr(t *testing.T) {
 	t.Parallel()
 
 	originalErr := errors.New("some non-terminal error")
-	dlq := &queuestest.FakeDLQ{}
+	dlq := &queuestest.FakeQueueWriter{}
 	executable := newExecutable(originalErr)
 	dlqExecutable := newExecutableDLQ(executable, dlq)
 	for i := 0; i < 2; i++ {
@@ -115,7 +115,7 @@ func TestDLQExecutable_RandomErr(t *testing.T) {
 		err := dlqExecutable.Execute()
 		assert.ErrorIs(t, err, originalErr)
 	}
-	assert.Empty(t, dlq.Requests, "Non-terminal error should not be sent to DLQ")
+	assert.Empty(t, dlq.EnqueueTaskRequests, "Non-terminal error should not be sent to DLQ")
 }
 
 func TestDLQExecutable_DLQEnqueueErr(t *testing.T) {
@@ -125,7 +125,7 @@ func TestDLQExecutable_DLQEnqueueErr(t *testing.T) {
 
 	dlqErr := errors.New("error writing task to queue")
 	originalErr := new(serialization.DeserializationError)
-	dlq := &queuestest.FakeDLQ{EnqueueTaskErr: dlqErr}
+	dlq := &queuestest.FakeQueueWriter{EnqueueTaskErr: dlqErr}
 	executable := newExecutable(originalErr)
 	dlqExecutable := newExecutableDLQ(executable, dlq)
 
@@ -141,9 +141,9 @@ func TestDLQExecutable_DLQEnqueueErr(t *testing.T) {
 			" ErrSendTaskToDLQ if the DLQ is still returning an error")
 	}
 
-	require.Len(t, dlq.Requests, 2, "The DLQ should have received two requests: one for each call"+
+	require.Len(t, dlq.EnqueueTaskRequests, 2, "The DLQ should have received two requests: one for each call"+
 		" to Execute after the first")
-	for _, r := range dlq.Requests {
+	for _, r := range dlq.EnqueueTaskRequests {
 		assert.Equal(t, &persistence.EnqueueTaskRequest{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			SourceCluster: "test-cluster-name",
@@ -160,7 +160,7 @@ func TestDLQExecutable_DLQCreateErr(t *testing.T) {
 
 	dlqErr := errors.New("error creating queue")
 	originalErr := new(serialization.DeserializationError)
-	dlq := &queuestest.FakeDLQ{
+	dlq := &queuestest.FakeQueueWriter{
 		CreateQueueErr: dlqErr,
 	}
 	executable := newExecutable(originalErr)
@@ -175,8 +175,13 @@ func TestDLQExecutable_DLQCreateErr(t *testing.T) {
 	assert.ErrorContains(t, err, dlqErr.Error())
 }
 
-func newExecutableDLQ(executable *queuestest.FakeExecutable, dlq queues.DLQ) *queues.ExecutableDLQ {
-	return queues.NewExecutableDLQ(executable, dlq, clock.NewEventTimeSource(), "test-cluster-name")
+func newExecutableDLQ(executable *queuestest.FakeExecutable, queueWriter queues.QueueWriter) *queues.ExecutableDLQ {
+	return queues.NewExecutableDLQ(
+		executable,
+		queues.NewDLQWriter(queueWriter),
+		clock.NewEventTimeSource(),
+		"test-cluster-name",
+	)
 }
 
 func newExecutable(err error) *queuestest.FakeExecutable {

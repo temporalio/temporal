@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/clock"
@@ -91,9 +92,13 @@ type (
 )
 
 var QueueModule = fx.Options(
-	fx.Provide(QueueSchedulerRateLimiterProvider),
-	fx.Provide(NewExecutableDLQWrapper),
 	fx.Provide(
+		QueueSchedulerRateLimiterProvider,
+		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {
+			return tqm
+		},
+		queues.NewDLQWriter,
+		NewExecutableDLQWrapper,
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
 			Target: NewTransferQueueFactory,
