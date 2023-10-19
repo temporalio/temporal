@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -119,6 +120,7 @@ type (
 		historyClient        resource.HistoryClient
 		matchingRawClient    resource.MatchingRawClient
 		tokenSerializer      common.TaskTokenSerializer
+		historySerializer    serialization.Serializer
 		logger               log.Logger
 		throttledLogger      log.ThrottledLogger
 		namespaceRegistry    namespace.Registry
@@ -184,6 +186,7 @@ func NewEngine(
 		historyClient:             historyClient,
 		matchingRawClient:         matchingRawClient,
 		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
+		historySerializer:         serialization.NewSerializer(),
 		logger:                    log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:           log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:         namespaceRegistry,
@@ -528,6 +531,14 @@ pollLoop:
 			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
 			// frontend returns full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
+
+			hist, nextPageToken, err := e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled, mutableStateResp)
+			if err != nil {
+				// will notify query client that the query task failed
+				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				return emptyPollWorkflowTaskQueueResponse, nil
+			}
+
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
@@ -537,16 +548,11 @@ pollLoop:
 				BranchToken:                mutableStateResp.CurrentBranchToken,
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
+				History:                    hist,
+				NextPageToken:              nextPageToken,
 			}
 
-			getHistResp, err := e.getHistoryForPollWorkflowTaskQueue(ctx, namespaceID, task, resp)
-			if err != nil {
-				// will notify query client that the query task failed
-				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
-				return emptyPollWorkflowTaskQueueResponse, nil
-			}
-
-			return e.createPollWorkflowTaskQueueResponse(task, resp, getHistResp, opMetrics), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 		}
 
 		resp, err := e.recordWorkflowTaskStarted(ctx, request, task)
@@ -580,67 +586,67 @@ pollLoop:
 			continue pollLoop
 		}
 
-		getHistResp, err := e.getHistoryForPollWorkflowTaskQueue(ctx, namespaceID, task, resp)
-		if err != nil {
-			return nil, err
-		}
-
 		task.finish(nil)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, getHistResp, opMetrics), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
 
-// getHistoryForPollWorkflowTaskQueue retrieves history associated with a task returned
-// by PollWorkflowTaskQueue. There are 4 possible cases where different histories are returned:
-//  1. sticky query task -> send empty history
-//  2. sticky non-query task -> send partial history
-//  3. non-sticky query task -> send full history
-//  4. non-sticky non-query task -> send full history
-func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueue(
+// getHistoryForPollWorkflowTaskQueueQueryTask retrieves history associated with a query task returned
+// by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky
+func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	task *internalTask,
-	recordStartedResp *historyservice.RecordWorkflowTaskStartedResponse,
-) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
-	if task.isQuery() && recordStartedResp.StickyExecutionEnabled {
-		// Case 1: sticky query task -> send empty history
-		return &historyservice.GetWorkflowExecutionHistoryResponse{
-			Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-				History: &history.History{Events: []*history.HistoryEvent{}},
-			}}, nil
+	isStickyEnabled bool,
+	mutableStateResp *historyservice.GetMutableStateResponse,
+) (*history.History, []byte, error) {
+	if isStickyEnabled {
+		return &history.History{Events: []*history.HistoryEvent{}}, nil, nil
 	}
 
 	continuation := &tokenspb.HistoryContinuation{
-		RunId:                 task.workflowExecution().GetRunId(),
-		FirstEventId:          common.FirstEventID, // Case 3+4: default to sending full history
-		NextEventId:           recordStartedResp.GetNextEventId(),
-		TransientWorkflowTask: recordStartedResp.GetTransientWorkflowTask(),
-		BranchToken:           recordStartedResp.GetBranchToken(),
-	}
-
-	if recordStartedResp.StickyExecutionEnabled {
-		// Case 2: sticky non-query task -> send partial history
-		continuation.FirstEventId = recordStartedResp.GetPreviousStartedEventId() + 1
+		RunId:        task.workflowExecution().GetRunId(),
+		FirstEventId: common.FirstEventID,
+		NextEventId:  mutableStateResp.GetNextEventId(),
+		BranchToken:  mutableStateResp.GetCurrentBranchToken(),
 	}
 
 	continueToken, err := api.SerializeHistoryToken(continuation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	maxPageSize := int32(e.config.HistoryMaxPageSize(task.namespace.String()))
 	resp, err := e.historyClient.GetWorkflowExecutionHistory(ctx,
 		&historyservice.GetWorkflowExecutionHistoryRequest{
 			NamespaceId: nsID.String(),
 			Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:       task.namespace.String(),
 				Execution:       task.workflowExecution(),
-				MaximumPageSize: int32(e.config.HistoryMaxPageSize(task.namespace.String())),
+				MaximumPageSize: maxPageSize,
 				NextPageToken:   continueToken,
 				WaitNewEvent:    false,
 				SkipArchival:    true,
 			},
 		})
-	return resp, err
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hist := resp.GetResponse().GetHistory()
+	if resp.GetResponse().GetRawHistory() != nil {
+		historyEvents := make([]*history.HistoryEvent, 0, maxPageSize)
+		for _, blob := range resp.GetResponse().GetRawHistory() {
+			events, err := e.historySerializer.DeserializeEvents(blob)
+			if err != nil {
+				return nil, nil, err
+			}
+			historyEvents = append(historyEvents, events...)
+		}
+		hist = &history.History{Events: historyEvents}
+	}
+
+	return hist, resp.GetResponse().GetNextPageToken(), err
 }
 
 // PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
@@ -1342,7 +1348,6 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(tqm taskQueueManager, delta in
 func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
-	getHistoryResp *historyservice.GetWorkflowExecutionHistoryResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
 
@@ -1380,8 +1385,8 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		task.workflowExecution(),
 		serializedToken)
 
-	response.History = getHistoryResp.GetResponse().GetHistory()
-	response.NextPageToken = getHistoryResp.GetResponse().GetNextPageToken()
+	response.History = recordStartResp.GetHistory()
+	response.NextPageToken = recordStartResp.GetNextPageToken()
 
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
