@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2021 Datadog, Inc.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,36 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queuestest
+package temporalite
 
 import (
-	"context"
-
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/queues"
+	"fmt"
+	"net"
 )
 
-// FakeDLQ is a DLQ which records the requests it receives and returns the given error upon DLQ.EnqueueTask.
-type FakeDLQ struct {
-	// Requests to write to the DLQ
-	Requests       []*persistence.EnqueueTaskRequest
-	EnqueueTaskErr error
-	CreateQueueErr error
+func newPortProvider() *portProvider {
+	return &portProvider{}
 }
 
-var _ queues.DLQ = (*FakeDLQ)(nil)
-
-func (d *FakeDLQ) EnqueueTask(
-	_ context.Context,
-	request *persistence.EnqueueTaskRequest,
-) (*persistence.EnqueueTaskResponse, error) {
-	d.Requests = append(d.Requests, request)
-	return nil, d.EnqueueTaskErr
+type portProvider struct {
+	listeners []*net.TCPListener
 }
 
-func (d *FakeDLQ) CreateQueue(
-	context.Context,
-	*persistence.CreateQueueRequest,
-) (*persistence.CreateQueueResponse, error) {
-	return nil, d.CreateQueueErr
+// GetFreePort finds an open port on the system which is ready to use.
+func (p *portProvider) GetFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+	if err != nil {
+		if addr, err = net.ResolveTCPAddr("tcp6", "[::1]:0"); err != nil {
+			return 0, fmt.Errorf("failed to get free port: %w", err)
+		}
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+
+	p.listeners = append(p.listeners, l)
+
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// MustGetFreePort calls GetFreePort, panicking on error.
+func (p *portProvider) MustGetFreePort() int {
+	port, err := p.GetFreePort()
+	if err != nil {
+		panic(err)
+	}
+	return port
+}
+
+func (p *portProvider) Close() error {
+	for _, l := range p.listeners {
+		if err := l.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

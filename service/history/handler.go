@@ -100,6 +100,7 @@ type (
 		controller                   shard.Controller
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
+		taskCategoryRegistry         tasks.TaskCategoryRegistry
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -128,6 +129,7 @@ type (
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
+		TaskCategoryRegistry         tasks.TaskCategoryRegistry
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -638,7 +640,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		category = tasks.CategoryReplication
 	default:
 		var ok bool
-		category, ok = tasks.GetCategoryByID(int32(categoryID))
+		category, ok = h.taskCategoryRegistry.GetCategoryByID(int(categoryID))
 		if !ok {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
 		}
@@ -2156,14 +2158,14 @@ func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	return getdlqtasks.Invoke(ctx, h.taskQueueManager, request)
+	return getdlqtasks.Invoke(ctx, h.taskQueueManager, h.taskCategoryRegistry, request)
 }
 
 func (h *Handler) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request)
+	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request, h.taskCategoryRegistry)
 }
 
 // AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.

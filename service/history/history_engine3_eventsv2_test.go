@@ -249,7 +249,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{

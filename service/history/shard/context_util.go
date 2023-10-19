@@ -41,10 +41,11 @@ func emitShardInfoMetricsLogsLocked(
 	queueStates map[int32]*persistencespb.QueueState,
 	immediateTaskExclusiveMaxReadLevel int64,
 	scheduledTaskMaxReadLevel time.Time,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) {
 Loop:
 	for categoryID, queueState := range queueStates {
-		category, ok := tasks.GetCategoryByID(categoryID)
+		category, ok := taskCategoryRegistry.GetCategoryByID(int(categoryID))
 		if !ok {
 			continue Loop
 		}

@@ -46,9 +46,9 @@ type (
 	}
 )
 
-func newTaskRequestTracker() *taskRequestTracker {
+func newTaskRequestTracker(registry tasks.TaskCategoryRegistry) *taskRequestTracker {
 	outstandingTaskKeys := make(map[tasks.Category]map[tasks.Key]struct{})
-	for _, category := range tasks.GetCategories() {
+	for _, category := range registry.GetCategories() {
 		outstandingTaskKeys[category] = make(map[tasks.Key]struct{})
 	}
 	return &taskRequestTracker{

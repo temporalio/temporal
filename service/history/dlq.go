@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 
@@ -40,25 +39,25 @@ import (
 
 type (
 	executableDLQWrapper struct {
-		historyTaskQueueManager persistence.HistoryTaskQueueManager
-		useDLQ                  dynamicconfig.BoolPropertyFn
-		numHistoryShards        int
-		clusterName             string
-		namespaceRegistry       namespace.Registry
-		timeSource              clock.TimeSource
-		logger                  log.Logger
-		metricsHandler          metrics.Handler
+		dlqWriter         *queues.DLQWriter
+		useDLQ            dynamicconfig.BoolPropertyFn
+		numHistoryShards  int
+		clusterName       string
+		namespaceRegistry namespace.Registry
+		timeSource        clock.TimeSource
+		logger            log.Logger
+		metricsHandler    metrics.Handler
 	}
 	executableDLQWrapperParams struct {
 		fx.In
 
-		HistoryTaskQueueManager persistence.HistoryTaskQueueManager
-		Config                  *configs.Config
-		ClusterMetadata         cluster.Metadata
-		TimeSource              clock.TimeSource
-		Logger                  log.Logger
-		NamespaceRegistry       namespace.Registry
-		MetricsHandler          metrics.Handler
+		DLQWriter         *queues.DLQWriter
+		Config            *configs.Config
+		ClusterMetadata   cluster.Metadata
+		TimeSource        clock.TimeSource
+		Logger            log.Logger
+		NamespaceRegistry namespace.Registry
+		MetricsHandler    metrics.Handler
 	}
 	dlqToggle struct {
 		queues.Executable
@@ -69,21 +68,21 @@ type (
 
 func NewExecutableDLQWrapper(params executableDLQWrapperParams) queues.ExecutableWrapper {
 	return executableDLQWrapper{
-		historyTaskQueueManager: params.HistoryTaskQueueManager,
-		useDLQ:                  params.Config.TaskDLQEnabled,
-		numHistoryShards:        int(params.Config.NumberOfShards),
-		clusterName:             params.ClusterMetadata.GetCurrentClusterName(),
-		namespaceRegistry:       params.NamespaceRegistry,
-		timeSource:              params.TimeSource,
-		logger:                  params.Logger,
-		metricsHandler:          params.MetricsHandler,
+		dlqWriter:         params.DLQWriter,
+		useDLQ:            params.Config.TaskDLQEnabled,
+		numHistoryShards:  int(params.Config.NumberOfShards),
+		clusterName:       params.ClusterMetadata.GetCurrentClusterName(),
+		namespaceRegistry: params.NamespaceRegistry,
+		timeSource:        params.TimeSource,
+		logger:            params.Logger,
+		metricsHandler:    params.MetricsHandler,
 	}
 }
 
 func (d executableDLQWrapper) Wrap(e queues.Executable) queues.Executable {
 	executableDLQ := queues.NewExecutableDLQ(
 		e,
-		d.historyTaskQueueManager,
+		d.dlqWriter,
 		d.timeSource,
 		d.clusterName,
 	)

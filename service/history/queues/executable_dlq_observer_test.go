@@ -111,7 +111,7 @@ func TestExecutableDLQObserver(t *testing.T) {
 	}
 	timeSource := clock.NewEventTimeSource()
 
-	dlq := &queuestest.FakeDLQ{}
+	dlq := &queuestest.FakeQueueWriter{}
 	logger := &testLogger{}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
@@ -213,7 +213,7 @@ func TestExecutableDLQObserver_GetNamespaceByIDErr(t *testing.T) {
 	}
 	timeSource := clock.NewEventTimeSource()
 
-	dlq := &queuestest.FakeDLQ{}
+	dlq := &queuestest.FakeQueueWriter{}
 	logger := &testLogger{}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()

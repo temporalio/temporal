@@ -64,6 +64,7 @@ func GetOrPollMutableState(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return nil, err

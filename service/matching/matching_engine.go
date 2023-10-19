@@ -1463,7 +1463,6 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
 		Clock:             task.event.Data.GetClock(),
-		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	})
@@ -1482,7 +1481,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
 		Clock:             task.event.Data.GetClock(),
-		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	})

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -63,6 +64,7 @@ func Invoke(
 	deserializer TaskDeserializer,
 	numShards int,
 	req *historyservice.AddTasksRequest,
+	taskRegistry tasks.TaskCategoryRegistry,
 ) (*historyservice.AddTasksResponse, error) {
 	if len(req.Tasks) > maxTasksPerRequest {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
@@ -83,12 +85,9 @@ func Invoke(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Nil task at index: %d", i))
 		}
 
-		category, ok := getCategoryByName(task.Category)
-		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"Invalid task category: %s",
-				task.Category,
-			))
+		category, err := api.GetTaskCategory(int(task.CategoryId), taskRegistry)
+		if err != nil {
+			return nil, err
 		}
 
 		if task.Blob == nil {
@@ -138,15 +137,4 @@ func Invoke(
 	}
 
 	return &historyservice.AddTasksResponse{}, nil
-}
-
-func getCategoryByName(categoryName string) (tasks.Category, bool) {
-	categories := tasks.GetCategories()
-	for _, category := range categories {
-		if category.Name() == categoryName {
-			return category, true
-		}
-	}
-
-	return tasks.Category{}, false
 }

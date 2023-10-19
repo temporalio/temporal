@@ -292,7 +292,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -349,7 +348,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -396,7 +394,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  wt.ScheduledEventID,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -428,7 +425,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -461,7 +457,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -498,7 +493,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -569,7 +563,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -658,7 +651,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -699,7 +691,6 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 			NamespaceId:       namespaceID.String(),
 			WorkflowExecution: workflowExecution,
 			ScheduledEventId:  5,
-			TaskId:            100,
 			RequestId:         "reqId",
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
@@ -757,7 +748,6 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduledEventId:  5,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{

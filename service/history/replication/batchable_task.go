@@ -97,8 +97,8 @@ func (w *batchedTask) Ack() {
 
 func (w *batchedTask) Execute() error {
 	w.lock.Lock()
-	defer w.lock.Unlock()
 	w.state = batchStateClose
+	w.lock.Unlock()
 	return w.batchedTask.Execute()
 }
 

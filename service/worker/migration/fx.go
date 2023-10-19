@@ -53,15 +53,11 @@ type (
 		HistoryClient             resource.HistoryClient
 		FrontendClient            workflowservice.WorkflowServiceClient
 		ClientFactory             serverClient.Factory
+		ClientBean                serverClient.Bean
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
 		MetricsHandler            metrics.Handler
-	}
-
-	fxResult struct {
-		fx.Out
-		Component workercommon.WorkerComponent `group:"workerComponent"`
 	}
 
 	replicationWorkerComponent struct {
@@ -69,25 +65,18 @@ type (
 	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
-)
+var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
-func NewResult(params initParams) fxResult {
-	component := &replicationWorkerComponent{
-		initParams: params,
-	}
-	return fxResult{
-		Component: component,
-	}
+func newComponent(params initParams) workercommon.WorkerComponent {
+	return &replicationWorkerComponent{initParams: params}
 }
 
-func (wc *replicationWorkerComponent) RegisterWorkflow(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
-	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
-	worker.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
+func (wc *replicationWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) {
+	registry.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
+	registry.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
+	registry.RegisterWorkflow(ForceTaskQueueUserDataReplicationWorkflow)
 
-	worker.RegisterActivity(wc.activities().GetMetadata) // may be run locally
+	registry.RegisterActivity(wc.activities().GetMetadata) // may be run locally
 }
 
 func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -95,8 +84,8 @@ func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workerco
 	return nil
 }
 
-func (wc *replicationWorkerComponent) RegisterActivities(worker sdkworker.Worker) {
-	worker.RegisterActivity(wc.activities())
+func (wc *replicationWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
+	registry.RegisterActivity(wc.activities())
 }
 
 func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -116,6 +105,7 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		historyClient:                  wc.HistoryClient,
 		frontendClient:                 wc.FrontendClient,
 		clientFactory:                  wc.ClientFactory,
+		clientBean:                     wc.ClientBean,
 		namespaceReplicationQueue:      wc.NamespaceReplicationQueue,
 		taskManager:                    wc.TaskManager,
 		logger:                         wc.Logger,

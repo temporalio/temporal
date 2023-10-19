@@ -97,7 +97,7 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 		require.NoError(t, err)
 		enqueueTasks(t, historyTaskQueueManager, 2, queueKey.SourceCluster, queueKey.TargetCluster)
 		dlqKey := &commonspb.HistoryDLQKey{
-			TaskCategory:  tasks.CategoryTransfer.ID(),
+			TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 		}
@@ -139,7 +139,7 @@ func readTasks(
 	for i := 0; i < numTasks; i++ {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
-				TaskCategory:  tasks.CategoryTransfer.ID(),
+				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},
@@ -156,8 +156,9 @@ func readTasks(
 func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
 	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
-		TaskQueueManager: historyTaskQueueManager,
-		TracerProvider:   fakeTracerProvider{},
+		TaskQueueManager:     historyTaskQueueManager,
+		TracerProvider:       fakeTracerProvider{},
+		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 	})
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)

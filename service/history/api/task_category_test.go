@@ -40,12 +40,13 @@ import (
 func TestGetTaskCategory(t *testing.T) {
 	t.Parallel()
 
-	category, err := api.GetTaskCategory(int(tasks.CategoryTransfer.ID()))
+	registry := tasks.NewDefaultTaskCategoryRegistry()
+	category, err := api.GetTaskCategory(int(enumspb.TASK_CATEGORY_TRANSFER), registry)
 	require.NoError(t, err)
-	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), int(category.ID()))
+	assert.Equal(t, int(enumspb.TASK_CATEGORY_TRANSFER), category.ID())
 
-	_, err = api.GetTaskCategory(-1)
+	_, err = api.GetTaskCategory(int(enumspb.TASK_CATEGORY_UNSPECIFIED), registry)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "-1")
+	assert.ErrorContains(t, err, "0")
 	assert.Equal(t, codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }

@@ -62,14 +62,14 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		}
 		_, err = deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
-				TaskCategory:  queueKey.Category.ID(),
+				TaskCategory:  int32(queueKey.Category.ID()),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
 			},
 			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: persistence.FirstQueueMessageID + 1,
 			},
-		})
+		}, tasks.NewDefaultTaskCategoryRegistry())
 		require.NoError(t, err)
 		resp, err := manager.ReadRawTasks(ctx, &persistence.ReadRawTasksRequest{
 			QueueKey: queueKey,
@@ -85,14 +85,14 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
 		_, err := deletedlqtasks.Invoke(ctx, manager, &historyservice.DeleteDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
-				TaskCategory:  queueKey.Category.ID(),
+				TaskCategory:  int32(queueKey.Category.ID()),
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
 			},
 			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: persistence.FirstQueueMessageID,
 			},
-		})
+		}, tasks.NewDefaultTaskCategoryRegistry())
 		require.Error(t, err)
 		assert.Equal(t, codes.NotFound, serviceerror.ToStatus(err).Code(), err.Error())
 	})
