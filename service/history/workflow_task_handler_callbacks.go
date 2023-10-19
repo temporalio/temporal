@@ -229,6 +229,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 					if err != nil {
 						return nil, err
 					}
+					maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+					err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)
+					if err != nil {
+						return nil, err
+					}
 					updateAction.Noop = true
 					return updateAction, nil
 				}
@@ -282,6 +287,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			)
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+			if err != nil {
+				return nil, err
+			}
+			maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+			err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)
 			if err != nil {
 				return nil, err
 			}
@@ -910,6 +920,74 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	}
 
 	return response, nil
+}
+
+func (handler *workflowTaskHandlerCallbacksImpl) setHistoryForRecordWfTaskStartedResp(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	maximumPageSize int32,
+	response *historyservice.RecordWorkflowTaskStartedResponse,
+) (retError error) {
+
+	firstEventID := common.FirstEventID
+	nextEventID := response.GetNextEventId()
+	if response.GetStickyExecutionEnabled() {
+		// sticky tasks only need partial history
+		firstEventID = response.GetPreviousStartedEventId() + 1
+	}
+
+	// TODO below is a temporal solution to guard against invalid event batch
+	//  when data inconsistency occurs
+	//  long term solution should check event batch pointing backwards within history store
+	defer func() {
+		if _, ok := retError.(*serviceerror.DataLoss); ok {
+			api.TrimHistoryNode(
+				ctx,
+				handler.shardContext,
+				handler.workflowConsistencyChecker,
+				handler.eventNotifier,
+				workflowKey.GetNamespaceID(),
+				workflowKey.GetWorkflowID(),
+				workflowKey.GetRunID(),
+			)
+		}
+	}()
+
+	history, persistenceToken, err := api.GetHistory(
+		ctx,
+		handler.shardContext,
+		namespace.ID(workflowKey.GetNamespaceID()),
+		commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+		firstEventID,
+		nextEventID,
+		maximumPageSize,
+		nil,
+		response.GetTransientWorkflowTask(),
+		response.GetBranchToken(),
+		handler.persistenceVisibilityMgr,
+	)
+	if err != nil {
+		return err
+	}
+
+	var continuation []byte
+	if len(persistenceToken) != 0 {
+		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+			RunId:                 workflowKey.GetRunID(),
+			FirstEventId:          firstEventID,
+			NextEventId:           nextEventID,
+			PersistenceToken:      persistenceToken,
+			TransientWorkflowTask: response.GetTransientWorkflowTask(),
+			BranchToken:           response.GetBranchToken(),
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	response.History = history
+	response.NextPageToken = continuation
+	return nil
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResponse(
