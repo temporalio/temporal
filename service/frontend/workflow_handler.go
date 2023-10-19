@@ -537,6 +537,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	if !wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendPollWorkflowTaskQueueTag))) {
+		return wh.pollWorkflowTaskQueue(ctx, request)
+	}
+
 	callTime := time.Now().UTC()
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
