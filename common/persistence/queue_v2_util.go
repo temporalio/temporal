@@ -96,8 +96,8 @@ func GetPartitionForQueueV2(
 	if numPartitions != 1 {
 		return nil, serviceerror.NewInternal(
 			fmt.Sprintf(
-				"queue with type %v and queueName %v has %d partitions, but this implementation only supports"+
-					" queues with 1 partition. Did you downgrade your Temporal server?",
+				"queue without single partition detected. queue with type %v and queueName %v has %d partitions, "+
+					"but this implementation only supports queues with 1 partition. Did you downgrade your Temporal server?",
 				queueType,
 				queueName,
 				numPartitions,
@@ -127,21 +127,16 @@ type DeleteRange struct {
 
 // GetDeleteRange returns the range of messages to delete, and a boolean indicating whether any messages should be deleted.
 func GetDeleteRange(request DeleteRequest) (DeleteRange, bool) {
-	lastID := request.LastIDToDeleteInclusive
-	newMinMessageID := lastID + 1
-	if lastID >= request.ExistingMessageRange.MaxMessageID {
-		// Never actually delete the last message
-		lastID = request.ExistingMessageRange.MaxMessageID - 1
-	}
-	if lastID < request.ExistingMessageRange.MinMessageID {
+	if request.LastIDToDeleteInclusive < request.ExistingMessageRange.MinMessageID {
 		// Nothing to delete
 		return DeleteRange{}, false
 	}
 	return DeleteRange{
 		InclusiveMessageRange: InclusiveMessageRange{
 			MinMessageID: request.ExistingMessageRange.MinMessageID,
-			MaxMessageID: lastID,
+			// Never actually delete the last message
+			MaxMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID-1),
 		},
-		NewMinMessageID: newMinMessageID,
+		NewMinMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID) + 1,
 	}, true
 }

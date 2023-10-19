@@ -314,6 +314,41 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			" messages are deleted, the next message ID should still be incremented")
 	})
 
+	t.Run("DeleteAndValidateMinId", func(t *testing.T) {
+		t.Parallel()
+
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		for i := 0; i < 3; i++ {
+			msg, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
+			require.NoError(t, err)
+			assert.Equal(t, int64(persistence.FirstQueueMessageID+i), msg.Metadata.ID)
+		}
+		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+				ID: persistence.FirstQueueMessageID + 10,
+			},
+		})
+		require.NoError(t, err)
+		_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
+		require.NoError(t, err)
+		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.NoError(t, err)
+		require.Len(t, response.Messages, 1)
+		require.Equal(t, response.Messages[0].MetaData.ID, int64(3))
+	})
+
 	t.Run("DeleteSameRangeTwice", func(t *testing.T) {
 		t.Parallel()
 

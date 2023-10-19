@@ -466,7 +466,6 @@ func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistenc
 	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).WithContext(ctx).Scan(&maxMessageID)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
-			// There are no messages in the queue, so the next message ID is the first message ID.
 			return 0, false, nil
 		}
 		return 0, false, gocql.ConvertError("QueueV2GetMaxMessageID", err)
