@@ -27,11 +27,14 @@ package worker
 import (
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -67,6 +70,17 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(func(
+		clusterMetadata cluster.Metadata,
+		metadataManager persistence.MetadataManager,
+		logger log.Logger,
+	) namespace.ReplicationTaskExecutor {
+		return namespace.NewReplicationTaskExecutor(
+			clusterMetadata.GetCurrentClusterName(),
+			metadataManager,
+			logger,
+		)
+	}),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
 	fx.Provide(NewPerNamespaceWorkerManager),
