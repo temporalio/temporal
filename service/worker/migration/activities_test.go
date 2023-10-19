@@ -432,7 +432,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		expectedVerified      bool
 		expectedErr           error
 		expectedNextIndex     int
-		expectedVerifiedIndex int
 	}{
 		{
 			expectedVerified: true,
@@ -444,7 +443,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      true,
 			expectedErr:           nil,
 			expectedNextIndex:     4,
-			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
@@ -452,7 +450,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      true,
 			expectedErr:           nil,
 			expectedNextIndex:     4,
-			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
@@ -460,7 +457,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      false,
 			expectedErr:           nil,
 			expectedNextIndex:     2,
-			expectedVerifiedIndex: 1,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound, executionFound, executionNotfound},
@@ -468,7 +464,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      false,
 			expectedErr:           nil,
 			expectedNextIndex:     2,
-			expectedVerifiedIndex: 1,
 		},
 	}
 
@@ -493,7 +488,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		}
 		s.Equal(tc.expectedVerified, verified)
 		s.Equal(tc.expectedNextIndex, details.NextIndex)
-		s.Equal(tc.expectedVerifiedIndex, details.LastVerifiedIndex)
 		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
 		s.Equal(recorder.lastHeartBeat, details)
 		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
@@ -535,7 +529,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	s.False(verified)
 	// Verify has made progress.
 	s.True(checkPointTime.Before(details.CheckPoint))
-	s.Equal(1, details.LastVerifiedIndex)
 	s.Equal(2, details.NextIndex)
 
 	prevDetails := details

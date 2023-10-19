@@ -80,7 +80,6 @@ type (
 		NextIndex                        int
 		CheckPoint                       time.Time
 		LastNotVerifiedWorkflowExecution commonpb.WorkflowExecution
-		LastVerifiedIndex                int
 	}
 
 	verifyStatus int
@@ -695,7 +694,6 @@ func (a *activities) verifyReplicationTasks(
 			return false, nil
 		}
 
-		details.LastVerifiedIndex = details.NextIndex
 		heartbeat(*details)
 		progress = true
 	}
