@@ -521,6 +521,26 @@ func (mr *MockAdminServiceClientMockRecorder) PurgeDLQMessages(ctx, in interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).PurgeDLQMessages), varargs...)
 }
 
+// PurgeDLQTasks mocks base method.
+func (m *MockAdminServiceClient) PurgeDLQTasks(ctx context.Context, in *adminservice.PurgeDLQTasksRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PurgeDLQTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.PurgeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PurgeDLQTasks indicates an expected call of PurgeDLQTasks.
+func (mr *MockAdminServiceClientMockRecorder) PurgeDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).PurgeDLQTasks), varargs...)
+}
+
 // ReapplyEvents mocks base method.
 func (m *MockAdminServiceClient) ReapplyEvents(ctx context.Context, in *adminservice.ReapplyEventsRequest, opts ...grpc.CallOption) (*adminservice.ReapplyEventsResponse, error) {
 	m.ctrl.T.Helper()
@@ -1184,6 +1204,21 @@ func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *ad
 func (mr *MockAdminServiceServerMockRecorder) PurgeDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).PurgeDLQMessages), arg0, arg1)
+}
+
+// PurgeDLQTasks mocks base method.
+func (m *MockAdminServiceServer) PurgeDLQTasks(arg0 context.Context, arg1 *adminservice.PurgeDLQTasksRequest) (*adminservice.PurgeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PurgeDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.PurgeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PurgeDLQTasks indicates an expected call of PurgeDLQTasks.
+func (mr *MockAdminServiceServerMockRecorder) PurgeDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).PurgeDLQTasks), arg0, arg1)
 }
 
 // ReapplyEvents mocks base method.

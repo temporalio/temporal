@@ -46,13 +46,14 @@ type (
 )
 
 func newTaskKeyManager(
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	timeSource clock.TimeSource,
 	config *configs.Config,
 	logger log.Logger,
 	renewRangeIDFn renewRangeIDFn,
 ) *taskKeyManager {
 	manager := &taskKeyManager{
-		tracker:    newTaskRequestTracker(),
+		tracker:    newTaskRequestTracker(taskCategoryRegistry),
 		timeSource: timeSource,
 		logger:     logger,
 		config:     config,

@@ -124,6 +124,7 @@ type (
 		clusterMetadata         cluster.Metadata
 		archivalMetadata        archiver.ArchivalMetadata
 		hostInfoProvider        membership.HostInfoProvider
+		taskCategoryRegistry    tasks.TaskCategoryRegistry
 
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
@@ -234,7 +235,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			s.rwLock.Unlock()
 			return nil
 		},
-		MetricsName: metrics.ShardLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardLockLatency.GetMetricName(),
 	}}
 }
 
@@ -325,7 +326,7 @@ func (s *ContextImpl) GetQueueState(
 	s.rLock()
 	defer s.rUnlock()
 
-	queueState, ok := s.shardInfo.QueueStates[category.ID()]
+	queueState, ok := s.shardInfo.QueueStates[int32(category.ID())]
 	if !ok {
 		return nil, false
 	}
@@ -341,7 +342,7 @@ func (s *ContextImpl) SetQueueState(
 ) error {
 	return s.updateShardInfo(func() {
 		categoryID := category.ID()
-		s.shardInfo.QueueStates[categoryID] = state
+		s.shardInfo.QueueStates[int32(categoryID)] = state
 	})
 }
 
@@ -351,13 +352,13 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 ) error {
 	return s.updateShardInfo(func() {
 		categoryID := tasks.CategoryReplication.ID()
-		queueState, ok := s.shardInfo.QueueStates[categoryID]
+		queueState, ok := s.shardInfo.QueueStates[int32(categoryID)]
 		if !ok {
 			queueState = &persistencespb.QueueState{
 				ExclusiveReaderHighWatermark: nil,
 				ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
 			}
-			s.shardInfo.QueueStates[categoryID] = queueState
+			s.shardInfo.QueueStates[int32(categoryID)] = queueState
 		}
 		queueState.ReaderStates[readerID] = readerState
 	})
@@ -1214,7 +1215,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked(
 
 Loop:
 	for categoryID, queueState := range queueStates {
-		category, ok := tasks.GetCategoryByID(categoryID)
+		category, ok := s.taskCategoryRegistry.GetCategoryByID(int(categoryID))
 		if !ok {
 			continue Loop
 		}
@@ -1590,6 +1591,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 			setStateStopped()
 			return nil
 		}
+	case contextStateStopped:
+		switch request.(type) {
+		case contextRequestStop, contextRequestFinishStop:
+			// nothing to do, already stopped
+			return nil
+		}
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
@@ -1614,7 +1621,7 @@ func (s *ContextImpl) notifyQueueProcessor() {
 
 	now := s.timeSource.Now()
 	fakeTasks := make(map[tasks.Category][]tasks.Task)
-	for _, category := range tasks.GetCategories() {
+	for _, category := range s.taskCategoryRegistry.GetCategories() {
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
@@ -1692,7 +1699,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	var taskMinScheduledTime time.Time
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
-	taskCategories := tasks.GetCategories()
+	taskCategories := s.taskCategoryRegistry.GetCategories()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
@@ -1700,7 +1707,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 		exclusiveMaxReadTime := tasks.DefaultFireTime
 		for categoryID, queueState := range shardInfo.QueueStates {
-			category, ok := taskCategories[categoryID]
+			category, ok := taskCategories[int(categoryID)]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
 				continue
 			}
@@ -1944,6 +1951,7 @@ func newContext(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -1978,6 +1986,7 @@ func newContext(
 		clusterMetadata:         clusterMetadata,
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
+		taskCategoryRegistry:    taskCategoryRegistry,
 		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
@@ -1985,6 +1994,7 @@ func newContext(
 		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
+		shardContext.taskCategoryRegistry,
 		timeSource,
 		historyConfig,
 		shardContext.GetLogger(),
@@ -2134,16 +2144,16 @@ func trimShardInfo(
 	allClusterInfo map[string]cluster.ClusterInformation,
 	shardInfo *persistencespb.ShardInfo,
 ) *persistencespb.ShardInfo {
-	if shardInfo.QueueStates != nil && shardInfo.QueueStates[tasks.CategoryIDReplication] != nil {
-		for readerID := range shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates {
+	if shardInfo.QueueStates != nil && shardInfo.QueueStates[int32(tasks.CategoryIDReplication)] != nil {
+		for readerID := range shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates {
 			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
 			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
 			if !found || !clusterInfo.Enabled {
-				delete(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates, readerID)
+				delete(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates, readerID)
 			}
 		}
-		if len(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates) == 0 {
-			delete(shardInfo.QueueStates, tasks.CategoryIDReplication)
+		if len(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates) == 0 {
+			delete(shardInfo.QueueStates, int32(tasks.CategoryIDReplication))
 		}
 	}
 	return shardInfo

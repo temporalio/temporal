@@ -82,6 +82,21 @@ func (mr *MockEngineMockRecorder) AddSpeculativeWorkflowTaskTimeoutTask(task int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpeculativeWorkflowTaskTimeoutTask", reflect.TypeOf((*MockEngine)(nil).AddSpeculativeWorkflowTaskTimeoutTask), task)
 }
 
+// AddTasks mocks base method.
+func (m *MockEngine) AddTasks(ctx context.Context, request *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTasks", ctx, request)
+	ret0, _ := ret[0].(*historyservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockEngineMockRecorder) AddTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockEngine)(nil).AddTasks), ctx, request)
+}
+
 // ConvertReplicationTask mocks base method.
 func (m *MockEngine) ConvertReplicationTask(ctx context.Context, task tasks.Task) (*repication.ReplicationTask, error) {
 	m.ctrl.T.Helper()

@@ -355,6 +355,20 @@ func (c *metricClient) PurgeDLQMessages(
 	return c.client.PurgeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.PurgeDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientPurgeDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PurgeDLQTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,

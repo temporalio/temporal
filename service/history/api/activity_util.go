@@ -54,6 +54,7 @@ func SetActivityTaskRunID(
 		ctx,
 		token.NamespaceId,
 		token.WorkflowId,
+		workflow.LockPriorityHigh,
 	)
 	if err != nil {
 		return err

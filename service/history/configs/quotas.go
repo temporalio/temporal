@@ -94,6 +94,7 @@ var (
 		"ForceDeleteWorkflowExecution":           1,
 		"GetDLQTasks":                            1,
 		"DeleteDLQTasks":                         1,
+		"AddTasks":                               1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

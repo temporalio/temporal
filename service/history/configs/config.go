@@ -74,6 +74,7 @@ type Config struct {
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -251,6 +252,7 @@ type Config struct {
 	ReplicationProcessorSchedulerQueueSize   dynamicconfig.IntPropertyFn
 	ReplicationProcessorSchedulerWorkerCount dynamicconfig.IntPropertyFn
 	EnableReplicationEagerRefreshNamespace   dynamicconfig.BoolPropertyFn
+	EnableReplicationTaskBatching            dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -363,6 +365,7 @@ func NewConfig(
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
+		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 
 		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
 		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
@@ -448,6 +451,7 @@ func NewConfig(
 		ReplicationProcessorSchedulerQueueSize:   dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerQueueSize, 128),
 		ReplicationProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ReplicationProcessorSchedulerWorkerCount, 512),
 		EnableReplicationEagerRefreshNamespace:   dc.GetBoolProperty(dynamicconfig.EnableEagerNamespaceRefresher, false),
+		EnableReplicationTaskBatching:            dc.GetBoolProperty(dynamicconfig.EnableReplicationTaskBatching, false),
 
 		MaximumBufferedEventsBatch:       dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsBatch, 100),
 		MaximumBufferedEventsSizeInBytes: dc.GetIntProperty(dynamicconfig.MaximumBufferedEventsSizeInBytes, 2*1024*1024),

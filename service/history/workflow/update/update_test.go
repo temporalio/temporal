@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -636,4 +637,11 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 	require.NoError(t, upd.OnMessage(ctx, &resp, store))
 	effects.Apply(ctx)
 	require.Equal(t, wantAcceptedEventID, gotAcceptedEventID)
+}
+
+func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {
+	t.Helper()
+	a, err := types.MarshalAny(pb)
+	require.NoError(t, err)
+	return a
 }

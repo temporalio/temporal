@@ -54,7 +54,7 @@ func TestTaskRequestTrackerSuite(t *testing.T) {
 func (s *taskRequestTrackerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.tracker = newTaskRequestTracker()
+	s.tracker = newTaskRequestTracker(tasks.NewDefaultTaskCategoryRegistry())
 }
 
 func (s *taskRequestTrackerSuite) TestTrackAndMinTaskKey() {

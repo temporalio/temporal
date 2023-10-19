@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 )
@@ -104,6 +105,8 @@ var (
 func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+
+	ctx = workflow.WithTaskQueue(ctx, primitives.AddSearchAttributesActivityTQ)
 
 	var a *activities
 	var err error

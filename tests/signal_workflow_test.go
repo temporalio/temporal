@@ -59,7 +59,7 @@ func (s *functionalSuite) TestSignalWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Send a signal to non-exist workflow
 	header := &commonpb.Header{
@@ -115,7 +115,7 @@ func (s *functionalSuite) TestSignalWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -253,7 +253,7 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -291,7 +291,7 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -395,7 +395,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -447,7 +447,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -504,7 +504,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -616,7 +616,7 @@ func (s *functionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -692,7 +692,7 @@ func (s *functionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -805,7 +805,7 @@ func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	tl := "functional-signal-workflow-workflow-close-attempted-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -893,7 +893,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -942,7 +942,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -998,7 +998,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(foreignActivityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1108,7 +1108,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1141,7 +1141,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1233,7 +1233,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1266,7 +1266,7 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1359,7 +1359,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
@@ -1402,7 +1402,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             strconv.Itoa(1),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -1624,7 +1624,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start a workflow
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1659,7 +1659,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -1794,6 +1794,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	id := "functional-signal-with-start-workflow-start-delay-test"
 	wt := "functional-signal-with-start-workflow-start-delay-test-type"
 	tl := "functional-signal-with-start-workflow-start-delay-test-taskqueue"
+	stickyTq := "functional-signal-with-start-workflow-start-delay-test-sticky-taskqueue"
 	identity := "worker1"
 
 	startDelay := 3 * time.Second
@@ -1806,7 +1807,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -1845,8 +1846,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
-		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,
@@ -1878,7 +1879,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	tl := "functional-signal-with-start-workflow-no-wft-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -1937,7 +1938,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 		Namespace:                s.namespace,
 		WorkflowId:               id,
 		WorkflowType:             &commonpb.WorkflowType{Name: wt},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:                    nil,
 		WorkflowRunTimeout:       timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),

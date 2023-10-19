@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,7 +40,7 @@ import (
 )
 
 type mockUpdateStore struct {
-	update.UpdateStore
+	update.Store
 	VisitUpdatesFunc     func(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 	GetUpdateOutcomeFunc func(context.Context, string) (*updatepb.Outcome, error)
 }
@@ -80,7 +78,7 @@ func TestFind(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(func() update.UpdateStore { return store })
+		reg = update.NewRegistry(func() update.Store { return store })
 	)
 	_, ok := reg.Find(ctx, updateID)
 	require.False(t, ok)
@@ -105,14 +103,14 @@ func TestHasOutgoing(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(func() update.UpdateStore { return store })
+		reg     = update.NewRegistry(func() update.Store { return store })
+		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
 	)
 
 	upd, _, err := reg.FindOrCreate(ctx, updateID)
 	require.NoError(t, err)
 	require.False(t, reg.HasOutgoing())
 
-	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
@@ -162,7 +160,7 @@ func TestFindOrCreate(t *testing.T) {
 				return nil, serviceerror.NewNotFound("not found")
 			},
 		}
-		reg = update.NewRegistry(func() update.UpdateStore { return store })
+		reg = update.NewRegistry(func() update.Store { return store })
 	)
 
 	t.Run("new update", func(t *testing.T) {
@@ -215,15 +213,15 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 				visitor(storedAcceptedUpdateID, storedAcceptedUpdateInfo)
 			},
 		}
-		reg = update.NewRegistry(func() update.UpdateStore { return regStore })
+		reg     = update.NewRegistry(func() update.Store { return regStore })
+		effects = effect.Buffer{}
+		evStore = mockEventStore{Controller: &effects}
 	)
 
 	upd, found, err := reg.FindOrCreate(ctx, storedAcceptedUpdateID)
 	require.NoError(t, err)
 	require.True(t, found)
 
-	var effects effect.Buffer
-	evStore := mockEventStore{Controller: &effects}
 	meta := updatepb.Meta{UpdateId: storedAcceptedUpdateID}
 	outcome := successOutcome(t, "success!")
 
@@ -242,8 +240,9 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 func TestMessageGathering(t *testing.T) {
 	t.Parallel()
 	var (
-		ctx = context.Background()
-		reg = update.NewRegistry(func() update.UpdateStore { return emptyUpdateStore })
+		ctx     = context.Background()
+		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
+		reg     = update.NewRegistry(func() update.Store { return emptyUpdateStore })
 	)
 	updateID1, updateID2 := t.Name()+"-update-id-1", t.Name()+"-update-id-2"
 	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
@@ -254,8 +253,6 @@ func TestMessageGathering(t *testing.T) {
 
 	msgs := reg.ReadOutgoingMessages(wftStartedEventID)
 	require.Empty(t, msgs)
-
-	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
 
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
@@ -286,11 +283,12 @@ func TestInFlightLimit(t *testing.T) {
 		ctx   = context.Background()
 		limit = 1
 		reg   = update.NewRegistry(
-			func() update.UpdateStore { return emptyUpdateStore },
+			func() update.Store { return emptyUpdateStore },
 			update.WithInFlightLimit(
 				func() int { return limit },
 			),
 		)
+		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -305,7 +303,6 @@ func TestInFlightLimit(t *testing.T) {
 	})
 
 	// complete update1 so that it is removed from the registry
-	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
@@ -355,11 +352,12 @@ func TestTotalLimit(t *testing.T) {
 		ctx   = context.Background()
 		limit = 1
 		reg   = update.NewRegistry(
-			func() update.UpdateStore { return emptyUpdateStore },
+			func() update.Store { return emptyUpdateStore },
 			update.WithTotalLimit(
 				func() int { return limit },
 			),
 		)
+		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -374,7 +372,6 @@ func TestTotalLimit(t *testing.T) {
 	})
 
 	// complete update1 so that it is removed from the registry and incremented counter
-	evStore := mockEventStore{Controller: effect.Immediate(ctx)}
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
@@ -418,34 +415,32 @@ func TestTotalLimit(t *testing.T) {
 
 func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	t.Parallel()
-	completedUpdateID := t.Name() + "-completed-update-id"
-	expectError := fmt.Errorf("expected error in %s", t.Name())
-	regStore := mockUpdateStore{
-		VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
-			completedUpdateInfo := &updatespb.UpdateInfo{
-				Value: &updatespb.UpdateInfo_Completion{
-					Completion: &updatespb.CompletionInfo{EventId: 123},
-				},
-			}
-			visitor(completedUpdateID, completedUpdateInfo)
-		},
-		GetUpdateOutcomeFunc: func(
-			ctx context.Context,
-			updateID string,
-		) (*updatepb.Outcome, error) {
-			return nil, expectError
-		},
-	}
-	reg := update.NewRegistry(func() update.UpdateStore { return regStore })
-	upd, found := reg.Find(context.TODO(), completedUpdateID)
-	require.True(t, found)
-	_, err := upd.WaitOutcome(context.TODO())
-	require.ErrorIs(t, expectError, err)
-}
+	var (
+		ctx               = context.Background()
+		completedUpdateID = t.Name() + "-completed-update-id"
+		expectError       = fmt.Errorf("expected error in %s", t.Name())
+		regStore          = mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *updatespb.UpdateInfo)) {
+				completedUpdateInfo := &updatespb.UpdateInfo{
+					Value: &updatespb.UpdateInfo_Completion{
+						Completion: &updatespb.CompletionInfo{EventId: 123},
+					},
+				}
+				visitor(completedUpdateID, completedUpdateInfo)
+			},
+			GetUpdateOutcomeFunc: func(
+				ctx context.Context,
+				updateID string,
+			) (*updatepb.Outcome, error) {
+				return nil, expectError
+			},
+		}
+		reg = update.NewRegistry(func() update.Store { return regStore })
+	)
 
-func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {
-	t.Helper()
-	a, err := types.MarshalAny(pb)
-	require.NoError(t, err)
-	return a
+	upd, found := reg.Find(ctx, completedUpdateID)
+	require.True(t, found)
+
+	_, err := upd.WaitOutcome(ctx)
+	require.ErrorIs(t, expectError, err)
 }

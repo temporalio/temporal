@@ -667,3 +667,83 @@ func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
 	s.NoError(err)
 	s.False(isInReplay)
 }
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_Same_VersionItems_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch1_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch2_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 6, Version: 6},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch1_Return_False() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 3, Version: 3},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 3, Version: 4},
+	}
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch2_Return_False() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 7, Version: 3},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 6, Version: 3},
+		{EventId: 7, Version: 4},
+	}
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}

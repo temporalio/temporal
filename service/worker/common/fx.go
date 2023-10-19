@@ -22,35 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql_test
+package common
 
-import (
-	"context"
-	"testing"
+import "go.uber.org/fx"
 
-	"github.com/stretchr/testify/assert"
+// WorkerComponentTag is the fx group tag for worker components. This is used to allow those who use Temporal as a
+// library to dynamically register their own system workers. Use this to annotate a worker component consumer. Use the
+// AnnotateWorkerComponentProvider function to annotate a worker component provider.
+const WorkerComponentTag = `group:"workerComponent"`
 
-	"go.temporal.io/server/common/persistence/sql"
-)
-
-func TestNewQueueV2(t *testing.T) {
-	t.Parallel()
-
-	q := sql.NewQueueV2()
-	_, err := q.EnqueueMessage(context.Background(), nil)
-	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
-		assert.ErrorContains(t, err, "EnqueueMessage")
-	}
-	_, err = q.ReadMessages(context.Background(), nil)
-	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
-		assert.ErrorContains(t, err, "ReadMessages")
-	}
-	_, err = q.CreateQueue(context.Background(), nil)
-	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
-		assert.ErrorContains(t, err, "CreateQueue")
-	}
-	_, err = q.RangeDeleteMessages(context.Background(), nil)
-	if assert.ErrorIs(t, err, sql.ErrNotImplemented) {
-		assert.ErrorContains(t, err, "RangeDeleteMessages")
-	}
+// AnnotateWorkerComponentProvider converts a WorkerComponent factory function into an fx provider which will add the
+// WorkerComponentTag to the result.
+func AnnotateWorkerComponentProvider[T any](f func(t T) WorkerComponent) fx.Option {
+	return fx.Provide(fx.Annotate(f, fx.ResultTags(WorkerComponentTag)))
 }

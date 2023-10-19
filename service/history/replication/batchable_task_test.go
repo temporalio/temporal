@@ -49,6 +49,7 @@ func (s *batchedTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewTestLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func TestBatchedTaskSuite(t *testing.T) {
@@ -156,7 +157,7 @@ func (s *batchedTaskSuite) TestAddTask_TasksAreBatchableAndCanBatch_ReturnTrue()
 	incoming.EXPECT().CanBatch().Return(true).Times(1)
 
 	batchResult := NewMockTrackableExecutableTask(s.controller)
-	existing.EXPECT().BatchWith(incoming).Return(batchResult, nil).Times(1)
+	existing.EXPECT().BatchWith(incoming).Return(batchResult, true).Times(1)
 	result := batchedTestTask.AddTask(incoming)
 
 	s.True(result)
@@ -199,6 +200,7 @@ func (s *batchedTaskSuite) TestAck_AckIndividualTasks() {
 		individualTaskHandler: func(task TrackableExecutableTask) {
 			handlerCallCount++
 		},
+		metricsHandler: s.metricsHandler,
 	}
 	existing.EXPECT().Ack().Times(1)
 	add1.EXPECT().Ack().Times(1)

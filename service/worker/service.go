@@ -26,7 +26,6 @@ package worker
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -347,10 +346,6 @@ func (s *Service) Start() {
 
 	s.clusterMetadata.Start()
 	s.namespaceRegistry.Start()
-
-	// The service is now started up
-	// seed the random generator once for this service
-	rand.Seed(time.Now().UnixNano())
 
 	s.membershipMonitor.Start()
 

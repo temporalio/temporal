@@ -370,8 +370,8 @@ const (
 	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
-	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
+	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
@@ -509,6 +509,8 @@ const (
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
 	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
 	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
+	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -837,6 +839,8 @@ const (
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
 	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
+	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
+	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
 
 	// keys for worker
 

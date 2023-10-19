@@ -294,7 +294,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 		return []*commandpb.Command{upsertCommand}, nil
 	}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
@@ -1049,7 +1049,7 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1105,7 +1105,7 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:           s.namespace,
@@ -1247,7 +1247,7 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,
@@ -1270,7 +1270,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1568,7 +1568,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1845,7 +1845,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -2430,7 +2430,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 		Namespace:    s.namespace,
 		WorkflowId:   s.randomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 
@@ -2440,7 +2440,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	// Complete the workflow and verify it affects reachability of v0.1
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:                 s.namespace,
-		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1},
+		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
 	})
 	s.Require().NoError(err)
@@ -2574,7 +2574,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 		Namespace:    s.namespace,
 		WorkflowId:   s.randomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 
@@ -2583,7 +2583,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 
 	task, err := s.engine.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())

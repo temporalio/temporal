@@ -78,23 +78,20 @@ FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
-INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)%,$(TEST_DIRS))
+INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
 	github.com/go-sql-driver/mysql@v1.5.0 \
 	github.com/urfave/cli/v2@v2.4.0
 
-# Code coverage output files.
+# Code coverage & test report output files.
 COVER_ROOT                      := ./.coverage
-UNIT_COVER_PROFILE              := $(COVER_ROOT)/unit_coverprofile.out
-INTEGRATION_COVER_PROFILE       := $(COVER_ROOT)/integration_coverprofile.out
-DB_TOOL_COVER_PROFILE           := $(COVER_ROOT)/db_tool_coverprofile.out
-FUNCTIONAL_COVER_PROFILE        := $(COVER_ROOT)/functional_$(PERSISTENCE_DRIVER)_coverprofile.out
-FUNCTIONAL_XDC_COVER_PROFILE    := $(COVER_ROOT)/functional_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
-FUNCTIONAL_NDC_COVER_PROFILE    := $(COVER_ROOT)/functional_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
+NEW_COVER_PROFILE 							= $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out # generates a new filename each time it's substituted.
 SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
+REPORT_ROOT                     := ./.testreport
+NEW_REPORT 											= $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml # generates a new filename each time it's substituted.
 
 # DB
 SQL_USER ?= temporal
@@ -108,6 +105,16 @@ SQL_PASSWORD ?= temporal
 INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
 FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
 
+# Only prints output if the exit code is non-zero
+define silent_exec
+    @output=$$($(1) 2>&1); \
+    status=$$?; \
+    if [ $$status -ne 0 ]; then \
+        echo "$$output"; \
+    fi; \
+    exit $$status
+endef
+
 ##### Tools #####
 update-goimports:
 	@printf $(COLOR) "Install/update goimports..."
@@ -120,6 +127,10 @@ update-linters:
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
 	@go install github.com/golang/mock/mockgen@v1.7.0-rc.1
+
+update-gotestsum:
+	@printf $(COLOR) "Install/update gotestsum..."
+	@go install gotest.tools/gotestsum@v1.11
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
@@ -143,10 +154,10 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 # update-linters is not included because in CI linters are run by github actions.
-ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
 
 ##### Proto #####
 $(PROTO_OUT):
@@ -165,15 +176,15 @@ install-proto-submodule:
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
-# Run protoc separately for each directory because of different package names.
+	@# Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
-		protoc --fatal_warnings $(PROTO_IMPORTS) \
+		@protoc --fatal_warnings $(PROTO_IMPORTS) \
 		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
 			$(PROTO_DIR)*.proto \
 	$(NEWLINE))
 
 fix-proto-path:
-	mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
+	@mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
@@ -183,7 +194,7 @@ mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))
 proto-mocks: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
-		cd $(PROTO_OUT) && \
+		@cd $(PROTO_OUT) && \
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
@@ -250,7 +261,7 @@ lint:
 
 api-linter:
 	@printf $(COLOR) "Run api-linter..."
-	@api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES)
+	$(call silent_exec, api-linter --set-exit-status $(PROTO_IMPORTS) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."
@@ -272,9 +283,9 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
-	@rm -f test.log
+	@rm -f test.log $(COVER_ROOT)/* $(REPORT_ROOT)/*
 	@go clean -testcache
-
+	
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 $(TEST_DIRS)
@@ -307,35 +318,47 @@ functional-with-fault-injection-test: clean-test-results
 
 test: unit-test integration-test functional-test functional-with-fault-injection-test
 
-##### Coverage #####
+##### Coverage & Reporting #####
 $(COVER_ROOT):
 	@mkdir -p $(COVER_ROOT)
 
-unit-test-coverage: $(COVER_ROOT)
+$(REPORT_ROOT):
+	@mkdir -p $(REPORT_ROOT)
+
+prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
+
+unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
-	@go test ./$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(UNIT_COVER_PROFILE) || exit 1;
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -coverprofile=$(NEW_COVER_PROFILE)
 
-integration-test-coverage: $(COVER_ROOT)
+integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(INTEGRATION_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-coverage: $(COVER_ROOT)
+functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-xdc-coverage: $(COVER_ROOT)
+functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_XDC_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-functional-test-ndc-coverage: $(COVER_ROOT)
+functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(FUNCTIONAL_NDC_COVER_PROFILE)
+	@gotestsum --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
 	@rm -f $(SUMMARY_COVER_PROFILE)
+	@if [ -z "$(wildcard $(COVER_ROOT)/*)" ]; then \
+		echo "No coverage data, aborting!" && exit 1; \
+	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \

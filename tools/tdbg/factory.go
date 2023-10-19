@@ -51,31 +51,59 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+type (
+	// HttpGetter defines http.Client.Get(...) as an interface so we can mock it
+	HttpGetter interface {
+		Get(url string) (resp *http.Response, err error)
+	}
+	// ClientFactory is used to construct rpc clients
+	ClientFactory interface {
+		AdminClient(c *cli.Context) adminservice.AdminServiceClient
+		WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
+	}
+	// ClientFactoryOption is used to configure the ClientFactory via NewClientFactory.
+	ClientFactoryOption func(params *clientFactoryParams)
+	// DefaultFrontendAddressProvider uses FlagAddress to determine the frontend address, defaulting to
+	// DefaultFrontendAddress if FlagAddress is not set or is empty.
+	DefaultFrontendAddressProvider struct{}
+
+	clientFactory struct {
+		logger                  log.Logger
+		frontendAddressProvider frontendAddressProvider
+	}
+	clientFactoryParams struct {
+		frontendAddressProvider frontendAddressProvider
+	}
+	frontendAddressProvider interface {
+		GetFrontendAddress(c *cli.Context) string
+	}
+	staticFrontendAddress string
+)
+
 var netClient HttpGetter = &http.Client{
 	Timeout: time.Second * 10,
 }
 
-// HttpGetter defines http.Client.Get(...) as an interface so we can mock it
-type HttpGetter interface {
-	Get(url string) (resp *http.Response, err error)
-}
-
-// ClientFactory is used to construct rpc clients
-type ClientFactory interface {
-	AdminClient(c *cli.Context) adminservice.AdminServiceClient
-	WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
-}
-
-type clientFactory struct {
-	logger log.Logger
-}
-
 // NewClientFactory creates a new ClientFactory
-func NewClientFactory() ClientFactory {
+func NewClientFactory(opts ...ClientFactoryOption) ClientFactory {
 	logger := log.NewCLILogger()
+	params := &clientFactoryParams{
+		frontendAddressProvider: DefaultFrontendAddressProvider{},
+	}
+	for _, opt := range opts {
+		opt(params)
+	}
 
 	return &clientFactory{
-		logger: logger,
+		logger:                  logger,
+		frontendAddressProvider: params.frontendAddressProvider,
+	}
+}
+
+// WithFrontendAddress ensures that admin clients created by the factory will connect to the specified address.
+func WithFrontendAddress(address string) ClientFactoryOption {
+	return func(params *clientFactoryParams) {
+		params.frontendAddressProvider = staticFrontendAddress(address)
 	}
 }
 
@@ -93,10 +121,7 @@ func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowS
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
-	hostPort := c.String(FlagAddress)
-	if hostPort == "" {
-		hostPort = localHostPort
-	}
+	frontendAddress := b.frontendAddressProvider.GetFrontendAddress(c)
 
 	tlsConfig, err := b.createTLSConfig(c)
 	if err != nil {
@@ -113,7 +138,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions,
 	}
 
-	connection, err := grpc.Dial(hostPort, dialOpts...)
+	connection, err := grpc.Dial(frontendAddress, dialOpts...)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err
@@ -160,7 +185,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 		} else {
 			hostPort := c.String(FlagAddress)
 			if hostPort == "" {
-				hostPort = localHostPort
+				hostPort = DefaultFrontendAddress
 			}
 			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
 			host, _, _ = net.SplitHostPort(hostPort)
@@ -218,4 +243,15 @@ func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
 		return nil, errors.New("unknown failure constructing cert pool for ca")
 	}
 	return caPool, nil
+}
+
+func (address staticFrontendAddress) GetFrontendAddress(*cli.Context) string {
+	return string(address)
+}
+
+func (d DefaultFrontendAddressProvider) GetFrontendAddress(c *cli.Context) string {
+	if addr := c.String(FlagAddress); addr != "" {
+		return addr
+	}
+	return DefaultFrontendAddress
 }

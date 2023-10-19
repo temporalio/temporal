@@ -56,13 +56,14 @@ type (
 		// Find finds an existing update in this Registry but does not create a
 		// new update if no update is found.
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
+		// TODO: isn't the return `bool` always true when the *Update != nil?
 
 		// ReadOutgoingMessages polls each registered Update for outbound
 		// messages and returns them.
 		ReadOutgoingMessages(startedEventID int64) []*protocolpb.Message
 
 		// TerminateUpdates terminates all existing updates in the registry
-		// and notifies update aPI callers with corresponding error.
+		// and notifies update API callers with corresponding error.
 		TerminateUpdates(ctx context.Context, eventStore EventStore)
 
 		// HasOutgoing returns true if the registry has any Updates that want to
@@ -73,71 +74,71 @@ type (
 		Len() int
 	}
 
-	// UpdateStore represents the update package's requirements for reading updates from the store.
-	UpdateStore interface {
+	// Store represents the update package's requirements for reading updates from the store.
+	Store interface {
 		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 	}
 
-	RegistryImpl struct {
+	registry struct {
 		mu              sync.RWMutex
 		updates         map[string]*Update
-		getStoreFn      func() UpdateStore
+		getStoreFn      func() Store
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
 		completedCount  int
 	}
 
-	regOpt func(*RegistryImpl)
+	Option func(*registry)
 )
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // updates that a Registry instance will allow.
-func WithInFlightLimit(f func() int) regOpt {
-	return func(r *RegistryImpl) {
+func WithInFlightLimit(f func() int) Option {
+	return func(r *registry) {
 		r.maxInFlight = f
 	}
 }
 
 // WithTotalLimit provides an optional limit to the total number of updates for workflow.
-func WithTotalLimit(f func() int) regOpt {
-	return func(r *RegistryImpl) {
+func WithTotalLimit(f func() int) Option {
+	return func(r *registry) {
 		r.maxTotal = f
 	}
 }
 
 // WithLogger sets the log.Logger to be used by an UpdateRegistry and its
 // Updates.
-func WithLogger(l log.Logger) regOpt {
-	return func(r *RegistryImpl) {
+func WithLogger(l log.Logger) Option {
+	return func(r *registry) {
 		r.instrumentation.log = l
 	}
 }
 
 // WithMetrics sets the metrics.Handler to be used by an UpdateRegistry and its
 // Updates.
-func WithMetrics(m metrics.Handler) regOpt {
-	return func(r *RegistryImpl) {
+func WithMetrics(m metrics.Handler) Option {
+	return func(r *registry) {
 		r.instrumentation.metrics = m
 	}
 }
 
 // WithTracerProvider sets the trace.TracerProvider (and by extension the
 // trace.Tracer) to be used by an UpdateRegistry and its Updates.
-func WithTracerProvider(t trace.TracerProvider) regOpt {
-	return func(r *RegistryImpl) {
+func WithTracerProvider(t trace.TracerProvider) Option {
+	return func(r *registry) {
 		r.instrumentation.tracer = t.Tracer(libraryName)
 	}
 }
 
-var _ Registry = (*RegistryImpl)(nil)
+var _ Registry = (*registry)(nil)
 
 func NewRegistry(
-	getStoreFn func() UpdateStore,
-	opts ...regOpt,
-) *RegistryImpl {
-	r := &RegistryImpl{
+	getStoreFn func() Store,
+	opts ...Option,
+) Registry {
+	r := &registry{
 		updates:         make(map[string]*Update),
 		getStoreFn:      getStoreFn,
 		instrumentation: noopInstrumentation,
@@ -165,7 +166,7 @@ func NewRegistry(
 	return r
 }
 
-func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
+func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if upd, found := r.findLocked(ctx, id); found {
@@ -179,19 +180,19 @@ func (r *RegistryImpl) FindOrCreate(ctx context.Context, id string) (*Update, bo
 	return upd, false, nil
 }
 
-func (r *RegistryImpl) Find(ctx context.Context, id string) (*Update, bool) {
+func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.findLocked(ctx, id)
 }
 
-func (r *RegistryImpl) TerminateUpdates(_ context.Context, _ EventStore) {
+func (r *registry) TerminateUpdates(_ context.Context, _ EventStore) {
 	// TODO (alex-update): implement
 	// This method is not implemented and update API callers will just timeout.
 	// In future, it should remove all existing updates and notify callers with better error.
 }
 
-func (r *RegistryImpl) HasOutgoing() bool {
+func (r *registry) HasOutgoing() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
@@ -202,7 +203,7 @@ func (r *RegistryImpl) HasOutgoing() bool {
 	return false
 }
 
-func (r *RegistryImpl) ReadOutgoingMessages(
+func (r *registry) ReadOutgoingMessages(
 	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
 	r.mu.RLock()
@@ -224,13 +225,13 @@ func (r *RegistryImpl) ReadOutgoingMessages(
 	return out
 }
 
-func (r *RegistryImpl) Len() int {
+func (r *registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.updates)
 }
 
-func (r *RegistryImpl) remover(id string) updateOpt {
+func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
 			r.mu.Lock()
@@ -241,7 +242,7 @@ func (r *RegistryImpl) remover(id string) updateOpt {
 	)
 }
 
-func (r *RegistryImpl) admit(ctx context.Context) error {
+func (r *registry) admit(ctx context.Context) error {
 	if len(r.updates) >= r.maxInFlight() {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
@@ -258,8 +259,7 @@ func (r *RegistryImpl) admit(ctx context.Context) error {
 	return nil
 }
 
-func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool) {
-
+func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 	if upd, ok := r.updates[id]; ok {
 		return upd, true
 	}
@@ -274,7 +274,7 @@ func (r *RegistryImpl) findLocked(ctx context.Context, id string) (*Update, bool
 		return nil, false
 	}
 
-	// Other errors goes to the future of completed update because it means, that update exists, was found,
+	// Other errors go to the future of completed update because it means, that update exists, was found,
 	// but there is something broken in it.
 
 	// Completed, create the Update object but do not add to registry.

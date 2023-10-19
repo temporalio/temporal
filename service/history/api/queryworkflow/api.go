@@ -78,6 +78,7 @@ func Invoke(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return nil, err

@@ -192,7 +192,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTransfer: persistenceState,
+				int32(tasks.CategoryIDTransfer): persistenceState,
 			},
 		},
 		s.config,
@@ -253,7 +253,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreFailed() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTransfer: persistenceState,
+				int32(tasks.CategoryIDTransfer): persistenceState,
 			},
 		},
 		s.config,
@@ -331,7 +331,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTimer: persistenceState,
+				int32(tasks.CategoryIDTimer): persistenceState,
 			},
 		},
 		s.config,
@@ -376,7 +376,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTimer: persistenceState,
+				int32(tasks.CategoryIDTimer): persistenceState,
 			},
 		},
 		s.config,
@@ -413,7 +413,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -447,7 +447,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTimer: persistenceState,
+				int32(tasks.CategoryIDTimer): persistenceState,
 			},
 		},
 		s.config,
@@ -469,7 +469,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 		mockShard.Resource.ExecutionMgr.EXPECT().UpdateHistoryTaskReaderProgress(gomock.Any(), gomock.Any()).Times(len(readerScopes)),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -494,7 +494,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTimer: persistenceState,
+				int32(tasks.CategoryIDTimer): persistenceState,
 			},
 		},
 		s.config,
@@ -530,7 +530,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 		).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(persistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -569,7 +569,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 			ShardId: 0,
 			RangeId: 10,
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTimer: initialPersistenceState,
+				int32(tasks.CategoryIDTimer): initialPersistenceState,
 			},
 		},
 		s.config,
@@ -593,7 +593,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveSlices() {
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1),
 		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *persistence.UpdateShardRequest) error {
-				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				s.QueueStateEqual(expectedPersistenceState, request.ShardInfo.QueueStates[int32(tasks.CategoryIDTimer)])
 				return nil
 			},
 		).Times(1),
@@ -627,7 +627,7 @@ func (s *queueBaseSuite) TestUpdateReaderProgress() {
 			RangeId: 10,
 			Owner:   "test-shard-owner",
 			QueueStates: map[int32]*persistencespb.QueueState{
-				tasks.CategoryIDTransfer: persistenceState,
+				int32(tasks.CategoryIDTransfer): persistenceState,
 			},
 		},
 		s.config,

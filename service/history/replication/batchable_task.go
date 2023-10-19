@@ -40,8 +40,8 @@ import (
 type (
 	BatchableTask interface {
 		TrackableExecutableTask
-		// BatchWith task and return a new BatchableTask
-		BatchWith(task BatchableTask) (TrackableExecutableTask, error)
+		// BatchWith task and return a new TrackableExecutableTask
+		BatchWith(task BatchableTask) (TrackableExecutableTask, bool)
 		CanBatch() bool
 		// MarkUnbatchable will mark current task not batchable, so CanBatch() will return false
 		MarkUnbatchable()
@@ -89,14 +89,16 @@ func (w *batchedTask) MarkPoisonPill() error {
 }
 
 func (w *batchedTask) Ack() {
-	// TODO: emit metrics
+	w.metricsHandler.Counter(metrics.BatchableTaskBatchCount.GetMetricName()).Record(
+		int64(len(w.individualTasks)),
+	)
 	w.callIndividual(TrackableExecutableTask.Ack)
 }
 
 func (w *batchedTask) Execute() error {
 	w.lock.Lock()
-	defer w.lock.Unlock()
 	w.state = batchStateClose
+	w.lock.Unlock()
 	return w.batchedTask.Execute()
 }
 
@@ -109,7 +111,12 @@ func (w *batchedTask) IsRetryableError(err error) bool {
 }
 
 func (w *batchedTask) RetryPolicy() backoff.RetryPolicy {
-	return w.batchedTask.RetryPolicy()
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if len(w.individualTasks) == 1 {
+		return w.batchedTask.RetryPolicy()
+	}
+	return backoff.DisabledRetryPolicy
 }
 
 func (w *batchedTask) Abort() {
@@ -172,9 +179,8 @@ func (w *batchedTask) AddTask(incomingTask TrackableExecutableTask) bool {
 		return false
 	}
 
-	newBatchedTask, err := currentBatchableTask.BatchWith(incomingBatchableTask)
-	if err != nil {
-		w.logger.Info("Failed to batch incomingTask", tag.Error(err))
+	newBatchedTask, success := currentBatchableTask.BatchWith(incomingBatchableTask)
+	if !success {
 		return false
 	}
 	w.batchedTask = newBatchedTask

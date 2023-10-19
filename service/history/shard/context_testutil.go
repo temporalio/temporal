@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type ContextTest struct {
@@ -107,10 +108,11 @@ func NewTestContext(
 		payloadSerializer:       resourceTest.GetPayloadSerializer(),
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
-
-		ioSemaphore: semaphore.NewWeighted(1),
+		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
+		ioSemaphore:             semaphore.NewWeighted(1),
 	}
 	shard.taskKeyManager = newTaskKeyManager(
+		shard.taskCategoryRegistry,
 		shard.timeSource,
 		config,
 		shard.GetLogger(),

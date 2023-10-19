@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -51,11 +50,9 @@ func TestConditionVariableSuite(t *testing.T) {
 
 func (s *conditionVariableSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *conditionVariableSuite) TearDownSuite() {
-
 }
 
 func (s *conditionVariableSuite) SetupTest() {
