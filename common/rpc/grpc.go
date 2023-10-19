@@ -160,8 +160,7 @@ func FrontendErrorInterceptor(
 	resp, err := handler(ctx, req)
 
 	// mask some internal errors at frontend
-	switch err.(type) {
-	case *serviceerrors.ShardOwnershipLost:
+	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
 		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
 	}
 	return resp, serviceerror.ToStatus(err).Err()
