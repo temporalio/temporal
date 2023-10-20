@@ -44,10 +44,6 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
 )
 
-var activityWorkerConcurrencyDefaults = map[string]any{
-	"MaxConcurrentActivityExecutionSize": 4,
-}
-
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
@@ -78,7 +74,7 @@ func newComponent(
 		atWorkerCfg: workercommon.NewActivityWorkerConcurrencyConfig(
 			params.dc,
 			dynamicconfig.WorkerDeleteNamespaceActivityConcurrencyConfig,
-			activityWorkerConcurrencyDefaults,
+			map[string]any{},
 		),
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,
