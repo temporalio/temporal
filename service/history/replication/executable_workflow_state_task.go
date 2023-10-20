@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -175,16 +174,12 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 	}
 
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	req := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardContext.GetShardID(),
-		SourceClusterName: e.ExecutableTask.SourceClusterName(),
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId: e.NamespaceID,
-			WorkflowId:  e.WorkflowID,
-			RunId:       e.RunID,
-			TaskId:      e.ExecutableTask.TaskID(),
-			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		},
+	taskInfo := &persistencespb.ReplicationTaskInfo{
+		NamespaceId: e.NamespaceID,
+		WorkflowId:  e.WorkflowID,
+		RunId:       e.RunID,
+		TaskId:      e.ExecutableTask.TaskID(),
+		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 	}
 
 	e.Logger.Error("enqueue workflow state replication task to DLQ",
@@ -198,5 +193,9 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.NamespaceID)
 	defer cancel()
 
-	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+	return e.DLQWriter.WriteTaskToDLQ(ctx, WriteRequest{
+		ShardContext:        shardContext,
+		SourceCluster:       e.ExecutableTask.SourceClusterName(),
+		ReplicationTaskInfo: taskInfo,
+	})
 }

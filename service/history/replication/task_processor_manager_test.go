@@ -130,6 +130,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 		func(params TaskExecutorParams) TaskExecutor {
 			return s.mockReplicationTaskExecutor
 		},
+		NewExecutionManagerDLQWriter(),
 	)
 }
 

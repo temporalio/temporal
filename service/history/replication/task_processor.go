@@ -86,6 +86,7 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		replicationTaskExecutor TaskExecutor
+		dlqWriter               DLQWriter
 
 		rateLimiter quotas.RateLimiter
 
@@ -119,6 +120,7 @@ func NewTaskProcessor(
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
+	dlqWriter DLQWriter,
 ) TaskProcessor {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
@@ -145,6 +147,7 @@ func NewTaskProcessor(
 		metricsHandler:          metricsHandler,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
+		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
@@ -368,7 +371,11 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())))
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(ctx, request)
+		err := p.dlqWriter.WriteTaskToDLQ(ctx, WriteRequest{
+			ShardContext:        p.shard,
+			SourceCluster:       request.SourceClusterName,
+			ReplicationTaskInfo: request.TaskInfo,
+		})
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			p.metricsHandler.Counter(metrics.ReplicationDLQFailed.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationTaskFetcherScope))

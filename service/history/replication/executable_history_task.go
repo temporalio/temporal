@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -225,19 +224,15 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	}
 
 	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	req := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardContext.GetShardID(),
-		SourceClusterName: e.ExecutableTask.SourceClusterName(),
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:  e.NamespaceID,
-			WorkflowId:   e.WorkflowID,
-			RunId:        e.RunID,
-			TaskId:       e.ExecutableTask.TaskID(),
-			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			FirstEventId: events[0].GetEventId(),
-			NextEventId:  events[len(events)-1].GetEventId() + 1,
-			Version:      events[0].GetVersion(),
-		},
+	taskInfo := &persistencespb.ReplicationTaskInfo{
+		NamespaceId:  e.NamespaceID,
+		WorkflowId:   e.WorkflowID,
+		RunId:        e.RunID,
+		TaskId:       e.ExecutableTask.TaskID(),
+		TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+		FirstEventId: events[0].GetEventId(),
+		NextEventId:  events[len(events)-1].GetEventId() + 1,
+		Version:      events[0].GetVersion(),
 	}
 
 	e.Logger.Error("enqueue history replication task to DLQ",
@@ -251,7 +246,11 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.NamespaceID)
 	defer cancel()
 
-	return shardContext.GetExecutionManager().PutReplicationTaskToDLQ(ctx, req)
+	return e.DLQWriter.WriteTaskToDLQ(ctx, WriteRequest{
+		ShardContext:        shardContext,
+		SourceCluster:       e.SourceClusterName(),
+		ReplicationTaskInfo: taskInfo,
+	})
 }
 
 func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {

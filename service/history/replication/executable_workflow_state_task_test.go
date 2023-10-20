@@ -122,6 +122,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			DLQWriter:               NewExecutionManagerDLQWriter(),
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
