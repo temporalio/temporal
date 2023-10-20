@@ -100,7 +100,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	for iterator.HasNext() && remainingMessageCount > 0 {
 		item, err := iterator.Next()
 		if err != nil {
-			return fmt.Errorf("unable to read dlq message. Last read message id: %v", lastReadMessageID)
+			return fmt.Errorf("unable to read dlq message. Last read message id: %v, Error: %v", lastReadMessageID, err)
 		}
 
 		task := item.(*repication.ReplicationTask)
