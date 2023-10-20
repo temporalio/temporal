@@ -56,7 +56,7 @@ type (
 	}
 	componentParams struct {
 		fx.In
-		dc                *dynamicconfig.Collection
+		DynamicCollection *dynamicconfig.Collection
 		VisibilityManager manager.VisibilityManager
 		MetadataManager   persistence.MetadataManager
 		HistoryClient     resource.HistoryClient
@@ -72,7 +72,7 @@ func newComponent(
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
 		atWorkerCfg: workercommon.NewActivityWorkerConcurrencyConfig(
-			params.dc,
+			params.DynamicCollection,
 			dynamicconfig.WorkerDeleteNamespaceActivityLimitsConfig,
 			map[string]any{},
 		),
