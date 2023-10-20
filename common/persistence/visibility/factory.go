@@ -61,6 +61,8 @@ func NewManager(
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityCountGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -77,6 +79,8 @@ func NewManager(
 		operatorRPSRatio,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableCountGroupByAnySA,
+		visibilityCountGroupByMaxGroups,
 		metricsHandler,
 		logger,
 	)
@@ -100,6 +104,8 @@ func NewManager(
 		operatorRPSRatio,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableCountGroupByAnySA,
+		visibilityCountGroupByMaxGroups,
 		metricsHandler,
 		logger,
 	)
@@ -190,6 +196,8 @@ func newVisibilityManagerFromDataStoreConfig(
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityCountGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -203,6 +211,8 @@ func newVisibilityManagerFromDataStoreConfig(
 		searchAttributesMapperProvider,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableCountGroupByAnySA,
+		visibilityCountGroupByMaxGroups,
 		metricsHandler,
 		logger,
 	)
@@ -233,6 +243,8 @@ func newVisibilityStoreFromDataStoreConfig(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityCountGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -249,6 +261,8 @@ func newVisibilityStoreFromDataStoreConfig(
 				persistenceResolver,
 				searchAttributesProvider,
 				searchAttributesMapperProvider,
+				visibilityEnableCountGroupByAnySA,
+				visibilityCountGroupByMaxGroups,
 				logger,
 			)
 		default:
@@ -265,6 +279,8 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesMapperProvider,
 			visibilityDisableOrderByClause,
 			visibilityEnableManualPagination,
+			visibilityEnableCountGroupByAnySA,
+			visibilityCountGroupByMaxGroups,
 			metricsHandler,
 			logger,
 		)
@@ -314,6 +330,8 @@ func newElasticsearchVisibilityStore(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityCountGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) store.VisibilityStore {
@@ -330,7 +348,7 @@ func newElasticsearchVisibilityStore(
 		esProcessor.Start()
 		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
 	}
-	s := elasticsearch.NewVisibilityStore(
+	return elasticsearch.NewVisibilityStore(
 		esClient,
 		defaultIndexName,
 		searchAttributesProvider,
@@ -339,6 +357,8 @@ func newElasticsearchVisibilityStore(
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
-		metricsHandler)
-	return s
+		visibilityEnableCountGroupByAnySA,
+		visibilityCountGroupByMaxGroups,
+		metricsHandler,
+	)
 }

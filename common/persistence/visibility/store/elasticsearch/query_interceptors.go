@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -44,6 +45,8 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
+
+		enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 	valuesInterceptor struct{}
 )
@@ -53,12 +56,14 @@ func newNameInterceptor(
 	index string,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespace,
 		index:                          index,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		enableCountGroupByAnySA:        enableCountGroupByAnySA,
 	}
 }
 
@@ -100,11 +105,13 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != searchattribute.ExecutionStatus {
-			return "", query.NewConverterError(
-				"'group by' clause is only supported for %s search attribute",
-				searchattribute.ExecutionStatus,
-			)
+		if !ni.enableCountGroupByAnySA(ni.namespace.String()) {
+			if fieldName != searchattribute.ExecutionStatus {
+				return "", query.NewConverterError(
+					"'group by' clause is only supported for %s search attribute",
+					searchattribute.ExecutionStatus,
+				)
+			}
 		}
 	}
 

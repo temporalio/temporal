@@ -81,23 +81,6 @@ func (node *jsonOverlapsExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("json_overlaps(%v, %v)", node.JSONDoc1, node.JSONDoc2)
 }
 
-func newMySQLQueryConverter(
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	return newQueryConverterInternal(
-		&mysqlQueryConverter{},
-		namespaceName,
-		namespaceID,
-		saTypeMap,
-		saMapper,
-		queryString,
-	)
-}
-
 func (c *mysqlQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
 }
@@ -276,6 +259,7 @@ func (c *mysqlQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
+	limit int,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -301,11 +285,13 @@ func (c *mysqlQueryConverter) buildCountStmt(
 		LEFT JOIN custom_search_attributes
 		USING (%s, %s)
 		WHERE %s
-		%s`,
+		%s
+		LIMIT %d`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
 		searchattribute.GetSqlDbColName(searchattribute.NamespaceID),
 		searchattribute.GetSqlDbColName(searchattribute.RunID),
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
+		limit,
 	), queryArgs
 }

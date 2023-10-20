@@ -68,6 +68,10 @@ const (
 	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
 	// VisibilityEnableManualPagination is the config to enable manual pagination for Elasticsearch
 	VisibilityEnableManualPagination = "system.visibilityEnableManualPagination"
+	// VisibilityEnableCountGroupByAnySA enable count group by any search attribute
+	VisibilityEnableCountGroupByAnySA = "system.visibilityEnableCountGroupByAnySA"
+	// VisibilityCountGroupByMaxGroups limits maximum number of groups in count group by query
+	VisibilityCountGroupByMaxGroups = "system.visibilityCountGroupByMaxGroups"
 
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"

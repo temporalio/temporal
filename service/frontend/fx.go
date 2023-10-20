@@ -455,6 +455,8 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableCountGroupByAnySA,
+		serviceConfig.VisibilityCountGroupByMaxGroups,
 		metricsHandler,
 		logger,
 	)

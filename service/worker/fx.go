@@ -150,6 +150,8 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableCountGroupByAnySA,
+		serviceConfig.VisibilityCountGroupByMaxGroups,
 		metricsHandler,
 		logger,
 	)

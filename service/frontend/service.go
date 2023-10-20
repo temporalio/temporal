@@ -69,6 +69,8 @@ type Config struct {
 	EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityCountGroupByMaxGroups   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	HistoryMaxPageSize                                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                                          dynamicconfig.IntPropertyFn
@@ -211,6 +213,8 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+		VisibilityEnableCountGroupByAnySA: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableCountGroupByAnySA, false),
+		VisibilityCountGroupByMaxGroups:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VisibilityCountGroupByMaxGroups, 100),
 
 		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),

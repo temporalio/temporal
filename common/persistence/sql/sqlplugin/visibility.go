@@ -197,6 +197,10 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 			)
 		}
 	default:
+		// make sure text types (Keyword, Text) are strings instead of []byte
+		if v, isBytes := value.([]byte); isBytes {
+			return string(v), nil
+		}
 		return value, nil
 	}
 }
