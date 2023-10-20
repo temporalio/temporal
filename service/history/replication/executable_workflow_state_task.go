@@ -193,9 +193,5 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.NamespaceID)
 	defer cancel()
 
-	return e.DLQWriter.WriteTaskToDLQ(ctx, WriteRequest{
-		ShardContext:        shardContext,
-		SourceCluster:       e.ExecutableTask.SourceClusterName(),
-		ReplicationTaskInfo: taskInfo,
-	})
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }

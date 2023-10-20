@@ -246,11 +246,7 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.NamespaceID)
 	defer cancel()
 
-	return e.DLQWriter.WriteTaskToDLQ(ctx, WriteRequest{
-		ShardContext:        shardContext,
-		SourceCluster:       e.SourceClusterName(),
-		ReplicationTaskInfo: taskInfo,
-	})
+	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
 func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {

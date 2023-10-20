@@ -27,6 +27,7 @@ package replication
 import (
 	"context"
 
+	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
@@ -55,6 +56,8 @@ var Module = fx.Provide(
 	ndcHistoryResenderProvider,
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
+	dlqWriterAdapterProvider,
+	newDLQWriterToggle,
 )
 
 func eagerNamespaceRefresherProvider(
@@ -176,4 +179,12 @@ func ndcHistoryResenderProvider(
 		config.StandbyTaskReReplicationContextTimeout,
 		logger,
 	)
+}
+
+func dlqWriterAdapterProvider(
+	dlqWriter *queues.DLQWriter,
+	taskSerializer serialization.Serializer,
+	clusterMetadata cluster.Metadata,
+) *DLQWriterAdapter {
+	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
 }
