@@ -58,8 +58,8 @@ type (
 		Options sdkworker.Options
 	}
 
-	ActivityWorkerConcurrencyConfig struct {
-		// copy of relevant remote activity concurrency controls from sdkworker.Options
+	ActivityWorkerLimitsConfig struct {
+		// copy of relevant remote activity controls from sdkworker.Options
 		MaxConcurrentActivityExecutionSize int
 		TaskQueueActivitiesPerSecond       float64
 		WorkerActivitiesPerSecond          float64

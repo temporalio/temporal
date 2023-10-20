@@ -30,15 +30,15 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// NewActivityWorkerConcurrencyConfig constructs an ActivityWorkerConcurrencyConfig from the map of values identified
+// NewActivityWorkerConcurrencyConfig constructs an ActivityWorkerLimitsConfig from the map of values identified
 // by key in the dynamic collection. Any errors are ignored and 0 values will be returned instead.
 func NewActivityWorkerConcurrencyConfig(
 	dc *dynamicconfig.Collection,
 	key dynamicconfig.Key,
 	defaults map[string]any,
-) ActivityWorkerConcurrencyConfig {
+) ActivityWorkerLimitsConfig {
 	dcOptions := dc.GetMapProperty(key, defaults)()
-	var config ActivityWorkerConcurrencyConfig
+	var config ActivityWorkerLimitsConfig
 	b, err := json.Marshal(dcOptions)
 	if err != nil {
 		return config
