@@ -289,19 +289,20 @@ func (s *TaskSerializer) deserializeReplicationTasks(
 	if err != nil {
 		return nil, err
 	}
-	var replication tasks.Task
+	return s.ParseReplicationTask(replicationTask)
+}
+
+func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error) {
 	switch replicationTask.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		replication = s.replicationActivityTaskFromProto(replicationTask)
+		return s.replicationActivityTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		replication = s.replicationHistoryTaskFromProto(replicationTask)
+		return s.replicationHistoryTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
-		replication = s.replicationSyncWorkflowStateTaskFromProto(replicationTask)
+		return s.replicationSyncWorkflowStateTaskFromProto(replicationTask), nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
-
-	return replication, nil
 }
 
 func (s *TaskSerializer) serializeArchivalTask(

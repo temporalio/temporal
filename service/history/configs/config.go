@@ -40,6 +40,7 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
+	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
 	RPS                                   dynamicconfig.IntPropertyFn
 	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
@@ -333,6 +334,7 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
+		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),

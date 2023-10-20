@@ -80,6 +80,7 @@ type (
 		StoreType         string                 `yaml:"-"`
 		SchemaDir         string                 `yaml:"-"`
 		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
+		Logger            log.Logger             `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -139,7 +140,10 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewTestLogger()
+	logger := options.Logger
+	if logger == nil {
+		logger = log.NewTestLogger()
+	}
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
