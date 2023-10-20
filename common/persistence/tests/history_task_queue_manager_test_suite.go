@@ -112,7 +112,7 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 		t.Parallel()
 		testHistoryTaskQueueManagerCreateQueueErr(t, queue)
 	})
-	t.Run("TestHistoryTaskQueueManagerErrDeserializeTask", func(t *testing.T) {
+	t.Run("TestHistoryTQMErrDeserializeTask", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue, historyTaskQueueManager)
 	})
@@ -282,12 +282,13 @@ func enqueueAndDeserializeBlob(
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueKey := persistencetest.GetQueueKey(t)
+	queueName := queueKey.GetQueueName()
+
 	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
 	})
 	require.NoError(t, err)
-	queueName := queueKey.GetQueueName()
 	historyTask := persistencespb.HistoryTask{
 		ShardId: 1,
 		Blob:    blob,

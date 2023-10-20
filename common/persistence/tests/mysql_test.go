@@ -621,9 +621,5 @@ func TestMySQLClosedConnectionError(t *testing.T) {
 func TestMySQLQueueV2(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	t.Cleanup(tearDown)
-
-	t.Run("RunQueueV2TestSuiteForSQL", func(t *testing.T) {
-		t.Parallel()
-		RunQueueV2TestSuiteForSQL(t, testData.Factory)
-	})
+	RunQueueV2TestSuiteForSQL(t, testData.Factory)
 }

@@ -27,6 +27,8 @@ package persistence
 import (
 	"fmt"
 
+	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -54,22 +56,88 @@ func GetNextPageTokenForQueueV2(result []QueueV2Message) []byte {
 	return append([]byte{pageTokenPrefixByte}, b...)
 }
 
-func GetMinMessageIDForQueueV2(request *InternalReadMessagesRequest) (int64, error) {
-	// TODO: start from the ack level of the queue partition instead of the first message ID when there is no token.
-	if len(request.NextPageToken) == 0 {
-		return FirstQueueMessageID, nil
+func GetMinMessageIDToReadForQueueV2(
+	queueType QueueV2Type,
+	queueName string,
+	nextPageToken []byte,
+	queue *persistencespb.Queue,
+) (int64, error) {
+	if len(nextPageToken) == 0 {
+		partition, err := GetPartitionForQueueV2(queueType, queueName, queue)
+		if err != nil {
+			return 0, err
+		}
+		return partition.MinMessageId, nil
 	}
 	var token persistencespb.ReadQueueMessagesNextPageToken
 
 	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
-	err := token.Unmarshal(request.NextPageToken[1:])
+	err := token.Unmarshal(nextPageToken[1:])
 	if err != nil {
 		return 0, fmt.Errorf(
 			"%w: %q: %v",
 			ErrInvalidReadQueueMessagesNextPageToken,
-			request.NextPageToken,
+			nextPageToken,
 			err,
 		)
 	}
 	return token.LastReadMessageId + 1, nil
+}
+
+func GetPartitionForQueueV2(
+	queueType QueueV2Type,
+	queueName string,
+	queue *persistencespb.Queue,
+) (*persistencespb.QueuePartition, error) {
+	// Currently, we only have one partition for each queue. However, that might change in the future. If a queue is
+	// created with more than 1 partition by a server on a future release, and then that server is downgraded, we
+	// will need to handle this case. Since all DLQ tasks are retried infinitely, we just return an error.
+	numPartitions := len(queue.Partitions)
+	if numPartitions != 1 {
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf(
+				"queue without single partition detected. queue with type %v and queueName %v has %d partitions, "+
+					"but this implementation only supports queues with 1 partition. Did you downgrade your Temporal server?",
+				queueType,
+				queueName,
+				numPartitions,
+			),
+		)
+	}
+	partition := queue.Partitions[0]
+	return partition, nil
+}
+
+type DeleteRequest struct {
+	// LastIDToDeleteInclusive represents the maximum message ID that the user wants to delete, inclusive.
+	LastIDToDeleteInclusive int64
+	// ExistingMessageRange represents an inclusive range of the minimum message ID and the maximum message ID in the queue.
+	ExistingMessageRange InclusiveMessageRange
+}
+
+type InclusiveMessageRange struct {
+	MinMessageID int64
+	MaxMessageID int64
+}
+
+type DeleteRange struct {
+	InclusiveMessageRange
+	NewMinMessageID int64
+}
+
+// GetDeleteRange returns the range of messages to delete, and a boolean indicating whether there is any update to be
+// made: meaning either we should delete messages, update the min message ID, or both.
+func GetDeleteRange(request DeleteRequest) (DeleteRange, bool) {
+	if request.LastIDToDeleteInclusive < request.ExistingMessageRange.MinMessageID {
+		// Nothing to delete
+		return DeleteRange{}, false
+	}
+	return DeleteRange{
+		InclusiveMessageRange: InclusiveMessageRange{
+			MinMessageID: request.ExistingMessageRange.MinMessageID,
+			// Never actually delete the last message
+			MaxMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID-1),
+		},
+		NewMinMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID) + 1,
+	}, true
 }
