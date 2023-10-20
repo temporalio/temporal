@@ -74,6 +74,7 @@ type Config struct {
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	EnableHostLevelHistoryCache           dynamicconfig.BoolPropertyFn
 	HistoryShardLevelCacheMaxSize         dynamicconfig.IntPropertyFn
+	EnableAPIGetCurrentRunIDLock          dynamicconfig.BoolPropertyFn
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -165,9 +166,9 @@ type Config struct {
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
+	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
-	// ShardSyncMinInterval the minimal time interval which the shard info should be sync to remote
+	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
 
@@ -363,6 +364,7 @@ func NewConfig(
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
 		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
+		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 
 		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
 		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),

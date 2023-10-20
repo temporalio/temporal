@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
@@ -44,31 +43,18 @@ type (
 	// will be returned (with the expectation that clients will retry). If it succeeds, no error will be returned and
 	// the task can be acked. When the executable is in the failed state, all calls to HandleErr will just return the
 	// error passed in.
-	// TODO: wrap all executables with this
-	// TODO: add metrics and logging to this
 	ExecutableDLQ struct {
 		Executable
-		dlq        DLQ
+		dlqWriter  *DLQWriter
 		timeSource clock.TimeSource
-		// dlqCause is the original error which caused this task to be sent to the DLQ. It is only set once.
-		dlqCause    error
-		clusterName string
-	}
-
-	// DLQ is a dead letter queue that can be used to enqueue tasks that fail to be processed.
-	DLQ interface {
-		CreateQueue(
-			ctx context.Context,
-			request *persistence.CreateQueueRequest,
-		) (*persistence.CreateQueueResponse, error)
-		EnqueueTask(
-			ctx context.Context,
-			request *persistence.EnqueueTaskRequest,
-		) (*persistence.EnqueueTaskResponse, error)
+		// This is the original error which caused this task to be sent to the DLQ. It is only set once.
+		terminalFailure error
+		clusterName     string
 	}
 )
 
 const (
+	// This has to be a relatively short timeout because we don't want to block the task queue processor for too long.
 	sendToDLQTimeout = 3 * time.Second
 )
 
@@ -80,10 +66,15 @@ var (
 )
 
 // NewExecutableDLQ wraps an Executable to ensure that it is sent to the DLQ if it fails terminally.
-func NewExecutableDLQ(executable Executable, dlq DLQ, timeSource clock.TimeSource, clusterName string) *ExecutableDLQ {
+func NewExecutableDLQ(
+	executable Executable,
+	dlq *DLQWriter,
+	timeSource clock.TimeSource,
+	clusterName string,
+) *ExecutableDLQ {
 	return &ExecutableDLQ{
 		Executable:  executable,
-		dlq:         dlq,
+		dlqWriter:   dlq,
 		timeSource:  timeSource,
 		clusterName: clusterName,
 	}
@@ -91,44 +82,33 @@ func NewExecutableDLQ(executable Executable, dlq DLQ, timeSource clock.TimeSourc
 
 // Execute is not thread-safe.
 func (d *ExecutableDLQ) Execute() error {
-	if d.dlqCause == nil {
+	if d.terminalFailure == nil {
 		// This task has not experienced a terminal failure yet, so we should execute it.
-		err := d.Executable.Execute()
-		// TODO: expand on the errors that should be considered terminal
-		if !errors.As(err, new(*serialization.DeserializationError)) &&
-			!errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
-			return err
-		}
-		d.dlqCause = err
-		return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
+		return d.executeNormally()
 	}
 	// This task experienced a terminal failure, so we should try to send it to the DLQ.
-	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
-	ctx, cancel := clock.ContextWithTimeout(ctx, sendToDLQTimeout, d.timeSource)
+	return d.sendToDLQ(context.Background())
+}
+
+func (d *ExecutableDLQ) executeNormally() error {
+	err := d.Executable.Execute()
+	if !d.isTerminalFailure(err) {
+		return err
+	}
+	d.terminalFailure = err
+	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
+}
+
+func (d *ExecutableDLQ) isTerminalFailure(err error) bool {
+	// TODO: expand on the errors that should be considered terminal
+	return errors.As(err, new(*serialization.DeserializationError)) ||
+		errors.As(err, new(*serialization.UnknownEncodingTypeError))
+}
+
+func (d *ExecutableDLQ) sendToDLQ(ctx context.Context) error {
+	// TODO: use clock.ContextWithTimeout here instead
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+	ctx, cancel := context.WithTimeout(ctx, sendToDLQTimeout)
 	defer cancel()
-	task := d.GetTask()
-	queueKey := persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      task.GetCategory(),
-		SourceCluster: d.clusterName,
-		TargetCluster: d.clusterName,
-	}
-	_, err := d.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
-		QueueKey: queueKey,
-	})
-	if err != nil {
-		if !errors.Is(err, persistence.ErrQueueAlreadyExists) {
-			return fmt.Errorf("%w: %v", ErrCreateDLQ, err)
-		}
-	}
-	_, err = d.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     queueKey.QueueType,
-		SourceCluster: queueKey.SourceCluster,
-		TargetCluster: queueKey.TargetCluster,
-		Task:          task,
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
-	}
-	return nil
+	return d.dlqWriter.WriteTaskToDLQ(ctx, d.clusterName, d.clusterName, d.GetTask())
 }

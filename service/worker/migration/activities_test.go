@@ -60,6 +60,7 @@ type activitiesSuite struct {
 	mockNamespaceReplicationQueue *persistence.MockNamespaceReplicationQueue
 	mockNamespaceRegistry         *namespace.MockRegistry
 	mockClientFactory             *client.MockFactory
+	mockClientBean                *client.MockBean
 
 	mockFrontendClient    *workflowservicemock.MockWorkflowServiceClient
 	mockHistoryClient     *historyservicemock.MockHistoryServiceClient
@@ -74,7 +75,7 @@ type activitiesSuite struct {
 const (
 	mockedNamespace   = "test_namespace"
 	mockedNamespaceID = "test_namespace_id"
-	remoteRpcAddress  = "remote"
+	remoteCluster     = "remote_cluster"
 )
 
 var (
@@ -123,7 +124,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockTaskManager = persistence.NewMockTaskManager(s.controller)
 	s.mockNamespaceReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
-	s.mockClientFactory = client.NewMockFactory(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -134,8 +135,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(gomock.Any()).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
-	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(remoteRpcAddress, gomock.Any(), gomock.Any()).
-		Return(s.mockRemoteAdminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(remoteCluster).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).
 		Return(namespace.Name(mockedNamespace), nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespace(gomock.Any()).
@@ -145,6 +145,7 @@ func (s *activitiesSuite) SetupTest() {
 		namespaceRegistry:              s.mockNamespaceRegistry,
 		namespaceReplicationQueue:      s.mockNamespaceReplicationQueue,
 		clientFactory:                  s.mockClientFactory,
+		clientBean:                     s.mockClientBean,
 		taskManager:                    s.mockTaskManager,
 		frontendClient:                 s.mockFrontendClient,
 		historyClient:                  s.mockHistoryClient,
@@ -171,10 +172,10 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 	env, iceptor := s.initEnv()
 
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1, execution2},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1, execution2},
 	}
 
 	// Immediately replicated
@@ -241,10 +242,10 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 	}
 
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1},
 	}
 
 	start := time.Now()
@@ -280,10 +281,10 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 	env, iceptor := s.initEnv()
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1},
 	}
 
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
@@ -316,10 +317,10 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 	env, iceptor := s.initEnv()
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1, execution2},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1, execution2},
 	}
 
 	// Set NextIndex to indicate all executions have been verified. No additional mock is needed.
@@ -336,27 +337,19 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_AlreadyVerified() {
 
 func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1, execution2},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1, execution2},
 	}
 	ctx := context.TODO()
-
-	cachedResults := make(map[int]verifyResult)
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 		Namespace: mockedNamespace,
 		Execution: &execution1,
 	}).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
-	result, err := s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 0)
-	s.NoError(err)
-	s.True(result.isVerified())
-	s.Equal(result, cachedResults[0])
-
-	// Second call should hit cache therefore no mock is needed.
-	result, err = s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 0)
+	result, err := s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, &request.Executions[0])
 	s.NoError(err)
 	s.True(result.isVerified())
 
@@ -371,11 +364,9 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 		Execution:   &execution2,
 	}).Return(&completeState, nil).AnyTimes()
 
-	result, err = s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, cachedResults, 1)
+	result, err = s.a.verifySingleReplicationTask(ctx, &request, mockRemoteAdminClient, &testNamespace, &request.Executions[1])
 	s.NoError(err)
 	s.False(result.isVerified())
-	_, ok := cachedResults[1]
-	s.False(ok)
 }
 
 type executionState int
@@ -393,6 +384,7 @@ func createExecutions(mockClient *adminservicemock.MockAdminServiceClient, state
 		executions = append(executions, execution1)
 	}
 
+Loop:
 	for i := nextIndex; i < len(states); i++ {
 		switch states[i] {
 		case executionFound:
@@ -405,6 +397,7 @@ func createExecutions(mockClient *adminservicemock.MockAdminServiceClient, state
 				Namespace: mockedNamespace,
 				Execution: &execution1,
 			}).Return(nil, serviceerror.NewNotFound("")).Times(1)
+			break Loop
 		case executionErr:
 			mockClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
 				Namespace: mockedNamespace,
@@ -426,9 +419,9 @@ func (m *mockHeartBeatRecorder) hearbeat(details replicationTasksHeartbeatDetail
 
 func (s *activitiesSuite) Test_verifyReplicationTasks() {
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
 	}
 
 	ctx := context.TODO()
@@ -439,7 +432,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 		expectedVerified      bool
 		expectedErr           error
 		expectedNextIndex     int
-		expectedVerifiedIndex int
 	}{
 		{
 			expectedVerified: true,
@@ -451,7 +443,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      true,
 			expectedErr:           nil,
 			expectedNextIndex:     4,
-			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionFound, executionFound},
@@ -459,7 +450,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      true,
 			expectedErr:           nil,
 			expectedNextIndex:     4,
-			expectedVerifiedIndex: 3,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound},
@@ -467,7 +457,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      false,
 			expectedErr:           nil,
 			expectedNextIndex:     2,
-			expectedVerifiedIndex: 1,
 		},
 		{
 			remoteExecutionStates: []executionState{executionFound, executionFound, executionNotfound, executionFound, executionNotfound},
@@ -475,7 +464,6 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			expectedVerified:      false,
 			expectedErr:           nil,
 			expectedNextIndex:     2,
-			expectedVerifiedIndex: 3,
 		},
 	}
 
@@ -494,14 +482,12 @@ func (s *activitiesSuite) Test_verifyReplicationTasks() {
 			CheckPoint: checkPointTime,
 		}
 
-		cachedResults := make(map[int]verifyResult)
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
 		if tc.expectedErr == nil {
 			s.NoError(err)
 		}
 		s.Equal(tc.expectedVerified, verified)
 		s.Equal(tc.expectedNextIndex, details.NextIndex)
-		s.Equal(tc.expectedVerifiedIndex, details.LastVerifiedIndex)
 		s.GreaterOrEqual(len(tc.remoteExecutionStates), details.NextIndex)
 		s.Equal(recorder.lastHeartBeat, details)
 		if details.NextIndex < len(tc.remoteExecutionStates) && tc.remoteExecutionStates[details.NextIndex] == executionNotfound {
@@ -520,10 +506,10 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            createExecutions(mockRemoteAdminClient, []executionState{executionFound, executionFound, executionNotfound, executionFound}, 0),
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        createExecutions(mockRemoteAdminClient, []executionState{executionFound, executionFound, executionNotfound, executionFound}, 0),
 	}
 
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
@@ -538,15 +524,14 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	}
 
 	ctx := context.TODO()
-	cachedResults := make(map[int]verifyResult)
-	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
+	verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
 	s.NoError(err)
 	s.False(verified)
 	// Verify has made progress.
 	s.True(checkPointTime.Before(details.CheckPoint))
-	s.Equal(3, details.LastVerifiedIndex)
+	s.Equal(2, details.NextIndex)
 
-	prevCheckPoint := details.CheckPoint
+	prevDetails := details
 
 	// Mock for one more NotFound call
 	mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), &adminservice.DescribeMutableStateRequest{
@@ -555,19 +540,18 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	// All results should be either NotFound or cached and no progress should be made.
-	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, cachedResults, recorder.hearbeat)
+	verified, err = s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, &testNamespace, recorder.hearbeat)
 	s.NoError(err)
 	s.False(verified)
-	s.Equal(prevCheckPoint, details.CheckPoint)
-	s.Equal(3, details.LastVerifiedIndex)
+	s.Equal(prevDetails, details)
 }
 
 func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 	request := verifyReplicationTasksRequest{
-		Namespace:             mockedNamespace,
-		NamespaceID:           mockedNamespaceID,
-		TargetClusterEndpoint: remoteRpcAddress,
-		Executions:            []commonpb.WorkflowExecution{execution1},
+		Namespace:         mockedNamespace,
+		NamespaceID:       mockedNamespaceID,
+		TargetClusterName: remoteCluster,
+		Executions:        []commonpb.WorkflowExecution{execution1},
 	}
 
 	var tests = []struct {
@@ -622,8 +606,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 
 		details := replicationTasksHeartbeatDetails{}
 		ctx := context.TODO()
-		cachedResults := make(map[int]verifyResult)
-		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns, cachedResults, recorder.hearbeat)
+		verified, err := s.a.verifyReplicationTasks(ctx, &request, &details, mockRemoteAdminClient, ns, recorder.hearbeat)
 		s.NoError(err)
 		s.Equal(tc.verified, verified)
 		s.Equal(recorder.lastHeartBeat, details)

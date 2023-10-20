@@ -80,12 +80,11 @@ type (
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		hostPort               string
 	}
-	// suiteParams contains the variables which are used to configure the test suite via the Option argument to
-	// setupSuite.
-	suiteParams struct {
-		fxOptions map[primitives.ServiceName][]fx.Option
+	// TestClusterParams contains the variables which are used to configure test suites via the Option type.
+	TestClusterParams struct {
+		ServiceOptions map[primitives.ServiceName][]fx.Option
 	}
-	Option func(params *suiteParams)
+	Option func(params *TestClusterParams)
 )
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -100,18 +99,13 @@ type (
 // scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
 // each one.
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) Option {
-	return func(params *suiteParams) {
-		params.fxOptions[serviceName] = append(params.fxOptions[serviceName], options...)
+	return func(params *TestClusterParams) {
+		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
 	}
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
-	params := suiteParams{
-		fxOptions: make(map[primitives.ServiceName][]fx.Option),
-	}
-	for _, opt := range options {
-		opt(&params)
-	}
+	params := ApplyTestClusterParams(options)
 
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
@@ -122,7 +116,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
 	clusterConfig.DynamicConfigOverrides = s.dynamicConfigOverrides
-	clusterConfig.ServiceFxOptions = params.fxOptions
+	clusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
@@ -162,6 +156,16 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	// For tests using SQL visibility, we need to wait for search attributes to be available as part of the ns config
 	// TODO: remove after https://github.com/temporalio/temporal/issues/4017 is resolved
 	time.Sleep(2 * NamespaceCacheRefreshInterval)
+}
+
+func ApplyTestClusterParams(options []Option) TestClusterParams {
+	params := TestClusterParams{
+		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
+	}
+	for _, opt := range options {
+		opt(&params)
+	}
+	return params
 }
 
 // setupLogger sets the Logger for the test suite.

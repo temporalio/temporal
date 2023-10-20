@@ -179,7 +179,7 @@ func (s *dlqSuite) TestTDBG() {
 				"dlq",
 				"--" + tdbg.FlagDLQVersion, "v2",
 				"read",
-				"--" + tdbg.FlagDLQType, strconv.Itoa(int(tasks.CategoryTransfer.ID())),
+				"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 				"--" + tdbg.FlagCluster, sourceCluster,
 				"--" + tdbg.FlagPageSize, "1",
 				"--" + tdbg.FlagMaxMessageCount, tc.maxMessageCount,

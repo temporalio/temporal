@@ -843,6 +843,8 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	// For DeleteWorkflowExecution tests
 	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+
+	client.OverrideValue(dynamicconfig.EnableAPIGetCurrentRunIDLock, true)
 }
 
 func (c *temporalImpl) newRPCFactory(
