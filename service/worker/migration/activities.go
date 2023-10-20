@@ -80,7 +80,6 @@ type (
 		NextIndex                        int
 		CheckPoint                       time.Time
 		LastNotVerifiedWorkflowExecution commonpb.WorkflowExecution
-		LastVerifiedIndex                int
 	}
 
 	verifyStatus int
@@ -625,25 +624,13 @@ func (a *activities) verifySingleReplicationTask(
 	request *verifyReplicationTasksRequest,
 	remoteClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	cachedResults map[int]verifyResult,
-	idx int,
+	we *commonpb.WorkflowExecution,
 ) (result verifyResult, rerr error) {
-	if r, ok := cachedResults[idx]; ok {
-		return r, nil
-	}
-
-	defer func() {
-		if result.isVerified() {
-			cachedResults[idx] = result
-		}
-	}()
-
-	we := request.Executions[idx]
 	s := time.Now()
 	// Check if execution exists on remote cluster
 	_, err := remoteClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
-		Execution: &we,
+		Execution: we,
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.GetMetricName()).Record(time.Since(s))
 
@@ -658,7 +645,7 @@ func (a *activities) verifySingleReplicationTask(
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.GetMetricName()).Record(1)
 		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
-		return a.checkSkipWorkflowExecution(ctx, request, &we, ns)
+		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
 
 	case *serviceerror.NamespaceNotFound:
 		return verifyResult{
@@ -681,14 +668,13 @@ func (a *activities) verifyReplicationTasks(
 	details *replicationTasksHeartbeatDetails,
 	remoteClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	cachedResults map[int]verifyResult,
 	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, error) {
 	start := time.Now()
 	progress := false
 	defer func() {
 		if progress {
-			// Update CheckPoint where there is a progress
+			// Update CheckPoint when there is a progress
 			details.CheckPoint = time.Now()
 		}
 
@@ -697,48 +683,22 @@ func (a *activities) verifyReplicationTasks(
 	}()
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
-		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, cachedResults, details.NextIndex)
+		we := request.Executions[details.NextIndex]
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, &we)
 		if err != nil {
 			return false, err
 		}
 
 		if !r.isVerified() {
-			details.LastNotVerifiedWorkflowExecution = request.Executions[details.NextIndex]
-			break
+			details.LastNotVerifiedWorkflowExecution = we
+			return false, nil
 		}
 
-		details.LastVerifiedIndex = details.NextIndex
 		heartbeat(*details)
 		progress = true
 	}
 
-	if details.NextIndex >= len(request.Executions) {
-		// Done with verification.
-		return true, nil
-	}
-
-	// Look ahead and see if there is any new workflow being replicated on target cluster. If yes, then consider it is a progress.
-	// This is to avoid verifyReplicationTasks from failing due to LastNotFoundWorkflowExecution being slow.
-	for idx := details.NextIndex + 1; idx < len(request.Executions); idx++ {
-		// Cache results don't count for progress.
-		if _, ok := cachedResults[idx]; ok {
-			continue
-		}
-
-		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, cachedResults, idx)
-		if err != nil {
-			return false, err
-		}
-
-		if r.isVerified() {
-			details.LastVerifiedIndex = idx
-			progress = true
-		}
-
-		heartbeat(*details)
-	}
-
-	return false, nil
+	return true, nil
 }
 
 const (
@@ -781,8 +741,6 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		return response, err
 	}
 
-	cachedResults := make(map[int]verifyResult)
-
 	// Verify if replication tasks exist on target cluster. There are several cases where execution was not found on target cluster.
 	//  1. replication lag
 	//  2. Zombie workflow execution
@@ -799,7 +757,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry, cachedResults,
+		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteClient, nsEntry,
 			func(d replicationTasksHeartbeatDetails) {
 				activity.RecordHeartbeat(ctx, d)
 			})
