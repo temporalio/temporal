@@ -140,9 +140,9 @@ func SequentialTaskQueueFactoryProvider(
 ) ctasks.SequentialTaskQueueFactory[TrackableExecutableTask] {
 	return func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		if config.EnableReplicationTaskBatching() {
-			return NewSequentialTaskQueue(task)
+			return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
 		}
-		return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
+		return NewSequentialTaskQueue(task)
 	}
 }
 

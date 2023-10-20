@@ -25,7 +25,6 @@
 package history_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -39,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/configs"
@@ -50,10 +48,6 @@ import (
 )
 
 type (
-	testHistoryTaskQueueManager struct {
-		persistence.HistoryTaskQueueManager
-		requests []*persistence.EnqueueTaskRequest
-	}
 	fakeMetadata struct {
 		cluster.Metadata
 	}
@@ -69,11 +63,11 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 		enableDLQ bool
 	}{
 		{
-			name:      "DLQ enabled",
+			name:      "DLQEnabled",
 			enableDLQ: true,
 		},
 		{
-			name:      "DLQ disabled",
+			name:      "DLQDisabled",
 			enableDLQ: false,
 		},
 	} {
@@ -82,13 +76,13 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 			t.Parallel()
 
 			ctrl := gomock.NewController(t)
-			tqm := &testHistoryTaskQueueManager{}
+			fakeQueueWriter := &queuestest.FakeQueueWriter{}
 			var w queues.ExecutableWrapper
 			fxtest.New(
 				t,
 				fx.Provide(
-					func() persistence.HistoryTaskQueueManager {
-						return tqm
+					func() *queues.DLQWriter {
+						return queues.NewDLQWriter(fakeQueueWriter)
 					},
 					func() *configs.Config {
 						dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]interface{}{
@@ -130,10 +124,10 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 			err = executable.Execute()
 			if tc.enableDLQ {
 				assert.NoError(t, err)
-				assert.Len(t, tqm.requests, 1)
+				assert.Len(t, fakeQueueWriter.EnqueueTaskRequests, 1)
 			} else {
 				assert.ErrorIs(t, err, errTerminal)
-				assert.Empty(t, tqm.requests)
+				assert.Empty(t, fakeQueueWriter.EnqueueTaskRequests)
 			}
 		})
 	}
@@ -141,19 +135,4 @@ func TestNewExecutableDLQWrapper(t *testing.T) {
 
 func (f fakeMetadata) GetCurrentClusterName() string {
 	return "test-cluster-name"
-}
-
-func (t *testHistoryTaskQueueManager) EnqueueTask(
-	_ context.Context,
-	request *persistence.EnqueueTaskRequest,
-) (*persistence.EnqueueTaskResponse, error) {
-	t.requests = append(t.requests, request)
-	return nil, nil
-}
-
-func (t *testHistoryTaskQueueManager) CreateQueue(
-	context.Context,
-	*persistence.CreateQueueRequest,
-) (*persistence.CreateQueueResponse, error) {
-	return nil, nil
 }

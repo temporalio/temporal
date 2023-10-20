@@ -80,7 +80,8 @@ func TestExecutable(t *testing.T, tqm persistence.HistoryTaskQueueManager) {
 			// MySQL connector compare the deadline in the ctx with time.Now().
 			// Updating ts to avoid deadline exceeded error.
 			ts.Update(time.Now())
-			executable = queues.NewExecutableDLQ(executable, tqm, ts, clusterName)
+			dlqWriter := queues.NewDLQWriter(tqm)
+			executable = queues.NewExecutableDLQ(executable, dlqWriter, ts, clusterName)
 			err := executable.Execute()
 			assert.ErrorContains(t, err, tc.err.Error())
 			if tc.shouldDLQ {
