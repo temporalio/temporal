@@ -37,7 +37,7 @@ func NewActivityWorkerConcurrencyConfig(
 	key dynamicconfig.Key,
 	defaults map[string]any,
 ) ActivityWorkerConcurrencyConfig {
-	dcOptions := dc.GetMapProperty(key, defaults)
+	dcOptions := dc.GetMapProperty(key, defaults)()
 	var config ActivityWorkerConcurrencyConfig
 	b, err := json.Marshal(dcOptions)
 	if err != nil {
