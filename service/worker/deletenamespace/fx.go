@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -44,8 +45,18 @@ import (
 )
 
 type (
+	activityWorkerConfig struct {
+		// worker concurrency option changes require a restart to take effect
+		// default to 0 to use SDK-defined defaults
+		maxConcurrentActivityExecutionSize dynamicconfig.IntPropertyFn
+		taskQueueActivitiesPerSecond       dynamicconfig.FloatPropertyFn
+		workerActivitiesPerSecond          dynamicconfig.FloatPropertyFn
+		maxConcurrentActivityTaskPollers   dynamicconfig.IntPropertyFn
+	}
+
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
+		atWorkerCfg       activityWorkerConfig
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     resource.HistoryClient
@@ -54,20 +65,36 @@ type (
 	}
 	componentParams struct {
 		fx.In
-		VisibilityManager manager.VisibilityManager
-		MetadataManager   persistence.MetadataManager
-		HistoryClient     resource.HistoryClient
-		MetricsHandler    metrics.Handler
-		Logger            log.Logger
+		ActivityWorkerConfig activityWorkerConfig
+		VisibilityManager    manager.VisibilityManager
+		MetadataManager      persistence.MetadataManager
+		HistoryClient        resource.HistoryClient
+		MetricsHandler       metrics.Handler
+		Logger               log.Logger
 	}
 )
 
-var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
+var Module = fx.Options(
+	fx.Provide(newActivityWorkerConfig),
+	workercommon.AnnotateWorkerComponentProvider(newComponent),
+)
+
+func newActivityWorkerConfig(
+	dc *dynamicconfig.Collection,
+) activityWorkerConfig {
+	return activityWorkerConfig{
+		maxConcurrentActivityExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerDeleteNamespaceMaxConcurrentActivityExecutionSize, 0),
+		taskQueueActivitiesPerSecond:       dc.GetFloat64Property(dynamicconfig.WorkerDeleteNamespaceTaskQueueActivitiesPerSecond, 1000),
+		workerActivitiesPerSecond:          dc.GetFloat64Property(dynamicconfig.WorkerDeleteNamespaceWorkerActivitiesPerSecond, 0),
+		maxConcurrentActivityTaskPollers:   dc.GetIntProperty(dynamicconfig.WorkerDeleteNamespaceMaxConcurrentActivityTaskPollers, 0),
+	}
+}
 
 func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
+		atWorkerCfg:       params.ActivityWorkerConfig,
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,
 		historyClient:     params.HistoryClient,
@@ -101,7 +128,11 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 	return &workercommon.DedicatedWorkerOptions{
 		TaskQueue: primitives.DeleteNamespaceActivityTQ,
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			BackgroundActivityContext:          headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			MaxConcurrentActivityExecutionSize: wc.atWorkerCfg.maxConcurrentActivityExecutionSize(),
+			TaskQueueActivitiesPerSecond:       wc.atWorkerCfg.taskQueueActivitiesPerSecond(),
+			WorkerActivitiesPerSecond:          wc.atWorkerCfg.workerActivitiesPerSecond(),
+			MaxConcurrentActivityTaskPollers:   wc.atWorkerCfg.maxConcurrentActivityTaskPollers(),
 		},
 	}
 }

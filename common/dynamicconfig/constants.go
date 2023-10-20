@@ -928,4 +928,12 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceMaxConcurrentActivityExecutionSize is the maximum concurrent activity executions the delete namespace activity worker can have
+	WorkerDeleteNamespaceMaxConcurrentActivityExecutionSize = "worker.deleteNamespaceMaxConcurrentActivityExecutionSize"
+	// WorkerDeleteNamespaceTaskQueueActivitiesPerSecond is the limit for concurrent activities on the delete namespace activity task queue
+	WorkerDeleteNamespaceTaskQueueActivitiesPerSecond = "worker.deleteNamespaceTaskQueueActivitiesPerSecond"
+	// WorkerDeleteNamespaceWorkerActivitiesPerSecond is the rate limit on number of activities that can be executed per second per delete namespace activity worker
+	WorkerDeleteNamespaceWorkerActivitiesPerSecond = "worker.deleteNamespaceWorkerActivitiesPerSecond"
+	// WorkerDeleteNamespaceMaxConcurrentActivityTaskPollers is the maximum number of goroutines that will concurrently poll for delete namespace activities
+	WorkerDeleteNamespaceMaxConcurrentActivityTaskPollers = "worker.deleteNamespaceMaxConcurrentActivityTaskPollers"
 )
