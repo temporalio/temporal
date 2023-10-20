@@ -125,7 +125,8 @@ type DeleteRange struct {
 	NewMinMessageID int64
 }
 
-// GetDeleteRange returns the range of messages to delete, and a boolean indicating whether any messages should be deleted.
+// GetDeleteRange returns the range of messages to delete, and a boolean indicating whether there is any update to be
+// made: meaning either we should delete messages, update the min message ID, or both.
 func GetDeleteRange(request DeleteRequest) (DeleteRange, bool) {
 	if request.LastIDToDeleteInclusive < request.ExistingMessageRange.MinMessageID {
 		// Nothing to delete

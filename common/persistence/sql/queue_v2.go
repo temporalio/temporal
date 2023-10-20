@@ -78,7 +78,7 @@ func (q *queueV2) EnqueueMessage(
 	tx, err := q.Db.BeginTx(ctx)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"EnqueueMessage failed for queue with type: %v and name: %v. BeginTx operation failed. error: %v",
+			"EnqueueMessage failed for queue with type: %v and name: %v. BeginTx operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -91,7 +91,7 @@ func (q *queueV2) EnqueueMessage(
 			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get next messageId. error: %v",
+			"EnqueueMessage failed for queue with type: %v and name: %v. failed to get next messageId. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -106,7 +106,7 @@ func (q *queueV2) EnqueueMessage(
 			q.SqlStore.logger.Error("transaction rollback error", tag.Error(rollBackErr))
 		}
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"EnqueueMessage failed for queue with type: %v and name: %v. InsertIntoQueueV2Messages operation failed. error: %v",
+			"EnqueueMessage failed for queue with type: %v and name: %v. InsertIntoQueueV2Messages operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -115,7 +115,7 @@ func (q *queueV2) EnqueueMessage(
 
 	if err := tx.Commit(); err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"EnqueueMessage failed for queue with type: %v and name: %v. commit operation failed. error: %v",
+			"EnqueueMessage failed for queue with type: %v and name: %v. commit operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -154,7 +154,7 @@ func (q *queueV2) ReadMessages(
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"ReadMessages failed for queue with type: %v and name: %v. RangeSelectFromQueueV2Messages operation failed. error %v",
+			"ReadMessages failed for queue with type: %v and name: %v. RangeSelectFromQueueV2Messages operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -231,7 +231,7 @@ func (q *queueV2) CreateQueue(
 	}
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"ReadMessages failed for queue with type: %v and name: %v. InsertIntoQueueV2Metadata operation failed. error %v",
+			"ReadMessages failed for queue with type: %v and name: %v. InsertIntoQueueV2Metadata operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -327,7 +327,7 @@ func (q *queueV2) getQueueMetadata(
 			return nil, persistence.NewQueueNotFoundError(queueType, queueName)
 		}
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("failed to get metadata for queue with type: %v and name: %v. error: %v", queueType, queueName, err),
+			fmt.Sprintf("failed to get metadata for queue with type: %v and name: %v. Error: %v", queueType, queueName, err),
 		)
 	}
 	if metadata.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {

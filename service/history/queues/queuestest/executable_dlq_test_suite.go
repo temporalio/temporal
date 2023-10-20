@@ -77,6 +77,8 @@ func TestExecutable(t *testing.T, tqm persistence.HistoryTaskQueueManager) {
 
 			var executable queues.Executable = NewFakeExecutable(task, tc.err)
 			ts := clock.NewEventTimeSource()
+			// MySQL connector compare the deadline in the ctx with time.Now().
+			// Updating ts to avoid deadline exceeded error.
 			ts.Update(time.Now())
 			executable = queues.NewExecutableDLQ(executable, tqm, ts, clusterName)
 			err := executable.Execute()
