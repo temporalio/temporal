@@ -144,6 +144,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
+		NewExecutionManagerDLQWriter(),
 	).(*taskProcessorImpl)
 }
 
