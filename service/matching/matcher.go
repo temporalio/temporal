@@ -269,8 +269,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	// doesn't succeed, try both local match and remote match
 	select {
 	case tm.taskC <- task:
-		mh := tm.metricsHandler.WithTags(metrics.StringTag("source", task.source.String()), metrics.StringTag("forwarded", "false"))
-		mh.Timer(metrics.TaskDispatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(*task.event.Data.CreateTime))
+		tm.emitDispatchLatency(task, false)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -358,6 +357,10 @@ forLoop:
 }
 
 func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+
 	source := task.source
 	if source == enumsspb.TASK_SOURCE_UNSPECIFIED {
 		// history may not specify the source
@@ -373,17 +376,17 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 
 // Poll blocks until a task is found or context deadline is exceeded
 // On success, the returned task could be a query task or a regular task
-// forwarded indicates if this poll was further forwarded to a parent partition
 // Returns errNoTasks when context deadline is exceeded
-func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (task *internalTask, forwarded bool, err error) {
-	return tm.poll(ctx, pollMetadata, false)
+func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	task, _, err := tm.poll(ctx, pollMetadata, false)
+	return task, err
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
-// forwarded indicates if this poll was further forwarded to a parent partition
 // Returns errNoTasks when context deadline is exceeded
-func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (task *internalTask, forwarded bool, err error) {
-	return tm.poll(ctx, pollMetadata, true)
+func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	task, _, err := tm.poll(ctx, pollMetadata, true)
+	return task, err
 }
 
 // UpdateRatelimit updates the task dispatch rate
@@ -422,7 +425,7 @@ func (tm *TaskMatcher) Rate() float64 {
 
 func (tm *TaskMatcher) poll(
 	ctx context.Context, pollMetadata *pollMetadata, queryOnly bool,
-) (task *internalTask, forwarded bool, err error) {
+) (task *internalTask, forwardedPoll bool, err error) {
 	taskC, queryTaskC := tm.taskC, tm.queryTaskC
 	if queryOnly {
 		taskC = nil
@@ -431,13 +434,17 @@ func (tm *TaskMatcher) poll(
 	start := time.Now()
 	tm.lastPoller.Store(start.UnixNano())
 
-	if pollMetadata.forwardedFrom == "" {
-		// Only recording for original polls
-		defer func() {
+	defer func() {
+		if pollMetadata.forwardedFrom == "" {
+			// Only recording for original polls
 			tm.metricsHandler.Timer(metrics.PollLatencyPerTaskQueue.GetMetricName()).Record(
-				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(forwarded)))
-		}()
-	}
+				time.Since(start), metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)))
+		}
+
+		if err == nil {
+			tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom, forwardedPoll)
+		}
+	}()
 
 	// We want to effectively do a prioritized select, but Go select is random
 	// if multiple cases are ready, so split into multiple selects.
@@ -539,6 +546,10 @@ func (tm *TaskMatcher) isBacklogNegligible() bool {
 }
 
 func (tm *TaskMatcher) registerBacklogTask(task *internalTask) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
@@ -547,6 +558,10 @@ func (tm *TaskMatcher) registerBacklogTask(task *internalTask) {
 }
 
 func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
@@ -575,4 +590,28 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 	}
 
 	return time.Since(time.Unix(0, oldest))
+}
+
+func (tm *TaskMatcher) emitForwardedSourceStats(
+	isTaskForwarded bool,
+	pollForwardedSource string,
+	forwardedPoll bool,
+) {
+	if forwardedPoll {
+		// This means we forwarded the poll to another partition. Skipping this to prevent duplicate emits.
+		// Only the partition in which the match happened should emit this metric.
+		return
+	}
+
+	isPollForwarded := len(pollForwardedSource) > 0
+	switch {
+	case isTaskForwarded && isPollForwarded:
+		tm.metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	case isTaskForwarded:
+		tm.metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	case isPollForwarded:
+		tm.metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	default:
+		tm.metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
+	}
 }

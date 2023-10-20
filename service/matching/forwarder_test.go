@@ -35,8 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -79,9 +77,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 
 func (t *ForwarderTestSuite) TestForwardTaskError() {
 	task := newInternalTask(&persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{
-			CreateTime: timestamp.TimePtr(time.Now().UTC()),
-		},
+		Data: &persistencespb.TaskInfo{},
 	}, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
 	t.Equal(tqname.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 
