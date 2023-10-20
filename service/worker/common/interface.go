@@ -58,6 +58,14 @@ type (
 		Options sdkworker.Options
 	}
 
+	ActivityWorkerConcurrencyConfig struct {
+		// copy of relevant remote activity concurrency controls from sdkworker.Options
+		MaxConcurrentActivityExecutionSize int
+		TaskQueueActivitiesPerSecond       float64
+		WorkerActivitiesPerSecond          float64
+		MaxConcurrentActivityTaskPollers   int
+	}
+
 	// PerNSWorkerComponent represents a per-namespace worker needed for worker role
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
