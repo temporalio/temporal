@@ -52,20 +52,18 @@ func newTaskKeyManager(
 	logger log.Logger,
 	renewRangeIDFn renewRangeIDFn,
 ) *taskKeyManager {
-	manager := &taskKeyManager{
+	return &taskKeyManager{
+		generator: newTaskKeyGenerator(
+			config.RangeSizeBits,
+			timeSource,
+			logger,
+			renewRangeIDFn,
+		),
 		tracker:    newTaskRequestTracker(taskCategoryRegistry),
 		timeSource: timeSource,
 		logger:     logger,
 		config:     config,
 	}
-	manager.generator = newTaskKeyGenerator(
-		config.RangeSizeBits,
-		timeSource,
-		logger,
-		renewRangeIDFn,
-	)
-
-	return manager
 }
 
 func (m *taskKeyManager) setAndTrackTaskKeys(
