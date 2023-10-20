@@ -48,20 +48,22 @@ type (
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
-		NamespaceID      string
-		RunID            string
-		WorkflowTypeName string
-		WorkflowID       string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		Status           int32
-		CloseTime        *time.Time
-		HistoryLength    *int64
-		HistorySizeBytes *int64
-		Memo             []byte
-		Encoding         string
-		TaskQueue        string
-		SearchAttributes *VisibilitySearchAttributes
+		NamespaceID          string
+		RunID                string
+		WorkflowTypeName     string
+		WorkflowID           string
+		StartTime            time.Time
+		ExecutionTime        time.Time
+		Status               int32
+		CloseTime            *time.Time
+		HistoryLength        *int64
+		HistorySizeBytes     *int64
+		ExecutionDuration    *time.Duration
+		StateTransitionCount *int64
+		Memo                 []byte
+		Encoding             string
+		TaskQueue            string
+		SearchAttributes     *VisibilitySearchAttributes
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

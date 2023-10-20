@@ -22,12 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package v8
+package searchattribute
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import (
+	"testing"
 
-// Version is the MySQL database release version
-const Version = "1.11"
+	"github.com/stretchr/testify/assert"
+)
 
-// VisibilityVersion is the MySQL visibility database release version
-const VisibilityVersion = "1.4"
+// This test is to make sure all system search attributes have a corresponding
+// column name in SQL DB.
+// If this test is failing, make sure that you updated the SQL DB schemas, and
+// you mapped the search attribute constant to the column name.
+func TestValidateSqlDbSystemNameToColNameMap(t *testing.T) {
+	s := assert.New(t)
+	s.Contains(sqlDbSystemNameToColName, NamespaceID)
+	for key := range system {
+		s.Contains(sqlDbSystemNameToColName, key)
+	}
+}

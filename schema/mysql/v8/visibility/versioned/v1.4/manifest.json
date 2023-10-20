@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "1.4",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add execution duration and state transition count columns and indices",
+  "SchemaUpdateCqlFiles": [
+    "add_execution_duration.sql",
+    "add_state_transition_count.sql"
+  ]
+}

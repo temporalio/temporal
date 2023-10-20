@@ -232,7 +232,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(
 	}
 
 	doc[searchattribute.CloseTime] = request.CloseTime
-	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
+	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
 	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
