@@ -353,6 +353,10 @@ func assertShardOwnership(
 	shardContext shard.Context,
 	shardOwnershipAsserted *bool,
 ) error {
+	if !shardContext.GetConfig().ShardOwnershipAssertionEnabled() {
+		return nil
+	}
+
 	if !*shardOwnershipAsserted {
 		*shardOwnershipAsserted = true
 		return shardContext.AssertOwnership(ctx)

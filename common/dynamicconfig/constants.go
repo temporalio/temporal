@@ -541,6 +541,14 @@ const (
 	// persistence layers that are missing AssertShardOwnership support.
 	// If set to zero, shards will not delay closing.
 	ShardLingerTimeLimit = "history.shardLingerTimeLimit"
+	// ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
+	// for API requests when a NotFound or NamespaceNotFound error is returned from
+	// persistence.
+	// NOTE: Shard ownership assertion is not implemented by any persistence implementation
+	// in this codebase, because assertion is not needed for persistence implementation
+	// that guarantees reader after write consistency. As a result, even if this config is
+	// enabled, it's a no-op.
+	ShardOwnershipAssertionEnabled = "history.shardOwnershipAssertionEnabled"
 	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
 	// shard ownership information, instead of checking membership for each request.
 	// Only inspected when an instance first creates a history client, so changes
