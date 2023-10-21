@@ -72,6 +72,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
+	fx.Decorate(GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -203,6 +204,12 @@ func RateLimitInterceptorProvider(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{},
 	)
+}
+
+func GrpcServerOptionsProvider(
+	interceptors []grpc.UnaryServerInterceptor,
+) []grpc.UnaryServerInterceptor {
+	return append(interceptors, lifecycleInterceptor)
 }
 
 func ESProcessorConfigProvider(

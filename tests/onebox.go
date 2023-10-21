@@ -530,6 +530,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
+			fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
