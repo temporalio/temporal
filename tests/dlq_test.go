@@ -35,6 +35,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
@@ -42,6 +43,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/sdk"
@@ -125,11 +127,12 @@ func (s *dlqSuite) SetupSuite() {
 		),
 	)
 	s.tdgbApp = tdbg.NewCliApp(
-		tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.hostPort)),
-		tasks.NewDefaultTaskCategoryRegistry(),
+		func(params *tdbg.Params) {
+			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.hostPort))
+			params.Writer = &s.writer
+		},
 	)
-	s.tdgbApp.ExitErrHandler = func(c *cli.Context, err error) {
-	}
+	s.tdgbApp.ExitErrHandler = func(c *cli.Context, err error) {}
 }
 
 func (s *dlqSuite) TearDownSuite() {
@@ -189,7 +192,6 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 	s.T().Cleanup(func() {
 		s.NoError(os.Remove(file.Name()))
 	})
-
 	for _, tc := range []dlqTestCase{
 		{
 			name: "max message count exceeded",
@@ -261,7 +263,8 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 
 // This test executes an actual workflow for which we've set up an executor wrapper to return a terminal error. This
 // causes the workflow task to be added to the DLQ. This tests the end-to-end functionality of the DLQ, whereas the
-// above test is more for testing specific CLI flags when reading from the DLQ.
+// above test is more for testing specific CLI flags when reading from the DLQ. After the workflow task is added to the
+// DLQ, this test then purges the DLQ and verifies that the task was deleted.
 func (s *dlqSuite) TestRealWorkflow() {
 	ctx := context.Background()
 	run := s.executeWorkflow(ctx)
@@ -281,6 +284,14 @@ func (s *dlqSuite) TestRealWorkflow() {
 	s.NoError(err)
 	s.Equal(s.workflowID, taskInfo.WorkflowId)
 	s.Equal(run.GetRunID(), taskInfo.RunId)
+
+	maxMessageIDToDelete := task.Metadata.MessageId
+	s.purgeMessages(ctx, maxMessageIDToDelete)
+
+	dlqTasks = s.readDLQTasks()
+	for _, task := range dlqTasks {
+		s.Less(task.Metadata.MessageId, maxMessageIDToDelete, "purge command failed to delete all messages")
+	}
 }
 
 func (s *dlqSuite) executeWorkflow(ctx context.Context) sdkclient.WorkflowRun {
@@ -305,6 +316,29 @@ func (s *dlqSuite) executeWorkflow(ctx context.Context) sdkclient.WorkflowRun {
 	return run
 }
 
+func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) {
+	args := []string{
+		"tdbg",
+		"dlq",
+		"--" + tdbg.FlagDLQVersion, "v2",
+		"purge",
+		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
+		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageIDToDelete, 10),
+	}
+	err := s.tdgbApp.Run(args)
+	s.NoError(err)
+	output := s.writer.Bytes()
+	var response adminservice.PurgeDLQTasksResponse
+	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+
+	var token adminservice.DLQJobToken
+	s.NoError(token.Unmarshal(response.GetJobToken()))
+
+	systemSDKClient := s.sdkClientFactory.GetSystemClient()
+	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
+	s.NoError(run.Get(ctx, nil))
+}
+
 func (s *dlqSuite) readDLQTasks() []*commonspb.HistoryDLQTask {
 	file := testutils.CreateTemp(s.T(), "", "*")
 	args := []string{
@@ -312,7 +346,6 @@ func (s *dlqSuite) readDLQTasks() []*commonspb.HistoryDLQTask {
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"read",
-		"--" + tdbg.FlagCluster, "active",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagOutputFilename, file.Name(),
 	}

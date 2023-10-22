@@ -27,6 +27,7 @@ package tdbg
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -47,6 +48,8 @@ type DLQV2Service struct {
 	sourceCluster string
 	targetCluster string
 	clientFactory ClientFactory
+	writer        io.Writer
+	marshaler     jsonpb.Marshaler
 }
 
 const dlqV2DefaultMaxMessageCount = 100
@@ -56,12 +59,18 @@ func NewDLQV2Service(
 	sourceCluster string,
 	targetCluster string,
 	clientFactory ClientFactory,
+	writer io.Writer,
 ) *DLQV2Service {
 	return &DLQV2Service{
 		category:      category,
 		sourceCluster: sourceCluster,
 		targetCluster: targetCluster,
 		clientFactory: clientFactory,
+		writer:        writer,
+		marshaler: jsonpb.Marshaler{
+			Indent:       "  ",
+			EmitDefaults: true,
+		},
 	}
 }
 
@@ -115,10 +124,6 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 		},
 	)
 
-	encoder := jsonpb.Marshaler{
-		Indent:       "  ",
-		EmitDefaults: true,
-	}
 	for iterator.HasNext() && remainingMessageCount > 0 {
 		dlqTask, err := iterator.Next()
 		if err != nil {
@@ -129,7 +134,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 		}
 		remainingMessageCount--
 		// TODO: decode the task and print it in a human readable format
-		taskString, err := encoder.MarshalToString(dlqTask)
+		taskString, err := ac.marshaler.MarshalToString(dlqTask)
 		if err != nil {
 			return fmt.Errorf("unable to encode dlq message: %w", err)
 		}
@@ -141,8 +146,37 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 	return nil
 }
 
-func (ac *DLQV2Service) PurgeMessages(*cli.Context) error {
-	return errors.New("purge is not yet implemented for DLQ v2")
+func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
+	adminClient := ac.clientFactory.AdminClient(c)
+	lastMessageID := c.Int64(FlagLastMessageID)
+	if lastMessageID < persistence.FirstQueueMessageID {
+		return fmt.Errorf(
+			"--%s must be at least %d but was %d",
+			FlagLastMessageID,
+			persistence.FirstQueueMessageID,
+			lastMessageID,
+		)
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+		DlqKey: &commonspb.HistoryDLQKey{
+			TaskCategory:  int32(ac.category.ID()),
+			SourceCluster: ac.sourceCluster,
+			TargetCluster: ac.targetCluster,
+		},
+		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			MessageId: lastMessageID,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("call to PurgeDLQTasks failed: %w", err)
+	}
+	err = ac.marshaler.Marshal(ac.writer, response)
+	if err != nil {
+		return fmt.Errorf("unable to encode PurgeDLQTasks response: %w", err)
+	}
+	return nil
 }
 
 func (ac *DLQV2Service) MergeMessages(*cli.Context) error {
