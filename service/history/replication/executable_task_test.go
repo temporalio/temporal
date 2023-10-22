@@ -117,6 +117,7 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+			DLQWriter:               NewExecutionManagerDLQWriter(),
 		},
 		rand.Int63(),
 		"metrics-tag",

@@ -177,7 +177,7 @@ func Invoke(
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
-	// until either an result has been obtained on a workflow task response or until it is safe to dispatch directly through matching.
+	// until either a result has been obtained on a workflow task response or until it is safe to dispatch directly through matching.
 	startTime := time.Now().UTC()
 	defer func() { scope.Timer(metrics.WorkflowTaskQueryLatency.GetMetricName()).Record(time.Since(startTime)) }()
 

@@ -330,7 +330,7 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Ke
 
 	// Truncation here is just to make sure max read level has the same precision as the old logic
 	// in case existing code can't work correctly with precision higher than 1ms.
-	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
+	// Once we validate that the rest of the code works correctly with higher precision, the truncation should be removed.
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
 	s.scheduledTaskMaxReadLevel = util.MaxTime(s.scheduledTaskMaxReadLevel, newMaxReadLevel)
 
