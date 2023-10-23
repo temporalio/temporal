@@ -522,7 +522,7 @@ func (tm *TaskMatcher) poll(
 }
 
 func (tm *TaskMatcher) fwdrPollReqTokenC() <-chan *ForwarderReqToken {
-	if tm.fwdr == nil {
+	if tm.fwdr == nil || !tm.isBacklogNegligible() {
 		return nil
 	}
 	return tm.fwdr.PollReqTokenC()
