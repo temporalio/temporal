@@ -92,6 +92,14 @@ func (f faultyAdminClient) PurgeDLQTasks(
 	return nil, f.err
 }
 
+func (f faultyAdminClient) MergeDLQTasks(
+	context.Context,
+	*adminservice.MergeDLQTasksRequest,
+	...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	return nil, f.err
+}
+
 func (f faultyClientFactory) WorkflowClient(*cli.Context) workflowservice.WorkflowServiceClient {
 	panic("not implemented")
 }
@@ -127,7 +135,9 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		return
 	}
 	runArgs := []string{
-		"tdbg", "dlq",
+		"tdbg",
+		"--" + tdbg.FlagYes,
+		"dlq",
 	}
 	runArgs = appendArg(runArgs, tdbg.FlagDLQVersion, p.dlqVersion)
 	runArgs = append(runArgs, p.command)
@@ -162,14 +172,6 @@ func TestDLQCommands(t *testing.T) {
 	firstAppRun := make(chan struct{}, 1)
 	firstAppRun <- struct{}{}
 	for _, tc := range []dlqTestCase{
-		{
-			name: "v2 merge",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "merge"
-				p.expectedErrSubstrings = []string{"merge", "v2", "not", "implemented"}
-			},
-		},
 		{
 			name: "v2 read no target cluster with faulty admin client",
 			override: func(p *dlqTestParams) {
@@ -278,6 +280,33 @@ func TestDLQCommands(t *testing.T) {
 				p.command = "purge"
 				p.clientFactory = faultyClientFactory{}
 				p.expectedErrSubstrings = []string{"unable to encode PurgeDLQTasks"}
+			},
+		},
+		{
+			name: "v2 merge invalid last message ID",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.lastMessageID = "-1"
+				p.expectedErrSubstrings = []string{tdbg.FlagLastMessageID, "at least", "0"}
+			},
+		},
+		{
+			name: "v2 merge client err",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
+				p.expectedErrSubstrings = []string{"some error", "MergeDLQTasks"}
+			},
+		},
+		{
+			name: "v2 merge client nil response",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.clientFactory = faultyClientFactory{}
+				p.expectedErrSubstrings = []string{"unable to encode MergeDLQTasks"}
 			},
 		},
 	} {

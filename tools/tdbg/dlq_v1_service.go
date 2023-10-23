@@ -38,11 +38,13 @@ import (
 
 type DLQV1Service struct {
 	clientFactory ClientFactory
+	prompter      *Prompter
 }
 
-func NewDLQV1Service(clientFactory ClientFactory) *DLQV1Service {
+func NewDLQV1Service(clientFactory ClientFactory, prompter *Prompter) *DLQV1Service {
 	return &DLQV1Service{
 		clientFactory: clientFactory,
+		prompter:      prompter,
 	}
 }
 
@@ -70,6 +72,9 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	var lastMessageID int64
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
+	} else {
+		ac.prompter.Prompt("Are you sure to read all DLQ messages without a upper boundary?")
+		lastMessageID = common.EndMessageID
 	}
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -132,7 +137,7 @@ func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		prompt("Are you sure to purge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
+		ac.prompter.Prompt("Are you sure to purge all DLQ messages without a upper boundary?")
 	}
 
 	adminClient := ac.clientFactory.AdminClient(c)
@@ -164,7 +169,7 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		prompt("Are you sure to merge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
+		ac.prompter.Prompt("Are you sure to merge all DLQ messages without a upper boundary?")
 	}
 
 	adminClient := ac.clientFactory.AdminClient(c)

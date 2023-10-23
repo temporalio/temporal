@@ -126,7 +126,13 @@ func NewCliApp(opts ...Option) *cli.App {
 			Value: string(color.Auto),
 		},
 	}
-	app.Commands = getCommands(params.ClientFactory, params.TaskCategoryRegistry, params.Writer)
+	prompterFactory := NewPrompterFactory()
+	app.Commands = getCommands(
+		params.ClientFactory,
+		NewDLQServiceProvider(params.ClientFactory, params.TaskCategoryRegistry, params.Writer, prompterFactory),
+		params.TaskCategoryRegistry,
+		prompterFactory,
+	)
 	app.ExitErrHandler = handleError
 
 	return app

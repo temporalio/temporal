@@ -34,6 +34,7 @@ import (
 	"time"
 
 	replicationpb "go.temporal.io/api/replication/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -1788,25 +1789,11 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(int(request.DlqKey.TaskCategory), adh.taskCategoryRegistry)
+	key, err := adh.parseDLQKey(request.DlqKey)
 	if err != nil {
 		return nil, err
 	}
-	sourceCluster := request.DlqKey.SourceCluster
-	if len(sourceCluster) == 0 {
-		return nil, errSourceClusterNotSet
-	}
-	targetCluster := request.DlqKey.TargetCluster
-	if len(targetCluster) == 0 {
-		return nil, errTargetClusterNotSet
-	}
-	key := persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      category,
-		SourceCluster: sourceCluster,
-		TargetCluster: request.DlqKey.TargetCluster,
-	}
-	workflowID := fmt.Sprintf("delete-dlq-tasks-%s", key.GetQueueName())
+	workflowID := adh.getDLQWorkflowID(key)
 	client := adh.sdkClientFactory.GetSystemClient()
 	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
@@ -1814,10 +1801,12 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	}, dlq.WorkflowName, dlq.WorkflowParams{
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
-			TaskCategory:  category.ID(),
-			SourceCluster: sourceCluster,
-			TargetCluster: targetCluster,
-			MaxMessageID:  request.InclusiveMaxTaskMetadata.MessageId,
+			Key: dlq.Key{
+				TaskCategoryID: key.Category.ID(),
+				SourceCluster:  key.SourceCluster,
+				TargetCluster:  key.TargetCluster,
+			},
+			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
 	})
 	if err != nil {
@@ -1831,6 +1820,67 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
+	}, nil
+}
+
+func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
+	key, err := adh.parseDLQKey(request.DlqKey)
+	if err != nil {
+		return nil, err
+	}
+	workflowID := adh.getDLQWorkflowID(key)
+	client := adh.sdkClientFactory.GetSystemClient()
+	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: primitives.DefaultWorkerTaskQueue,
+	}, dlq.WorkflowName, dlq.WorkflowParams{
+		WorkflowType: dlq.WorkflowTypeMerge,
+		MergeParams: dlq.MergeParams{
+			Key: dlq.Key{
+				TaskCategoryID: key.Category.ID(),
+				SourceCluster:  key.SourceCluster,
+				TargetCluster:  key.TargetCluster,
+			},
+			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
+			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	runID := run.GetRunID()
+	jobToken := adminservice.DLQJobToken{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	}
+	jobTokenBytes, _ := jobToken.Marshal()
+	return &adminservice.MergeDLQTasksResponse{
+		JobToken: jobTokenBytes,
+	}, nil
+}
+
+func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
+	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
+}
+
+func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (*persistence.QueueKey, error) {
+	category, err := api.GetTaskCategory(int(key.TaskCategory), adh.taskCategoryRegistry)
+	if err != nil {
+		return nil, err
+	}
+	sourceCluster := key.SourceCluster
+	if len(sourceCluster) == 0 {
+		return nil, errSourceClusterNotSet
+	}
+	targetCluster := key.TargetCluster
+	if len(targetCluster) == 0 {
+		return nil, errTargetClusterNotSet
+	}
+	return &persistence.QueueKey{
+		QueueType:     persistence.QueueTypeHistoryDLQ,
+		Category:      category,
+		SourceCluster: sourceCluster,
+		TargetCluster: key.TargetCluster,
 	}, nil
 }
 
