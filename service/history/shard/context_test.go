@@ -201,16 +201,6 @@ func (s *contextSuite) TestAddTasks_Success() {
 	s.NoError(err)
 }
 
-// func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
-// 	now := time.Now().Add(time.Minute)
-// 	s.timeSource.Update(now)
-
-// 	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
-// 	s.NoError(err)
-
-// 	s.True(s.mockShard.scheduledTaskMaxReadLevel.After(now))
-// }
-
 func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: tests.NamespaceID.String(),

@@ -842,7 +842,8 @@ func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		}
 
 		if attemptCount == 2 {
-			_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(time.Second)
+			_, err := s.engine.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
