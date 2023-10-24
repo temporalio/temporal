@@ -532,7 +532,7 @@ pollLoop:
 			// frontend returns full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, nextPageToken, err := e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled, mutableStateResp)
+			hist, nextPageToken, err := e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled)
 			if err != nil {
 				// will notify query client that the query task failed
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
@@ -598,7 +598,6 @@ func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
 	nsID namespace.ID,
 	task *internalTask,
 	isStickyEnabled bool,
-	mutableStateResp *historyservice.GetMutableStateResponse,
 ) (*history.History, []byte, error) {
 	if isStickyEnabled {
 		return &history.History{Events: []*history.HistoryEvent{}}, nil, nil
@@ -607,8 +606,6 @@ func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
 	continuation := &tokenspb.HistoryContinuation{
 		RunId:        task.workflowExecution().GetRunId(),
 		FirstEventId: common.FirstEventID,
-		NextEventId:  mutableStateResp.GetNextEventId(),
-		BranchToken:  mutableStateResp.GetCurrentBranchToken(),
 	}
 
 	continueToken, err := api.SerializeHistoryToken(continuation)
@@ -1384,9 +1381,6 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		recordStartResp,
 		task.workflowExecution(),
 		serializedToken)
-
-	response.History = recordStartResp.GetHistory()
-	response.NextPageToken = recordStartResp.GetNextPageToken()
 
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query

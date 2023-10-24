@@ -184,7 +184,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	scheduledEventID := req.GetScheduledEventId()
 	requestID := req.GetRequestId()
 
+	var mutableState workflow.MutableState
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
+
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		req.Clock,
@@ -195,7 +197,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			req.WorkflowExecution.RunId,
 		),
 		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+			mutableState = workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -290,11 +292,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if err != nil {
 				return nil, err
 			}
-			maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-			err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)
-			if err != nil {
-				return nil, err
-			}
+
 			return updateAction, nil
 		},
 		nil,
@@ -302,6 +300,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		handler.workflowConsistencyChecker,
 	)
 
+	maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
+	err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)
 	if err != nil {
 		return nil, err
 	}
