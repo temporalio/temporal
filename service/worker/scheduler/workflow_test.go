@@ -1697,3 +1697,76 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 	s.True(s.env.Now().Sub(baseStartTime) == currentTweakablePolicies.RetentionTime)
 }
+
+func (s *workflowSuite) TestCANByIterations() {
+	// written using low-level mocks so we can control iteration count
+
+	const iters = 30
+	// note: one fewer run than iters since the first doesn't start anything
+	for i := 1; i < iters; i++ {
+		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+	}
+	// this one catches and fails if we go over
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts")
+		return nil, nil
+	}).Times(0).Maybe()
+
+	// this is ignored because we set iters explicitly
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, 5*time.Minute*iters/2-time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, iters)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCANBySuggested() {
+	// written using low-level mocks so we can control iteration count
+
+	const iters = 30
+	// note: one fewer run than iters since the first doesn't start anything
+	for i := 1; i < iters; i++ {
+		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+	}
+	// this one catches and fails if we go over
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, 5*time.Minute*iters-time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
