@@ -142,8 +142,8 @@ type (
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
-		IterationsBeforeContinueAsNew     int
-		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
+		IterationsBeforeContinueAsNew     int           // Number of iterations per run, or 0 to use server-suggested
+		SleepWhilePaused                  bool          // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize       int
@@ -191,7 +191,7 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		IterationsBeforeContinueAsNew:     500,
+		IterationsBeforeContinueAsNew:     500, // TODO: change to 0 to use GetContinueAsNewSuggested
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
@@ -253,12 +253,17 @@ func (s *scheduler) run() error {
 
 	iters := s.tweakables.IterationsBeforeContinueAsNew
 	for {
-		// TODO: use the real GetContinueAsNewSuggested
-		continueAsNewSuggested := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= impossibleHistorySize
-		if continueAsNewSuggested && s.pendingUpdate == nil && s.pendingPatch == nil {
+		info := workflow.GetInfo(s.ctx)
+		suggestContinueAsNew := info.GetCurrentHistoryLength() >= impossibleHistorySize
+		if s.tweakables.IterationsBeforeContinueAsNew > 0 {
+			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
+			iters--
+		} else {
+			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested()
+		}
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
 			break
 		}
-		iters--
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
