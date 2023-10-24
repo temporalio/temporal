@@ -932,4 +932,7 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
+	// settings for controlling remote activity concurrency for delete namespace workflows.
+	WorkerDeleteNamespaceActivityLimitsConfig = "worker.deleteNamespaceActivityLimitsConfig"
 )
