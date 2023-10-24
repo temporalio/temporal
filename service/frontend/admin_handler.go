@@ -34,6 +34,7 @@ import (
 	"time"
 
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -934,7 +935,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
+	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
 		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 				NamespaceId: request.NamespaceId,
@@ -1585,7 +1586,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
+	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),

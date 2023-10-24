@@ -446,7 +446,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
 			&historyservice.GetWorkflowExecutionHistoryRequest{
 				NamespaceId: namespaceID.String(),
@@ -491,7 +491,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
 			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
 				NamespaceId: namespaceID.String(),
@@ -535,10 +535,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	if err := wh.validateTaskQueue(request.TaskQueue, namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
-	}
-
-	if !wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendPollWorkflowTaskQueueTag))) {
-		return wh.pollWorkflowTaskQueue(ctx, request)
 	}
 
 	callTime := time.Now().UTC()
@@ -659,7 +655,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
 		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 		if err != nil {
 			return nil, err

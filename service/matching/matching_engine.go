@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -532,7 +533,12 @@ pollLoop:
 			// frontend returns full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
-			hist, nextPageToken, err := e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			var hist *history.History
+			var nextPageToken []byte
+			if dynamicconfig.AccessHistory(e.config.FrontendAccessHistoryFraction, e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingPollWorkflowTaskQueueTag))) {
+				hist, nextPageToken, err = e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled)
+			}
+
 			if err != nil {
 				// will notify query client that the query task failed
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})

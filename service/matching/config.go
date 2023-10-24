@@ -90,6 +90,9 @@ type (
 		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
+
+		// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+		FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 	}
 
 	forwarderConfig struct {
@@ -199,6 +202,8 @@ func NewConfig(
 		EnableReadFromSecondaryVisibility: visibility.GetEnableReadFromSecondaryVisibilityConfig(dc, visibilityStoreConfigExist, enableReadFromES),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 }
 
