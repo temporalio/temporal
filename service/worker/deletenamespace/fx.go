@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +47,7 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
+		atWorkerCfg       workercommon.ActivityWorkerLimitsConfig
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     resource.HistoryClient
@@ -54,6 +56,7 @@ type (
 	}
 	componentParams struct {
 		fx.In
+		DynamicCollection *dynamicconfig.Collection
 		VisibilityManager manager.VisibilityManager
 		MetadataManager   persistence.MetadataManager
 		HistoryClient     resource.HistoryClient
@@ -68,6 +71,11 @@ func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
+		atWorkerCfg: workercommon.NewActivityWorkerConcurrencyConfig(
+			params.DynamicCollection,
+			dynamicconfig.WorkerDeleteNamespaceActivityLimitsConfig,
+			map[string]any{},
+		),
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,
 		historyClient:     params.HistoryClient,
@@ -101,7 +109,11 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 	return &workercommon.DedicatedWorkerOptions{
 		TaskQueue: primitives.DeleteNamespaceActivityTQ,
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			BackgroundActivityContext:          headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			MaxConcurrentActivityExecutionSize: wc.atWorkerCfg.MaxConcurrentActivityExecutionSize,
+			TaskQueueActivitiesPerSecond:       wc.atWorkerCfg.TaskQueueActivitiesPerSecond,
+			WorkerActivitiesPerSecond:          wc.atWorkerCfg.WorkerActivitiesPerSecond,
+			MaxConcurrentActivityTaskPollers:   wc.atWorkerCfg.MaxConcurrentActivityTaskPollers,
 		},
 	}
 }
