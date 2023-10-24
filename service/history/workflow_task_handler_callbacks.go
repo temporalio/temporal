@@ -231,11 +231,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 					if err != nil {
 						return nil, err
 					}
-					maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
-					err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)
-					if err != nil {
-						return nil, err
-					}
 					updateAction.Noop = true
 					return updateAction, nil
 				}
