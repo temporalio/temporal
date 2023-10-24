@@ -35,9 +35,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestCancelTimer() {
@@ -53,8 +53,8 @@ func (s *functionalSuite) TestCancelTimer() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1000 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1000 * time.Second),
 		Identity:            identity,
 	}
 
@@ -80,7 +80,7 @@ func (s *functionalSuite) TestCancelTimer() {
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("%v", timerID),
-					StartToFireTimeout: &timer,
+					StartToFireTimeout: durationpb.New(timer),
 				}},
 			}}, nil
 		}
@@ -184,8 +184,8 @@ func (s *functionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1000 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1000 * time.Second),
 		Identity:            identity,
 	}
 
@@ -211,7 +211,7 @@ func (s *functionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("%v", timerID),
-					StartToFireTimeout: &timer,
+					StartToFireTimeout: durationpb.New(timer),
 				}},
 			}}, nil
 		}

@@ -194,8 +194,8 @@ func (s *queueV2Store) ReadMessages(
 		if !iter.Scan(&messageID, &messagePayload, &messageEncoding) {
 			break
 		}
-		encoding, ok := enums.EncodingType_value[messageEncoding]
-		if !ok {
+		encoding, err := enums.EncodingTypeFromString(messageEncoding)
+		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(messageEncoding)
 		}
 
@@ -203,7 +203,7 @@ func (s *queueV2Store) ReadMessages(
 
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: messageID},
-			Data: commonpb.DataBlob{
+			Data: &commonpb.DataBlob{
 				EncodingType: encodingType,
 				Data:         messagePayload,
 			},
@@ -357,7 +357,7 @@ func (s *queueV2Store) tryInsert(
 	ctx context.Context,
 	queueType persistence.QueueV2Type,
 	queueName string,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 	messageID int64,
 ) error {
 	applied, err := s.session.Query(

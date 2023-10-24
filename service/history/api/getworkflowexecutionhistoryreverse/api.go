@@ -154,7 +154,7 @@ func Invoke(
 		ctx,
 		shardContext,
 		namespaceID,
-		*execution,
+		execution,
 		continuationToken.NextEventId,
 		lastFirstTxnID,
 		req.GetMaximumPageSize(),

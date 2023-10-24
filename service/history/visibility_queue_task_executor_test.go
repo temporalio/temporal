@@ -33,6 +33,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -54,6 +57,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -178,7 +182,7 @@ func (s *visibilityQueueTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -203,8 +207,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId:      parentNamespaceID,
@@ -262,7 +266,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflowClosedCleanup() {
 	s.enableCloseWorkflowCleanup = true
 
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -287,8 +291,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId:      parentNamespaceID,
@@ -345,7 +349,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -364,11 +368,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 				CronSchedule:             cronSchedule,
 			},
-			FirstWorkflowTaskBackoff: &backoff,
+			FirstWorkflowTaskBackoff: durationpb.New(backoff),
 		},
 	)
 	s.Nil(err)
@@ -399,7 +403,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -416,8 +420,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -448,7 +452,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -471,8 +475,8 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -534,7 +538,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				TaskId:   highWatermark,
-				FireTime: timestamp.TimePtr(tasks.DefaultFireTime),
+				FireTime: timestamppb.New(tasks.DefaultFireTime),
 			},
 		}))
 		s.Run("NotAcked", func() {
@@ -582,7 +586,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 	return &manager.VisibilityRequestBase{
 		NamespaceID:      namespace.ID(task.GetNamespaceID()),
 		Namespace:        namespaceName,
-		Execution:        *execution,
+		Execution:        execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
 		StartTime:        timestamp.TimeValue(executionInfo.GetStartTime()),
 		Status:           mutableState.GetExecutionState().GetStatus(),
@@ -602,8 +606,8 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 	mutableState workflow.MutableState,
 	backoff time.Duration,
 	taskQueueName string,
-) *manager.RecordWorkflowExecutionStartedRequest {
-	return &manager.RecordWorkflowExecutionStartedRequest{
+) gomock.Matcher {
+	return protomock.Eq(&manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: s.createVisibilityRequestBase(
 			namespaceName,
 			task,
@@ -612,7 +616,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 			nil,
 			nil,
 		),
-	}
+	})
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
@@ -620,8 +624,8 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 	task *tasks.UpsertExecutionVisibilityTask,
 	mutableState workflow.MutableState,
 	taskQueueName string,
-) *manager.UpsertWorkflowExecutionRequest {
-	return &manager.UpsertWorkflowExecutionRequest{
+) gomock.Matcher {
+	return protomock.Eq(&manager.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: s.createVisibilityRequestBase(
 			namespaceName,
 			task,
@@ -630,7 +634,7 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 			nil,
 			nil,
 		),
-	}
+	})
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRequest(
@@ -640,9 +644,9 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
 	searchAttributes map[string]any,
-) *manager.RecordWorkflowExecutionClosedRequest {
+) gomock.Matcher {
 	executionInfo := mutableState.GetExecutionInfo()
-	return &manager.RecordWorkflowExecutionClosedRequest{
+	return protomock.Eq(&manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: s.createVisibilityRequestBase(
 			namespaceName,
 			task,
@@ -655,7 +659,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 		HistoryLength:        mutableState.GetNextEventID() - 1,
 		HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 		StateTransitionCount: executionInfo.GetStateTransitionCount(),
-	}
+	})
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(

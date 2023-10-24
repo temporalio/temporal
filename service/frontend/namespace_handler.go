@@ -37,6 +37,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -744,7 +745,7 @@ func (d *namespaceHandler) mergeBadBinaries(
 		old = map[string]*namespacepb.BadBinaryInfo{}
 	}
 	for k, v := range new {
-		v.CreateTime = &createTime
+		v.CreateTime = timestamppb.New(createTime)
 		old[k] = v
 	}
 	return namespacepb.BadBinaries{
@@ -875,7 +876,7 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 		now := d.timeSource.Now()
 		failoverHistory = append(
 			failoverHistory, &persistencespb.FailoverStatus{
-				FailoverTime:    &now,
+				FailoverTime:    timestamppb.New(now),
 				FailoverVersion: newFailoverVersion,
 			},
 		)

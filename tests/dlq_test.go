@@ -38,11 +38,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -62,7 +65,6 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
-	"go.uber.org/fx"
 )
 
 type (
@@ -525,10 +527,10 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
 	var response adminservice.PurgeDLQTasksResponse
-	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+	s.NoError(protojson.Unmarshal(output, &response))
 
 	var token adminservice.DLQJobToken
-	s.NoError(token.Unmarshal(response.GetJobToken()))
+	s.NoError(proto.Unmarshal(response.GetJobToken(), &token))
 
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
@@ -565,7 +567,7 @@ func (s *dlqSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
 	var response adminservice.MergeDLQTasksResponse
-	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+	s.NoError(protojson.Unmarshal(output, &response))
 	return response.GetJobToken()
 }
 
@@ -601,7 +603,7 @@ func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
 	var response adminservice.DescribeDLQJobResponse
-	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+	s.NoError(protojson.Unmarshal(output, &response))
 	return response
 }
 
@@ -621,7 +623,7 @@ func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
 	var response adminservice.CancelDLQJobResponse
-	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+	s.NoError(protojson.Unmarshal(output, &response))
 	return response
 }
 

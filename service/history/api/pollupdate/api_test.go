@@ -189,7 +189,7 @@ func TestPollOutcome(t *testing.T) {
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
 	})
 	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
-		for _, req := range []historyservice.PollWorkflowExecutionUpdateRequest{{
+		for _, req := range []*historyservice.PollWorkflowExecutionUpdateRequest{{
 			Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
 				UpdateRef: req.Request.UpdateRef,
 			},
@@ -210,7 +210,7 @@ func TestPollOutcome(t *testing.T) {
 			reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
 				return update.New(updateID), true
 			}
-			resp, err := pollupdate.Invoke(context.Background(), &req, shardContext, wfcc)
+			resp, err := pollupdate.Invoke(context.Background(), req, shardContext, wfcc)
 			require.NoError(t, err)
 			require.True(t, len(resp.GetResponse().UpdateRef.GetWorkflowExecution().RunId) > 0)
 			require.Nil(t, resp.GetResponse().Outcome)

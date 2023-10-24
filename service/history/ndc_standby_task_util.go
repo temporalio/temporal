@@ -113,8 +113,8 @@ type (
 	workflowTaskPostActionInfo struct {
 		*historyResendInfo
 
-		workflowTaskScheduleToStartTimeout *time.Duration
-		taskqueue                          taskqueuepb.TaskQueue
+		workflowTaskScheduleToStartTimeout time.Duration
+		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
 
@@ -183,8 +183,8 @@ func newActivityRetryTimePostActionInfo(
 
 func newWorkflowTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	workflowTaskScheduleToStartTimeout *time.Duration,
-	taskqueue taskqueuepb.TaskQueue,
+	workflowTaskScheduleToStartTimeout time.Duration,
+	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {

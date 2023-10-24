@@ -107,7 +107,7 @@ func Invoke(
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
-			activityStartedTime = *ai.StartedTime
+			activityStartedTime = ai.StartedTime.AsTime()
 			taskQueue = ai.TaskQueue
 			return &api.UpdateWorkflowAction{
 				Noop:               false,

@@ -103,7 +103,7 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{
-		ParentExecution: commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "parent workflowID",
 			RunId:      "parent runID",
 		},
@@ -147,7 +147,7 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 	env.RegisterActivity(ProcessorActivity)
 
 	request := Request{
-		ParentExecution: commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "parent workflowID",
 			RunId:      "parent runID",
 		},

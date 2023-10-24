@@ -29,6 +29,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,7 +37,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestServerRejectsInvalidRequests() {
@@ -111,8 +111,8 @@ func newStartWorkflowExecutionRequest(ns namespace.Name, workflowId string, iden
 		WorkflowType:        workflowType,
 		TaskQueue:           queue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(20 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(3 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
 	}
 	return request
@@ -141,7 +141,7 @@ func newRespondWorkflowTaskCompletedRequest(ns namespace.Name, stickyQueue *task
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,

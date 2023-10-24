@@ -33,9 +33,13 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -53,7 +57,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
@@ -72,6 +76,7 @@ type (
 	timerQueueStandbyTaskExecutorSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller             *gomock.Controller
 		mockExecutionMgr       *persistence.MockExecutionManager
@@ -110,6 +115,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupSuite() {
 
 func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	config := tests.NewDynamicConfig()
 	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
@@ -202,7 +208,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -224,8 +230,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -288,7 +294,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -308,8 +314,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -356,7 +362,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multiple() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -372,8 +378,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -424,7 +430,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -440,8 +446,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -509,7 +515,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -525,8 +531,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -580,7 +586,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat_Noop() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -596,8 +602,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -651,7 +657,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple_CanUpdate() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -667,8 +673,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -696,7 +702,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.GetPendingActivityInfos()[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= workflow.TimerTaskStatusCreatedHeartbeat
-	activityInfo2.LastHeartbeatUpdateTime = timestamp.TimePtr(time.Now().UTC())
+	activityInfo2.LastHeartbeatUpdateTime = timestamppb.New(time.Now().UTC())
 
 	timerSequence := workflow.NewTimerSequence(mutableState)
 	mutableState.InsertTasks[tasks.CategoryTimer] = nil
@@ -714,7 +720,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 		Version:             s.version,
 		TaskID:              int64(100),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		VisibilityTimestamp: activityInfo2.LastHeartbeatUpdateTime.Add(-5 * time.Second),
+		VisibilityTimestamp: activityInfo2.LastHeartbeatUpdateTime.AsTime().Add(-5 * time.Second),
 		EventID:             scheduledEvent2.GetEventId(),
 	}
 
@@ -739,7 +745,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			mutableState.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
 			mutableState.GetExecutionInfo().ExecutionStats = &persistencespb.ExecutionStats{}
 
-			s.Equal(&persistence.UpdateWorkflowExecutionRequest{
+			s.True(temporalproto.DeepEqual(&persistence.UpdateWorkflowExecutionRequest{
 				ShardID: s.mockShard.GetShardID(),
 				UpdateWorkflowMutation: persistence.WorkflowMutation{
 					ExecutionInfo:             mutableState.GetExecutionInfo(),
@@ -763,7 +769,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 					ClearBufferedEvents:       false,
 				},
 				UpdateWorkflowEvents: []*persistence.WorkflowEvents{},
-			}, input)
+			}, input))
 			return tests.UpdateWorkflowExecutionResponse, nil
 		})
 
@@ -773,7 +779,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -790,8 +796,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -845,7 +851,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_ScheduleToStartTimer() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -872,7 +878,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Sche
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Success() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -888,8 +894,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -925,7 +931,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -941,8 +947,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -992,7 +998,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Success() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1008,8 +1014,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1040,7 +1046,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1056,8 +1062,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1110,7 +1116,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1126,8 +1132,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1161,7 +1167,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1177,8 +1183,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1204,7 +1210,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1220,8 +1226,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1302,7 +1308,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Noop(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_ActivityCompleted() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1318,8 +1324,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1371,7 +1377,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Activ
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pending() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
@@ -1387,8 +1393,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
 	)
@@ -1458,13 +1464,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
 			NamespaceId: s.namespaceID.String(),
-			Execution:   &execution,
+			Execution:   execution,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 			ScheduledEventId:       scheduledEvent.EventId,
-			ScheduleToStartTimeout: &timerTimeout,
+			ScheduleToStartTimeout: durationpb.New(timerTimeout),
 			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
 			VersionDirective:       worker_versioning.MakeDirectiveForActivityTask(nil, false),
 		},

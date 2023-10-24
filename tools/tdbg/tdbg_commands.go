@@ -757,7 +757,10 @@ func newDecodeCommands(
 			},
 			Action: func(c *cli.Context) (err error) {
 				encoding := c.String(FlagEncoding)
-				encodingType := enumspb.EncodingType(enumspb.EncodingType_value[encoding])
+				encodingType, err := enumspb.EncodingTypeFromString(encoding)
+				if err != nil {
+					return err
+				}
 				taskCategoryID := c.Int(FlagTaskCategoryID)
 				file, err := os.Open(c.String(FlagBinaryFile))
 				if err != nil {
@@ -774,7 +777,7 @@ func newDecodeCommands(
 					EncodingType: encodingType,
 					Data:         b,
 				}
-				if err := taskBlobEncoder.Encode(writer, taskCategoryID, blob); err != nil {
+				if err := taskBlobEncoder.Encode(writer, taskCategoryID, &blob); err != nil {
 					return fmt.Errorf("failed to decode task blob: %w", err)
 				}
 				return nil

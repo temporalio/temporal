@@ -33,9 +33,9 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"

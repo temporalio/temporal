@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
@@ -57,8 +58,8 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -100,10 +101,10 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("test-input"),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -181,8 +182,8 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -210,10 +211,10 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(25 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(25 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(25 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(25 * time.Second),
 				}},
 			}}, nil
 		}
@@ -270,7 +271,7 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
-	s.True(pollerInfos[0].GetLastAccessTime().After(before))
+	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 
 	errActivity := poller.PollAndProcessActivityTask(false)
@@ -278,11 +279,11 @@ func (s *functionalSuite) TestDescribeTaskQueue() {
 	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
-	s.True(pollerInfos[0].GetLastAccessTime().After(before))
+	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
-	s.True(pollerInfos[0].GetLastAccessTime().After(before))
+	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
 }

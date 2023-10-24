@@ -30,10 +30,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/proto"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -109,8 +109,8 @@ type (
 		// from a byte array. Instead, it takes a proto and "parses" it into a more structured type.
 		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
 
-		SerializeTask(task tasks.Task) (commonpb.DataBlob, error)
-		DeserializeTask(category tasks.Category, blob commonpb.DataBlob) (tasks.Task, error)
+		SerializeTask(task tasks.Task) (*commonpb.DataBlob, error)
+		DeserializeTask(category tasks.Category, blob *commonpb.DataBlob) (tasks.Task, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -127,12 +127,16 @@ type (
 
 	// UnknownEncodingTypeError is an error type for unknown or unsupported encoding type
 	UnknownEncodingTypeError struct {
-		encodingTypeStr     string
+		providedType        string
 		expectedEncodingStr []string
 	}
 
 	serializerImpl struct {
 		TaskSerializer
+	}
+
+	marshaler interface {
+		Marshal() ([]byte, error)
 	}
 )
 
@@ -233,7 +237,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	return cm, err
 }
 
-func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) serialize(p marshaler, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -266,7 +270,7 @@ func (t *serializerImpl) serialize(p proto.Marshaler, encodingType enumspb.Encod
 
 // NewUnknownEncodingTypeError returns a new instance of encoding type error
 func NewUnknownEncodingTypeError(
-	encodingTypeStr string,
+	providedType string,
 	expectedEncoding ...enumspb.EncodingType,
 ) error {
 	if len(expectedEncoding) == 0 {
@@ -279,14 +283,14 @@ func NewUnknownEncodingTypeError(
 		expectedEncodingStr = append(expectedEncodingStr, encodingType.String())
 	}
 	return &UnknownEncodingTypeError{
-		encodingTypeStr:     encodingTypeStr,
+		providedType:        providedType,
 		expectedEncodingStr: expectedEncodingStr,
 	}
 }
 
 func (e *UnknownEncodingTypeError) Error() string {
 	return fmt.Sprintf("unknown or unsupported encoding type %v, supported types: %v",
-		e.encodingTypeStr,
+		e.providedType,
 		strings.Join(e.expectedEncodingStr, ","),
 	)
 }

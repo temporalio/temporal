@@ -37,10 +37,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
@@ -60,8 +60,8 @@ func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -155,8 +155,8 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -170,8 +170,8 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -291,8 +291,8 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -306,8 +306,8 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -423,8 +423,8 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -505,8 +505,8 @@ func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

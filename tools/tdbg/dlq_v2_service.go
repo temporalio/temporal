@@ -73,7 +73,7 @@ type (
 	TaskPayload struct {
 		taskBlobEncoder TaskBlobEncoder
 		taskCategoryID  int
-		blob            commonpb.DataBlob
+		blob            *commonpb.DataBlob
 		bytes           []byte
 	}
 )
@@ -190,7 +190,7 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 		}
 		payload := &TaskPayload{
 			taskBlobEncoder: ac.taskBlobEncoder,
-			blob:            *blob,
+			blob:            blob,
 			taskCategoryID:  ac.category.ID(),
 		}
 		message := DLQMessage{

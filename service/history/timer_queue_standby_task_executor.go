@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -293,7 +294,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout, activityInfo.UseCompatibleVersion)
+		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo.UseCompatibleVersion)
 	}
 
 	return t.processTimer(
@@ -568,7 +569,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
-	activityScheduleToStartTimeout := &pushActivityInfo.activityTaskScheduleToStartTimeout
+	activityScheduleToStartTimeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
 	_, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -582,7 +583,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		ScheduledEventId:       activityTask.EventID,
-		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
 	})

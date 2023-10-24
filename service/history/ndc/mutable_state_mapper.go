@@ -221,7 +221,7 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 		ctx,
 		task.getNamespaceID(),
 		uuid.New().String(),
-		*task.getExecution(),
+		task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
 	)

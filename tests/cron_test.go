@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payload"
@@ -48,7 +50,6 @@ import (
 
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
@@ -65,13 +66,13 @@ func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(5 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(5 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		RetryPolicy: &commonpb.RetryPolicy{
 			MaximumAttempts:    2,
-			MaximumInterval:    timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 1.2,
 		},
 	}
@@ -165,8 +166,8 @@ func (s *functionalSuite) TestCronWorkflow() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                memo,
@@ -237,8 +238,8 @@ func (s *functionalSuite) TestCronWorkflow() {
 	}
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startWorkflowTS
-	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	startFilter.EarliestTime = timestamppb.New(startWorkflowTS)
+	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 	// Sleep some time before checking the open executions.
 	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
@@ -254,7 +255,7 @@ func (s *functionalSuite) TestCronWorkflow() {
 	s.NoError(err)
 	s.Equal(1, len(resp.GetExecutions()))
 	executionInfo := resp.GetExecutions()[0]
-	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
+	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().AsTime().Sub(executionInfo.GetStartTime().AsTime()))
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
@@ -286,7 +287,7 @@ func (s *functionalSuite) TestCronWorkflow() {
 		events := s.getHistory(s.namespace, executions[i])
 
 		startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
-		s.Equal(memo, startAttrs.Memo)
+		s.ProtoEqual(memo, startAttrs.Memo)
 		checkSearchAttrs(startAttrs.SearchAttributes)
 
 		lastEvent := events[len(events)-1]
@@ -300,7 +301,7 @@ func (s *functionalSuite) TestCronWorkflow() {
 	events := s.getHistory(s.namespace, executions[2])
 
 	startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(memo, startAttrs.Memo)
+	s.ProtoEqual(memo, startAttrs.Memo)
 	checkSearchAttrs(startAttrs.SearchAttributes)
 
 	lastEvent := events[len(events)-1]
@@ -309,7 +310,7 @@ func (s *functionalSuite) TestCronWorkflow() {
 	completedAttrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
 	s.Equal("cron-test-result", s.decodePayloadsString(completedAttrs.Result))
 
-	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -336,21 +337,21 @@ func (s *functionalSuite) TestCronWorkflow() {
 		},
 	})
 	s.NoError(err)
-	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().Add(3 * time.Second)
-	s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+	expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(3 * time.Second)
+	s.Equal(expectedExecutionTime, dweResponse.WorkflowExecutionInfo.GetExecutionTime().AsTime())
 
 	sort.Slice(closedExecutions, func(i, j int) bool {
-		return closedExecutions[i].GetStartTime().Before(timestamp.TimeValue(closedExecutions[j].GetStartTime()))
+		return closedExecutions[i].GetStartTime().AsTime().Before(closedExecutions[j].GetStartTime().AsTime())
 	})
 	lastExecution := closedExecutions[0]
 	for i := 1; i < 4; i++ {
 		executionInfo := closedExecutions[i]
-		expectedBackoff := executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(lastExecution.GetExecutionTime()))
+		expectedBackoff := executionInfo.GetExecutionTime().AsTime().Sub(lastExecution.GetExecutionTime().AsTime())
 		// The execution time calculated based on last execution close time.
 		// However, the current execution time is based on the current start time.
 		// This code is to remove the diff between current start time and last execution close time.
 		// TODO: Remove this line once we unify the time source
-		executionTimeDiff := executionInfo.GetStartTime().Sub(timestamp.TimeValue(lastExecution.GetCloseTime()))
+		executionTimeDiff := executionInfo.GetStartTime().AsTime().Sub(lastExecution.GetCloseTime().AsTime())
 		// The backoff between any two executions should be a multiplier of the target backoff duration which is 3 in this test
 		s.Equal(
 			0,
@@ -463,7 +464,7 @@ func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
 	attrs0 := lastEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(cronSchedule, attrs0.CronSchedule)
-	s.DurationNear(timestamp.DurationValue(attrs0.FirstWorkflowTaskBackoff), targetBackoffDuration, tolerance)
+	s.DurationNear(attrs0.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 	s.Equal(firstRunID, attrs0.FirstExecutionRunId)
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attrs0.Initiator)
 	s.Equal("", attrs0.ContinuedExecutionRunId)
@@ -481,7 +482,7 @@ func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, lastEvent.GetEventType())
 	attrs0 = lastEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(cronSchedule, attrs0.CronSchedule)
-	s.DurationNear(timestamp.DurationValue(attrs0.FirstWorkflowTaskBackoff), targetBackoffDuration, tolerance)
+	s.DurationNear(attrs0.FirstWorkflowTaskBackoff.AsDuration(), targetBackoffDuration, tolerance)
 	s.Equal(firstRunID, attrs0.FirstExecutionRunId)
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attrs0.Initiator)
 	s.Equal(firstRunID, attrs0.ContinuedExecutionRunId)
@@ -564,7 +565,7 @@ func (s *clientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time,
 		resp, err := s.sdkClient.ListOpenWorkflow(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: int32(2 * expectedNumber),
-			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: &start, LatestTime: &end},
+			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: timestamppb.New(start), LatestTime: timestamppb.New(end)},
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},
@@ -585,7 +586,7 @@ func (s *clientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Tim
 		resp, err := s.sdkClient.ListClosedWorkflow(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: int32(2 * expectedNumber),
-			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: &start, LatestTime: &end},
+			StartTimeFilter: &filterpb.StartTimeFilter{EarliestTime: timestamppb.New(start), LatestTime: timestamppb.New(end)},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
 			}},

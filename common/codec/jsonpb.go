@@ -27,10 +27,12 @@ package codec
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/temporalproto"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -38,37 +40,32 @@ type (
 	// This is an wrapper on top of jsonpb.Marshaler which supports not only single object serialization
 	// but also slices of concrete objects.
 	JSONPBEncoder struct {
-		marshaler   jsonpb.Marshaler
-		ubmarshaler jsonpb.Unmarshaler
+		marshaler protojson.MarshalOptions
 	}
 )
 
 // NewJSONPBEncoder creates a new JSONPBEncoder.
-func NewJSONPBEncoder() *JSONPBEncoder {
-	return &JSONPBEncoder{
-		marshaler:   jsonpb.Marshaler{},
-		ubmarshaler: jsonpb.Unmarshaler{},
-	}
+func NewJSONPBEncoder() JSONPBEncoder {
+	return JSONPBEncoder{}
 }
 
 // NewJSONPBIndentEncoder creates a new JSONPBEncoder with indent.
-func NewJSONPBIndentEncoder(indent string) *JSONPBEncoder {
-	return &JSONPBEncoder{
-		marshaler:   jsonpb.Marshaler{Indent: indent},
-		ubmarshaler: jsonpb.Unmarshaler{},
+func NewJSONPBIndentEncoder(indent string) JSONPBEncoder {
+	return JSONPBEncoder{
+		marshaler: protojson.MarshalOptions{
+			Indent: indent,
+		},
 	}
 }
 
 // Encode protobuf struct to bytes.
-func (e *JSONPBEncoder) Encode(pb proto.Message) ([]byte, error) {
-	var buf bytes.Buffer
-	err := e.marshaler.Marshal(&buf, pb)
-	return buf.Bytes(), err
+func (e JSONPBEncoder) Encode(pb proto.Message) ([]byte, error) {
+	return e.marshaler.Marshal(pb)
 }
 
 // Decode bytes to protobuf struct.
-func (e *JSONPBEncoder) Decode(data []byte, pb proto.Message) error {
-	return e.ubmarshaler.Unmarshal(bytes.NewReader(data), pb)
+func (e JSONPBEncoder) Decode(data []byte, pb proto.Message) error {
+	return temporalproto.UnmarshalJSON(data, pb)
 }
 
 // Encode HistoryEvent slice to bytes.
@@ -122,9 +119,11 @@ func (e *JSONPBEncoder) encodeSlice(
 	buf.WriteString("[")
 	for i := 0; i < len; i++ {
 		pb := item(i)
-		if err := e.marshaler.Marshal(&buf, pb); err != nil {
+		bs, err := e.marshaler.Marshal(pb)
+		if err != nil {
 			return nil, err
 		}
+		buf.Write(bs)
 
 		if i == len-1 {
 			buf.WriteString("]")
@@ -139,18 +138,33 @@ func (e *JSONPBEncoder) encodeSlice(
 func (e *JSONPBEncoder) decodeSlice(
 	data []byte,
 	constructor func() proto.Message) error {
-	jsonDecoder := json.NewDecoder(bytes.NewReader(data))
 
-	_, err := jsonDecoder.Token() // Read leading `[` and ignore it
+	dec := json.NewDecoder(bytes.NewReader(data))
+
+	tok, err := dec.Token()
 	if err != nil {
 		return err
 	}
-	for jsonDecoder.More() {
-		pb := constructor()
-		err := jsonpb.UnmarshalNext(jsonDecoder, pb)
-		if err != nil {
+	if delim, ok := tok.(json.Delim); !ok || delim != '[' {
+		return fmt.Errorf("invalid json: expected [ but found %v", tok)
+	}
+
+	// We need DiscardUnknown here as the history json may have been written by a
+	// different proto revision
+	unmarshaller := temporalproto.JSONUnmarshaller{
+		DiscardUnknown: true,
+	}
+
+	var buf json.RawMessage
+	for dec.More() {
+		if err := dec.Decode(&buf); err != nil {
 			return err
 		}
+		pb := constructor()
+		if err := unmarshaller.Unmarshal([]byte(buf), pb); err != nil {
+			return err
+		}
+		buf = buf[:0]
 	}
 
 	return nil

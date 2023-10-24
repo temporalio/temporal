@@ -35,7 +35,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -52,6 +51,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -63,7 +65,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -175,10 +176,10 @@ func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startTime
+	startFilter.EarliestTime = timestamppb.New(startTime)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultPageSize,
@@ -424,7 +425,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -516,7 +517,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -673,7 +674,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -1071,7 +1072,7 @@ func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -1101,8 +1102,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1155,8 +1156,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1298,8 +1299,8 @@ func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	return request
@@ -1322,8 +1323,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1620,8 +1621,8 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1897,8 +1898,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
