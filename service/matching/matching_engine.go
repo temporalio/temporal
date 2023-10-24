@@ -517,7 +517,10 @@ pollLoop:
 			task.finish(nil) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
-			// the NextEventID so front end knows what are the history events to load for this workflow task.
+			// the NextEventID and the currently set sticky task queue.
+			// TODO: in theory we only need this lookup for non-sticky queries (to get NextEventID for populating
+			//		partial history in the response), but we need a new history API to to determine whether the query
+			//		is sticky or not without this call
 			mutableStateResp, err := e.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
@@ -530,7 +533,7 @@ pollLoop:
 
 			// A non-sticky poll may get task for a workflow that has sticky still set in its mutable state after
 			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
-			// frontend returns full history.
+			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
 			var hist *history.History
