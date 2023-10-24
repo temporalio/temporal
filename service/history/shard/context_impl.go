@@ -130,6 +130,14 @@ type (
 		lifecycleCtx    context.Context
 		lifecycleCancel context.CancelFunc
 
+		// ioSemaphore is used to control the concurrency of shard I/O requests.
+		// Despite its name, this semaphore is only applied to persistence requests that
+		// could cause potentially contention/conflict with each other.
+		// For cassandra, this basically means requests that use LWT.
+		// It's ok to use semaphore by its own or lock rwLock within the semaphore.
+		// But DO NOT try to acquire ioSemaphore while holding rwLock, as it may cause deadlock.
+		ioSemaphore *semaphore.Weighted
+
 		// state is protected by stateLock
 		stateLock  sync.Mutex
 		state      contextState
@@ -140,7 +148,11 @@ type (
 		lastUpdated time.Time
 		shardInfo   *persistencespb.ShardInfo
 
-		ioSemaphore    *semaphore.Weighted
+		// All methods of the taskKeyManager, except the completionFn returned by
+		// setAndTrackTaskKeys, must be invoked within rwLock.
+		// NOTE: The completionFn must be invoked outside rwLock because when
+		// renewing rangeID, the rwLock will be held when waiting for in-flight
+		// requests to complete.
 		taskKeyManager *taskKeyManager
 
 		// exist only in memory
@@ -223,20 +235,34 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 }
 
 func (s *ContextImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{{
-		Name: s.String(),
-		// rwLock may be held for the duration of a persistence op, which are called with a
-		// timeout of shardIOTimeout. add a few more seconds for reliability.
-		Timeout: shardIOTimeout + 5*time.Second,
-		Ping: func() []common.Pingable {
-			// call rwLock.Lock directly to bypass metrics since this isn't a real request
-			s.rwLock.Lock()
-			//lint:ignore SA2001 just checking if we can acquire the lock
-			s.rwLock.Unlock()
-			return nil
+	return []common.PingCheck{
+		{
+			Name: s.String() + "-shard-lock",
+			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
+			// timeout of shardIOTimeout. add a few more seconds for reliability.
+			Timeout: shardIOTimeout + 5*time.Second,
+			Ping: func() []common.Pingable {
+				// call rwLock.Lock directly to bypass metrics since this isn't a real request
+				s.rwLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				s.rwLock.Unlock()
+				return nil
+			},
+			MetricsName: metrics.DDShardLockLatency.GetMetricName(),
 		},
-		MetricsName: metrics.DDShardLockLatency.GetMetricName(),
-	}}
+		{
+			Name: s.String() + "-io-semaphore",
+			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
+			// of 10 sec.
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				s.ioSemaphore.Acquire(context.Background(), 1)
+				s.ioSemaphore.Release(1)
+				return nil
+			},
+			MetricsName: metrics.DDShardIOSemaphoreLatency.GetMetricName(),
+		},
+	}
 }
 
 func (s *ContextImpl) GetEngine(
@@ -248,12 +274,20 @@ func (s *ContextImpl) GetEngine(
 func (s *ContextImpl) AssertOwnership(
 	ctx context.Context,
 ) error {
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
+
+	// timeout check should be done within the shard lock, in case of shard lock contention
+	ctx, cancel, err := s.newDetachedContext(ctx)
+	if err != nil {
+		s.wUnlock()
+		return err
+	}
+	defer cancel()
 
 	if err := s.errorByState(); err != nil {
 		s.wUnlock()
@@ -266,7 +300,7 @@ func (s *ContextImpl) AssertOwnership(
 	}
 	s.wUnlock()
 
-	err := s.persistenceShardManager.AssertShardOwnership(ctx, request)
+	err = s.persistenceShardManager.AssertShardOwnership(ctx, request)
 	return s.handleWriteError(request.RangeID, err)
 }
 
@@ -487,16 +521,17 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
-		return err
-	}
-	defer s.ioSemaphore.Release(1)
-
 	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
-	err = s.addTasks(ctx, request)
+
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
+		return err
+	}
+	defer s.ioSemaphoreRelease()
+
+	err = s.addTasksSemaphoreAcquired(ctx, request)
 	if OperationPossiblySucceeded(err) {
 		engine.NotifyNewTasks(request.Tasks)
 	}
@@ -533,10 +568,10 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -591,10 +626,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -668,10 +703,10 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -730,10 +765,10 @@ func (s *ContextImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(ctx); err != nil {
 		return nil, err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	s.wLock()
 
@@ -806,7 +841,7 @@ func (s *ContextImpl) GetWorkflowExecution(
 	return resp, nil
 }
 
-func (s *ContextImpl) addTasks(
+func (s *ContextImpl) addTasksSemaphoreAcquired(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
@@ -949,19 +984,19 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		return ctx, cancel, nil
 	}
 
-	// Don't acquire shard lock if all stages that require lock are already processed.
+	// Don't acquire shard lock or io semaphore if all stages that require lock are already processed.
 	if !stage.IsProcessed(
 		tasks.DeleteWorkflowExecutionStageVisibility |
 			tasks.DeleteWorkflowExecutionStageCurrent |
 			tasks.DeleteWorkflowExecutionStageMutableState) {
 
-		// Wrap stage 1, 2, and 3 with function to release shard lock with defer after stage 3.
+		// Wrap stage 1, 2, and 3 with function to release io semaphore with defer after stage 3.
 		if err = func() error {
 
-			if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+			if err := s.ioSemaphoreAcquire(ctx); err != nil {
 				return err
 			}
-			defer s.ioSemaphore.Release(1)
+			defer s.ioSemaphoreRelease()
 
 			// Stage 1. Delete visibility.
 			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
@@ -986,7 +1021,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 					Tasks: newTasks,
 				}
-				err := s.addTasks(ctx, addTasksRequest)
+				err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
 				if OperationPossiblySucceeded(err) {
 					engine.NotifyNewTasks(newTasks)
 				}
@@ -997,11 +1032,12 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
 
 			// Stage 2. Delete current workflow execution pointer.
-			ctx, cancel, err := validateCtxAndShardState()
-			if err != nil {
-				return err
-			}
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {
+				ctx, cancel, err := validateCtxAndShardState()
+				if err != nil {
+					return err
+				}
+				defer cancel()
 				delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
@@ -1015,15 +1051,15 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
-			cancel()
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageCurrent)
 
 			// Stage 3. Delete workflow mutable state.
-			ctx, cancel, err = validateCtxAndShardState()
-			if err != nil {
-				return err
-			}
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageMutableState) {
+				ctx, cancel, err := validateCtxAndShardState()
+				if err != nil {
+					return err
+				}
+				defer cancel()
 				delRequest := &persistence.DeleteWorkflowExecutionRequest{
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
@@ -1034,8 +1070,8 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
-			cancel()
 			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageMutableState)
+
 			return nil
 		}(); err != nil {
 			return err
@@ -1115,6 +1151,12 @@ func (s *ContextImpl) generateTaskIDLocked() (int64, error) {
 }
 
 func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
+	// We must drain all in-flight requests before updating the rangeID.
+	// This is because requests are conditioned on rangeID, if rangeID
+	// is updated before draining them, those requests could fail.
+	// This also means renew rangeID will be the only in-flight request
+	// when it's issued, so it doesn't matter if semaphore is acquired or not
+	// before calling this method.
 	s.taskKeyManager.drainTaskRequests()
 
 	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
@@ -1184,12 +1226,10 @@ func (s *ContextImpl) updateShardInfo(
 	}
 	s.wUnlock()
 
-	// TODO: check if release shard lock is safe here
-
-	if err := s.ioSemaphore.Acquire(s.lifecycleCtx, 1); err != nil {
+	if err := s.ioSemaphoreAcquire(s.lifecycleCtx); err != nil {
 		return err
 	}
-	defer s.ioSemaphore.Release(1)
+	defer s.ioSemaphoreRelease()
 
 	ctx, cancel := s.newIOContext()
 	defer cancel()
@@ -1443,6 +1483,29 @@ func (s *ContextImpl) wUnlock() {
 
 func (s *ContextImpl) rUnlock() {
 	s.rwLock.RUnlock()
+}
+
+func (s *ContextImpl) ioSemaphoreAcquire(
+	ctx context.Context,
+) (retErr error) {
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	handler.Counter(metrics.SemaphoreRequests.GetMetricName()).Record(1)
+	startTIme := time.Now().UTC()
+	defer func() {
+		handler.Timer(metrics.SemaphoreLatency.GetMetricName()).Record(time.Since(startTIme))
+		if retErr != nil {
+			handler.Counter(metrics.SemaphoreFailures.GetMetricName()).Record(1)
+		}
+	}()
+
+	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ContextImpl) ioSemaphoreRelease() {
+	s.ioSemaphore.Release(1)
 }
 
 func (s *ContextImpl) transition(request contextRequest) error {
@@ -1854,13 +1917,13 @@ func (s *ContextImpl) acquireShard() {
 		//   outer function will do nothing, since the state was already changed.
 		// transition(contextRequestLost) for other transient errors:
 		//   This will do nothing, since state is already Acquiring.
-		if err := s.ioSemaphore.Acquire(s.lifecycleCtx, 1); err != nil {
-			return err
-		}
+		//
+		// We don't need to acquire the semaphore here, because renewRangeLocked will drain
+		// in-flight requests before making the call. So it's guaranteed that the renew rangeID
+		// UpdateShard call is the only one in flight.
 		s.wLock()
 		err = s.renewRangeLocked(true)
 		s.wUnlock()
-		s.ioSemaphore.Release(1)
 		if err != nil {
 			return err
 		}
