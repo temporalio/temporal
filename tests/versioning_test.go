@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -800,6 +801,80 @@ func (s *versioningIntegSuite) dispatchActivityCompatible() {
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v1.1", out)
+}
+
+func (s *versioningIntegSuite) TestDispatchActivityEager() {
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.EnableActivityEagerExecution, true)
+	defer dc.RemoveOverride(dynamicconfig.EnableActivityEagerExecution)
+
+	tq := s.randomizeStr(s.T().Name())
+	v1 := s.prefixed("v1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.Require().NoError(err)
+
+	pollResponse, err := s.sdkClient.WorkflowService().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+		Identity:  "test",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId: v1,
+		},
+	})
+	s.Require().NoError(err)
+	startToCloseTimeout := time.Minute
+
+	completionResponse, err := s.sdkClient.WorkflowService().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: "test",
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+			BuildId:       v1,
+			UseVersioning: true,
+		},
+		TaskToken: pollResponse.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId: "compatible",
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: tq,
+						},
+						StartToCloseTimeout: &startToCloseTimeout,
+						ActivityType: &commonpb.ActivityType{
+							Name: "ignore",
+						},
+						RequestEagerExecution: true,
+						UseCompatibleVersion:  true,
+					},
+				},
+			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId: "latest",
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: tq,
+						},
+						StartToCloseTimeout: &startToCloseTimeout,
+						ActivityType: &commonpb.ActivityType{
+							Name: "ignore",
+						},
+						RequestEagerExecution: true,
+						UseCompatibleVersion:  false,
+					},
+				},
+			},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(completionResponse.ActivityTasks))
+	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
 }
 
 func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
