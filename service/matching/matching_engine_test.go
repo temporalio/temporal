@@ -3137,6 +3137,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
 

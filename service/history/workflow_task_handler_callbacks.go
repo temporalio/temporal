@@ -296,7 +296,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		handler.workflowConsistencyChecker,
 	)
 
-	// TODO: wrap with feature flag
+	if err != nil {
+		return nil, err
+	}
+
 	if dynamicconfig.AccessHistory(handler.config.FrontendAccessHistoryFraction, handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryHandleWorkflowTaskStartedTag))) {
 		maxHistoryPageSize := int32(handler.config.HistoryMaxPageSize(namespaceEntry.Name().String()))
 		err = handler.setHistoryForRecordWfTaskStartedResp(ctx, mutableState.GetWorkflowKey(), maxHistoryPageSize, resp)

@@ -508,41 +508,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
-	fakeHistory := []*historypb.HistoryEvent{
-		{
-			EventId:   int64(1),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   int64(2),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
-						},
-					},
-				},
-			},
-		},
-		{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		},
-	}
-
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
-		NextPageToken: []byte{},
-		Size:          1,
-	}, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-
 	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
