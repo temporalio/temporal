@@ -105,6 +105,9 @@ type (
 
 		ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error)
+		// ParseReplicationTask is unique among these methods in that it does not serialize or deserialize a type to or
+		// from a byte array. Instead, it takes a proto and "parses" it into a more structured type.
+		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
 
 		SerializeTask(task tasks.Task) (commonpb.DataBlob, error)
 		DeserializeTask(category tasks.Category, blob commonpb.DataBlob) (tasks.Task, error)

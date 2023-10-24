@@ -501,9 +501,10 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 					Name:  FlagOutputFilename,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
-				&cli.StringFlag{
+				&cli.IntFlag{
 					Name:  FlagPageSize,
 					Usage: "Page size to use when reading messages from the DB, v2 only",
+					Value: defaultPageSize,
 				},
 			),
 			Action: func(c *cli.Context) error {

@@ -591,7 +591,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	lastVisitedRunID := baseRunID
 
-	// first special handling the remaining events for base workflow
+	// First, special handling of remaining events for base workflow
 	nextRunID, err := r.reapplyWorkflowEvents(
 		ctx,
 		resetMutableState,
@@ -640,7 +640,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		return nextEventID, branchToken, nil
 	}
 
-	// second for remaining continue as new workflow, reapply eligible events
+	// Second, for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
 		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)

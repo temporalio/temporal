@@ -63,6 +63,7 @@ type (
 		PersistenceVisibilityMgr        manager.VisibilityManager
 		EventBlobCache                  persistence.XDCCache
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		ReplicationDLQWriter            replication.DLQWriter
 	}
 
 	historyEngineFactory struct {
@@ -99,5 +100,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.PersistenceVisibilityMgr,
 		f.EventBlobCache,
 		f.TaskCategoryRegistry,
+		f.ReplicationDLQWriter,
 	)
 }

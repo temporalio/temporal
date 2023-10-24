@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -38,7 +39,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/serviceerror"
@@ -46,6 +49,10 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	commonspb "go.temporal.io/server/api/common/v1"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 
@@ -53,7 +60,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/replication"
@@ -75,13 +81,16 @@ type (
 		// config flag. We want to test both code paths, so we run the test suite twice, once with streaming enabled and
 		// once with it disabled.
 		enableReplicationStream bool
+		// We also parameterize on whether we should use the new queue implementation or not. See more details about
+		// this migration in [persistence.QueueV2].
+		enableQueueV2 bool
 
 		// The below "params" objects are used to propagate parameters to the dependencies that we inject into the
 		// Temporal server. Mainly, we use this to share channels between the main test goroutine and the background
 		// task processing goroutines so that we can synchronize on them.
 
 		replicationTaskExecutorParams          replicationTaskExecutorParams
-		executionManagerParams                 executionManagerParams
+		executionManagerParams                 dlqWriterParams
 		namespaceReplicationTaskExecutorParams namespaceReplicationTaskExecutorParams
 	}
 
@@ -98,13 +107,13 @@ type (
 		*replicationTaskExecutorParams
 		taskExecutor replication.TaskExecutor
 	}
-	executionManagerParams struct {
+	dlqWriterParams struct {
 		// This channel is sent to once we're done processing a request to add a message to the DLQ.
-		dlqRequests chan *persistence.PutReplicationTaskToDLQRequest
+		dlqRequests chan replication.WriteRequest
 	}
-	testExecutionManager struct {
-		*executionManagerParams
-		persistence.ExecutionManager
+	testDLQWriter struct {
+		*dlqWriterParams
+		replication.DLQWriter
 	}
 	namespaceReplicationTaskExecutorParams struct {
 		// This channel is sent to once we're done processing a namespace replication task.
@@ -130,22 +139,43 @@ const (
 )
 
 func TestHistoryReplicationDLQSuite(t *testing.T) {
+	flag.Parse()
 	for _, tc := range []struct {
 		name                    string
+		enableQueueV2           bool
 		enableReplicationStream bool
 	}{
 		{
-			name:                    "ReplicationStreamEnabled",
+			name:                    "QueueV1ReplicationStreamEnabled",
+			enableQueueV2:           false,
 			enableReplicationStream: true,
 		},
 		{
-			name:                    "ReplicationStreamDisabled",
+			name:                    "QueueV1ReplicationStreamDisabled",
+			enableQueueV2:           false,
+			enableReplicationStream: false,
+		},
+		{
+			name:                    "QueueV2ReplicationStreamEnabled",
+			enableQueueV2:           true,
+			enableReplicationStream: true,
+		},
+		{
+			name:                    "QueueV2ReplicationStreamDisabled",
+			enableQueueV2:           true,
 			enableReplicationStream: false,
 		},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.enableQueueV2 {
+				if tests.TestFlags.PersistenceType != config.StoreTypeNoSQL {
+					t.Skip("this test only works with cassandra")
+				}
+			}
 			s := &historyReplicationDLQSuite{
 				enableReplicationStream: tc.enableReplicationStream,
+				enableQueueV2:           tc.enableQueueV2,
 			}
 			suite.Run(t, s)
 		})
@@ -153,13 +183,13 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 }
 
 func (s *historyReplicationDLQSuite) SetupSuite() {
-	// Conditionally switch replication from polling to streaming.
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.EnableReplicationStream: s.enableReplicationStream,
+		dynamicconfig.EnableReplicationStream:       s.enableReplicationStream,
+		dynamicconfig.EnableHistoryReplicationDLQV2: s.enableQueueV2,
 	}
 
 	// Buffer this channel by one because we only care about the first request to add a message to the DLQ.
-	s.executionManagerParams.dlqRequests = make(chan *persistence.PutReplicationTaskToDLQRequest, 1)
+	s.executionManagerParams.dlqRequests = make(chan replication.WriteRequest, 1)
 
 	// Buffer these channels by 100 because we don't know how many replication tasks there will be until the one that
 	// replicates our namespace is executed.
@@ -170,6 +200,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	// We also don't escape this string in many places, so it can't contain any dashes.
 	format := strings.Replace(uuid.New(), "-", "", -1) + "_%s"
 	taskExecutorDecorator := s.getTaskExecutorDecorator()
+	s.logger = log.NewNoopLogger()
 	s.setupSuite(
 		[]string{
 			fmt.Sprintf(format, "active"),
@@ -178,12 +209,12 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 		tests.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,
-				func(executionManager persistence.ExecutionManager) persistence.ExecutionManager {
-					// Replace the execution manager with one that records DLQ requests so that we can wait until a
-					// task is added to the DLQ before querying tdbg.
-					return &testExecutionManager{
-						executionManagerParams: &s.executionManagerParams,
-						ExecutionManager:       executionManager,
+				func(dlqWriter replication.DLQWriter) replication.DLQWriter {
+					// Replace the dlq writer with one that records DLQ requests so that we can wait until a task is
+					// added to the DLQ before querying tdbg.
+					return &testDLQWriter{
+						dlqWriterParams: &s.executionManagerParams,
+						DLQWriter:       dlqWriter,
 					}
 				},
 			),
@@ -234,6 +265,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	activeClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: ns,
+		Logger:    log.NewSdkLogger(s.logger),
 	})
 	s.NoError(err)
 	tq := "history-replication-dlq-test-task-queue"
@@ -279,15 +311,15 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	}
 
 	// Wait for at least one replication task to be added to the DLQ. There could be more, but we only care about the
-	// first one because they should all be for this workflow since it's the only one for which we injected repliaction
+	// first one because they should all be for this workflow since it's the only one for which we injected replication
 	// task failures.
-	var request *persistence.PutReplicationTaskToDLQRequest
+	var request replication.WriteRequest
 	select {
 	case request = <-s.executionManagerParams.dlqRequests:
 	case <-ctx.Done():
 		s.FailNow("timed out waiting for replication task to be added to DLQ")
 	}
-	s.Equal(s.clusterNames[0], request.SourceClusterName)
+	s.Equal(s.clusterNames[0], request.SourceCluster)
 	s.Equal(1, int(request.ShardID))
 
 	// Create a TDBG client pointing at the standby cluster.
@@ -306,16 +338,29 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// be specified, so we just use the maximum possible value to get all available tasks.
 	lastMessageID := strconv.Itoa(math.MaxInt64 - 1)
 	file := testutils.CreateTemp(s.T(), "", "*")
+	dlqVersion := "v1"
+	if s.enableQueueV2 {
+		dlqVersion = "v2"
+	}
 	cmd := []string{
 		"tdbg",
 		"dlq",
+		"--" + tdbg.FlagDLQVersion, dlqVersion,
 		"read",
-		"--" + tdbg.FlagDLQType, "history",
 		"--" + tdbg.FlagCluster, s.clusterNames[0],
 		"--" + tdbg.FlagShardID, "1",
 		"--" + tdbg.FlagLastMessageID, lastMessageID,
 		"--" + tdbg.FlagMaxMessageCount, "10",
 		"--" + tdbg.FlagOutputFilename, file.Name(),
+	}
+	if s.enableQueueV2 {
+		cmd = append(cmd,
+			"--"+tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryReplication.ID()),
+		)
+	} else {
+		cmd = append(cmd,
+			"--"+tdbg.FlagDLQType, "history",
+		)
 	}
 	cmdString := strings.Join(cmd, " ")
 	s.T().Log("TDBG command:", cmdString)
@@ -331,16 +376,38 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	_, err = file.Seek(0, io.SeekStart)
 	s.NoError(err)
 	s.T().Log("========================================")
-	replicationTasks := s.readReplicationTasks(file)
-
 	// Verify that the replication task contains the correct information (operators will want to know which workflow
 	// failed to replicate).
-	s.NotEmpty(replicationTasks)
-	task := replicationTasks[0]
-	s.Equal(enumspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
-	historyTaskAttributes := task.GetHistoryTaskAttributes()
-	s.Equal(run.GetID(), historyTaskAttributes.GetWorkflowId())
-	s.Equal(run.GetRunID(), historyTaskAttributes.GetRunId())
+	if s.enableQueueV2 {
+		replicationTasks := readDLQReplicationTasks[*commonspb.HistoryDLQTask](
+			s.Assertions,
+			file,
+			func() *commonspb.HistoryDLQTask {
+				return &commonspb.HistoryDLQTask{}
+			},
+		)
+		s.NotEmpty(replicationTasks)
+		blob := replicationTasks[0].Task.Task
+		task, err := serialization.ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		s.NoError(err)
+		s.Equal(enumspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
+		s.Equal(run.GetID(), task.WorkflowId)
+		s.Equal(run.GetRunID(), task.RunId)
+	} else {
+		replicationTasks := readDLQReplicationTasks[*replicationspb.ReplicationTask](
+			s.Assertions,
+			file,
+			func() *replicationspb.ReplicationTask {
+				return &replicationspb.ReplicationTask{}
+			},
+		)
+		s.NotEmpty(replicationTasks)
+		task := replicationTasks[0]
+		s.Equal(enumspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
+		historyTaskAttributes := task.GetHistoryTaskAttributes()
+		s.Equal(run.GetID(), historyTaskAttributes.GetWorkflowId())
+		s.Equal(run.GetRunID(), historyTaskAttributes.GetRunId())
+	}
 }
 
 func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() interface{} {
@@ -369,19 +436,19 @@ func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() interface{} {
 
 // This function iterates through the given file parsing replication tasks until it encounters an EOF. It expects the
 // input file to be in JSONL format (JSON objects separated by newlines).
-func (s *historyReplicationDLQSuite) readReplicationTasks(file *os.File) []replicationspb.ReplicationTask {
+func readDLQReplicationTasks[T proto.Message](t *require.Assertions, file *os.File, newT func() T) []T {
 	decoder := json.NewDecoder(file)
 	var (
 		unmarshaler      jsonpb.Unmarshaler
-		replicationTasks []replicationspb.ReplicationTask
+		replicationTasks []T
 	)
 	for {
-		var task replicationspb.ReplicationTask
-		err := unmarshaler.UnmarshalNext(decoder, &task)
+		task := newT()
+		err := unmarshaler.UnmarshalNext(decoder, task)
 		if err == io.EOF { // Don't need errors.Is because io.EOF should never be wrapped.
 			return replicationTasks
 		}
-		s.NoError(err)
+		t.NoError(err)
 		replicationTasks = append(replicationTasks, task)
 	}
 }
@@ -403,13 +470,13 @@ func (t *testNamespaceReplicationTaskExecutor) Execute(
 	return nil
 }
 
-// PutReplicationTaskToDLQ is the same as the normal execution manager, but also sends the request to the channel so
-// that the test can wait for it to know that the replication task has been added to the DLQ.
-func (t *testExecutionManager) PutReplicationTaskToDLQ(
+// WriteTaskToDLQ is the same as the normal dlq writer, but also sends the request to the channel so that the test can
+// wait for it to know that the replication task has been added to the DLQ.
+func (t *testDLQWriter) WriteTaskToDLQ(
 	ctx context.Context,
-	request *persistence.PutReplicationTaskToDLQRequest,
+	request replication.WriteRequest,
 ) error {
-	err := t.ExecutionManager.PutReplicationTaskToDLQ(ctx, request)
+	err := t.DLQWriter.WriteTaskToDLQ(ctx, request)
 	if err != nil {
 		return err
 	}

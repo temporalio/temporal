@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,8 +76,12 @@ func TestExecutable(t *testing.T, tqm persistence.HistoryTaskQueueManager) {
 			clusterName := "test-cluster-" + t.Name()
 
 			var executable queues.Executable = NewFakeExecutable(task, tc.err)
+			ts := clock.NewEventTimeSource()
+			// MySQL connector compare the deadline in the ctx with time.Now().
+			// Updating ts to avoid deadline exceeded error.
+			ts.Update(time.Now())
 			dlqWriter := queues.NewDLQWriter(tqm)
-			executable = queues.NewExecutableDLQ(executable, dlqWriter, clock.NewEventTimeSource(), clusterName)
+			executable = queues.NewExecutableDLQ(executable, dlqWriter, ts, clusterName)
 			err := executable.Execute()
 			assert.ErrorContains(t, err, tc.err.Error())
 			if tc.shouldDLQ {

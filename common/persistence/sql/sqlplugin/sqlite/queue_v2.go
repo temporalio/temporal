@@ -36,14 +36,12 @@ import (
 const (
 	templateEnqueueMessageQueryV2      = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES(:queue_type, :queue_name, :queue_partition, :message_id, :message_payload, :message_encoding)`
 	templateGetMessagesQueryV2         = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? ORDER BY message_id ASC LIMIT ?`
-	templateRangeDeleteMessagesQueryV2 = `DELETE FROM queue_v2 WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id > ? and message_id <= ?`
-
-	templateGetLastMessageIDQueryV2 = `SELECT message_id FROM queue_messages WHERE message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1)`
-
-	templateCreateQueueMetadataQueryV2 = `INSERT INTO queue_metadata_v2 (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
-	templateUpdateQueueMetadataQueryV2 = `UPDATE queue_metadata_v2 SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
-	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding, version from queue_metadata_v2 WHERE queue_type=? and queue_name=?`
-	templateGetNameFromQueueMetadataV2 = `SELECT queue_name from queue_metadata_v2 WHERE queue_type=? LIMIT ? OFFSET ?`
+	templateRangeDeleteMessagesQueryV2 = `DELETE FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? and message_id <= ?`
+	templateGetLastMessageIDQueryV2    = `SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1`
+	templateCreateQueueMetadataQueryV2 = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
+	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
+	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=?`
+	templateGetNameFromQueueMetadataV2 = `SELECT queue_name from queues WHERE queue_type=? LIMIT ? OFFSET ?`
 )
 
 func (sdb *db) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {

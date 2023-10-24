@@ -103,22 +103,26 @@ var (
 		NamespaceID:       {},
 		MemoEncoding:      {},
 		Memo:              {},
+		// Used in the Elasticsearch bulk processor, not needed in SQL databases.
 		VisibilityTaskKey: {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
-		NamespaceID:     "namespace_id",
-		WorkflowID:      "workflow_id",
-		RunID:           "run_id",
-		WorkflowType:    "workflow_type_name",
-		StartTime:       "start_time",
-		ExecutionTime:   "execution_time",
-		CloseTime:       "close_time",
-		ExecutionStatus: "status",
-		TaskQueue:       "task_queue",
-		HistoryLength:   "history_length",
-		Memo:            "memo",
-		MemoEncoding:    "encoding",
+		NamespaceID:          "namespace_id",
+		WorkflowID:           "workflow_id",
+		RunID:                "run_id",
+		WorkflowType:         "workflow_type_name",
+		StartTime:            "start_time",
+		ExecutionTime:        "execution_time",
+		CloseTime:            "close_time",
+		ExecutionStatus:      "status",
+		TaskQueue:            "task_queue",
+		HistoryLength:        "history_length",
+		HistorySizeBytes:     "history_size_bytes",
+		ExecutionDuration:    "execution_duration",
+		StateTransitionCount: "state_transition_count",
+		Memo:                 "memo",
+		MemoEncoding:         "encoding",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{

@@ -325,7 +325,7 @@ func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQue
 	e.taskQueues[*taskQueue] = mgr
 }
 
-// AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
+// AddWorkflowTask either delivers task directly to waiting poller or saves it into task queue persistence.
 func (e *matchingEngineImpl) AddWorkflowTask(
 	ctx context.Context,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
