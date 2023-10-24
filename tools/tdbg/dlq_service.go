@@ -111,7 +111,7 @@ func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
 	case "history":
 		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION, nil
 	default:
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported Tueue type %v", dlqType)
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported queue type %v", dlqType)
 	}
 }
 

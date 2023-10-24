@@ -177,7 +177,6 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
-	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -192,7 +191,6 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 		wfTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		stateTransitionCount,
 		task.GetTaskID(),
 		executionStatus,
 		taskQueue,
@@ -232,7 +230,6 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
-	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -247,7 +244,6 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		wfTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		stateTransitionCount,
 		task.GetTaskID(),
 		executionStatus,
 		taskQueue,
@@ -264,7 +260,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	workflowTypeName string,
 	startTime time.Time,
 	executionTime time.Time,
-	stateTransitionCount int64,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -284,10 +279,10 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount, TaskID: taskID,
+			WorkflowTypeName: workflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			TaskID:           taskID,
 			Status:           status,
 			ShardID:          t.shardContext.GetShardID(),
 			Memo:             visibilityMemo,
@@ -306,7 +301,6 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	workflowTypeName string,
 	startTime time.Time,
 	executionTime time.Time,
-	stateTransitionCount int64,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -326,10 +320,10 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount, TaskID: taskID,
+			WorkflowTypeName: workflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			TaskID:           taskID,
 			ShardID:          t.shardContext.GetShardID(),
 			Status:           status,
 			Memo:             visibilityMemo,
@@ -456,20 +450,20 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount,
-			Status:               status,
-			TaskID:               taskID,
-			ShardID:              t.shardContext.GetShardID(),
-			Memo:                 visibilityMemo,
-			TaskQueue:            taskQueue,
-			SearchAttributes:     searchAttributes,
+			WorkflowTypeName: workflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			Status:           status,
+			TaskID:           taskID,
+			ShardID:          t.shardContext.GetShardID(),
+			Memo:             visibilityMemo,
+			TaskQueue:        taskQueue,
+			SearchAttributes: searchAttributes,
 		},
-		CloseTime:        endTime,
-		HistoryLength:    historyLength,
-		HistorySizeBytes: historySizeBytes,
+		CloseTime:            endTime,
+		HistoryLength:        historyLength,
+		HistorySizeBytes:     historySizeBytes,
+		StateTransitionCount: stateTransitionCount,
 	})
 }
 

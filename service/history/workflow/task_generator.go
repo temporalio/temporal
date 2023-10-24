@@ -323,7 +323,9 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
-	generateTimeoutTaskOnly bool, // For non-speculative WT, generate only SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching.
+	// For non-speculative WT, generate a SCHEDULE_TO_START timeout timer task
+	// only; do not generate a transfer task to push the WT to matching.
+	generateTimeoutTaskOnly bool,
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(

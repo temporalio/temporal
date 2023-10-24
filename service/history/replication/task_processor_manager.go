@@ -70,6 +70,7 @@ type (
 		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
 		logger                        log.Logger
+		dlqWriter                     DLQWriter
 
 		enableFetcher     bool
 		taskProcessorLock sync.RWMutex
@@ -89,6 +90,7 @@ func NewTaskProcessorManager(
 	eventSerializer serialization.Serializer,
 	replicationTaskFetcherFactory TaskFetcherFactory,
 	taskExecutorProvider TaskExecutorProvider,
+	dlqWriter DLQWriter,
 ) *taskProcessorManagerImpl {
 
 	return &taskProcessorManagerImpl{
@@ -113,6 +115,7 @@ func NewTaskProcessorManager(
 		),
 		logger:         shard.GetLogger(),
 		metricsHandler: shard.GetMetricsHandler(),
+		dlqWriter:      dlqWriter,
 
 		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
@@ -224,6 +227,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 					WorkflowCache:   r.workflowCache,
 				}),
 				r.eventSerializer,
+				r.dlqWriter,
 			)
 			replicationTaskProcessor.Start()
 			processors = append(processors, replicationTaskProcessor)
