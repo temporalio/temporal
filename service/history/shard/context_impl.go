@@ -244,7 +244,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			Ping: func() []common.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
-				//lint:ignore SA2001 just checking if we can acquire the lock
+				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
 				s.rwLock.Unlock()
 				return nil
 			},
@@ -256,7 +256,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			// of 10 sec.
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
-				s.ioSemaphore.Acquire(context.Background(), 1)
+				_ = s.ioSemaphore.Acquire(context.Background(), 1)
 				s.ioSemaphore.Release(1)
 				return nil
 			},
@@ -1498,10 +1498,7 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	if err := s.ioSemaphore.Acquire(ctx, 1); err != nil {
-		return err
-	}
-	return nil
+	return s.ioSemaphore.Acquire(ctx, 1)
 }
 
 func (s *ContextImpl) ioSemaphoreRelease() {
