@@ -384,7 +384,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	eagerStartActivity := false
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-	if attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) {
+
+	// Only enable eager activity start if dynamic config enables it and workflow doesn't use versioning.
+	// If a workflow _uses_ versioning, only allow eager activities which intend to use a compatible version since a
+	// worker is obviously compatible with itself and we are okay dispatching an eager task knowning that there may be a
+	// newer "default" compatible version.
+	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
+	// for the task queue.
+	if attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
+		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseCompatibleVersion) {
 		eagerStartActivity = true
 	}
 
