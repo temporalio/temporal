@@ -1808,13 +1808,13 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	}
 	workflowID := fmt.Sprintf("delete-dlq-tasks-%s", key.GetQueueName())
 	client := adh.sdkClientFactory.GetSystemClient()
-	future, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: primitives.DefaultWorkerTaskQueue,
 	}, dlq.WorkflowName, dlq.WorkflowParams{
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
-			TaskCategory:  int(category.ID()),
+			TaskCategory:  category.ID(),
 			SourceCluster: sourceCluster,
 			TargetCluster: targetCluster,
 			MaxMessageID:  request.InclusiveMaxTaskMetadata.MessageId,
@@ -1823,9 +1823,10 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	if err != nil {
 		return nil, err
 	}
+	runID := run.GetRunID()
 	jobToken := adminservice.DLQJobToken{
 		WorkflowId: workflowID,
-		RunId:      future.GetRunID(),
+		RunId:      runID,
 	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{

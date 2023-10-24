@@ -81,9 +81,9 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res.DlqTasks))
 	assert.Equal(t, int64(persistence.FirstQueueMessageID), res.DlqTasks[0].Metadata.MessageId)
-	assert.Equal(t, 1, int(res.DlqTasks[0].Task.ShardId))
+	assert.Equal(t, 1, int(res.DlqTasks[0].Payload.ShardId))
 	serializer := serialization.NewTaskSerializer()
-	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, *res.DlqTasks[0].Task.Task)
+	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, *res.DlqTasks[0].Payload.Blob)
 	require.NoError(t, err)
 	assert.Equal(t, inTask, outTask)
 }

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package history_test
 
 import (
 	"context"
@@ -36,7 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	"go.temporal.io/server/api/persistence/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -48,6 +47,7 @@ import (
 	cpersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -500,7 +500,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				)
 			}
 
-			executor := NewArchivalQueueTaskExecutor(
+			executor := history.NewArchivalQueueTaskExecutor(
 				a,
 				shardContext,
 				workflowCache,

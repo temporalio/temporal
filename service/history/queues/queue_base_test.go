@@ -689,6 +689,10 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetClusterMetadata(),
 		s.logger,
 		s.metricsHandler,
+		nil,
+		func() bool {
+			return false
+		},
 	)
 	return newQueueBase(
 		mockShard,

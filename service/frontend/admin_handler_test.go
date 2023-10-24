@@ -1173,9 +1173,9 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 							Metadata: &commonspb.HistoryDLQTaskMetadata{
 								MessageId: 21,
 							},
-							Task: &commonspb.HistoryTask{
+							Payload: &commonspb.HistoryTask{
 								ShardId: 34,
-								Task:    blob,
+								Blob:    blob,
 							},
 						},
 					},
@@ -1202,9 +1202,9 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 						Metadata: &commonspb.HistoryDLQTaskMetadata{
 							MessageId: 21,
 						},
-						Task: &commonspb.HistoryTask{
+						Payload: &commonspb.HistoryTask{
 							ShardId: 34,
-							Task:    blob,
+							Blob:    blob,
 						},
 					},
 				},

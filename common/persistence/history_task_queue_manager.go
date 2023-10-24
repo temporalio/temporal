@@ -151,7 +151,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}
 		responseTasks[i].MessageMetadata = message.MetaData
-		responseTasks[i].Task = &task
+		responseTasks[i].Payload = &task
 	}
 
 	return &ReadRawTasksResponse{
@@ -170,7 +170,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	resTasks := make([]HistoryTask, len(response.Tasks))
 
 	for i, rawTask := range response.Tasks {
-		blob := rawTask.Task.Blob
+		blob := rawTask.Payload.Blob
 		if blob == nil {
 			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}

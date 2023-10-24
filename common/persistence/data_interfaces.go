@@ -1269,7 +1269,7 @@ type (
 
 	RawHistoryTask struct {
 		MessageMetadata MessageMetadata
-		Task            *persistencespb.HistoryTask
+		Payload         *persistencespb.HistoryTask
 	}
 
 	ReadRawTasksResponse struct {

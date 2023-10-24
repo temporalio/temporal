@@ -22,46 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues_test
+package tests
 
 import (
-	"testing"
+	"encoding/json"
+	"io"
+	"os"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
-type (
-	testWrapper       struct{}
-	wrappedExecutable struct {
-		queues.Executable
-	}
-)
-
-func TestNewExecutableFactoryWrapper(t *testing.T) {
-	t.Parallel()
-
-	wrapper := testWrapper{}
-	factory := queues.NewExecutableFactory(
-		nil,
-		nil,
-		nil,
-		queues.NewNoopPriorityAssigner(),
-		clock.NewEventTimeSource(),
-		nil,
-		nil,
-		log.NewNoopLogger(),
-		nil,
+// ParseJSONLProtos parses protos from a JSONL file until EOF.
+// The newMessage argument should return a new instance of the type of message that is being parsed.
+func ParseJSONLProtos[T proto.Message](t *require.Assertions, file *os.File, newMessage func() T) []T {
+	decoder := json.NewDecoder(file)
+	var (
+		unmarshaler jsonpb.Unmarshaler
+		messages    []T
 	)
-	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
-	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
-	_, ok := executable.(wrappedExecutable)
-	assert.True(t, ok, "expected executable to be wrapped")
-}
-
-func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
-	return wrappedExecutable{e}
+	for {
+		message := newMessage()
+		err := unmarshaler.UnmarshalNext(decoder, message)
+		if err == io.EOF {
+			return messages
+		}
+		t.NoError(err)
+		messages = append(messages, message)
+	}
 }
