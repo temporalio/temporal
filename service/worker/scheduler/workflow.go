@@ -78,9 +78,10 @@ const (
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
-	SignalNameUpdate  = "update"
-	SignalNamePatch   = "patch"
-	SignalNameRefresh = "refresh"
+	SignalNameUpdate   = "update"
+	SignalNamePatch    = "patch"
+	SignalNameRefresh  = "refresh"
+	SignalNameForceCAN = "force-continue-as-new"
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
@@ -123,6 +124,7 @@ type (
 		// Signal requests
 		pendingPatch  *schedpb.SchedulePatch
 		pendingUpdate *schedspb.FullUpdateRequest
+		forceCAN      bool
 
 		uuidBatch []string
 
@@ -259,7 +261,7 @@ func (s *scheduler) run() error {
 			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
 			iters--
 		} else {
-			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested()
+			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested() || s.forceCAN
 		}
 		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
 			break
@@ -590,6 +592,9 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
+	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
+	sel.AddReceive(forceCAN, s.handleForceCANSignal)
+
 	// if we're paused or out of actions, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
 		nextWakeup = time.Time{}
@@ -722,6 +727,12 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
 	s.State.NeedRefresh = true
+}
+
+func (s *scheduler) handleForceCANSignal(ch workflow.ReceiveChannel, _ bool) {
+	ch.Receive(s.ctx, nil)
+	s.logger.Debug("got force-continue-as-new signal")
+	s.forceCAN = true
 }
 
 func (s *scheduler) processSignals() bool {
