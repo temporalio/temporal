@@ -157,7 +157,7 @@ func (s *taskKeyManagerSuite) TestSetRangeID() {
 	)
 }
 
-func (s *taskKeyManagerSuite) TestSetTaskMinScheduledTime_NoPendingTask() {
+func (s *taskKeyManagerSuite) TestGetExclusiveReaderHighWatermark_NoPendingTask() {
 	highReaderWatermark := s.manager.getExclusiveReaderHighWatermark(tasks.CategoryTransfer)
 	s.Zero(tasks.NewImmediateKey(s.initialTaskID).CompareTo(highReaderWatermark))
 
@@ -171,7 +171,7 @@ func (s *taskKeyManagerSuite) TestSetTaskMinScheduledTime_NoPendingTask() {
 	s.False(highReaderWatermark.FireTime.After(now.Add(s.manager.config.TimerProcessorMaxTimeShift())))
 }
 
-func (s *taskKeyManagerSuite) TestSetTaskMinScheduledTime_WithPendingTask() {
+func (s *taskKeyManagerSuite) TestGetExclusiveReaderHighWatermark_WithPendingTask() {
 	now := time.Now()
 	s.mockTimeSource.Update(now)
 
@@ -185,9 +185,14 @@ func (s *taskKeyManagerSuite) TestSetTaskMinScheduledTime_WithPendingTask() {
 		tasks.CategoryTimer,
 		now.Add(-time.Minute),
 	)
+
+	// make two calls here, otherwise the order for assgining task keys is not guaranteed
 	_, err := s.manager.setAndTrackTaskKeys(map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer: {transferTask},
-		tasks.CategoryTimer:    {timerTask},
+	})
+	s.NoError(err)
+	_, err = s.manager.setAndTrackTaskKeys(map[tasks.Category][]tasks.Task{
+		tasks.CategoryTimer: {timerTask},
 	})
 	s.NoError(err)
 
