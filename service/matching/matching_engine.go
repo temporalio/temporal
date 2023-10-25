@@ -67,7 +67,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/history/api"
 )
 
 const (
@@ -539,7 +538,7 @@ pollLoop:
 			var hist *history.History
 			var nextPageToken []byte
 			if dynamicconfig.AccessHistory(e.config.FrontendAccessHistoryFraction, e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingPollWorkflowTaskQueueTag))) {
-				hist, nextPageToken, err = e.getHistoryForPollWorkflowTaskQueueQueryTask(ctx, namespaceID, task, isStickyEnabled)
+				hist, nextPageToken, err = e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
 			}
 
 			if err != nil {
@@ -600,9 +599,9 @@ pollLoop:
 	}
 }
 
-// getHistoryForPollWorkflowTaskQueueQueryTask retrieves history associated with a query task returned
+// getHistoryForQueryTask retrieves history associated with a query task returned
 // by PollWorkflowTaskQueue. Returns empty history for sticky query and full history for non-sticky
-func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
+func (e *matchingEngineImpl) getHistoryForQueryTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	task *internalTask,
@@ -610,16 +609,6 @@ func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
 ) (*history.History, []byte, error) {
 	if isStickyEnabled {
 		return &history.History{Events: []*history.HistoryEvent{}}, nil, nil
-	}
-
-	continuation := &tokenspb.HistoryContinuation{
-		RunId:        task.workflowExecution().GetRunId(),
-		FirstEventId: common.FirstEventID,
-	}
-
-	continueToken, err := api.SerializeHistoryToken(continuation)
-	if err != nil {
-		return nil, nil, err
 	}
 
 	maxPageSize := int32(e.config.HistoryMaxPageSize(task.namespace.String()))
@@ -630,7 +619,6 @@ func (e *matchingEngineImpl) getHistoryForPollWorkflowTaskQueueQueryTask(
 				Namespace:       task.namespace.String(),
 				Execution:       task.workflowExecution(),
 				MaximumPageSize: maxPageSize,
-				NextPageToken:   continueToken,
 				WaitNewEvent:    false,
 				SkipArchival:    true,
 			},

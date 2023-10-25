@@ -34,7 +34,6 @@ import (
 	"time"
 
 	replicationpb "go.temporal.io/api/replication/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -69,6 +68,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
