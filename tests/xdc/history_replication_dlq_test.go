@@ -26,22 +26,17 @@ package xdc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/serviceerror"
@@ -379,7 +374,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// Verify that the replication task contains the correct information (operators will want to know which workflow
 	// failed to replicate).
 	if s.enableQueueV2 {
-		replicationTasks := readDLQReplicationTasks[*commonspb.HistoryDLQTask](
+		replicationTasks := tests.ParseJSONLProtos[*commonspb.HistoryDLQTask](
 			s.Assertions,
 			file,
 			func() *commonspb.HistoryDLQTask {
@@ -387,14 +382,14 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 			},
 		)
 		s.NotEmpty(replicationTasks)
-		blob := replicationTasks[0].Task.Task
+		blob := replicationTasks[0].Payload.Blob
 		task, err := serialization.ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 		s.NoError(err)
 		s.Equal(enumspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
 		s.Equal(run.GetID(), task.WorkflowId)
 		s.Equal(run.GetRunID(), task.RunId)
 	} else {
-		replicationTasks := readDLQReplicationTasks[*replicationspb.ReplicationTask](
+		replicationTasks := tests.ParseJSONLProtos[*replicationspb.ReplicationTask](
 			s.Assertions,
 			file,
 			func() *replicationspb.ReplicationTask {
@@ -431,25 +426,6 @@ func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() interface{} {
 				taskExecutor:                  taskExecutor,
 			}
 		}
-	}
-}
-
-// This function iterates through the given file parsing replication tasks until it encounters an EOF. It expects the
-// input file to be in JSONL format (JSON objects separated by newlines).
-func readDLQReplicationTasks[T proto.Message](t *require.Assertions, file *os.File, newT func() T) []T {
-	decoder := json.NewDecoder(file)
-	var (
-		unmarshaler      jsonpb.Unmarshaler
-		replicationTasks []T
-	)
-	for {
-		task := newT()
-		err := unmarshaler.UnmarshalNext(decoder, task)
-		if err == io.EOF { // Don't need errors.Is because io.EOF should never be wrapped.
-			return replicationTasks
-		}
-		t.NoError(err)
-		replicationTasks = append(replicationTasks, task)
 	}
 }
 

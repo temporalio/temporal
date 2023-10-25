@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
-	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -135,10 +134,6 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 	t.Run("ClientTest", func(t *testing.T) {
 		t.Parallel()
 		historytest.TestClient(t, historyTaskQueueManager)
-	})
-	t.Run("ExecutableTest", func(t *testing.T) {
-		t.Parallel()
-		queuestest.TestExecutable(t, historyTaskQueueManager)
 	})
 }
 
