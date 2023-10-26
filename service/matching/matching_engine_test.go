@@ -150,20 +150,21 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:       taskMgr,
-		historyClient:     mockHistoryClient,
-		taskQueues:        make(map[taskQueueID]taskQueueManager),
-		taskQueueCount:    make(map[taskQueueCounterKey]int),
-		logger:            logger,
-		throttledLogger:   log.ThrottledLogger(logger),
-		metricsHandler:    metrics.NoopMetricsHandler,
-		matchingRawClient: mockMatchingClient,
-		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
-		config:            config,
-		namespaceRegistry: mockNamespaceCache,
-		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:        clock.NewRealTimeSource(),
-		visibilityManager: mockVisibilityManager,
+		taskManager:          taskMgr,
+		historyClient:        mockHistoryClient,
+		taskQueues:           make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:       make(map[taskQueueCounterKey]int),
+		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		logger:               logger,
+		throttledLogger:      log.ThrottledLogger(logger),
+		metricsHandler:       metrics.NoopMetricsHandler,
+		matchingRawClient:    mockMatchingClient,
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
+		config:               config,
+		namespaceRegistry:    mockNamespaceCache,
+		clusterMeta:          cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:           clock.NewRealTimeSource(),
+		visibilityManager:    mockVisibilityManager,
 	}
 }
 
@@ -350,6 +351,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 				Attempt:                    1,
 				StickyExecutionEnabled:     true,
 				WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:              nil,
 			}
 			return response, nil
 		}).AnyTimes()
@@ -409,10 +412,80 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		ScheduledTime: nil,
 		StartedTime:   nil,
 		Queries:       nil,
+		History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken: nil,
 	}
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
+	namespaceID := namespace.ID(uuid.New())
+	tl := "makeToast"
+	identity := "selfDrivingToaster"
+	fakeErr := serviceerror.NewDataLoss("fake data loss error")
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowType := &commonpb.WorkflowType{
+		Name: "workflow",
+	}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	scheduledEventID := int64(0)
+
+	// History service is using mock
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetMutableStateRequest, arg2 ...interface{}) (*historyservice.GetMutableStateResponse, error) {
+			s.logger.Debug("Mock Received GetMutableState")
+			response := &historyservice.GetMutableStateResponse{
+				PreviousStartedEventId: scheduledEventID,
+				NextEventId:            scheduledEventID + 1,
+				WorkflowType:           workflowType,
+				TaskQueue:              taskQueue,
+				StickyTaskQueue:        &taskqueuepb.TaskQueue{Name: "makeToast-sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+				CurrentBranchToken:     nil,
+			}
+			return response, nil
+		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			return nil, fakeErr
+		}).AnyTimes()
+
+	query := matchingservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   taskQueue,
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Namespace: "ns",
+			Execution: execution,
+			Query:     &querypb.WorkflowQuery{QueryType: "q"},
+		},
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+		s.ErrorIs(err, fakeErr)
+		wg.Done()
+	}()
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  identity,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+	wg.Wait()
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
@@ -1284,8 +1357,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				ScheduledEventId:       scheduledEventID,
 				WorkflowType:           workflowType,
 				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
 			}, nil
 		}).AnyTimes()
+
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
@@ -1618,8 +1694,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				ScheduledEventId:       taskRequest.GetScheduledEventId(),
 				WorkflowType:           workflowType,
 				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
 			}, nil
 		}).AnyTimes()
+
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
@@ -3058,6 +3137,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
 

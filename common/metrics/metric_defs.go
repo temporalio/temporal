@@ -1121,4 +1121,6 @@ const (
 	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
 	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
 	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
+	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

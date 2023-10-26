@@ -188,5 +188,6 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
 	config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
