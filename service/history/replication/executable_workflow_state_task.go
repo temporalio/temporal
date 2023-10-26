@@ -107,7 +107,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
-			metrics.NamespaceTag(namespaceName),
+			metrics.NamespaceTag(e.NamespaceID),
 		)
 		return nil
 	}

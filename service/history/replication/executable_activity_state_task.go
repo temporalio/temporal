@@ -113,7 +113,7 @@ func (e *ExecutableActivityStateTask) Execute() error {
 		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
-			metrics.NamespaceTag(namespaceName),
+			metrics.NamespaceTag(e.NamespaceID),
 		)
 		return nil
 	}
