@@ -501,6 +501,26 @@ func (mr *MockAdminServiceClientMockRecorder) MergeDLQMessages(ctx, in interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// MergeDLQTasks mocks base method.
+func (m *MockAdminServiceClient) MergeDLQTasks(ctx context.Context, in *adminservice.MergeDLQTasksRequest, opts ...grpc.CallOption) (*adminservice.MergeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MergeDLQTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.MergeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDLQTasks indicates an expected call of MergeDLQTasks.
+func (mr *MockAdminServiceClientMockRecorder) MergeDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQTasks), varargs...)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *adminservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1189,6 +1209,21 @@ func (m *MockAdminServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *ad
 func (mr *MockAdminServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQMessages), arg0, arg1)
+}
+
+// MergeDLQTasks mocks base method.
+func (m *MockAdminServiceServer) MergeDLQTasks(arg0 context.Context, arg1 *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.MergeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDLQTasks indicates an expected call of MergeDLQTasks.
+func (mr *MockAdminServiceServerMockRecorder) MergeDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQTasks), arg0, arg1)
 }
 
 // PurgeDLQMessages mocks base method.

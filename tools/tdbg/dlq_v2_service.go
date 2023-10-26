@@ -25,10 +25,8 @@
 package tdbg
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"strings"
 
@@ -50,6 +48,7 @@ type DLQV2Service struct {
 	clientFactory ClientFactory
 	writer        io.Writer
 	marshaler     jsonpb.Marshaler
+	prompter      *Prompter
 }
 
 const dlqV2DefaultMaxMessageCount = 100
@@ -60,6 +59,7 @@ func NewDLQV2Service(
 	targetCluster string,
 	clientFactory ClientFactory,
 	writer io.Writer,
+	prompter *Prompter,
 ) *DLQV2Service {
 	return &DLQV2Service{
 		category:      category,
@@ -67,6 +67,7 @@ func NewDLQV2Service(
 		targetCluster: targetCluster,
 		clientFactory: clientFactory,
 		writer:        writer,
+		prompter:      prompter,
 		marshaler: jsonpb.Marshaler{
 			Indent:       "  ",
 			EmitDefaults: true,
@@ -85,17 +86,9 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 			return fmt.Errorf("--%s must be positive but was %d", FlagMaxMessageCount, remainingMessageCount)
 		}
 	}
-	var maxMessageID int64 = math.MaxInt64
-	if c.IsSet(FlagLastMessageID) {
-		maxMessageID = c.Int64(FlagLastMessageID)
-		if maxMessageID < persistence.FirstQueueMessageID {
-			return fmt.Errorf(
-				"--%s must be at least %d but was %d",
-				FlagLastMessageID,
-				persistence.FirstQueueMessageID,
-				maxMessageID,
-			)
-		}
+	maxMessageID, err := ac.getLastMessageID(c, "read")
+	if err != nil {
+		return err
 	}
 
 	outputFile, err := getOutputFile(c.String(FlagOutputFilename))
@@ -148,23 +141,14 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 
 func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	lastMessageID := c.Int64(FlagLastMessageID)
-	if lastMessageID < persistence.FirstQueueMessageID {
-		return fmt.Errorf(
-			"--%s must be at least %d but was %d",
-			FlagLastMessageID,
-			persistence.FirstQueueMessageID,
-			lastMessageID,
-		)
+	lastMessageID, err := ac.getLastMessageID(c, "purge")
+	if err != nil {
+		return err
 	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 	response, err := adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
-		DlqKey: &commonspb.HistoryDLQKey{
-			TaskCategory:  int32(ac.category.ID()),
-			SourceCluster: ac.sourceCluster,
-			TargetCluster: ac.targetCluster,
-		},
+		DlqKey: ac.getDLQKey(),
 		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
 			MessageId: lastMessageID,
 		},
@@ -179,8 +163,60 @@ func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
 	return nil
 }
 
-func (ac *DLQV2Service) MergeMessages(*cli.Context) error {
-	return errors.New("merge is not yet implemented for DLQ v2")
+func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
+	adminClient := ac.clientFactory.AdminClient(c)
+	lastMessageID, err := ac.getLastMessageID(c, "merge")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	response, err := adminClient.MergeDLQTasks(ctx, &adminservice.MergeDLQTasksRequest{
+		DlqKey: ac.getDLQKey(),
+		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			MessageId: lastMessageID,
+		},
+		BatchSize: int32(c.Int(FlagPageSize)), // let the server handle validation and defaulting of batch size.
+	})
+	if err != nil {
+		return fmt.Errorf("call to MergeDLQTasks failed: %w", err)
+	}
+	err = ac.marshaler.Marshal(ac.writer, response)
+	if err != nil {
+		return fmt.Errorf("unable to encode MergeDLQTasks response: %w", err)
+	}
+	return nil
+}
+
+func (ac *DLQV2Service) getDLQKey() *commonspb.HistoryDLQKey {
+	return &commonspb.HistoryDLQKey{
+		TaskCategory:  int32(ac.category.ID()),
+		SourceCluster: ac.sourceCluster,
+		TargetCluster: ac.targetCluster,
+	}
+}
+
+func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, error) {
+	if !c.IsSet(FlagLastMessageID) {
+		msg := fmt.Sprintf(
+			"You did not set --%s. Are you sure you want to %s all messages without an upper bound?",
+			FlagLastMessageID,
+			action,
+		)
+		ac.prompter.Prompt(msg)
+		return persistence.MaxQueueMessageID, nil
+	}
+	lastMessageID := c.Int64(FlagLastMessageID)
+	if lastMessageID < persistence.FirstQueueMessageID {
+		return 0, fmt.Errorf(
+			"--%s must be at least %d but was %d",
+			FlagLastMessageID,
+			persistence.FirstQueueMessageID,
+			lastMessageID,
+		)
+	}
+	return lastMessageID, nil
 }
 
 func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {
@@ -191,7 +227,7 @@ func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegist
 		}
 	}
 	slices.SortFunc(categories, func(a, b tasks.Category) int {
-		return int(a.ID() - b.ID())
+		return a.ID() - b.ID()
 	})
 	return categories
 }
@@ -217,9 +253,7 @@ func getCategoryByID(
 	id, err := strconv.Atoi(categoryIDString)
 	if err != nil {
 		return tasks.Category{}, false, fmt.Errorf(
-			"%w: unable to parse category ID as an integer: %s",
-			err,
-			categoryIDString,
+			"%w: unable to parse category ID as an integer: %s", err, categoryIDString,
 		)
 	}
 	for _, c := range getSupportedDLQTaskCategories(taskCategoryRegistry) {

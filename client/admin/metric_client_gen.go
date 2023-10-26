@@ -341,6 +341,20 @@ func (c *metricClient) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.MergeDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientMergeDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,

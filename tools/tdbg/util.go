@@ -25,7 +25,6 @@
 package tdbg
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -213,25 +212,6 @@ func StringToEnum(search string, candidates map[string]int32) (int32, error) {
 	}
 
 	return 0, fmt.Errorf("could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
-}
-
-// prompt will show input msg, then waiting user input y/yes to continue
-func prompt(msg string, autoConfirm bool) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(msg, " ")
-	var text string
-	if autoConfirm {
-		text = "y"
-		fmt.Print("y")
-	} else {
-		text, _ = reader.ReadString('\n')
-	}
-	fmt.Println()
-
-	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
-	if textLower != "y" && textLower != "yes" {
-		os.Exit(1)
-	}
 }
 
 // paginate creates an interactive CLI mode to control the printing of items

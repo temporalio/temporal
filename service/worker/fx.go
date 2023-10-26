@@ -60,7 +60,7 @@ var Module = fx.Options(
 	scheduler.Module,
 	batcher.Module,
 	dlq.Module,
-	fx.Provide(func(c resource.HistoryClient) dlq.HistoryServiceClient {
+	fx.Provide(func(c resource.HistoryClient) dlq.HistoryClient {
 		return c
 	}),
 	fx.Provide(VisibilityManagerProvider),
