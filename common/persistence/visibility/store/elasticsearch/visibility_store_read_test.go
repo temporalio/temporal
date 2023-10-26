@@ -700,10 +700,9 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 
 	query = `ExecutionTime < "unable to parse"`
 	queryParams, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
-	// Wrong dates goes directly to Elasticsearch, and it returns an error.
-	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"unable to parse"}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.Nil(queryParams.Sorter)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal(err.Error(), "invalid query: unable to convert filter expression: unable to convert values of comparison expression: invalid value for search attribute ExecutionTime of type Datetime: \"unable to parse\"")
 
 	// invalid union injection
 	query = `WorkflowId = 'wid' union select * from dummy`
