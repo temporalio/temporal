@@ -27,6 +27,7 @@ package queues
 import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -40,13 +41,7 @@ type (
 		NewExecutable(task tasks.Task, readerID int64) Executable
 	}
 	// ExecutableFactoryFn is a convenience type to avoid having to create a struct that implements ExecutableFactory.
-	ExecutableFactoryFn func(readerID int64, t tasks.Task) Executable
-	ExecutableWrapper   interface {
-		Wrap(e Executable) Executable
-	}
-	// ExecutableWrapperFn is a convenience type to avoid having to create a struct that implements ExecutableWrapper.
-	ExecutableWrapperFn func(e Executable) Executable
-
+	ExecutableFactoryFn   func(readerID int64, t tasks.Task) Executable
 	executableFactoryImpl struct {
 		executor          Executor
 		scheduler         Scheduler
@@ -57,10 +52,8 @@ type (
 		clusterMetadata   cluster.Metadata
 		logger            log.Logger
 		metricsHandler    metrics.Handler
-	}
-	executableFactoryWrapper struct {
-		factory ExecutableFactory
-		wrapper ExecutableWrapper
+		dlqWriter         *DLQWriter
+		dlqEnabled        dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -78,6 +71,8 @@ func NewExecutableFactory(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	dlqWriter *DLQWriter,
+	dlqEnabled dynamicconfig.BoolPropertyFn,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
 		executor:          executor,
@@ -89,13 +84,9 @@ func NewExecutableFactory(
 		clusterMetadata:   clusterMetadata,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
+		dlqWriter:         dlqWriter,
+		dlqEnabled:        dlqEnabled,
 	}
-}
-
-// NewExecutableFactoryWrapper returns a new ExecutableFactory that wraps the executable created by the factory with the
-// given wrapper.
-func NewExecutableFactoryWrapper(factory ExecutableFactory, wrapper ExecutableWrapper) executableFactoryWrapper {
-	return executableFactoryWrapper{factory: factory, wrapper: wrapper}
 }
 
 func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) Executable {
@@ -111,13 +102,9 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		f.clusterMetadata,
 		f.logger,
 		f.metricsHandler,
+		func(params *ExecutableParams) {
+			params.DLQEnabled = f.dlqEnabled
+			params.DLQWriter = f.dlqWriter
+		},
 	)
-}
-
-func (f executableFactoryWrapper) NewExecutable(task tasks.Task, readerID int64) Executable {
-	return f.wrapper.Wrap(f.factory.NewExecutable(task, readerID))
-}
-
-func (f ExecutableWrapperFn) Wrap(e Executable) Executable {
-	return f(e)
 }

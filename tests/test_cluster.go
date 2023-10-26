@@ -174,6 +174,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
 		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
+	options.Persistence.Logger = logger
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup(clusterMetadataConfig)

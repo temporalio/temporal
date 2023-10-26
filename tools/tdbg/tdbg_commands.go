@@ -28,17 +28,21 @@ import (
 	"fmt"
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func getCommands(
+	clientFactory ClientFactory,
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	prompterFactory PrompterFactory,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:        "workflow",
 			Aliases:     []string{"w"},
 			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory),
+			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -67,7 +71,7 @@ func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCat
 		{
 			Name:        "dlq",
 			Usage:       "Run admin operation on DLQ",
-			Subcommands: newAdminDLQCommands(clientFactory, taskCategoryRegistry),
+			Subcommands: newAdminDLQCommands(dlqServiceProvider, taskCategoryRegistry),
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
@@ -84,7 +88,7 @@ func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCat
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory) []*cli.Command {
+func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -224,7 +228,7 @@ func newAdminWorkflowCommands(clientFactory ClientFactory) []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c, clientFactory)
+				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
 	}
@@ -482,7 +486,10 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	}
 }
 
-func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func newAdminDLQCommands(
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "read",
@@ -501,13 +508,14 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 					Name:  FlagOutputFilename,
 					Usage: "Output file to write to, if not provided output is written to stdout",
 				},
-				&cli.StringFlag{
+				&cli.IntFlag{
 					Name:  FlagPageSize,
 					Usage: "Page size to use when reading messages from the DB, v2 only",
+					Value: defaultPageSize,
 				},
 			),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -520,7 +528,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(taskCategoryRegistry),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -528,12 +536,19 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			},
 		},
 		{
-			Name:    "merge",
-			Aliases: []string{"m"},
-			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
-			Flags:   getDLQFlags(taskCategoryRegistry),
+			Name:        "merge",
+			Aliases:     []string{"m"},
+			Usage:       "Merge DLQ messages with equal or smaller ids than the provided task id",
+			Description: "This command will delete messages after they've been re-enqueued if using v2.",
+			Flags: append(getDLQFlags(taskCategoryRegistry),
+				&cli.IntFlag{
+					Name: FlagPageSize,
+					Usage: "Batch size to use when purging messages from the DB, v2 only. Will use server default if " +
+						"not provided.",
+				},
+			),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -562,8 +577,9 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 			Usage: "ShardId, v1 only",
 		},
 		&cli.IntFlag{
-			Name:  FlagLastMessageID,
-			Usage: "The upper boundary of the read message",
+			Name: FlagLastMessageID,
+			Usage: "The upper boundary of messages to operate on. If not provided, all messages will be operated on. " +
+				"However, you will be prompted for confirmation unless the --yes flag is also provided.",
 		},
 		&cli.StringFlag{
 			Name:  FlagTargetCluster,

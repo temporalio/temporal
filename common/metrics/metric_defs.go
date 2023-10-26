@@ -829,7 +829,7 @@ var (
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
-	BatchableTaskBatchCount                       = NewCounterDef("batchable_task_batch_count")
+	BatchableTaskBatchCount                       = NewGaugeDef("batchable_task_batch_count")
 	ConcurrencyUpdateFailureCounter               = NewCounterDef("concurrency_update_failure")
 	ServiceErrShardOwnershipLostCounter           = NewCounterDef("service_errors_shard_ownership_lost")
 	HeartbeatTimeoutCounter                       = NewCounterDef("heartbeat_timeout")
@@ -1123,4 +1123,6 @@ const (
 	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
 	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
 	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
+	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

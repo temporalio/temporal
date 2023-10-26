@@ -36,7 +36,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -312,7 +311,7 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
 // (e.g. if a child workflow has recorded its result in the parent workflow)
 // Please use normal workflow delete command to gracefully delete a workflow execution.
-func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
 	adminClient := clientFactory.AdminClient(c)
 
 	namespace, err := getRequiredOption(c, FlagNamespace)
@@ -325,8 +324,8 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 	rid := c.String(FlagRunID)
 
-	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nForce delete above workflow execution[Yes/No]?", namespace, wid, rid)
-	prompt(msg, c.Bool(FlagYes))
+	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nForce delete above workflow execution?", namespace, wid, rid)
+	prompter.Prompt(msg)
 
 	ctx, cancel := newContext(c)
 	defer cancel()

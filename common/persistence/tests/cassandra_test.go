@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 )
@@ -407,8 +407,7 @@ func testCassandraQueueV2ErrRangeDeleteMessagesUpdateQueueQuery(t *testing.T, cl
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	_, err = enqueueMessage(ctx, q, queueType, queueName)
-	require.NoError(t, err)
+	persistencetest.EnqueueMessagesForDelete(t, q, queueName, queueType)
 	err = deleteMessages(ctx, q, queueType, queueName, persistence.FirstQueueMessageID)
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
@@ -417,10 +416,11 @@ func testCassandraQueueV2ErrRangeDeleteMessagesUpdateQueueQuery(t *testing.T, cl
 }
 
 func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
-	q := newQueueV2Store(failingSession{
+	session := &failingSession{
 		Session:        cluster.GetSession(),
-		failingQueries: []string{cassandra.TemplateGetMaxMessageIDQuery},
-	})
+		failingQueries: []string{},
+	}
+	q := newQueueV2Store(session)
 	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
@@ -429,6 +429,8 @@ func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
+	persistencetest.EnqueueMessagesForDelete(t, q, queueName, queueType)
+	session.failingQueries = []string{cassandra.TemplateGetMaxMessageIDQuery}
 	err = deleteMessages(ctx, q, queueType, queueName, persistence.FirstQueueMessageID)
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
@@ -449,7 +451,7 @@ func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, clu
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	_, err = enqueueMessage(ctx, q, queueType, queueName)
+	_, err = persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
@@ -507,7 +509,7 @@ func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster 
 	require.NoError(t, err)
 	for i := 0; i < numConcurrentWrites; i++ {
 		go func() {
-			res, err := enqueueMessage(ctx, q, queueType, queueName)
+			res, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -668,14 +670,7 @@ func testCassandraQueueV2ErrEnqueueMessageQuery(t *testing.T, cluster *cassandra
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	_, err = q.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-		Blob: commonpb.DataBlob{
-			EncodingType: enums.ENCODING_TYPE_JSON,
-			Data:         []byte("1"),
-		},
-	})
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
@@ -795,8 +790,7 @@ func testCassandraQueueV2ErrRangeDeleteMessagesQuery(t *testing.T, cluster *cass
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	_, err = enqueueMessage(ctx, q, queueType, queueName)
-	require.NoError(t, err)
+	persistencetest.EnqueueMessagesForDelete(t, q, queueName, queueType)
 	err = deleteMessages(ctx, q, queueType, queueName, persistence.FirstQueueMessageID)
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
@@ -818,14 +812,7 @@ func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassand
 	})
 	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
-		_, err = q.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
-			QueueType: queueType,
-			QueueName: queueName,
-			Blob: commonpb.DataBlob{
-				EncodingType: enums.ENCODING_TYPE_JSON,
-				Data:         []byte("1"),
-			},
-		})
+		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 		require.NoError(t, err)
 	}
 	err = deleteMessages(ctx, q, queueType, queueName, persistence.FirstQueueMessageID)
@@ -916,7 +903,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 
 			// Enqueue 3 messages
 			for i := 0; i < 3; i++ {
-				_, err := enqueueMessage(ctx, qs[0].QueueV2, queueType, queueName)
+				_, err := persistencetest.EnqueueMessage(ctx, qs[0].QueueV2, queueType, queueName)
 				require.NoError(t, err)
 			}
 
@@ -1047,11 +1034,11 @@ func testCassandraQueueV2RangeDeleteUpperBoundHigherThanMaxMessageID(t *testing.
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	_, err = enqueueMessage(ctx, q, queueType, queueName)
+	_, err = persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 	require.NoError(t, err)
 	err = deleteMessages(ctx, q, queueType, queueName, persistence.FirstQueueMessageID+2)
 	require.NoError(t, err)
-	res, err := enqueueMessage(ctx, q, queueType, queueName)
+	res, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 	require.NoError(t, err)
 	assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.Metadata.ID)
 }
@@ -1071,7 +1058,7 @@ func testCassandraQueueV2RepeatedRangeDelete(t *testing.T, cluster *cassandra.Te
 	require.NoError(t, err)
 	numMessages := 3
 	for i := 0; i < numMessages; i++ {
-		_, err := enqueueMessage(ctx, q, queueType, queueName)
+		_, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 		require.NoError(t, err)
 	}
 	numRemainingMessages := getNumMessages(t, cluster, queueType, queueName, numMessages)

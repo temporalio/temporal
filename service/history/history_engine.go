@@ -164,6 +164,7 @@ func NewEngineWithShardContext(
 	persistenceVisibilityMgr manager.VisibilityManager,
 	eventBlobCache persistence.XDCCache,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	dlqWriter replication.DLQWriter,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -283,6 +284,7 @@ func NewEngineWithShardContext(
 		eventSerializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
+		dlqWriter,
 	)
 	return historyEngImpl
 }

@@ -22,35 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queuestest
+package tests
 
 import (
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
+	"encoding/json"
+	"io"
+	"os"
+
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
-// FakeExecutable is a fake queues.Executable that returns the given task and error upon GetTask and Execute,
-// respectively, and it also records the number of calls.
-type FakeExecutable struct {
-	queues.Executable
-	err   error
-	task  tasks.Task
-	calls int
-}
-
-func NewFakeExecutable(task tasks.Task, err error) *FakeExecutable {
-	return &FakeExecutable{task: task, err: err}
-}
-
-func (e *FakeExecutable) Execute() error {
-	e.calls++
-	return e.err
-}
-
-func (e *FakeExecutable) GetTask() tasks.Task {
-	return e.task
-}
-
-func (e *FakeExecutable) GetCalls() int {
-	return e.calls
+// ParseJSONLProtos parses protos from a JSONL file until EOF.
+// The newMessage argument should return a new instance of the type of message that is being parsed.
+func ParseJSONLProtos[T proto.Message](t *require.Assertions, file *os.File, newMessage func() T) []T {
+	decoder := json.NewDecoder(file)
+	var (
+		unmarshaler jsonpb.Unmarshaler
+		messages    []T
+	)
+	for {
+		message := newMessage()
+		err := unmarshaler.UnmarshalNext(decoder, message)
+		if err == io.EOF {
+			return messages
+		}
+		t.NoError(err)
+		messages = append(messages, message)
+	}
 }

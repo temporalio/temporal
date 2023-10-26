@@ -522,6 +522,8 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		StartedTime:                historyResponse.StartedTime,
 		Queries:                    historyResponse.Queries,
 		Messages:                   historyResponse.Messages,
+		History:                    historyResponse.History,
+		NextPageToken:              historyResponse.NextPageToken,
 	}
 
 	return matchingResp

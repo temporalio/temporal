@@ -22,46 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues_test
+package searchattribute
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
 )
 
-type (
-	testWrapper       struct{}
-	wrappedExecutable struct {
-		queues.Executable
+// This test is to make sure all system search attributes have a corresponding
+// column name in SQL DB.
+// If this test is failing, make sure that you updated the SQL DB schemas, and
+// you mapped the search attribute constant to the column name.
+func TestValidateSqlDbSystemNameToColNameMap(t *testing.T) {
+	s := assert.New(t)
+	s.Contains(sqlDbSystemNameToColName, NamespaceID)
+	for key := range system {
+		s.Contains(sqlDbSystemNameToColName, key)
 	}
-)
-
-func TestNewExecutableFactoryWrapper(t *testing.T) {
-	t.Parallel()
-
-	wrapper := testWrapper{}
-	factory := queues.NewExecutableFactory(
-		nil,
-		nil,
-		nil,
-		queues.NewNoopPriorityAssigner(),
-		clock.NewEventTimeSource(),
-		nil,
-		nil,
-		log.NewNoopLogger(),
-		nil,
-	)
-	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
-	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
-	_, ok := executable.(wrappedExecutable)
-	assert.True(t, ok, "expected executable to be wrapped")
-}
-
-func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
-	return wrappedExecutable{e}
 }

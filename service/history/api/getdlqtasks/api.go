@@ -77,9 +77,9 @@ func Invoke(
 			Metadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: task.MessageMetadata.ID,
 			},
-			Task: &commonspb.HistoryTask{
-				ShardId: task.Task.ShardId,
-				Task:    task.Task.Blob,
+			Payload: &commonspb.HistoryTask{
+				ShardId: task.Payload.ShardId,
+				Blob:    task.Payload.Blob,
 			},
 		}
 	}

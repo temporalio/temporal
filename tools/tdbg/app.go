@@ -26,6 +26,7 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 
@@ -37,8 +38,30 @@ import (
 	"github.com/temporalio/tctl-kit/pkg/color"
 )
 
+type (
+	// Params which are customizable for the CLI application.
+	Params struct {
+		// ClientFactory creates Temporal service clients for tdbg to use.
+		ClientFactory ClientFactory
+		// TaskCategoryRegistry is used to determine which task categories are available for tdbg to use.
+		TaskCategoryRegistry tasks.TaskCategoryRegistry
+		// Writer is used to write output from tdbg. The default is os.Stdout.
+		Writer io.Writer
+	}
+	// Option modifies the Params for tdbg.
+	Option func(params *Params)
+)
+
 // NewCliApp instantiates a new instance of the CLI application.
-func NewCliApp(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.App {
+func NewCliApp(opts ...Option) *cli.App {
+	params := Params{
+		ClientFactory:        NewClientFactory(),
+		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		Writer:               os.Stdout,
+	}
+	for _, opt := range opts {
+		opt(&params)
+	}
 	app := cli.NewApp()
 	app.Name = "tdbg"
 	app.Usage = "A command-line tool for Temporal server debugging"
@@ -103,7 +126,13 @@ func NewCliApp(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCateg
 			Value: string(color.Auto),
 		},
 	}
-	app.Commands = getCommands(clientFactory, taskCategoryRegistry)
+	prompterFactory := NewPrompterFactory()
+	app.Commands = getCommands(
+		params.ClientFactory,
+		NewDLQServiceProvider(params.ClientFactory, params.TaskCategoryRegistry, params.Writer, prompterFactory),
+		params.TaskCategoryRegistry,
+		prompterFactory,
+	)
 	app.ExitErrHandler = handleError
 
 	return app

@@ -1079,8 +1079,5 @@ func TestSQLiteQueueV2(t *testing.T) {
 		factory.Close()
 		assert.NoError(t, os.Remove(cfg.DatabaseName))
 	})
-	t.Run("RunQueueV2TestSuiteForSQL", func(t *testing.T) {
-		t.Parallel()
-		RunQueueV2TestSuiteForSQL(t, factory)
-	})
+	RunQueueV2TestSuiteForSQL(t, factory)
 }
