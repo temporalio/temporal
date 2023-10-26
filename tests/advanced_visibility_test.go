@@ -1244,6 +1244,59 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 	s.Contains(err.Error(), "'group by' clause supports only a single field")
 }
 
+func (s *advancedVisibilitySuite) TestCountGroupByWorkflow_EnableCountGroupByAnySA() {
+	dc := s.testCluster.host.dcClient
+	dc.OverrideValue(dynamicconfig.VisibilityEnableCountGroupByAnySA, true)
+
+	id := "es-functional-count-groupby-workflow-test"
+	wt := "es-functional-count-groupby-workflow-test-type"
+	tl := "es-functional-count-groupby-workflow-test-taskqueue"
+
+	numWorkflows := 10
+	for i := 0; i < numWorkflows; i++ {
+		wfid := id + strconv.Itoa(i)
+		request := s.createStartWorkflowExecutionRequest(wfid, wt, tl)
+		_, err := s.engine.StartWorkflowExecution(NewContext(), request)
+		s.NoError(err)
+	}
+
+	query := `GROUP BY WorkflowType`
+	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		Query:     query,
+	}
+	var resp *workflowservice.CountWorkflowExecutionsResponse
+	var err error
+	for i := 0; i < numOfRetry; i++ {
+		resp, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
+		s.NoError(err)
+		if resp.GetCount() == int64(numWorkflows) {
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.Equal(int64(numWorkflows), resp.GetCount())
+	s.Equal(1, len(resp.Groups))
+
+	wfTypePayload, _ := searchattribute.EncodeValue(
+		wt,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	s.Equal(
+		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			GroupValues: []*commonpb.Payload{wfTypePayload},
+			Count:       int64(numWorkflows),
+		},
+		resp.Groups[0],
+	)
+
+	query = `GROUP BY ExecutionStatus, WorkflowType`
+	countRequest.Query = query
+	_, err = s.engine.CountWorkflowExecutions(NewContext(), countRequest)
+	s.Error(err)
+	s.Contains(err.Error(), "'group by' clause supports only a single field")
+}
+
 func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}

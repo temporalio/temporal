@@ -81,6 +81,8 @@ var (
 	testRunID        = "test-rid"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
+	testMaxGroups = 100
+
 	testSearchResult = &elastic.SearchResult{
 		Hits: &elastic.SearchHits{},
 	}
@@ -123,6 +125,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute * debug.TimeoutMultiplier)
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 	visibilityEnableManualPagination := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	visibilityEnableCountGroupByAnySA := dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	visibilityCountGroupByMaxGroups := dynamicconfig.GetIntPropertyFilteredByNamespace(testMaxGroups)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
@@ -139,6 +143,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableCountGroupByAnySA,
+		visibilityCountGroupByMaxGroups,
 		s.mockMetricsHandler,
 	)
 }
@@ -1400,7 +1406,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 				Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
 				MustNot(namespaceDivisionExists),
 			searchattribute.ExecutionStatus,
-			elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+			elastic.NewTermsAggregation().Size(testMaxGroups).Field(searchattribute.ExecutionStatus),
 		).
 		Return(
 			&elastic.SearchResult{
@@ -1452,6 +1458,56 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	s.Error(err)
 	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
 	s.Nil(resp)
+
+	// test enable count group by any search attribute
+	s.visibilityStore.enableCountGroupByAnySA = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	request.Query = "GROUP BY WorkflowType"
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String())).
+				MustNot(namespaceDivisionExists),
+			searchattribute.WorkflowType,
+			elastic.NewTermsAggregation().Size(testMaxGroups).Field(searchattribute.WorkflowType),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					searchattribute.WorkflowType: json.RawMessage(
+						`{"buckets":[{"key":"workflow-type-1","doc_count":100},{"key":"workflow-type-2","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	payload1, _ = searchattribute.EncodeValue(
+		"workflow-type-1",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	payload2, _ = searchattribute.EncodeValue(
+		"workflow-type-2",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	s.Equal(
+		&manager.CountWorkflowExecutionsResponse{
+			Count: 110,
+			Groups: []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				{
+					GroupValues: []*commonpb.Payload{payload1},
+					Count:       100,
+				},
+				{
+					GroupValues: []*commonpb.Payload{payload2},
+					Count:       10,
+				},
+			},
+		},
+		resp,
+	)
 }
 
 func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
@@ -1483,7 +1539,9 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 			name:    "group by one field",
 			groupBy: []string{searchattribute.ExecutionStatus},
 			aggName: searchattribute.ExecutionStatus,
-			agg:     elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus),
+			agg: elastic.NewTermsAggregation().
+				Size(testMaxGroups).
+				Field(searchattribute.ExecutionStatus),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
 					searchattribute.ExecutionStatus: json.RawMessage(
@@ -1521,10 +1579,13 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 			name:    "group by two fields",
 			groupBy: []string{searchattribute.ExecutionStatus, searchattribute.WorkflowType},
 			aggName: searchattribute.ExecutionStatus,
-			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
-				searchattribute.WorkflowType,
-				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType),
-			),
+			agg: elastic.NewTermsAggregation().
+				Size(testMaxGroups).
+				Field(searchattribute.ExecutionStatus).
+				SubAggregation(
+					searchattribute.WorkflowType,
+					elastic.NewTermsAggregation().Field(searchattribute.WorkflowType),
+				),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
 					searchattribute.ExecutionStatus: json.RawMessage(
@@ -1598,13 +1659,16 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 				searchattribute.WorkflowID,
 			},
 			aggName: searchattribute.ExecutionStatus,
-			agg: elastic.NewTermsAggregation().Field(searchattribute.ExecutionStatus).SubAggregation(
-				searchattribute.WorkflowType,
-				elastic.NewTermsAggregation().Field(searchattribute.WorkflowType).SubAggregation(
-					searchattribute.WorkflowID,
-					elastic.NewTermsAggregation().Field(searchattribute.WorkflowID),
+			agg: elastic.NewTermsAggregation().
+				Size(testMaxGroups).
+				Field(searchattribute.ExecutionStatus).
+				SubAggregation(
+					searchattribute.WorkflowType,
+					elastic.NewTermsAggregation().Field(searchattribute.WorkflowType).SubAggregation(
+						searchattribute.WorkflowID,
+						elastic.NewTermsAggregation().Field(searchattribute.WorkflowID),
+					),
 				),
-			),
 			mockResponse: &elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
 					searchattribute.ExecutionStatus: json.RawMessage(
@@ -1730,7 +1794,11 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 					tc.agg,
 				).
 				Return(tc.mockResponse, nil)
-			resp, err := s.visibilityStore.countGroupByWorkflowExecutions(context.Background(), searchParams)
+			resp, err := s.visibilityStore.countGroupByWorkflowExecutions(
+				context.Background(),
+				testNamespace,
+				searchParams,
+			)
 			s.NoError(err)
 			s.Equal(tc.response, resp)
 		})
@@ -1938,6 +2006,8 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 				dynamicconfig.GetDurationPropertyFn(1*time.Minute*debug.TimeoutMultiplier),
 				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetIntPropertyFilteredByNamespace(testMaxGroups),
 				s.mockMetricsHandler,
 			)
 			params := &client.SearchParameters{

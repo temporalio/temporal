@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -54,6 +55,9 @@ type (
 		sqlStore                       persistencesql.SqlStore
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+
+		enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		countGroupByMaxGroups   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -67,6 +71,8 @@ func NewSQLVisibilityStore(
 	r resolver.ServiceResolver,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	countGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) (*VisibilityStore, error) {
 	refDbConn := persistencesql.NewRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r)
@@ -78,6 +84,9 @@ func NewSQLVisibilityStore(
 		sqlStore:                       persistencesql.NewSqlStore(db, logger),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+
+		enableCountGroupByAnySA: enableCountGroupByAnySA,
+		countGroupByMaxGroups:   countGroupByMaxGroups,
 	}, nil
 }
 
@@ -349,6 +358,8 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 		saTypeMap,
 		saMapper,
 		request.Query,
+		s.enableCountGroupByAnySA,
+		s.countGroupByMaxGroups,
 	)
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
@@ -427,6 +438,8 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 		saTypeMap,
 		saMapper,
 		request.Query,
+		s.enableCountGroupByAnySA,
+		s.countGroupByMaxGroups,
 	)
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {

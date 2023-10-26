@@ -34,6 +34,7 @@ import (
 	"github.com/xwb1989/sqlparser"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -54,7 +55,12 @@ type (
 			token *pageToken,
 		) (string, []any)
 
-		buildCountStmt(namespaceID namespace.ID, queryString string, groupBy []string) (string, []any)
+		buildCountStmt(
+			namespaceID namespace.ID,
+			queryString string,
+			groupBy []string,
+			limit int,
+		) (string, []any)
 
 		getDatetimeFormat() string
 
@@ -68,6 +74,9 @@ type (
 		saTypeMap     searchattribute.NameTypeMap
 		saMapper      searchattribute.Mapper
 		queryString   string
+
+		enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		countGroupByMaxGroups   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		seenNamespaceDivision bool
 	}
@@ -129,6 +138,8 @@ func newQueryConverterInternal(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	countGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *QueryConverter {
 	return &QueryConverter{
 		pluginQueryConverter: pqc,
@@ -137,6 +148,9 @@ func newQueryConverterInternal(
 		saTypeMap:            saTypeMap,
 		saMapper:             saMapper,
 		queryString:          queryString,
+
+		enableCountGroupByAnySA: enableCountGroupByAnySA,
+		countGroupByMaxGroups:   countGroupByMaxGroups,
 
 		seenNamespaceDivision: false,
 	}
@@ -175,7 +189,12 @@ func (c *QueryConverter) BuildCountStmt() (*sqlplugin.VisibilitySelectFilter, er
 	for i, fieldName := range qp.groupBy {
 		groupByDbNames[i] = searchattribute.GetSqlDbColName(fieldName)
 	}
-	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames)
+	queryString, queryArgs := c.buildCountStmt(
+		c.namespaceID,
+		qp.queryString,
+		groupByDbNames,
+		c.countGroupByMaxGroups(c.namespaceName.String()),
+	)
 	return &sqlplugin.VisibilitySelectFilter{
 		Query:     queryString,
 		QueryArgs: queryArgs,
@@ -280,12 +299,14 @@ func (c *QueryConverter) convertSelectStmt(sel *sqlparser.Select) error {
 		if err != nil {
 			return err
 		}
-		if colName.fieldName != searchattribute.ExecutionStatus {
-			return query.NewConverterError(
-				"%s: 'group by' clause is only supported for %s search attribute",
-				query.NotSupportedErrMessage,
-				searchattribute.ExecutionStatus,
-			)
+		if !c.enableCountGroupByAnySA(c.namespaceName.String()) {
+			if colName.fieldName != searchattribute.ExecutionStatus {
+				return query.NewConverterError(
+					"%s: 'group by' clause is only supported for %s search attribute",
+					query.NotSupportedErrMessage,
+					searchattribute.ExecutionStatus,
+				)
+			}
 		}
 	}
 

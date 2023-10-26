@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -39,15 +40,28 @@ func NewQueryConverter(
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
 	queryString string,
+	enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	countGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *QueryConverter {
+	var pqc pluginQueryConverter
 	switch pluginName {
 	case mysql.PluginNameV8:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		pqc = &mysqlQueryConverter{}
 	case postgresql.PluginNameV12, postgresql.PluginNameV12PGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		pqc = &pgQueryConverter{}
 	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
+		pqc = &sqliteQueryConverter{}
 	default:
 		return nil
 	}
+	return newQueryConverterInternal(
+		pqc,
+		namespaceName,
+		namespaceID,
+		saTypeMap,
+		saMapper,
+		queryString,
+		enableCountGroupByAnySA,
+		countGroupByMaxGroups,
+	)
 }

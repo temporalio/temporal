@@ -62,23 +62,6 @@ func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
 	buf.Myprintf("%v::%v", node.Value, node.Type)
 }
 
-func newPostgreSQLQueryConverter(
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	return newQueryConverterInternal(
-		&pgQueryConverter{},
-		namespaceName,
-		namespaceID,
-		saTypeMap,
-		saMapper,
-		queryString,
-	)
-}
-
 func (c *pgQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999"
 }
@@ -279,6 +262,7 @@ func (c *pgQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
+	limit int,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -299,9 +283,10 @@ func (c *pgQueryConverter) buildCountStmt(
 	}
 
 	return fmt.Sprintf(
-		"SELECT %s FROM executions_visibility WHERE %s %s",
+		"SELECT %s FROM executions_visibility WHERE %s %s LIMIT %d",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
+		limit,
 	), queryArgs
 }

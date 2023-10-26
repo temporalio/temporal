@@ -72,6 +72,8 @@ type (
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableCountGroupByAnySA        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		countGroupByMaxGroups          dynamicconfig.IntPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
 	}
 
@@ -139,6 +141,8 @@ func NewVisibilityStore(
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	countGroupByMaxGroups dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
@@ -151,6 +155,8 @@ func NewVisibilityStore(
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
+		enableCountGroupByAnySA:        enableCountGroupByAnySA,
+		countGroupByMaxGroups:          countGroupByMaxGroups,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 	}
 }
@@ -621,7 +627,7 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	}
 
 	if len(queryParams.GroupBy) > 0 {
-		return s.countGroupByWorkflowExecutions(ctx, queryParams)
+		return s.countGroupByWorkflowExecutions(ctx, request.Namespace, queryParams)
 	}
 
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
@@ -635,6 +641,7 @@ func (s *visibilityStore) CountWorkflowExecutions(
 
 func (s *visibilityStore) countGroupByWorkflowExecutions(
 	ctx context.Context,
+	namespaceName namespace.Name,
 	queryParams *query.QueryParams,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	groupByFields := queryParams.GroupBy
@@ -668,7 +675,7 @@ func (s *visibilityStore) countGroupByWorkflowExecutions(
 		s.index,
 		queryParams.Query,
 		groupByFields[0],
-		termsAgg,
+		termsAgg.Size(s.countGroupByMaxGroups(namespaceName.String())),
 	)
 	if err != nil {
 		return nil, err
@@ -885,7 +892,13 @@ func (s *visibilityStore) convertQuery(
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
-	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
+	nameInterceptor := newNameInterceptor(
+		namespace,
+		s.index,
+		saTypeMap,
+		s.searchAttributesMapperProvider,
+		s.enableCountGroupByAnySA,
+	)
 	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {

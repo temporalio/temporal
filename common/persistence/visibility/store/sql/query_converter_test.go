@@ -35,6 +35,7 @@ import (
 	"github.com/xwb1989/sqlparser"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -73,6 +74,8 @@ func (s *queryConverterSuite) SetupTest() {
 		searchattribute.TestNameTypeMap,
 		&searchattribute.TestMapper{},
 		"",
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 	)
 }
 
@@ -167,6 +170,66 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 				searchattribute.TestNameTypeMap,
 				&searchattribute.TestMapper{},
 				"",
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+				dynamicconfig.GetIntPropertyFilteredByNamespace(100),
+			)
+			qp, err := qc.convertWhereString(tc.input)
+			if tc.err == nil {
+				s.NoError(err)
+				s.Equal(tc.output, qp)
+			} else {
+				s.Error(err)
+				s.Equal(err, tc.err)
+			}
+		})
+	}
+}
+
+func (s *queryConverterSuite) TestCountGroupByAnySA() {
+	var tests = []testCase{
+		{
+			name:  "group by one field",
+			input: "GROUP BY WorkflowType",
+			output: &queryParams{
+				queryString: "TemporalNamespaceDivision is null",
+				groupBy:     []string{searchattribute.WorkflowType},
+			},
+			err: nil,
+		},
+		{
+			name:   "group by two fields not supported",
+			input:  "GROUP BY ExecutionStatus, WorkflowType",
+			output: nil,
+			err: query.NewConverterError(
+				"%s: 'group by' clause supports only a single field",
+				query.NotSupportedErrMessage,
+			),
+		},
+		{
+			name:   "order by not supported",
+			input:  "ORDER BY StartTime",
+			output: nil,
+			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+		},
+		{
+			name:   "group by with order by not supported",
+			input:  "GROUP BY ExecutionStatus ORDER BY StartTime",
+			output: nil,
+			err:    query.NewConverterError("%s: 'order by' clause", query.NotSupportedErrMessage),
+		},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			qc := newQueryConverterInternal(
+				s.pqc,
+				testNamespaceName,
+				testNamespaceID,
+				searchattribute.TestNameTypeMap,
+				&searchattribute.TestMapper{},
+				"",
+				dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 			)
 			qp, err := qc.convertWhereString(tc.input)
 			if tc.err == nil {

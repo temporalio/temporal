@@ -96,6 +96,8 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		metrics.NoopMetricsHandler,
 		s.Logger,
 	)
@@ -874,6 +876,82 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	)
 	s.NoError(err)
 	s.Equal(int64(5), resp.Count)
+}
+
+func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions_EnableCountGroupByAnySA() {
+	cfg := s.DefaultTestCluster.Config()
+	visibilityMgr, err := visibility.NewManager(
+		cfg,
+		resolver.NewNoopResolver(),
+		nil,
+		nil,
+		s.SearchAttributesProvider,
+		s.SearchAttributesMapperProvider,
+		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetFloatPropertyFn(0.2),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true), // enableCountGroupByAnySA
+		dynamicconfig.GetIntPropertyFilteredByNamespace(100),
+		metrics.NoopMetricsHandler,
+		s.Logger,
+	)
+	s.NoError(err)
+	defer visibilityMgr.Close()
+
+	switch visibilityMgr.GetStoreNames()[0] {
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
+		s.T().Skip("Not supported by standard visibility")
+	}
+
+	testNamespaceUUID := namespace.ID(uuid.New())
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
+
+	n := 5
+	for i := 0; i < n; i++ {
+		s.createOpenWorkflowRecord(
+			testNamespaceUUID,
+			"visibility-workflow-test",
+			fmt.Sprintf("visibility-workflow-%d", i%2),
+			startTime,
+			"test-queue",
+		)
+	}
+
+	wfType0, _ := searchattribute.EncodeValue(
+		"visibility-workflow-0",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	wfType1, _ := searchattribute.EncodeValue(
+		"visibility-workflow-1",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	resp, err := visibilityMgr.CountWorkflowExecutions(
+		s.ctx,
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "GROUP BY WorkflowType",
+		},
+	)
+	s.NoError(err)
+	s.Equal(int64(n), resp.Count)
+	s.Equal(
+		[]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{wfType0},
+				Count:       int64((n + 1) / 2),
+			},
+			{
+				GroupValues: []*commonpb.Payload{wfType1},
+				Count:       int64(n / 2),
+			},
+		},
+		resp.Groups,
+	)
 }
 
 func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID, pageSize int) []*workflowpb.WorkflowExecutionInfo {

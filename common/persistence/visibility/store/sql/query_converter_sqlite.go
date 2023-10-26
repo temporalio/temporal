@@ -47,23 +47,6 @@ const (
 	textTypeFtsTableName        = "executions_visibility_fts_text"
 )
 
-func newSqliteQueryConverter(
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	return newQueryConverterInternal(
-		&sqliteQueryConverter{},
-		namespaceName,
-		namespaceID,
-		saTypeMap,
-		saMapper,
-		queryString,
-	)
-}
-
 func (c *sqliteQueryConverter) getDatetimeFormat() string {
 	return "2006-01-02 15:04:05.999999-07:00"
 }
@@ -320,6 +303,7 @@ func (c *sqliteQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
+	limit int,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -340,10 +324,11 @@ func (c *sqliteQueryConverter) buildCountStmt(
 	}
 
 	return fmt.Sprintf(
-		"SELECT %s FROM executions_visibility WHERE %s %s",
+		"SELECT %s FROM executions_visibility WHERE %s %s LIMIT %d",
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
+		limit,
 	), queryArgs
 }
 

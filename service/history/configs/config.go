@@ -59,6 +59,8 @@ type Config struct {
 	SecondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
 	VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableCountGroupByAnySA dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityCountGroupByMaxGroups   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -358,6 +360,8 @@ func NewConfig(
 		SecondaryVisibilityWritingMode:    visibility.GetSecondaryVisibilityWritingModeConfig(dc, visibilityStoreConfigExist, advancedVisibilityStoreConfigExist),
 		VisibilityDisableOrderByClause:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
 		VisibilityEnableManualPagination:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
+		VisibilityEnableCountGroupByAnySA: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableCountGroupByAnySA, false),
+		VisibilityCountGroupByMaxGroups:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VisibilityCountGroupByMaxGroups, 100),
 
 		EmitShardLagLog:                       dc.GetBoolProperty(dynamicconfig.EmitShardLagLog, false),
 		HistoryCacheInitialSize:               dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
