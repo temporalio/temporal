@@ -22,33 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package tdbgtest
 
 import (
-	"encoding/json"
-	"io"
-	"os"
-
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
+	"go.temporal.io/server/tools/tdbg"
 )
 
-// ParseJSONLProtos parses protos from a JSONL file until EOF.
-// The newMessage argument should return a new instance of the type of message that is being parsed.
-func ParseJSONLProtos[T proto.Message](t *require.Assertions, file *os.File, newMessage func() T) []T {
-	decoder := json.NewDecoder(file)
-	var (
-		unmarshaler jsonpb.Unmarshaler
-		messages    []T
-	)
-	for {
-		message := newMessage()
-		err := unmarshaler.UnmarshalNext(decoder, message)
-		if err == io.EOF {
-			return messages
-		}
-		t.NoError(err)
-		messages = append(messages, message)
-	}
+// NewCliApp is a wrapper around [tdbg.NewCliApp] that sets the [cli.App.ExitErrHandler] to a no-op function.
+func NewCliApp(opts ...tdbg.Option) *cli.App {
+	app := tdbg.NewCliApp(opts...)
+	app.ExitErrHandler = func(context *cli.Context, err error) {}
+	return app
 }
