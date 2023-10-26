@@ -102,3 +102,25 @@ func (s *ParseDurationSuite) TestParseDurationDefaultSeconds() {
 		}
 	}
 }
+
+func (s *ParseDurationSuite) TestParseHHMMSSDuration() {
+	for _, c := range []struct {
+		input    string
+		expected time.Duration // -1 means error
+	}{
+		{"1:00:00", 1 * time.Hour},
+		{"123:05:10", 123*time.Hour + 5*time.Minute + 10*time.Second},
+		{"00:05:10", 5*time.Minute + 10*time.Second},
+		{"-12:05:10", -1},
+		{"12:61:10", -1},
+		{"12:05:61", -1},
+		{"", -1},
+	} {
+		got, err := ParseHHMMSSDuration(c.input)
+		if c.expected == -1 {
+			s.Error(err)
+		} else {
+			s.Equal(c.expected, got)
+		}
+	}
+}
