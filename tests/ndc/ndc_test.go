@@ -2220,17 +2220,17 @@ func (s *nDCFunctionalTestSuite) importEvents(
 		resp, err := historyClient.ImportWorkflowExecution(s.newContext(), req)
 		s.NoError(err, "Failed to import history event")
 		token = resp.Token
+	}
 
-		if verifyWorkflowNotExists {
-			_, err := historyClient.GetMutableState(s.newContext(), &historyservice.GetMutableStateRequest{
-				NamespaceId: s.namespaceID.String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-			})
-			s.IsType(&serviceerror.NotFound{}, err)
-		}
+	if verifyWorkflowNotExists {
+		_, err := historyClient.GetMutableState(s.newContext(), &historyservice.GetMutableStateRequest{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		})
+		s.IsType(&serviceerror.NotFound{}, err)
 	}
 
 	req := &historyservice.ImportWorkflowExecutionRequest{
