@@ -27,6 +27,7 @@ package replication
 import (
 	"context"
 
+	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/metrics"
@@ -44,34 +45,22 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-var Module = fx.Options(
-	fx.Provide(ReplicationTaskFetcherFactoryProvider),
-	fx.Provide(ReplicationTaskConverterFactoryProvider),
-	fx.Provide(ReplicationTaskExecutorProvider),
-	fx.Provide(ReplicationStreamSchedulerProvider),
-	fx.Provide(ExecutableTaskConverterProvider),
-	fx.Provide(StreamReceiverMonitorProvider),
-	fx.Invoke(ReplicationStreamSchedulerLifetimeHooks),
-	fx.Provide(NDCHistoryResenderProvider),
-	fx.Provide(EagerNamespaceRefresherProvider),
-	fx.Provide(SequentialTaskQueueFactoryProvider),
+var Module = fx.Provide(
+	NewTaskFetcherFactory,
+	NewExecutionManagerDLQWriter,
+	replicationTaskConverterFactoryProvider,
+	replicationTaskExecutorProvider,
+	replicationStreamSchedulerProvider,
+	executableTaskConverterProvider,
+	streamReceiverMonitorProvider,
+	ndcHistoryResenderProvider,
+	eagerNamespaceRefresherProvider,
+	sequentialTaskQueueFactoryProvider,
+	dlqWriterAdapterProvider,
+	newDLQWriterToggle,
 )
 
-func ReplicationTaskFetcherFactoryProvider(
-	logger log.Logger,
-	config *configs.Config,
-	clusterMetadata cluster.Metadata,
-	clientBean client.Bean,
-) TaskFetcherFactory {
-	return NewTaskFetcherFactory(
-		logger,
-		config,
-		clusterMetadata,
-		clientBean,
-	)
-}
-
-func EagerNamespaceRefresherProvider(
+func eagerNamespaceRefresherProvider(
 	metadataManager persistence.MetadataManager,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
@@ -94,8 +83,14 @@ func EagerNamespaceRefresherProvider(
 	)
 }
 
-func ReplicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
-	return func(historyEngine shard.Engine, shardContext shard.Context, clientClusterShardCount int32, clientClusterName string, clientShardKey ClusterShardKey) SourceTaskConverter {
+func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+	return func(
+		historyEngine shard.Engine,
+		shardContext shard.Context,
+		clientClusterShardCount int32,
+		clientClusterName string,
+		clientShardKey ClusterShardKey,
+	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
@@ -105,7 +100,7 @@ func ReplicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
 	}
 }
 
-func ReplicationTaskExecutorProvider() TaskExecutorProvider {
+func replicationTaskExecutorProvider() TaskExecutorProvider {
 	return func(params TaskExecutorParams) TaskExecutor {
 		return NewTaskExecutor(
 			params.RemoteCluster,
@@ -117,12 +112,13 @@ func ReplicationTaskExecutorProvider() TaskExecutorProvider {
 	}
 }
 
-func ReplicationStreamSchedulerProvider(
+func replicationStreamSchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
+	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
-	return ctasks.NewSequentialScheduler[TrackableExecutableTask](
+	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationProcessorSchedulerWorkerCount,
@@ -131,46 +127,30 @@ func ReplicationStreamSchedulerProvider(
 		queueFactory,
 		logger,
 	)
+	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
+	return scheduler
 }
 
-func SequentialTaskQueueFactoryProvider(
+func sequentialTaskQueueFactoryProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
 ) ctasks.SequentialTaskQueueFactory[TrackableExecutableTask] {
 	return func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		if config.EnableReplicationTaskBatching() {
-			return NewSequentialTaskQueue(task)
+			return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
 		}
-		return NewSequentialBatchableTaskQueue(task, nil, logger, metricsHandler)
+		return NewSequentialTaskQueue(task)
 	}
 }
 
-func ReplicationStreamSchedulerLifetimeHooks(
-	lc fx.Lifecycle,
-	scheduler ctasks.Scheduler[TrackableExecutableTask],
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				scheduler.Start()
-				return nil
-			},
-			OnStop: func(context.Context) error {
-				scheduler.Stop()
-				return nil
-			},
-		},
-	)
-}
-
-func ExecutableTaskConverterProvider(
+func executableTaskConverterProvider(
 	processToolBox ProcessToolBox,
 ) ExecutableTaskConverter {
 	return NewExecutableTaskConverter(processToolBox)
 }
 
-func StreamReceiverMonitorProvider(
+func streamReceiverMonitorProvider(
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
 ) StreamReceiverMonitor {
@@ -181,7 +161,7 @@ func StreamReceiverMonitorProvider(
 	)
 }
 
-func NDCHistoryResenderProvider(
+func ndcHistoryResenderProvider(
 	config *configs.Config,
 	namespaceRegistry namespace.Registry,
 	clientBean client.Bean,
@@ -199,4 +179,12 @@ func NDCHistoryResenderProvider(
 		config.StandbyTaskReReplicationContextTimeout,
 		logger,
 	)
+}
+
+func dlqWriterAdapterProvider(
+	dlqWriter *queues.DLQWriter,
+	taskSerializer serialization.Serializer,
+	clusterMetadata cluster.Metadata,
+) *DLQWriterAdapter {
+	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
 }

@@ -1094,7 +1094,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
+		// Hints for persistence implementation regarding history task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -1269,7 +1269,7 @@ type (
 
 	RawHistoryTask struct {
 		MessageMetadata MessageMetadata
-		Task            *persistencespb.HistoryTask
+		Payload         *persistencespb.HistoryTask
 	}
 
 	ReadRawTasksResponse struct {

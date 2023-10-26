@@ -39,6 +39,7 @@ import (
 	"go.uber.org/multierr"
 
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/temporal"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -173,6 +174,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
 		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
+	options.Persistence.Logger = logger
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup(clusterMetadataConfig)
@@ -247,6 +249,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 	}
 
+	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata)
+
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -269,6 +273,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 options.ServiceFxOptions,
+		TaskCategoryRegistry:             taskCategoryRegistry,
 	}
 
 	if options.EnableMetricsCapture {

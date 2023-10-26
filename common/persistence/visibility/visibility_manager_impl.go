@@ -122,6 +122,8 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		HistorySizeBytes:              request.HistorySizeBytes,
+		ExecutionDuration:             request.CloseTime.Sub(request.StartTime),
+		StateTransitionCount:          request.StateTransitionCount,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
 }
@@ -291,19 +293,18 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(request *manage
 	}
 
 	return &store.InternalVisibilityRequestBase{
-		NamespaceID:          request.NamespaceID.String(),
-		WorkflowID:           request.Execution.GetWorkflowId(),
-		RunID:                request.Execution.GetRunId(),
-		WorkflowTypeName:     request.WorkflowTypeName,
-		StartTime:            request.StartTime,
-		Status:               request.Status,
-		ExecutionTime:        request.ExecutionTime,
-		StateTransitionCount: request.StateTransitionCount,
-		TaskID:               request.TaskID,
-		ShardID:              request.ShardID,
-		TaskQueue:            request.TaskQueue,
-		Memo:                 memoBlob,
-		SearchAttributes:     request.SearchAttributes,
+		NamespaceID:      request.NamespaceID.String(),
+		WorkflowID:       request.Execution.GetWorkflowId(),
+		RunID:            request.Execution.GetRunId(),
+		WorkflowTypeName: request.WorkflowTypeName,
+		StartTime:        request.StartTime,
+		Status:           request.Status,
+		ExecutionTime:    request.ExecutionTime,
+		TaskID:           request.TaskID,
+		ShardID:          request.ShardID,
+		TaskQueue:        request.TaskQueue,
+		Memo:             memoBlob,
+		SearchAttributes: request.SearchAttributes,
 	}, nil
 }
 
@@ -343,13 +344,12 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExe
 		Type: &commonpb.WorkflowType{
 			Name: internalExecution.TypeName,
 		},
-		StartTime:            &internalExecution.StartTime,
-		ExecutionTime:        &internalExecution.ExecutionTime,
-		Memo:                 memo,
-		SearchAttributes:     internalExecution.SearchAttributes,
-		TaskQueue:            internalExecution.TaskQueue,
-		Status:               internalExecution.Status,
-		StateTransitionCount: internalExecution.StateTransitionCount,
+		StartTime:        &internalExecution.StartTime,
+		ExecutionTime:    &internalExecution.ExecutionTime,
+		Memo:             memo,
+		SearchAttributes: internalExecution.SearchAttributes,
+		TaskQueue:        internalExecution.TaskQueue,
+		Status:           internalExecution.Status,
 	}
 
 	// for close records
@@ -357,6 +357,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExe
 		executionInfo.CloseTime = &internalExecution.CloseTime
 		executionInfo.HistoryLength = internalExecution.HistoryLength
 		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
+		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
 	}
 
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.

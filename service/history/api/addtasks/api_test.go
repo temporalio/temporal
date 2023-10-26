@@ -127,8 +127,8 @@ func TestInvoke(t *testing.T) {
 						blob, err := serializer.SerializeTask(task)
 						require.NoError(t, err)
 						params.req.Tasks = append(params.req.Tasks, &historyservice.AddTasksRequest_Task{
-							Category: task.GetCategory().Name(),
-							Blob:     &blob,
+							CategoryId: int32(task.GetCategory().ID()),
+							Blob:       &blob,
 						})
 					}
 				}
@@ -185,11 +185,11 @@ func TestInvoke(t *testing.T) {
 		{
 			name: "invalid task category",
 			configure: func(t *testing.T, params *testParams) {
-				params.req.Tasks[0].Category = "my-invalid-task-category"
+				params.req.Tasks[0].CategoryId = -1
 				params.expectation = func(resp *historyservice.AddTasksResponse, err error) {
 					require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 					assert.ErrorContains(t, err, "Invalid task category")
-					assert.ErrorContains(t, err, "my-invalid-task-category")
+					assert.ErrorContains(t, err, "-1")
 				}
 			},
 		},
@@ -251,6 +251,7 @@ func TestInvoke(t *testing.T) {
 				params.deserializer,
 				params.numShards,
 				params.req,
+				tasks.NewDefaultTaskCategoryRegistry(),
 			)
 			params.expectation(resp, err)
 		})
@@ -276,8 +277,8 @@ func getDefaultTestParams(t *testing.T) *testParams {
 			ShardId: 1,
 			Tasks: []*historyservice.AddTasksRequest_Task{
 				{
-					Category: tasks.CategoryTransfer.Name(),
-					Blob:     &blob,
+					CategoryId: int32(tasks.CategoryTransfer.ID()),
+					Blob:       &blob,
 				},
 			},
 		},

@@ -143,42 +143,41 @@ type (
 
 		hBuilder *HistoryBuilder
 
-		// in memory only attributes
-		// indicate the current version
+		// In-memory only attributes
 		currentVersion int64
-		// running approximate total size of mutable state fields (except buffered events) when written to DB in bytes
-		// buffered events are added to this value when calling GetApproximatePersistedSize
+		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
+		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
-		// buffer events from DB
+		// Buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
-		// indicates the workflow state in DB, can be used to calculate
-		// whether this workflow is pointed by current workflow record
+		// Indicates the workflow state in DB, can be used to calculate
+		// whether this workflow is pointed by current workflow record.
 		stateInDB enumsspb.WorkflowExecutionState
-		// TODO deprecate nextEventIDInDB in favor of dbRecordVersion
-		// indicates the next event ID in DB, for conditional update
+		// TODO deprecate nextEventIDInDB in favor of dbRecordVersion.
+		// Indicates the next event ID in DB, for conditional update.
 		nextEventIDInDB int64
-		// indicates the DB record version, for conditional update
+		// Indicates the DB record version, for conditional update.
 		dbRecordVersion int64
-		// namespace entry contains a snapshot of namespace
-		// NOTE: do not use the failover version inside, use currentVersion above
+		// Namespace entry contains a snapshot of namespace.
+		// NOTE: do not use the failover version inside, use currentVersion above.
 		namespaceEntry *namespace.Namespace
-		// record if a event has been applied to mutable state
+		// Record if an event has been applied to mutable state.
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
-		// a flag indicating if workflow has attempted to close (complete/cancel/continue as new)
-		// but failed due to undelievered buffered events
-		// the flag will be unset whenever workflow task successfully completed, timedout or failed
-		// due to cause other than UnhandledCommand
+		// A flag indicating if workflow has attempted to close (complete/cancel/continue as new)
+		// but failed due to undelivered buffered events.
+		// The flag will be unset whenever workflow task successfully completed, timedout or failed
+		// due to cause other than UnhandledCommand.
 		workflowCloseAttempted bool
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
 
-		// do not rely on this, this is only updated on
+		// Do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
 		// a transaction is in progress, this value will be
-		// wrong. This exist primarily for visibility via CLI
+		// wrong. This exists primarily for visibility via CLI.
 		checksum *persistencespb.Checksum
 
 		taskGenerator       TaskGenerator
@@ -1604,7 +1603,7 @@ func (ms *MutableStateImpl) AddSignalRequested(
 	if ms.updateSignalRequestedIDs == nil {
 		ms.updateSignalRequestedIDs = make(map[string]struct{})
 	}
-	ms.pendingSignalRequestedIDs[requestID] = struct{}{} // add requestID to set
+	ms.pendingSignalRequestedIDs[requestID] = struct{}{}
 	ms.updateSignalRequestedIDs[requestID] = struct{}{}
 	ms.approximateSize += len(requestID)
 }
@@ -3365,8 +3364,8 @@ func (ms *MutableStateImpl) ReplicateTimerStartedEvent(
 	timerID := attributes.GetTimerId()
 
 	startToFireTimeout := timestamp.DurationValue(attributes.GetStartToFireTimeout())
-	// TODO: Time skew need to be taken in to account.
-	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
+	// TODO: Time skew needs to be taken in to account.
+	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout)
 
 	ti := &persistencespb.TimerInfo{
 		Version:        event.GetVersion(),
@@ -4466,11 +4465,11 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	ms.executionInfo.LastUpdateTime = timestamp.TimePtr(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.StateTransitionCount += 1
 
-	// we generate checksum here based on the assumption that the returned
+	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution
-	// currently, the updates done inside Context.resetWorkflowExecution doesn't
-	// impact the checksum calculation
+	// code that modifies the returned object lives inside Context.resetWorkflowExecution.
+	// Currently, the updates done inside Context.resetWorkflowExecution don't
+	// impact the checksum calculation.
 	checksum := ms.generateChecksum()
 
 	if ms.dbRecordVersion == 0 {
@@ -4552,11 +4551,11 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	ms.executionInfo.LastUpdateTime = timestamp.TimePtr(ms.shard.GetTimeSource().Now())
 	ms.executionInfo.StateTransitionCount += 1
 
-	// we generate checksum here based on the assumption that the returned
+	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution
-	// currently, the updates done inside Context.resetWorkflowExecution doesn't
-	// impact the checksum calculation
+	// code that modifies the returned object lives inside Context.resetWorkflowExecution.
+	// Currently, the updates done inside Context.resetWorkflowExecution don't
+	// impact the checksum calculation.
 	checksum := ms.generateChecksum()
 
 	if ms.dbRecordVersion == 0 {
@@ -4606,7 +4605,7 @@ func (ms *MutableStateImpl) UpdateDuplicatedResource(
 	ms.appliedEvents[id] = struct{}{}
 }
 
-func (ms *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, int64, error) {
+func (ms *MutableStateImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	return ms.taskGenerator.GenerateMigrationTasks()
 }
 

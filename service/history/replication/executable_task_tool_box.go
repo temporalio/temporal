@@ -54,5 +54,6 @@ type (
 		MetricsHandler          metrics.Handler
 		Logger                  log.Logger
 		EventSerializer         serialization.Serializer
+		DLQWriter               DLQWriter
 	}
 )

@@ -132,6 +132,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 			NDCHistoryResender: s.ndcHistoryResender,
 			MetricsHandler:     s.metricsHandler,
 			Logger:             s.logger,
+			DLQWriter:          NewExecutionManagerDLQWriter(),
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),

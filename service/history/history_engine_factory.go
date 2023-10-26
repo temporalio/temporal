@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -61,6 +62,8 @@ type (
 		TracerProvider                  trace.TracerProvider
 		PersistenceVisibilityMgr        manager.VisibilityManager
 		EventBlobCache                  persistence.XDCCache
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		ReplicationDLQWriter            replication.DLQWriter
 	}
 
 	historyEngineFactory struct {
@@ -96,5 +99,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.TracerProvider,
 		f.PersistenceVisibilityMgr,
 		f.EventBlobCache,
+		f.TaskCategoryRegistry,
+		f.ReplicationDLQWriter,
 	)
 }

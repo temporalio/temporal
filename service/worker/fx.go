@@ -27,11 +27,14 @@ package worker
 import (
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -42,7 +45,9 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -54,6 +59,10 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
+	dlq.Module,
+	fx.Provide(func(c resource.HistoryClient) dlq.HistoryServiceClient {
+		return c
+	}),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -61,8 +70,19 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(func(
+		clusterMetadata cluster.Metadata,
+		metadataManager persistence.MetadataManager,
+		logger log.Logger,
+	) namespace.ReplicationTaskExecutor {
+		return namespace.NewReplicationTaskExecutor(
+			clusterMetadata.GetCurrentClusterName(),
+			metadataManager,
+			logger,
+		)
+	}),
 	fx.Provide(NewService),
-	fx.Provide(NewWorkerManager),
+	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
 	fx.Provide(NewPerNamespaceWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )

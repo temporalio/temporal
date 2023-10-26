@@ -475,6 +475,10 @@ const (
 
 	// EnableReplicationStream turn on replication stream
 	EnableReplicationStream = "history.enableReplicationStream"
+	// EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
+	// [go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
+	// production.
+	EnableHistoryReplicationDLQV2 = "history.enableHistoryReplicationDLQV2"
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -509,6 +513,8 @@ const (
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
 	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
 	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
+	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -926,4 +932,7 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
+	// settings for controlling remote activity concurrency for delete namespace workflows.
+	WorkerDeleteNamespaceActivityLimitsConfig = "worker.deleteNamespaceActivityLimitsConfig"
 )

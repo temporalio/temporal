@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
@@ -49,20 +48,19 @@ type (
 		workers          []sdkworker.Worker
 		workerComponents []workercommon.WorkerComponent
 	}
-
-	initParams struct {
-		fx.In
-		Logger           log.Logger
-		SdkClientFactory sdk.ClientFactory
-		WorkerComponents []workercommon.WorkerComponent `group:"workerComponent"`
-	}
 )
 
-func NewWorkerManager(params initParams) *workerManager {
+// NewWorkerManager creates a new worker manager. The workerComponents argument must be first in order for the fx param
+// tag to work correctly.
+func NewWorkerManager(
+	workerComponents []workercommon.WorkerComponent,
+	logger log.Logger,
+	sdkClientFactory sdk.ClientFactory,
+) *workerManager {
 	return &workerManager{
-		logger:           params.Logger,
-		sdkClientFactory: params.SdkClientFactory,
-		workerComponents: params.WorkerComponents,
+		logger:           logger,
+		sdkClientFactory: sdkClientFactory,
+		workerComponents: workerComponents,
 	}
 }
 
@@ -100,6 +98,9 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterActivities(defaultWorker)
 		} else {
+			// TODO: This is to prevent issues during upgrade/downgrade. Remove in 1.24 release.
+			wc.RegisterActivities(defaultWorker)
+
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 // Invoke the GetDLQTasks API. All errors returned from this function are already translated into the appropriate type
@@ -44,9 +45,10 @@ import (
 func Invoke(
 	ctx context.Context,
 	historyTaskQueueManager persistence.HistoryTaskQueueManager,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	req *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory))
+	category, err := api.GetTaskCategory(int(req.DlqKey.TaskCategory), taskCategoryRegistry)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +77,9 @@ func Invoke(
 			Metadata: &commonspb.HistoryDLQTaskMetadata{
 				MessageId: task.MessageMetadata.ID,
 			},
-			Task: &commonspb.HistoryTask{
-				ShardId: task.Task.ShardId,
-				Task:    task.Task.Blob,
+			Payload: &commonspb.HistoryTask{
+				ShardId: task.Payload.ShardId,
+				Blob:    task.Payload.Blob,
 			},
 		}
 	}

@@ -71,19 +71,18 @@ type (
 	}
 
 	VisibilityRequestBase struct {
-		NamespaceID          namespace.ID
-		Namespace            namespace.Name // namespace.Name is not persisted.
-		Execution            commonpb.WorkflowExecution
-		WorkflowTypeName     string
-		StartTime            time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTime        time.Time
-		StateTransitionCount int64
-		TaskID               int64 // not persisted, used as condition update version for ES
-		ShardID              int32 // not persisted
-		Memo                 *commonpb.Memo
-		TaskQueue            string
-		SearchAttributes     *commonpb.SearchAttributes
+		NamespaceID      namespace.ID
+		Namespace        namespace.Name // namespace.Name is not persisted.
+		Execution        commonpb.WorkflowExecution
+		WorkflowTypeName string
+		StartTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		ExecutionTime    time.Time
+		TaskID           int64 // not persisted, used as condition update version for ES
+		ShardID          int32 // not persisted
+		Memo             *commonpb.Memo
+		TaskQueue        string
+		SearchAttributes *commonpb.SearchAttributes
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
@@ -94,9 +93,10 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
-		CloseTime        time.Time
-		HistoryLength    int64
-		HistorySizeBytes int64
+		CloseTime            time.Time
+		HistoryLength        int64
+		HistorySizeBytes     int64
+		StateTransitionCount int64
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution

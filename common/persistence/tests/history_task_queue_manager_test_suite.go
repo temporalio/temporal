@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
-	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -112,7 +111,7 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 		t.Parallel()
 		testHistoryTaskQueueManagerCreateQueueErr(t, queue)
 	})
-	t.Run("TestHistoryTaskQueueManagerErrDeserializeTask", func(t *testing.T) {
+	t.Run("TestHistoryTQMErrDeserializeTask", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerErrDeserializeHistoryTask(t, queue, historyTaskQueueManager)
 	})
@@ -135,10 +134,6 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 	t.Run("ClientTest", func(t *testing.T) {
 		t.Parallel()
 		historytest.TestClient(t, historyTaskQueueManager)
-	})
-	t.Run("ExecutableTest", func(t *testing.T) {
-		t.Parallel()
-		queuestest.TestExecutable(t, historyTaskQueueManager)
 	})
 }
 
@@ -282,12 +277,13 @@ func enqueueAndDeserializeBlob(
 
 	queueType := persistence.QueueTypeHistoryNormal
 	queueKey := persistencetest.GetQueueKey(t)
+	queueName := queueKey.GetQueueName()
+
 	_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
 	})
 	require.NoError(t, err)
-	queueName := queueKey.GetQueueName()
 	historyTask := persistencespb.HistoryTask{
 		ShardId: 1,
 		Blob:    blob,

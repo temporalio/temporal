@@ -129,16 +129,18 @@ func (f *visibilityQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
-	factory := f.NewExecutableFactory(
+	factory := queues.NewExecutableFactory(
 		executor,
 		shardScheduler,
 		rescheduler,
-		f.ExecutableWrapper,
-		shard.GetClusterMetadata(),
+		f.HostPriorityAssigner,
+		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
+		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
-		shard.GetTimeSource(),
+		f.DLQWriter,
+		f.Config.TaskDLQEnabled,
 	)
 	return queues.NewImmediateQueue(
 		shard,

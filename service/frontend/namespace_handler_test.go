@@ -26,13 +26,12 @@ package frontend
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/slices"
-
-	"strings"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
@@ -72,7 +71,7 @@ type (
 		mockArchiverProvider    *provider.MockArchiverProvider
 		fakeClock               *clock.EventTimeSource
 
-		handler *namespaceHandlerImpl
+		handler *namespaceHandler
 	}
 )
 
@@ -383,7 +382,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	}
 }
 
-func (s *namespaceHandlerCommonSuite) TestRegisterNamespace() {
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
 	const namespace = "namespace-to-register"
 	clusterName := "cluster1"
 	retention := timestamp.DurationPtr(10 * 24 * time.Hour)
@@ -415,7 +414,58 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace() {
 			s.Equal(int64(1), request.Namespace.GetFailoverVersion())
 			return &persistence.CreateNamespaceResponse{}, nil
 		})
-	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(0)
+	_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.NoError(err)
+}
+
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithTwoCluster() {
+	const namespace = "namespace-to-register"
+	clusterName := "cluster1"
+	clusterName2 := "cluster2"
+	retention := timestamp.DurationPtr(10 * 24 * time.Hour)
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: retention,
+		ActiveClusterName:                clusterName,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{
+				ClusterName: clusterName,
+			},
+			{
+				ClusterName: clusterName2,
+			},
+		},
+		IsGlobalNamespace: true,
+	}
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: 1,
+		},
+		clusterName2: {
+			Enabled:                true,
+			InitialFailoverVersion: 2,
+		},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetNextFailoverVersion(clusterName, int64(0)).Return(int64(1))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
+	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateNamespaceRequest) (*persistence.CreateNamespaceResponse, error) {
+			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
+			s.Equal(namespace, request.Namespace.GetInfo().GetName())
+			s.Equal(namespace, request.Namespace.GetInfo().GetDescription())
+			s.Equal(registerRequest.IsGlobalNamespace, request.IsGlobalNamespace)
+			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
+			s.Equal(clusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
+			s.Equal(int64(1), request.Namespace.GetFailoverVersion())
+			return &persistence.CreateNamespaceResponse{}, nil
+		})
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
 }
@@ -1112,7 +1162,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 	namespace := s.getRandomNamespace()
 	retention := timestamp.DurationPtr(24 * time.Hour)
-	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{

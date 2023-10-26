@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -47,20 +48,28 @@ type (
 )
 
 // GetDLQService returns a DLQService based on FlagDLQVersion.
-func GetDLQService(c *cli.Context, clientFactory ClientFactory) (DLQService, error) {
+func GetDLQService(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) (DLQService, error) {
 	version := c.String(FlagDLQVersion)
 	if version == "v1" {
 		return NewDLQV1Service(clientFactory), nil
 	}
 	if version == "v2" {
-		return getDLQV2Service(c, clientFactory)
+		return getDLQV2Service(c, clientFactory, taskCategoryRegistry)
 	}
 	return nil, fmt.Errorf("unknown DLQ version: %v", version)
 }
 
-func getDLQV2Service(c *cli.Context, clientFactory ClientFactory) (DLQService, error) {
+func getDLQV2Service(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) (DLQService, error) {
 	dlqType := c.String(FlagDLQType)
-	category, ok, err := getCategoryByID(dlqType)
+	category, ok, err := getCategoryByID(taskCategoryRegistry, dlqType)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +111,7 @@ func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
 	case "history":
 		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION, nil
 	default:
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported Tueue type %v", dlqType)
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported queue type %v", dlqType)
 	}
 }
 

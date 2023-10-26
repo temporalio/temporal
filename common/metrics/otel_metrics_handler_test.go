@@ -38,7 +38,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.temporal.io/server/common/log/tag"
 
@@ -73,7 +72,7 @@ func TestMeter(t *testing.T) {
 					Unit: "By",
 				},
 				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
+					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 						Boundaries: defaultConfig.PerUnitHistogramBoundaries["By"],
 					},
 				},
@@ -84,7 +83,7 @@ func TestMeter(t *testing.T) {
 					Unit: "1",
 				},
 				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
+					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 						Boundaries: defaultConfig.PerUnitHistogramBoundaries["1"],
 					},
 				},
@@ -95,7 +94,7 @@ func TestMeter(t *testing.T) {
 					Unit: "ms",
 				},
 				sdkmetrics.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
+					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 						Boundaries: defaultConfig.PerUnitHistogramBoundaries["ms"],
 					},
 				},

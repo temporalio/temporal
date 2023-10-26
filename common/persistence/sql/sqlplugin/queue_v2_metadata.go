@@ -34,11 +34,11 @@ import (
 type (
 	// QueueV2MetadataRow represents a row in queue_metadata table
 	QueueV2MetadataRow struct {
-		QueueType       persistence.QueueV2Type
-		QueueName       string
-		Payload         []byte
-		PayloadEncoding string
-		Version         int64
+		QueueType        persistence.QueueV2Type
+		QueueName        string
+		MetadataPayload  []byte
+		MetadataEncoding string
+		Version          int64
 	}
 
 	QueueV2MetadataFilter struct {

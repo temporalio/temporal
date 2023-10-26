@@ -129,7 +129,6 @@ func newWorkflowTaskHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEvents bool,
 ) *workflowTaskHandlerImpl {
-
 	return &workflowTaskHandlerImpl{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
@@ -152,10 +151,13 @@ func newWorkflowTaskHandler(
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope)),
-		config:            config,
-		shard:             shard,
-		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
+		metricsHandler: metricsHandler.WithTags(
+			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
+			metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
+		),
+		config:          config,
+		shard:           shard,
+		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 	}
 }
 
@@ -215,6 +217,10 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	command *commandpb.Command,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
+
+	handler.metricsHandler.Counter(metrics.CommandCounter.GetMetricName()).
+		Record(1, metrics.CommandTypeTag(command.GetCommandType().String()))
+
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
@@ -376,11 +382,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
-	eagerStartActivity := false
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-	if attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) {
-		eagerStartActivity = true
-	}
+
+	// Enable eager activity start if dynamic config enables it and either 1. workflow doesn't use versioning,
+	// or 2. workflow uses versioning and activity intends to use a compatible version (since a
+	// worker is obviously compatible with itself and we are okay dispatching an eager task knowing that there may be a
+	// newer "default" compatible version).
+	// Note that if `UseCompatibleVersion` is false, it implies that the activity should run on the "default" version
+	// for the task queue.
+	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
+		(!handler.mutableState.GetWorkerVersionStamp().GetUseVersioning() || attr.UseCompatibleVersion)
 
 	_, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,

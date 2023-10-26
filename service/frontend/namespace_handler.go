@@ -56,33 +56,9 @@ import (
 )
 
 type (
-	// Handler is the namespace operation handler
-	NamespaceHandler interface {
-		// Deprecated.
-		DeprecateNamespace(
-			ctx context.Context,
-			deprecateRequest *workflowservice.DeprecateNamespaceRequest,
-		) (*workflowservice.DeprecateNamespaceResponse, error)
-		DescribeNamespace(
-			ctx context.Context,
-			describeRequest *workflowservice.DescribeNamespaceRequest,
-		) (*workflowservice.DescribeNamespaceResponse, error)
-		ListNamespaces(
-			ctx context.Context,
-			listRequest *workflowservice.ListNamespacesRequest,
-		) (*workflowservice.ListNamespacesResponse, error)
-		RegisterNamespace(
-			ctx context.Context,
-			registerRequest *workflowservice.RegisterNamespaceRequest,
-		) (*workflowservice.RegisterNamespaceResponse, error)
-		UpdateNamespace(
-			ctx context.Context,
-			updateRequest *workflowservice.UpdateNamespaceRequest,
-		) (*workflowservice.UpdateNamespaceResponse, error)
-	}
-
-	// namespaceHandlerImpl is the namespace operation handler implementation
-	namespaceHandlerImpl struct {
+	// namespaceHandler implements the namespace-related APIs specified by the [workflowservice] package,
+	// such as registering, updating, and querying namespaces.
+	namespaceHandler struct {
 		maxBadBinaryCount      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
@@ -99,8 +75,6 @@ type (
 const (
 	maxReplicationHistorySize = 10
 )
-
-var _ NamespaceHandler = (*namespaceHandlerImpl)(nil)
 
 var (
 	// err indicating that this cluster is not the master, so cannot do namespace registration or update
@@ -123,8 +97,8 @@ func newNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	timeSource clock.TimeSource,
-) *namespaceHandlerImpl {
-	return &namespaceHandlerImpl{
+) *namespaceHandler {
+	return &namespaceHandler{
 		maxBadBinaryCount:      maxBadBinaryCount,
 		logger:                 logger,
 		metadataMgr:            metadataMgr,
@@ -139,7 +113,9 @@ func newNamespaceHandler(
 }
 
 // RegisterNamespace register a new namespace
-func (d *namespaceHandlerImpl) RegisterNamespace(
+//
+//nolint:revive // cognitive complexity grandfathered
+func (d *namespaceHandler) RegisterNamespace(
 	ctx context.Context,
 	registerRequest *workflowservice.RegisterNamespaceRequest,
 ) (*workflowservice.RegisterNamespaceResponse, error) {
@@ -299,7 +275,7 @@ func (d *namespaceHandlerImpl) RegisterNamespace(
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
 		namespaceRequest.Namespace.ReplicationConfig,
-		true,
+		false,
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
@@ -318,7 +294,7 @@ func (d *namespaceHandlerImpl) RegisterNamespace(
 }
 
 // ListNamespaces list all namespaces
-func (d *namespaceHandlerImpl) ListNamespaces(
+func (d *namespaceHandler) ListNamespaces(
 	ctx context.Context,
 	listRequest *workflowservice.ListNamespacesRequest,
 ) (*workflowservice.ListNamespacesResponse, error) {
@@ -361,7 +337,7 @@ func (d *namespaceHandlerImpl) ListNamespaces(
 }
 
 // DescribeNamespace describe the namespace
-func (d *namespaceHandlerImpl) DescribeNamespace(
+func (d *namespaceHandler) DescribeNamespace(
 	ctx context.Context,
 	describeRequest *workflowservice.DescribeNamespaceRequest,
 ) (*workflowservice.DescribeNamespaceResponse, error) {
@@ -386,7 +362,9 @@ func (d *namespaceHandlerImpl) DescribeNamespace(
 }
 
 // UpdateNamespace update the namespace
-func (d *namespaceHandlerImpl) UpdateNamespace(
+//
+//nolint:revive // cognitive complexity grandfathered
+func (d *namespaceHandler) UpdateNamespace(
 	ctx context.Context,
 	updateRequest *workflowservice.UpdateNamespaceRequest,
 ) (*workflowservice.UpdateNamespaceResponse, error) {
@@ -661,7 +639,7 @@ func (d *namespaceHandlerImpl) UpdateNamespace(
 
 // DeprecateNamespace deprecates a namespace
 // Deprecated.
-func (d *namespaceHandlerImpl) DeprecateNamespace(
+func (d *namespaceHandler) DeprecateNamespace(
 	ctx context.Context,
 	deprecateRequest *workflowservice.DeprecateNamespaceRequest,
 ) (*workflowservice.DeprecateNamespaceResponse, error) {
@@ -707,7 +685,7 @@ func (d *namespaceHandlerImpl) DeprecateNamespace(
 	return nil, nil
 }
 
-func (d *namespaceHandlerImpl) createResponse(
+func (d *namespaceHandler) createResponse(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
@@ -756,7 +734,7 @@ func (d *namespaceHandlerImpl) createResponse(
 	return infoResult, configResult, replicationConfigResult, failoverHistory
 }
 
-func (d *namespaceHandlerImpl) mergeBadBinaries(
+func (d *namespaceHandler) mergeBadBinaries(
 	old map[string]*namespacepb.BadBinaryInfo,
 	new map[string]*namespacepb.BadBinaryInfo,
 	createTime time.Time,
@@ -774,7 +752,7 @@ func (d *namespaceHandlerImpl) mergeBadBinaries(
 	}
 }
 
-func (d *namespaceHandlerImpl) mergeNamespaceData(
+func (d *namespaceHandler) mergeNamespaceData(
 	old map[string]string,
 	new map[string]string,
 ) map[string]string {
@@ -788,7 +766,7 @@ func (d *namespaceHandlerImpl) mergeNamespaceData(
 	return old
 }
 
-func (d *namespaceHandlerImpl) upsertCustomSearchAttributesAliases(
+func (d *namespaceHandler) upsertCustomSearchAttributesAliases(
 	current map[string]string,
 	upsert map[string]string,
 ) (map[string]string, error) {
@@ -805,7 +783,7 @@ func (d *namespaceHandlerImpl) upsertCustomSearchAttributesAliases(
 	return result, nil
 }
 
-func (d *namespaceHandlerImpl) toArchivalRegisterEvent(
+func (d *namespaceHandler) toArchivalRegisterEvent(
 	state enumspb.ArchivalState,
 	URI string,
 	defaultState enumspb.ArchivalState,
@@ -826,7 +804,7 @@ func (d *namespaceHandlerImpl) toArchivalRegisterEvent(
 	return event, nil
 }
 
-func (d *namespaceHandlerImpl) toArchivalUpdateEvent(
+func (d *namespaceHandler) toArchivalUpdateEvent(
 	state enumspb.ArchivalState,
 	URI string,
 	defaultURI string,
@@ -843,7 +821,7 @@ func (d *namespaceHandlerImpl) toArchivalUpdateEvent(
 	return event, nil
 }
 
-func (d *namespaceHandlerImpl) validateHistoryArchivalURI(URIString string) error {
+func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -857,7 +835,7 @@ func (d *namespaceHandlerImpl) validateHistoryArchivalURI(URIString string) erro
 	return archiver.ValidateURI(URI)
 }
 
-func (d *namespaceHandlerImpl) validateVisibilityArchivalURI(URIString string) error {
+func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error {
 	URI, err := archiver.NewURI(URIString)
 	if err != nil {
 		return err
@@ -872,7 +850,7 @@ func (d *namespaceHandlerImpl) validateVisibilityArchivalURI(URIString string) e
 }
 
 // maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.
-func (d *namespaceHandlerImpl) maybeUpdateFailoverHistory(
+func (d *namespaceHandler) maybeUpdateFailoverHistory(
 	failoverHistory []*persistencespb.FailoverStatus,
 	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
 	namespaceDetail *persistencespb.NamespaceDetail,

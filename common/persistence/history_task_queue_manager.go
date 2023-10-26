@@ -62,6 +62,7 @@ const (
 var (
 	ErrReadTasksNonPositivePageSize = errors.New("page size to read history tasks must be positive")
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
+	ErrEnqueueTaskRequestTaskIsNil  = errors.New("enqueue task request task is nil")
 	ErrQueueAlreadyExists           = errors.New("queue already exists")
 )
 
@@ -77,6 +78,9 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	ctx context.Context,
 	request *EnqueueTaskRequest,
 ) (*EnqueueTaskResponse, error) {
+	if request.Task == nil {
+		return nil, ErrEnqueueTaskRequestTaskIsNil
+	}
 	blob, err := m.serializer.SerializeTask(request.Task)
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
@@ -147,7 +151,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}
 		responseTasks[i].MessageMetadata = message.MetaData
-		responseTasks[i].Task = &task
+		responseTasks[i].Payload = &task
 	}
 
 	return &ReadRawTasksResponse{
@@ -166,7 +170,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	resTasks := make([]HistoryTask, len(response.Tasks))
 
 	for i, rawTask := range response.Tasks {
-		blob := rawTask.Task.Blob
+		blob := rawTask.Payload.Blob
 		if blob == nil {
 			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}

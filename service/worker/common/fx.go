@@ -22,46 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues_test
+package common
 
-import (
-	"testing"
+import "go.uber.org/fx"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
-)
+// WorkerComponentTag is the fx group tag for worker components. This is used to allow those who use Temporal as a
+// library to dynamically register their own system workers. Use this to annotate a worker component consumer. Use the
+// AnnotateWorkerComponentProvider function to annotate a worker component provider.
+const WorkerComponentTag = `group:"workerComponent"`
 
-type (
-	testWrapper       struct{}
-	wrappedExecutable struct {
-		queues.Executable
-	}
-)
-
-func TestNewExecutableFactoryWrapper(t *testing.T) {
-	t.Parallel()
-
-	wrapper := testWrapper{}
-	factory := queues.NewExecutableFactory(
-		nil,
-		nil,
-		nil,
-		queues.NewNoopPriorityAssigner(),
-		clock.NewEventTimeSource(),
-		nil,
-		nil,
-		log.NewNoopLogger(),
-		nil,
-	)
-	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
-	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
-	_, ok := executable.(wrappedExecutable)
-	assert.True(t, ok, "expected executable to be wrapped")
-}
-
-func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
-	return wrappedExecutable{e}
+// AnnotateWorkerComponentProvider converts a WorkerComponent factory function into an fx provider which will add the
+// WorkerComponentTag to the result.
+func AnnotateWorkerComponentProvider[T any](f func(t T) WorkerComponent) fx.Option {
+	return fx.Provide(fx.Annotate(f, fx.ResultTags(WorkerComponentTag)))
 }

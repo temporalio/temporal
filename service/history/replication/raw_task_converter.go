@@ -89,10 +89,16 @@ func NewSourceTaskConverter(
 func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
-	if namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
+	var shouldProcessTask bool
+	namespaceEntry, err := c.namespaceCache.GetNamespaceByID(
 		namespace.ID(task.GetNamespaceID()),
-	); err == nil {
-		shouldProcessTask := false
+	)
+	if err != nil {
+		// if there is error, then blindly send the task, better safe than sorry
+		shouldProcessTask = true
+	}
+
+	if namespaceEntry != nil {
 	FilterLoop:
 		for _, targetCluster := range namespaceEntry.ClusterNames() {
 			if c.clientClusterName == targetCluster {
@@ -100,18 +106,18 @@ func (c *SourceTaskConverterImpl) Convert(
 				break FilterLoop
 			}
 		}
-		if !shouldProcessTask {
-			return nil, nil
-		}
 	}
-	// if there is error, then blindly send the task, better safe than sorry
+
+	if !shouldProcessTask {
+		return nil, nil
+	}
 
 	clientShardID := common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), c.clientClusterShardCount)
 	if clientShardID != c.clientShardKey.ShardID {
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := newTaskContext(namespaceEntry.Name().String())
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {

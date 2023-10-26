@@ -28,6 +28,7 @@ package common
 
 import (
 	sdkworker "go.temporal.io/sdk/worker"
+
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -36,13 +37,13 @@ type (
 	WorkerComponent interface {
 		// RegisterWorkflow registers Workflow types provided by this worker component.
 		// Local Activities should also be registered here because they are executed on the workflow worker.
-		RegisterWorkflow(sdkworker.Worker)
+		RegisterWorkflow(registry sdkworker.Registry)
 		// DedicatedWorkflowWorkerOptions returns a DedicatedWorkerOptions for this worker component.
 		// Return nil to use default worker instance.
 		DedicatedWorkflowWorkerOptions() *DedicatedWorkerOptions
 		// RegisterActivities registers remote Activity types provided by this worker component.
 		// Local Activities should be registered in RegisterWorkflow
-		RegisterActivities(sdkworker.Worker)
+		RegisterActivities(registry sdkworker.Registry)
 		// DedicatedActivityWorkerOptions returns a DedicatedWorkerOptions for this worker component.
 		// Return nil to use default worker instance.
 		DedicatedActivityWorkerOptions() *DedicatedWorkerOptions
@@ -57,11 +58,19 @@ type (
 		Options sdkworker.Options
 	}
 
+	ActivityWorkerLimitsConfig struct {
+		// copy of relevant remote activity controls from sdkworker.Options
+		MaxConcurrentActivityExecutionSize int
+		TaskQueueActivitiesPerSecond       float64
+		WorkerActivitiesPerSecond          float64
+		MaxConcurrentActivityTaskPollers   int
+	}
+
 	// PerNSWorkerComponent represents a per-namespace worker needed for worker role
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
-		Register(sdkworker.Worker, *namespace.Namespace, RegistrationDetails)
+		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails)
 		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
 		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}
