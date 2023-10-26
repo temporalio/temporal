@@ -8,8 +8,13 @@ cd develop/buildkite
 
 {
   sed -n '1,/<<< build-alias list/ p' pipeline.yml
-  yq -y '[ .services | to_entries[] | select(.value.build.context == "../..") | .key | select(. != "build") ]' docker-compose.yml | \
-    sed 's/^/            /'
+  yq -y '[
+    .services |
+    to_entries[] |
+    select(.value.build.context == "../..") |
+    .key |
+    select(. != "build" and . != "prebuild")
+  ]' docker-compose.yml | sed 's/^/            /'
   sed -n '/>>> build-alias list/,$ p' pipeline.yml
 } > pipeline.yml.tmp
 
