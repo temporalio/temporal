@@ -26,13 +26,18 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func getCommands(
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	writer io.Writer,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:        "workflow",
@@ -67,7 +72,7 @@ func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCat
 		{
 			Name:        "dlq",
 			Usage:       "Run admin operation on DLQ",
-			Subcommands: newAdminDLQCommands(clientFactory, taskCategoryRegistry),
+			Subcommands: newAdminDLQCommands(clientFactory, taskCategoryRegistry, writer),
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
@@ -482,7 +487,11 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	}
 }
 
-func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func newAdminDLQCommands(
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	writer io.Writer,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "read",
@@ -508,7 +517,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 				},
 			),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry, writer)
 				if err != nil {
 					return err
 				}
@@ -521,7 +530,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(taskCategoryRegistry),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry, writer)
 				if err != nil {
 					return err
 				}
@@ -534,7 +543,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(taskCategoryRegistry),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry, writer)
 				if err != nil {
 					return err
 				}

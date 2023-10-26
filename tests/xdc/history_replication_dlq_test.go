@@ -321,7 +321,9 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	clientFactory := tdbg.NewClientFactory(
 		tdbg.WithFrontendAddress(s.cluster2.GetHost().FrontendGRPCAddress()),
 	)
-	app := tdbg.NewCliApp(clientFactory, tasks.NewDefaultTaskCategoryRegistry())
+	app := tdbg.NewCliApp(func(params *tdbg.Params) {
+		params.ClientFactory = clientFactory
+	})
 	app.ExitErrHandler = func(c *cli.Context, err error) {
 		// We don't want the CLI to exit when it encounters an error, so we override the default handler.
 	}
