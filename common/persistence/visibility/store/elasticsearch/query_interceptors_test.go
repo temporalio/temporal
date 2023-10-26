@@ -148,12 +148,12 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		value     interface{}
 		returnErr bool
 	}{
-		{value: "1", returnErr: false},
+		{value: nil, returnErr: true},
 		{value: 1, returnErr: false},
 		{value: int64(18180000000000), returnErr: false},
 		{value: int64(1000000000), returnErr: false},
 		{value: nil, returnErr: true},
-		{value: "bad value", returnErr: false},
+		{value: nil, returnErr: true},
 		{value: "should not be modified", returnErr: false},
 	}
 
