@@ -27,6 +27,7 @@ package standard
 import (
 	"time"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/api/enums/v1"
@@ -56,10 +57,18 @@ func newNameInterceptor() *nameInterceptor {
 	return &nameInterceptor{}
 }
 
-func newValuesInterceptor() *valuesInterceptor {
+func newValuesInterceptor(
+	namespaceName namespace.Name,
+	searchAttributesTypeMap searchattribute.NameTypeMap,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+) *valuesInterceptor {
 	return &valuesInterceptor{
-		filter:          &sqlplugin.VisibilitySelectFilter{},
-		nextInterceptor: elasticsearch.NewValuesInterceptor(),
+		filter: &sqlplugin.VisibilitySelectFilter{},
+		nextInterceptor: elasticsearch.NewValuesInterceptor(
+			namespaceName,
+			searchAttributesTypeMap,
+			searchAttributesMapperProvider,
+		),
 	}
 }
 
