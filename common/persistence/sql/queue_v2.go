@@ -259,11 +259,21 @@ func (q *queueV2) RangeDeleteMessages(
 		}
 		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, request.QueueName, qm.Metadata)
 		if err != nil {
-			return err
+			return serviceerror.NewUnavailable(fmt.Sprintf(
+				"RangeDeleteMessages failed for queue with type: %v and name: %v. GetPartitionForQueueV2 operation failed. Error: %v",
+				request.QueueType,
+				request.QueueName,
+				err),
+			)
 		}
 		maxMessageID, ok, err := q.getMaxMessageID(ctx, request.QueueType, request.QueueName, tx)
 		if err != nil {
-			return err
+			return serviceerror.NewUnavailable(fmt.Sprintf(
+				"RangeDeleteMessages failed for queue with type: %v and name: %v. failed to get MaxMessageID. Error: %v",
+				request.QueueType,
+				request.QueueName,
+				err),
+			)
 		}
 		if !ok {
 			return nil
@@ -287,7 +297,12 @@ func (q *queueV2) RangeDeleteMessages(
 		}
 		_, err = tx.RangeDeleteFromQueueV2Messages(ctx, msgFilter)
 		if err != nil {
-			return err
+			return serviceerror.NewUnavailable(fmt.Sprintf(
+				"RangeDeleteMessages failed for queue with type: %v and name: %v. RangeDeleteFromQueueV2Messages operation failed. Error: %v",
+				request.QueueType,
+				request.QueueName,
+				err),
+			)
 		}
 		partition.MinMessageId = deleteRange.NewMinMessageID
 		bytes, _ := qm.Metadata.Marshal()
@@ -296,11 +311,16 @@ func (q *queueV2) RangeDeleteMessages(
 			QueueName:        request.QueueName,
 			MetadataPayload:  bytes,
 			MetadataEncoding: enums.ENCODING_TYPE_PROTO3.String(),
-			Version:          0,
+			Version:          qm.Version,
 		}
 		_, err = tx.UpdateQueueV2Metadata(ctx, &row)
 		if err != nil {
-			return err
+			return serviceerror.NewUnavailable(fmt.Sprintf(
+				"RangeDeleteMessages failed for queue with type: %v and name: %v. UpdateQueueV2Metadata operation failed. Error: %v",
+				request.QueueType,
+				request.QueueName,
+				err),
+			)
 		}
 		return nil
 	})

@@ -383,6 +383,40 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		require.Len(t, response.Messages, 1)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), response.Messages[0].MetaData.ID)
 	})
+
+	t.Run("RangeDeleteTwice", func(t *testing.T) {
+		t.Parallel()
+
+		queueType := persistence.QueueTypeHistoryNormal
+		queueName := "test-queue-" + t.Name()
+		_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		for i := 0; i < 2; i++ {
+			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
+			require.NoError(t, err)
+		}
+
+		for i := 0; i < 2; i++ {
+			_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+				QueueType: queueType,
+				QueueName: queueName,
+				InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+					ID: persistence.FirstQueueMessageID + int64(i),
+				},
+			})
+			require.NoError(t, err)
+		}
+		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			PageSize:  10,
+		})
+		require.NoError(t, err)
+		require.Len(t, response.Messages, 0)
+	})
 }
 
 func RunQueueV2TestSuiteForSQL(t *testing.T, factory *sql.Factory) {
