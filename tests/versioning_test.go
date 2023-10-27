@@ -116,7 +116,7 @@ func (s *versioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func TestVersioningFuncSuite(t *testing.T) {
+func TestVersioningFunctionalSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, new(versioningIntegSuite))
 }
