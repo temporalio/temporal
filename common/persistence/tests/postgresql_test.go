@@ -623,14 +623,10 @@ func (p *PostgreSQLSuite) TestPostgreSQLClosedConnectionError() {
 	suite.Run(p.T(), s)
 }
 
-func (p *PostgreSQLSuite) TestPostgreSQLQueueV2() {
+func (p *PostgreSQLSuite) TestPGQueueV2() {
 	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
 	p.T().Cleanup(tearDown)
-
-	p.T().Run("RunQueueV2TestSuiteForSQL", func(t *testing.T) {
-		t.Parallel()
-		RunQueueV2TestSuiteForSQL(t, testData.Factory)
-	})
+	RunQueueV2TestSuiteForSQL(p.T(), testData.Factory)
 }
 
 func TestPQ(t *testing.T) {

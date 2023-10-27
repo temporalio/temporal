@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/service/history/consts"
 
 	commonpb "go.temporal.io/api/common/v1"

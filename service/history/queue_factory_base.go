@@ -72,9 +72,8 @@ type (
 		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
-
-		ExecutorWrapper   queues.ExecutorWrapper   `optional:"true"`
-		ExecutableWrapper queues.ExecutableWrapper `optional:"true"`
+		DLQWriter            *queues.DLQWriter
+		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {
@@ -98,7 +97,6 @@ var QueueModule = fx.Options(
 			return tqm
 		},
 		queues.NewDLQWriter,
-		NewExecutableDLQWrapper,
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
 			Target: NewTransferQueueFactory,
@@ -219,34 +217,6 @@ func (f *QueueFactoryBase) Stop() {
 	if f.HostScheduler != nil {
 		f.HostScheduler.Stop()
 	}
-}
-
-func (f *QueueFactoryBase) NewExecutableFactory(
-	executor queues.Executor,
-	scheduler queues.Scheduler,
-	rescheduler queues.Rescheduler,
-	executableWrapper queues.ExecutableWrapper,
-	clusterMetadata cluster.Metadata,
-	namespaceRegistry namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-) queues.ExecutableFactory {
-	factory := queues.NewExecutableFactory(
-		executor,
-		scheduler,
-		rescheduler,
-		f.HostPriorityAssigner,
-		timeSource,
-		namespaceRegistry,
-		clusterMetadata,
-		logger,
-		metricsHandler,
-	)
-	if executableWrapper == nil {
-		return factory
-	}
-	return queues.NewExecutableFactoryWrapper(factory, executableWrapper)
 }
 
 func NewQueueHostRateLimiter(

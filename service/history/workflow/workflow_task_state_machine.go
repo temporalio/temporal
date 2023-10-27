@@ -270,7 +270,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 	return event, nil
 }
 
-// AddWorkflowTaskScheduledEventAsHeartbeat is to record the first scheduled workflow task during workflow task heartbeat.
+// AddWorkflowTaskScheduledEventAsHeartbeat records the first scheduled workflow task during workflow task heartbeat.
 // If bypassTaskGeneration is specified, a transfer task will not be generated.
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,

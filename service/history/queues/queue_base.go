@@ -366,17 +366,17 @@ func (p *queueBase) checkpoint() {
 
 	p.updateReaderProgress(readerScopes)
 
-	// NOTE: Must range complete task first.
-	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
-	// some tasks will never be deleted.
+	// NOTE: Must range-complete task first.
+	// Otherwise, if state is updated first, later deletion fails and the shard gets reloaded.
+	// Some tasks will never be deleted.
 	//
-	// Emit metric before the deletion watermark comparsion so we have the emit even if there's no task
-	// for the queue
+	// Emit metric before the deletion watermark comparison so we have the emit even if there's no task
+	// for the queue.
 	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
 		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
-		// when shard rangeID is updated, perform range completion again in case the underlying persistence implementation
-		// serves traffic based on the persisted shardInfo
+		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
+		// serves traffic based on the persisted shardInfo.
 		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
 			p.resetCheckpointTimer(err)
@@ -396,7 +396,7 @@ func (p *queueBase) updateReaderProgress(
 	// NOTE: A reader has progress = X means that reader will
 	// never try to load/process tasks with key < X.
 	// If a reader's first slice has scope start from Y,
-	// it's possible that later a slice contains key < Y get moved into it.
+	// it's possible that later a slice containing a key < Y gets moved into it.
 	// In general, the minKey of a reader's first slice's scope is not it's progress.
 
 	// However, since slices only move from reader with lower ID to higher ID,

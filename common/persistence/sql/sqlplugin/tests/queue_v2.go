@@ -30,9 +30,14 @@ import (
 	"errors"
 	"testing"
 
+	"go.temporal.io/api/serviceerror"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/persistencetest"
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/log"
@@ -49,6 +54,10 @@ var (
 	ErrTxRollbackFailed       = errors.New("txRollBack err")
 	ErrTxCommitFailed         = errors.New("txCommit err")
 	ErrRangeSelectFailed      = errors.New("rangeSelect err")
+	ErrSelectMetadataFailed   = errors.New("selectFromMetadata err")
+	ErrInsertMetadataFailed   = errors.New("insertMetadataFailed")
+	ErrRangeDeleteFailed      = errors.New("rangeDeleteFailed")
+	ErrUpdateMetadataFailed   = errors.New("updateMetadataFailed")
 )
 
 type (
@@ -60,6 +69,10 @@ type (
 		insertErr           error
 		txRollbackErr       error
 		rangeSelectError    error
+		selectMetadataError error
+		insertMetadataError error
+		rangeDeleteError    error
+		updateMetadataError error
 		commitCalls         int
 	}
 	faultyTx struct {
@@ -85,20 +98,64 @@ func (db *faultyDB) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 }
 
 func (tx *faultyTx) InsertIntoQueueV2Messages(ctx context.Context, row []sqlplugin.QueueV2MessageRow) (sql.Result, error) {
-	if _, err := tx.Tx.InsertIntoQueueV2Messages(ctx, row); err != nil {
-		return nil, err
+	if tx.db.insertErr != nil {
+		return nil, tx.db.insertErr
 	}
-	return nil, tx.db.insertErr
+	return tx.Tx.InsertIntoQueueV2Messages(ctx, row)
 }
 
 func (tx *faultyTx) GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter sqlplugin.QueueV2Filter) (int64, error) {
-	return 0, tx.db.getLastMessageIdErr
+	if tx.db.getLastMessageIdErr != nil {
+		return 0, tx.db.getLastMessageIdErr
+	}
+	return tx.Tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, filter)
+}
 
+func (db *faultyDB) GetLastEnqueuedMessageIDForUpdateV2(ctx context.Context, filter sqlplugin.QueueV2Filter) (int64, error) {
+	if db.getLastMessageIdErr != nil {
+		return 0, db.getLastMessageIdErr
+	}
+	return db.DB.GetLastEnqueuedMessageIDForUpdateV2(ctx, filter)
 }
 
 func (db *faultyDB) RangeSelectFromQueueV2Messages(ctx context.Context, filter sqlplugin.QueueV2MessagesFilter) ([]sqlplugin.QueueV2MessageRow, error) {
 	return []sqlplugin.QueueV2MessageRow{}, db.rangeSelectError
 
+}
+
+func (db *faultyDB) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, db.selectMetadataError
+	}
+	return db.DB.SelectFromQueueV2Metadata(ctx, filter)
+}
+
+func (tx *faultyTx) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if tx.db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
+	}
+	return tx.Tx.SelectFromQueueV2Metadata(ctx, filter)
+}
+
+func (db *faultyDB) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
+	if db.insertMetadataError != nil {
+		return nil, db.insertMetadataError
+	}
+	return db.DB.InsertIntoQueueV2Metadata(ctx, row)
+}
+
+func (tx *faultyTx) RangeDeleteFromQueueV2Messages(ctx context.Context, filter sqlplugin.QueueV2MessagesFilter) (sql.Result, error) {
+	if tx.db.rangeDeleteError != nil {
+		return nil, tx.db.rangeDeleteError
+	}
+	return tx.Tx.RangeDeleteFromQueueV2Messages(ctx, filter)
+}
+
+func (tx *faultyTx) UpdateQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
+	if tx.db.updateMetadataError != nil {
+		return nil, tx.db.updateMetadataError
+	}
+	return tx.Tx.UpdateQueueV2Metadata(ctx, row)
 }
 
 func (tx *faultyTx) Rollback() error {
@@ -125,29 +182,70 @@ func (l *logRecorder) Error(msg string, _ ...tag.Tag) {
 }
 
 func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
+	ctx := context.Background()
+
 	t.Run("QueueInsertFails", func(t *testing.T) {
 		t.Parallel()
-		testQueueInsertFails(t, baseDB)
+		testQueueInsertFails(ctx, t, baseDB)
 	})
 	t.Run("TxBeginFails", func(t *testing.T) {
 		t.Parallel()
-		testBeginTxFails(t, baseDB)
+		testBeginTxFails(ctx, t, baseDB)
 	})
 	t.Run("TxCommitFails", func(t *testing.T) {
 		t.Parallel()
-		testCommitTxFails(t, baseDB)
+		testCommitTxFails(ctx, t, baseDB)
 	})
 	t.Run("FailedToGetLastMessageIDFromDB", func(t *testing.T) {
 		t.Parallel()
-		testGetLastMessageIDFails(t, baseDB)
+		testGetLastMessageIDFails(ctx, t, baseDB)
 	})
 	t.Run("FailedToGetLastMessageIDFromDB", func(t *testing.T) {
 		t.Parallel()
-		rangeSelectFromQueueV2MessagesFails(t, baseDB)
+		testRangeSelectFromQueueV2MessagesFails(ctx, t, baseDB)
 	})
+	t.Run("InsertIntoQueueV2MetadataFails", func(t *testing.T) {
+		t.Parallel()
+		testInsertIntoQueueV2MetadataFails(ctx, t, baseDB)
+	})
+	t.Run("GetPartitionFailsForRangeDelete", func(t *testing.T) {
+		t.Parallel()
+		testGetPartitionFails(ctx, t, baseDB)
+	})
+	t.Run("GetLastMessageIDForDeleteFails", func(t *testing.T) {
+		t.Parallel()
+		testGetLastMessageIDForDeleteFails(ctx, t, baseDB)
+	})
+	t.Run("RangeDeleteMessagesFails", func(t *testing.T) {
+		t.Parallel()
+		testRangeDeleteMessagesFails(ctx, t, baseDB)
+	})
+	t.Run("RangeDeleteActuallyDeletes", func(t *testing.T) {
+		t.Parallel()
+		testRangeDeleteActuallyDeletes(ctx, t, baseDB)
+	})
+	t.Run("UpdateMetadataFails", func(t *testing.T) {
+		t.Parallel()
+		testUpdateMetadataFails(ctx, t, baseDB)
+	})
+	t.Run("InvalidMetadataEncoding", func(t *testing.T) {
+		t.Parallel()
+		testInvalidMetadataEncoding(ctx, t, baseDB)
+	})
+	t.Run("InvalidMetadataPayload", func(t *testing.T) {
+		t.Parallel()
+		testInvalidMetadataPayload(ctx, t, baseDB)
+	})
+	t.Run("SelectMetadataFails", func(t *testing.T) {
+		t.Parallel()
+		testSelectMetadataFails(ctx, t, baseDB)
+	})
+
 }
 
-func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
+func testQueueInsertFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:            baseDB,
 		insertErr:     ErrInsertFailed,
@@ -155,14 +253,12 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
-	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
-		QueueType: persistence.QueueTypeHistoryNormal,
-		QueueName: "test-queue-" + t.Name(),
-		Blob: commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON,
-			Data:         []byte("1"),
-		},
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
 	})
+	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "insert error")
 	require.Len(t, logger.errMsgs, 1)
@@ -170,47 +266,49 @@ func testQueueInsertFails(t *testing.T, baseDB sqlplugin.DB) {
 	assert.Equal(t, db.commitCalls, 0)
 }
 
-func testCommitTxFails(t *testing.T, baseDB sqlplugin.DB) {
+func testCommitTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:          baseDB,
 		txCommitErr: ErrTxCommitFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
-	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
-		QueueType: persistence.QueueTypeHistoryNormal,
-		QueueName: "test-queue-" + t.Name(),
-		Blob: commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON,
-			Data:         []byte("1"),
-		},
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
 	})
+	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "EnqueueMessage failed. Failed to commit transaction.")
+	assert.ErrorContains(t, err, "EnqueueMessage failed")
 	assert.Equal(t, db.commitCalls, 1)
 }
 
-func testBeginTxFails(t *testing.T, baseDB sqlplugin.DB) {
+func testBeginTxFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:         baseDB,
 		txBeginErr: ErrTxBeginFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
-	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
-		QueueType: persistence.QueueTypeHistoryNormal,
-		QueueName: "test-queue-" + t.Name(),
-		Blob: commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON,
-			Data:         []byte("1"),
-		},
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
 	})
+	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "txBegin error")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
-func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
+func testGetLastMessageIDFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:                  baseDB,
 		getLastMessageIdErr: ErrGetLastMessageIdFailed,
@@ -218,32 +316,287 @@ func testGetLastMessageIDFails(t *testing.T, baseDB sqlplugin.DB) {
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
-	_, err := q.EnqueueMessage(context.Background(), &persistence.InternalEnqueueMessageRequest{
-		QueueType: persistence.QueueTypeHistoryNormal,
-		QueueName: "test-queue-" + t.Name(),
-		Blob: commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_JSON,
-			Data:         []byte("1"),
-		},
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
 	})
+	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to get last enqueued message id")
+	assert.ErrorContains(t, err, "failed to get next messageId")
 	assert.Equal(t, db.commitCalls, 0)
 }
 
-func rangeSelectFromQueueV2MessagesFails(t *testing.T, baseDB sqlplugin.DB) {
+func testRangeSelectFromQueueV2MessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:               baseDB,
 		rangeSelectError: ErrRangeSelectFailed,
 	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(db, logger)
-	_, err := q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
-		QueueType:     persistence.QueueTypeHistoryNormal,
-		QueueName:     "test-queue-" + t.Name(),
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
+		QueueType:     queueType,
+		QueueName:     queueName,
 		PageSize:      1,
 		NextPageToken: nil,
 	})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "RangeSelectFromQueueV2Messages operation failed")
+}
+
+func testInsertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		insertMetadataError: ErrInsertMetadataFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "InsertIntoQueueV2Metadata operation failed")
+}
+
+func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		insertMetadataError: ErrInsertMetadataFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	queuePB := persistencespb.Queue{
+		Partitions: map[int32]*persistencespb.QueuePartition{
+			0: {},
+			1: {},
+		},
+	}
+	bytes, _ := queuePB.Marshal()
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  bytes,
+		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
+		Version:          0,
+	}
+	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
+	require.NoError(t, err)
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   persistence.QueueTypeHistoryNormal,
+		QueueName:                   "test-queue-" + t.Name(),
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "partitions")
+}
+
+func testGetLastMessageIDForDeleteFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		getLastMessageIdErr: ErrGetLastMessageIdFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   persistence.QueueTypeHistoryNormal,
+		QueueName:                   "test-queue-" + t.Name(),
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "getLastMessageId error")
+}
+
+func testRangeDeleteMessagesFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:               baseDB,
+		rangeDeleteError: ErrRangeDeleteFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	persistencetest.EnqueueMessagesForDelete(t, q, queueName, queueType)
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   queueType,
+		QueueName:                   queueName,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "rangeDeleteFailed")
+}
+
+func testUpdateMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		updateMetadataError: ErrUpdateMetadataFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	persistencetest.EnqueueMessagesForDelete(t, q, queueName, queueType)
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   queueType,
+		QueueName:                   queueName,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "updateMetadataFailed")
+}
+
+func testSelectMetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		selectMetadataError: ErrSelectMetadataFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+		PageSize:  10,
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, ErrSelectMetadataFailed.Error())
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, ErrSelectMetadataFailed.Error())
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   queueType,
+		QueueName:                   queueName,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
+}
+
+func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(baseDB, logger)
+
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  []byte("invalid_payload"),
+		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
+		Version:          0,
+	}
+	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
+	require.NoError(t, err)
+	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+		PageSize:  10,
+	})
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serialization.DeserializationError))
+}
+
+func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(baseDB, logger)
+
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  []byte("test"),
+		MetadataEncoding: "invalid_encoding",
+		Version:          0,
+	}
+	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
+	require.NoError(t, err)
+	_, err = q.ReadMessages(context.Background(), &persistence.InternalReadMessagesRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+		PageSize:  10,
+	})
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   queueType,
+		QueueName:                   queueName,
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 0},
+	})
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
+}
+
+func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplugin.DB) {
+	queueKey := persistencetest.GetQueueKey(t)
+	queueType := persistence.QueueTypeHistoryNormal
+	q := persistencesql.NewQueueV2(db, log.NewTestLogger())
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueKey.GetQueueName(),
+	})
+	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
+		require.NoError(t, err)
+	}
+	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+		QueueType:                   queueType,
+		QueueName:                   queueKey.GetQueueName(),
+		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: persistence.FirstQueueMessageID + 2},
+	})
+	require.NoError(t, err)
+	result, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
+		QueueType: queueType,
+		QueueName: queueKey.GetQueueName(),
+		PageSize:  10,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, result.Messages)
+	messages, err := db.RangeSelectFromQueueV2Messages(ctx, sqlplugin.QueueV2MessagesFilter{
+		QueueType:    queueType,
+		QueueName:    queueKey.GetQueueName(),
+		MinMessageID: 0,
+		MaxMessageID: 100,
+		PageSize:     10,
+	})
+	require.NoError(t, err)
+	if assert.Len(t, messages, 1) {
+		assert.Equal(t, int64(persistence.FirstQueueMessageID+2), messages[0].MessageID)
+	}
+	response, err := persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
+	require.NoError(t, err)
+	assert.Equal(t, int64(persistence.FirstQueueMessageID+3), response.Metadata.ID)
 }

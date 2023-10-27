@@ -26,7 +26,6 @@ package dlq_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,14 +33,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
-	"google.golang.org/grpc"
-
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tasks"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -52,12 +52,15 @@ type (
 	}
 	testParams struct {
 		workflowParams dlq.WorkflowParams
-		client         *faultyHistoryClient
+		client         *testHistoryClient
 		// expectation is run with the result of the workflow execution
 		expectation func(err error)
 	}
-	faultyHistoryClient struct {
-		err error
+	// This client allows the test to set custom functions for each of its methods.
+	testHistoryClient struct {
+		getTasksFn    func(req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error)
+		deleteTasksFn func(req *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)
+		addTasksFn    func(req *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error)
 	}
 )
 
@@ -66,12 +69,13 @@ type (
 func TestModule(t *testing.T) {
 	for _, tc := range []testCase{
 		{
-			name: "happy path",
+			name: "delete",
 			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultDeleteParams(t)
 			},
 		},
 		{
-			name: "invalid workflow type",
+			name: "invalid_workflow_type",
 			configure: func(t *testing.T, params *testParams) {
 				params.workflowParams.WorkflowType = "my-invalid-workflow-type"
 				params.expectation = func(err error) {
@@ -84,24 +88,272 @@ func TestModule(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid argument error",
+			name: "invalid_argument_error_when_deleting",
 			configure: func(t *testing.T, params *testParams) {
-				params.client.err = new(serviceerror.InvalidArgument)
-				verifyRetry(t, params, false)
+				params.setDefaultDeleteParams(t)
+				clientErr := new(serviceerror.InvalidArgument)
+				params.client.deleteTasksFn = func(
+					req *historyservice.DeleteDLQTasksRequest,
+				) (*historyservice.DeleteDLQTasksResponse, error) {
+					return nil, clientErr
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable())
+				}
 			},
 		},
 		{
-			name: "not found error",
+			name: "not_found_error_when_deleting",
 			configure: func(t *testing.T, params *testParams) {
-				params.client.err = new(serviceerror.NotFound)
-				verifyRetry(t, params, false)
+				params.setDefaultDeleteParams(t)
+				clientErr := new(serviceerror.NotFound)
+				params.client.deleteTasksFn = func(
+					*historyservice.DeleteDLQTasksRequest,
+				) (*historyservice.DeleteDLQTasksResponse, error) {
+					return nil, clientErr
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable())
+				}
 			},
 		},
 		{
-			name: "some other error",
+			name: "some_other_error_when_deleting",
 			configure: func(t *testing.T, params *testParams) {
-				params.client.err = assert.AnError
-				verifyRetry(t, params, true)
+				params.setDefaultDeleteParams(t)
+				clientErr := assert.AnError
+				params.client.deleteTasksFn = func(
+					*historyservice.DeleteDLQTasksRequest,
+				) (*historyservice.DeleteDLQTasksResponse, error) {
+					return nil, clientErr
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+
+					require.ErrorAs(t, err, &applicationErr)
+					assert.False(t, applicationErr.NonRetryable())
+				}
+			},
+		},
+		{
+			name: "merge",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+			},
+		},
+		{
+			name: "merge_negative_batch_size",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.BatchSize = -1
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable(),
+						"Negative batch size should be non-retryable")
+					assert.ErrorContains(t, err, "BatchSize")
+				}
+			},
+		},
+		{
+			name: "merge_batch_size_too_large",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.BatchSize = dlq.MaxMergeBatchSize + 1
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable(),
+						"Batch size too large should be non-retryable")
+					assert.ErrorContains(t, err, "BatchSize")
+				}
+			},
+		},
+		{
+			name: "merge_get_tasks_non-retryable_error",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.client.getTasksFn = func(
+					*historyservice.GetDLQTasksRequest,
+				) (*historyservice.GetDLQTasksResponse, error) {
+					return nil, new(serviceerror.InvalidArgument)
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable(),
+						"Not found error should be non-retryable")
+					assert.ErrorContains(t, err, "GetDLQTasks")
+				}
+			},
+		},
+		{
+			name: "merge_no_next_page_token",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.MaxMessageID = 2
+				var (
+					getRequests []*historyservice.GetDLQTasksRequest
+					addRequests []*historyservice.AddTasksRequest
+				)
+				params.client.getTasksFn = func(
+					req *historyservice.GetDLQTasksRequest,
+				) (*historyservice.GetDLQTasksResponse, error) {
+					getRequests = append(getRequests, req)
+					return &historyservice.GetDLQTasksResponse{
+						DlqTasks: []*commonspb.HistoryDLQTask{
+							{
+								Metadata: &commonspb.HistoryDLQTaskMetadata{
+									MessageId: 0,
+								},
+								Payload: &commonspb.HistoryTask{
+									ShardId: 1,
+								},
+							},
+						},
+						NextPageToken: nil,
+					}, nil
+				}
+				params.client.addTasksFn = func(
+					req *historyservice.AddTasksRequest,
+				) (*historyservice.AddTasksResponse, error) {
+					addRequests = append(addRequests, req)
+					return nil, nil
+				}
+				params.expectation = func(err error) {
+					require.NoError(t, err)
+					assert.Len(t, getRequests, 1)
+					require.Len(t, addRequests, 1)
+					requestsByShardID := make(map[int32]*historyservice.AddTasksRequest)
+					for _, request := range addRequests {
+						requestsByShardID[request.GetShardId()] = request
+					}
+					assert.Len(t, requestsByShardID[1].GetTasks(), 1)
+				}
+			},
+		},
+		{
+			name: "merge_multiple_pages",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.MaxMessageID = 3
+				params.client.getTasksFn = func(
+					req *historyservice.GetDLQTasksRequest,
+				) (*historyservice.GetDLQTasksResponse, error) {
+					return getPaginatedResponse(req)
+				}
+				var addRequests []*historyservice.AddTasksRequest
+				params.client.addTasksFn = func(
+					req *historyservice.AddTasksRequest,
+				) (*historyservice.AddTasksResponse, error) {
+					addRequests = append(addRequests, req)
+					return nil, nil
+				}
+				params.expectation = func(err error) {
+					require.NoError(t, err)
+					require.Len(t, addRequests, 3)
+					requestsByShardID := make(map[int32]*historyservice.AddTasksRequest)
+					for _, request := range addRequests {
+						requestsByShardID[request.GetShardId()] = request
+					}
+					assert.Len(t, requestsByShardID[1].GetTasks(), 1)
+					assert.Len(t, requestsByShardID[2].GetTasks(), 2)
+					assert.Len(t, requestsByShardID[3].GetTasks(), 1)
+				}
+			},
+		},
+		{
+			name: "merge_add_tasks_non-retryable_error",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.MaxMessageID = 1
+				res := &historyservice.GetDLQTasksResponse{
+					DlqTasks: []*commonspb.HistoryDLQTask{
+						{
+							Metadata: &commonspb.HistoryDLQTaskMetadata{
+								MessageId: 0,
+							},
+							Payload: &commonspb.HistoryTask{
+								ShardId: 1,
+							},
+						},
+					},
+				}
+				params.client.getTasksFn = func(
+					*historyservice.GetDLQTasksRequest,
+				) (*historyservice.GetDLQTasksResponse, error) {
+					return res, nil
+				}
+				var addTasksRequests []*historyservice.AddTasksRequest
+				params.client.addTasksFn = func(
+					req *historyservice.AddTasksRequest,
+				) (*historyservice.AddTasksResponse, error) {
+					addTasksRequests = append(addTasksRequests, req)
+					return nil, new(serviceerror.InvalidArgument)
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable(),
+						"Not found error should be non-retryable")
+					assert.ErrorContains(t, err, "AddTasks")
+					require.Len(t, addTasksRequests, 1)
+				}
+			},
+		},
+		{
+			name: "merge_delete_tasks_non-retryable_error",
+			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultMergeParams(t)
+				params.workflowParams.MergeParams.MaxMessageID = 1
+				res := &historyservice.GetDLQTasksResponse{
+					DlqTasks: []*commonspb.HistoryDLQTask{
+						{
+							Metadata: &commonspb.HistoryDLQTaskMetadata{
+								MessageId: 0,
+							},
+							Payload: &commonspb.HistoryTask{
+								ShardId: 1,
+							},
+						},
+					},
+				}
+				params.client.getTasksFn = func(
+					*historyservice.GetDLQTasksRequest,
+				) (*historyservice.GetDLQTasksResponse, error) {
+					return res, nil
+				}
+				var (
+					addRequests    []*historyservice.AddTasksRequest
+					deleteRequests []*historyservice.DeleteDLQTasksRequest
+				)
+				params.client.addTasksFn = func(
+					req *historyservice.AddTasksRequest,
+				) (*historyservice.AddTasksResponse, error) {
+					addRequests = append(addRequests, req)
+					return nil, nil
+				}
+				params.client.deleteTasksFn = func(
+					req *historyservice.DeleteDLQTasksRequest,
+				) (*historyservice.DeleteDLQTasksResponse, error) {
+					deleteRequests = append(deleteRequests, req)
+					return nil, new(serviceerror.InvalidArgument)
+				}
+				params.expectation = func(err error) {
+					var applicationErr *temporal.ApplicationError
+					require.ErrorAs(t, err, &applicationErr)
+					assert.True(t, applicationErr.NonRetryable(),
+						"Not found error should be non-retryable")
+					assert.ErrorContains(t, err, "DeleteDLQTasks")
+					require.Len(t, addRequests, 1)
+					require.Len(t, deleteRequests, 1)
+				}
 			},
 		},
 	} {
@@ -109,7 +361,7 @@ func TestModule(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			params := getDefaultTestParams(t)
+			params := &testParams{}
 			tc.configure(t, params)
 
 			var components []workercommon.WorkerComponent
@@ -117,7 +369,7 @@ func TestModule(t *testing.T) {
 			fxtest.New(
 				t,
 				dlq.Module,
-				fx.Provide(func() dlq.HistoryServiceClient {
+				fx.Provide(func() dlq.HistoryClient {
 					return params.client
 				}),
 				fx.Populate(fx.Annotate(&components, fx.ParamTags(workercommon.WorkerComponentTag))),
@@ -128,6 +380,8 @@ func TestModule(t *testing.T) {
 			env := testSuite.NewTestWorkflowEnvironment()
 			component.RegisterWorkflow(env)
 			component.RegisterActivities(env)
+			require.Nil(t, component.DedicatedWorkflowWorkerOptions())
+			assert.Equal(t, primitives.DLQActivityTQ, component.DedicatedActivityWorkerOptions().TaskQueue)
 
 			env.ExecuteWorkflow(dlq.WorkflowName, params.workflowParams)
 			err := env.GetWorkflowError()
@@ -136,41 +390,126 @@ func TestModule(t *testing.T) {
 	}
 }
 
-func verifyRetry(t *testing.T, params *testParams, shouldRetry bool) {
-	params.expectation = func(err error) {
-		var applicationErr *temporal.ApplicationError
-
-		require.ErrorAs(t, err, &applicationErr)
-		assert.Equal(t, applicationErr.NonRetryable(), !shouldRetry,
-			fmt.Sprintf(
-				"%v error should be considered retryable: %v",
-				params.client.err, shouldRetry,
-			),
-		)
+func getPaginatedResponse(req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
+	if len(req.NextPageToken) == 0 {
+		return &historyservice.GetDLQTasksResponse{
+			DlqTasks: []*commonspb.HistoryDLQTask{
+				{
+					Metadata: &commonspb.HistoryDLQTaskMetadata{
+						MessageId: 0,
+					},
+					Payload: &commonspb.HistoryTask{
+						ShardId: 1,
+					},
+				},
+				{
+					Metadata: &commonspb.HistoryDLQTaskMetadata{
+						MessageId: 1,
+					},
+					Payload: &commonspb.HistoryTask{
+						ShardId: 2,
+					},
+				},
+				{
+					Metadata: &commonspb.HistoryDLQTaskMetadata{
+						MessageId: 2,
+					},
+					Payload: &commonspb.HistoryTask{
+						ShardId: 2,
+					},
+				},
+			},
+			NextPageToken: []byte{42},
+		}, nil
 	}
-}
 
-func getDefaultTestParams(t *testing.T) *testParams {
-	return &testParams{
-		workflowParams: dlq.WorkflowParams{
-			WorkflowType: dlq.WorkflowTypeDelete,
-			DeleteParams: dlq.DeleteParams{
-				TaskCategory:  tasks.CategoryTransfer.ID(),
-				SourceCluster: "source-cluster",
-				TargetCluster: "target-cluster",
+	return &historyservice.GetDLQTasksResponse{
+		DlqTasks: []*commonspb.HistoryDLQTask{
+			{
+				Metadata: &commonspb.HistoryDLQTaskMetadata{
+					MessageId: 3,
+				},
+				Payload: &commonspb.HistoryTask{
+					ShardId: 3,
+				},
+			},
+			{
+				Metadata: &commonspb.HistoryDLQTaskMetadata{
+					MessageId: 4,
+				},
+				Payload: &commonspb.HistoryTask{
+					ShardId: 4,
+				},
 			},
 		},
-		client: &faultyHistoryClient{},
-		expectation: func(err error) {
-			require.NoError(t, err)
+		NextPageToken: []byte{42},
+	}, nil
+}
+
+func (p *testParams) setDefaultDeleteParams(t *testing.T) {
+	p.setDefaultParams(t)
+	p.workflowParams = dlq.WorkflowParams{
+		WorkflowType: dlq.WorkflowTypeDelete,
+		DeleteParams: dlq.DeleteParams{
+			Key: dlq.Key{
+				TaskCategoryID: tasks.CategoryTransfer.ID(),
+				SourceCluster:  "source-cluster",
+				TargetCluster:  "target-cluster",
+			},
 		},
 	}
 }
 
-func (t *faultyHistoryClient) DeleteDLQTasks(
-	context.Context,
-	*historyservice.DeleteDLQTasksRequest,
-	...grpc.CallOption,
+func (p *testParams) setDefaultMergeParams(t *testing.T) {
+	p.setDefaultParams(t)
+	p.workflowParams = dlq.WorkflowParams{
+		WorkflowType: dlq.WorkflowTypeMerge,
+		MergeParams: dlq.MergeParams{
+			Key: dlq.Key{
+				TaskCategoryID: tasks.CategoryTransfer.ID(),
+				SourceCluster:  "source-cluster",
+				TargetCluster:  "target-cluster",
+			},
+		},
+	}
+}
+
+func (p *testParams) setDefaultParams(t *testing.T) {
+	p.client = &testHistoryClient{}
+	p.client.getTasksFn = func(
+		*historyservice.GetDLQTasksRequest,
+	) (*historyservice.GetDLQTasksResponse, error) {
+		return nil, nil
+	}
+	p.client.addTasksFn = func(
+		request *historyservice.AddTasksRequest,
+	) (*historyservice.AddTasksResponse, error) {
+		return nil, nil
+	}
+	p.client.deleteTasksFn = func(
+		request *historyservice.DeleteDLQTasksRequest,
+	) (*historyservice.DeleteDLQTasksResponse, error) {
+		return nil, nil
+	}
+	p.expectation = func(err error) {
+		require.NoError(t, err)
+	}
+}
+
+func (c *testHistoryClient) GetDLQTasks(
+	_ context.Context, req *historyservice.GetDLQTasksRequest, _ ...grpc.CallOption,
+) (*historyservice.GetDLQTasksResponse, error) {
+	return c.getTasksFn(req)
+}
+
+func (c *testHistoryClient) DeleteDLQTasks(
+	_ context.Context, req *historyservice.DeleteDLQTasksRequest, _ ...grpc.CallOption,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	return nil, t.err
+	return c.deleteTasksFn(req)
+}
+
+func (c *testHistoryClient) AddTasks(
+	_ context.Context, req *historyservice.AddTasksRequest, _ ...grpc.CallOption,
+) (*historyservice.AddTasksResponse, error) {
+	return c.addTasksFn(req)
 }

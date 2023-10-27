@@ -428,6 +428,8 @@ const (
 	MatchingLongPollExpirationInterval = "matching.longPollExpirationInterval"
 	// MatchingSyncMatchWaitDuration is to wait time for sync match
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
+	// MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests
+	MatchingHistoryMaxPageSize = "matching.historyMaxPageSize"
 	// MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
 	// that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
 	// be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
@@ -475,6 +477,10 @@ const (
 
 	// EnableReplicationStream turn on replication stream
 	EnableReplicationStream = "history.enableReplicationStream"
+	// EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
+	// [go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
+	// production.
+	EnableHistoryReplicationDLQV2 = "history.enableHistoryReplicationDLQV2"
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -928,4 +934,7 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
+	// settings for controlling remote activity concurrency for delete namespace workflows.
+	WorkerDeleteNamespaceActivityLimitsConfig = "worker.deleteNamespaceActivityLimitsConfig"
 )

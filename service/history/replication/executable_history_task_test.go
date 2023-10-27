@@ -151,6 +151,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		EventSerializer:         s.eventSerializer,
+		DLQWriter:               NewExecutionManagerDLQWriter(),
 	}
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,

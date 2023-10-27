@@ -25,8 +25,6 @@
 package elasticsearch
 
 import (
-	"errors"
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -133,14 +131,11 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 					value = duration.Nanoseconds()
 				} else {
 					// To support "hh:mm:ss" durations.
-					durationNanos, err := vi.parseHHMMSSDuration(durationStr)
-					var converterErr *query.ConverterError
-					if errors.As(err, &converterErr) {
-						return nil, converterErr
+					duration, err := timestamp.ParseHHMMSSDuration(durationStr)
+					if err != nil {
+						return nil, err
 					}
-					if err == nil {
-						value = durationNanos
-					}
+					value = duration.Nanoseconds()
 				}
 			}
 		default:
@@ -149,23 +144,4 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		result = append(result, value)
 	}
 	return result, nil
-}
-
-func (vi *valuesInterceptor) parseHHMMSSDuration(d string) (int64, error) {
-	var hours, minutes, seconds, nanos int64
-	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
-	if err != nil {
-		return 0, errors.New("value is not a duration")
-	}
-	if hours < 0 {
-		return 0, query.NewConverterError("invalid duration: hours must be positive number")
-	}
-	if minutes < 0 || minutes > 59 {
-		return 0, query.NewConverterError("invalid duration: minutes must be from 0 to 59")
-	}
-	if seconds < 0 || seconds > 59 {
-		return 0, query.NewConverterError("invalid duration: seconds must be from 0 to 59")
-	}
-
-	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
 }

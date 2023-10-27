@@ -446,7 +446,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistory(ctx,
 			&historyservice.GetWorkflowExecutionHistoryRequest{
 				NamespaceId: namespaceID.String(),
@@ -491,7 +491,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
 			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
 				NamespaceId: namespaceID.String(),
@@ -537,7 +537,85 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	return wh.pollWorkflowTaskQueue(ctx, request)
+	callTime := time.Now().UTC()
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	namespaceID := namespaceEntry.ID()
+
+	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
+	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
+		return nil, err
+	}
+
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+	}
+
+	pollerID := uuid.New()
+	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		PollRequest: request,
+	})
+	if err != nil {
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
+			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+		}
+
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
+		}
+
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
+		return nil, err
+	}
+
+	if matchingResp.History == nil {
+		// Got an old matching response, need to lookup history
+		// Eventually empty history will only happen for sticky query tasks
+		return wh.createPollWorkflowTaskQueueResponse(
+			ctx,
+			namespaceID,
+			matchingResp,
+			matchingResp.BranchToken,
+		)
+	}
+
+	return &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:                  matchingResp.TaskToken,
+		WorkflowExecution:          matchingResp.WorkflowExecution,
+		WorkflowType:               matchingResp.WorkflowType,
+		PreviousStartedEventId:     matchingResp.PreviousStartedEventId,
+		StartedEventId:             matchingResp.StartedEventId,
+		Query:                      matchingResp.Query,
+		BacklogCountHint:           matchingResp.BacklogCountHint,
+		Attempt:                    matchingResp.Attempt,
+		History:                    matchingResp.History,
+		NextPageToken:              matchingResp.NextPageToken,
+		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
+		ScheduledTime:              matchingResp.ScheduledTime,
+		StartedTime:                matchingResp.StartedTime,
+		Queries:                    matchingResp.Queries,
+		Messages:                   matchingResp.Messages,
+	}, nil
 }
 
 func contextNearDeadline(ctx context.Context, tailroom time.Duration) bool {
@@ -577,7 +655,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
-	if wh.config.accessHistory(wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
+	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendRespondWorkflowTaskCompletedTag))) {
 		namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 		if err != nil {
 			return nil, err
@@ -1488,8 +1566,8 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 	return &workflowservice.RequestCancelWorkflowExecutionResponse{}, nil
 }
 
-// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
-// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
+// SignalWorkflowExecution is used to send a signal event to running workflow execution. This results in
+// a WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request *workflowservice.SignalWorkflowExecutionRequest) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

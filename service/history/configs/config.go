@@ -40,6 +40,7 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream dynamicconfig.BoolPropertyFn
+	HistoryReplicationDLQV2 dynamicconfig.BoolPropertyFn
 
 	RPS                                   dynamicconfig.IntPropertyFn
 	OperatorRPSRatio                      dynamicconfig.FloatPropertyFn
@@ -166,9 +167,9 @@ type Config struct {
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// ShardUpdateMinInterval the minimal time interval which the shard info can be updated
+	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
-	// ShardSyncMinInterval the minimal time interval which the shard info should be sync to remote
+	// ShardSyncMinInterval is the minimum time interval within which the shard info can be synced to the remote.
 	ShardSyncMinInterval            dynamicconfig.DurationPropertyFn
 	ShardSyncTimerJitterCoefficient dynamicconfig.FloatPropertyFn
 
@@ -316,6 +317,9 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 const (
@@ -333,6 +337,7 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream: dc.GetBoolProperty(dynamicconfig.EnableReplicationStream, false),
+		HistoryReplicationDLQV2: dc.GetBoolProperty(dynamicconfig.EnableHistoryReplicationDLQV2, false),
 
 		RPS:                                   dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		OperatorRPSRatio:                      dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
@@ -574,6 +579,8 @@ func NewConfig(
 		WorkflowExecutionMaxTotalUpdates:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 2000),
 
 		SendRawWorkflowHistory: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
+
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 
 	return cfg

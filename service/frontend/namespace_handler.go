@@ -275,7 +275,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
 		namespaceRequest.Namespace.ReplicationConfig,
-		true,
+		false,
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,

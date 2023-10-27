@@ -63,8 +63,8 @@ type (
 		err error
 	}
 	faultyAdminClient struct {
+		*faultyClientFactory
 		adminservice.AdminServiceClient
-		err error
 	}
 )
 
@@ -84,12 +84,28 @@ func (f faultyAdminClient) GetDLQTasks(
 	return nil, f.err
 }
 
+func (f faultyAdminClient) PurgeDLQTasks(
+	context.Context,
+	*adminservice.PurgeDLQTasksRequest,
+	...grpc.CallOption,
+) (*adminservice.PurgeDLQTasksResponse, error) {
+	return nil, f.err
+}
+
+func (f faultyAdminClient) MergeDLQTasks(
+	context.Context,
+	*adminservice.MergeDLQTasksRequest,
+	...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	return nil, f.err
+}
+
 func (f faultyClientFactory) WorkflowClient(*cli.Context) workflowservice.WorkflowServiceClient {
 	panic("not implemented")
 }
 
 func (f faultyClientFactory) AdminClient(*cli.Context) adminservice.AdminServiceClient {
-	return faultyAdminClient{err: f.err}
+	return faultyAdminClient{faultyClientFactory: &f}
 }
 
 func appendArg(args []string, name string, val string) []string {
@@ -102,22 +118,26 @@ func appendArg(args []string, name string, val string) []string {
 func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 	p := dlqTestParams{
 		dlqVersion:            "v2",
-		dlqType:               strconv.Itoa(int(tasks.CategoryTransfer.ID())),
+		dlqType:               strconv.Itoa(tasks.CategoryTransfer.ID()),
 		sourceCluster:         "test-source-cluster",
 		targetCluster:         "test-target-cluster",
 		maxMessageCount:       "",
 		lastMessageID:         "",
 		outputFileName:        "",
-		clientFactory:         tdbg.NewClientFactory(),
 		expectedErrSubstrings: nil,
+		clientFactory:         faultyClientFactory{err: errors.New("did not expect client to be used")},
 	}
 	tc.override(&p)
-	app := tdbg.NewCliApp(p.clientFactory, tasks.NewDefaultTaskCategoryRegistry())
+	app := tdbg.NewCliApp(func(params *tdbg.Params) {
+		params.ClientFactory = p.clientFactory
+	})
 	app.ExitErrHandler = func(c *cli.Context, err error) {
 		return
 	}
 	runArgs := []string{
-		"tdbg", "dlq",
+		"tdbg",
+		"--" + tdbg.FlagYes,
+		"dlq",
 	}
 	runArgs = appendArg(runArgs, tdbg.FlagDLQVersion, p.dlqVersion)
 	runArgs = append(runArgs, p.command)
@@ -153,31 +173,6 @@ func TestDLQCommands(t *testing.T) {
 	firstAppRun <- struct{}{}
 	for _, tc := range []dlqTestCase{
 		{
-			name: "v2 merge",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "merge"
-				p.expectedErrSubstrings = []string{"merge", "v2", "not", "implemented"}
-			},
-		},
-		{
-			name: "v2 purge",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "purge"
-				p.expectedErrSubstrings = []string{"purge", "v2", "not", "implemented"}
-			},
-		},
-		{
-			name: "v2 read no source cluster",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "read"
-				p.sourceCluster = ""
-				p.expectedErrSubstrings = []string{tdbg.FlagCluster}
-			},
-		},
-		{
 			name: "v2 read no target cluster with faulty admin client",
 			override: func(p *dlqTestParams) {
 				p.dlqVersion = "v2"
@@ -185,6 +180,16 @@ func TestDLQCommands(t *testing.T) {
 				p.targetCluster = ""
 				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
 				p.expectedErrSubstrings = []string{tdbg.FlagTargetCluster, "DescribeCluster", "some error"}
+			},
+		},
+		{
+			name: "v2 read no source cluster for replication task",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "read"
+				p.sourceCluster = ""
+				p.dlqType = strconv.Itoa(tasks.CategoryReplication.ID())
+				p.expectedErrSubstrings = []string{tdbg.FlagCluster, "replication", "source cluster"}
 			},
 		},
 		{
@@ -248,6 +253,60 @@ func TestDLQCommands(t *testing.T) {
 				p.command = "read"
 				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
 				p.expectedErrSubstrings = []string{"some error", "GetDLQTasks"}
+			},
+		},
+		{
+			name: "v2 purge invalid last message ID",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "purge"
+				p.lastMessageID = "-1"
+				p.expectedErrSubstrings = []string{tdbg.FlagLastMessageID, "at least", "0"}
+			},
+		},
+		{
+			name: "v2 purge client err",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "purge"
+				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
+				p.expectedErrSubstrings = []string{"some error", "PurgeDLQTasks"}
+			},
+		},
+		{
+			name: "v2 purge client nil response",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "purge"
+				p.clientFactory = faultyClientFactory{}
+				p.expectedErrSubstrings = []string{"unable to encode PurgeDLQTasks"}
+			},
+		},
+		{
+			name: "v2 merge invalid last message ID",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.lastMessageID = "-1"
+				p.expectedErrSubstrings = []string{tdbg.FlagLastMessageID, "at least", "0"}
+			},
+		},
+		{
+			name: "v2 merge client err",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
+				p.expectedErrSubstrings = []string{"some error", "MergeDLQTasks"}
+			},
+		},
+		{
+			name: "v2 merge client nil response",
+			override: func(p *dlqTestParams) {
+				p.dlqVersion = "v2"
+				p.command = "merge"
+				p.clientFactory = faultyClientFactory{}
+				p.expectedErrSubstrings = []string{"unable to encode MergeDLQTasks"}
 			},
 		},
 	} {

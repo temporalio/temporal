@@ -471,7 +471,7 @@ func getWorkflowExecution(
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
-			// it is possible that workflow does not exists
+			// It is possible that workflow does not exist.
 			return nil, err
 		default:
 			shard.GetLogger().Error(

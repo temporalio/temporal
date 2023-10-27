@@ -26,6 +26,7 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -45,20 +46,39 @@ type (
 		PurgeMessages(c *cli.Context) error
 		MergeMessages(c *cli.Context) error
 	}
+	DLQServiceProvider struct {
+		clientFactory        ClientFactory
+		taskCategoryRegistry tasks.TaskCategoryRegistry
+		writer               io.Writer
+		prompterFactory      PrompterFactory
+	}
 )
 
-// GetDLQService returns a DLQService based on FlagDLQVersion.
-func GetDLQService(
-	c *cli.Context,
+func NewDLQServiceProvider(
 	clientFactory ClientFactory,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	writer io.Writer,
+	prompterFactory PrompterFactory,
+) *DLQServiceProvider {
+	return &DLQServiceProvider{
+		clientFactory:        clientFactory,
+		taskCategoryRegistry: taskCategoryRegistry,
+		writer:               writer,
+		prompterFactory:      prompterFactory,
+	}
+}
+
+// GetDLQService returns a DLQService based on FlagDLQVersion.
+func (p *DLQServiceProvider) GetDLQService(
+	c *cli.Context,
 ) (DLQService, error) {
+	prompter := p.prompterFactory(c)
 	version := c.String(FlagDLQVersion)
 	if version == "v1" {
-		return NewDLQV1Service(clientFactory), nil
+		return NewDLQV1Service(p.clientFactory, prompter), nil
 	}
 	if version == "v2" {
-		return getDLQV2Service(c, clientFactory, taskCategoryRegistry)
+		return getDLQV2Service(c, p.clientFactory, p.taskCategoryRegistry, p.writer, prompter)
 	}
 	return nil, fmt.Errorf("unknown DLQ version: %v", version)
 }
@@ -67,6 +87,8 @@ func getDLQV2Service(
 	c *cli.Context,
 	clientFactory ClientFactory,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	writer io.Writer,
+	prompter *Prompter,
 ) (DLQService, error) {
 	dlqType := c.String(FlagDLQType)
 	category, ok, err := getCategoryByID(taskCategoryRegistry, dlqType)
@@ -76,15 +98,20 @@ func getDLQV2Service(
 	if !ok {
 		return nil, fmt.Errorf("unknown dlq category %v", dlqType)
 	}
-	sourceCluster := c.String(FlagCluster)
-	if len(sourceCluster) == 0 {
-		return nil, fmt.Errorf("--%s is not provided", FlagCluster)
-	}
 	targetCluster, service, err := getTargetCluster(c, clientFactory)
 	if err != nil {
 		return service, err
 	}
-	return NewDLQV2Service(category, sourceCluster, targetCluster, clientFactory), nil
+	sourceCluster := c.String(FlagCluster)
+	if len(sourceCluster) == 0 {
+		if category == tasks.CategoryReplication {
+			return nil, fmt.Errorf(
+				"must provide source cluster, --%s, when managing the replication dlq", FlagCluster,
+			)
+		}
+		sourceCluster = targetCluster
+	}
+	return NewDLQV2Service(category, sourceCluster, targetCluster, clientFactory, writer, prompter), nil
 }
 
 func getTargetCluster(c *cli.Context, clientFactory ClientFactory) (string, DLQService, error) {

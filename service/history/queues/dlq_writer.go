@@ -51,6 +51,11 @@ type (
 	}
 )
 
+var (
+	ErrSendTaskToDLQ = errors.New("failed to send task to DLQ")
+	ErrCreateDLQ     = errors.New("failed to create DLQ")
+)
+
 // NewDLQWriter returns a DLQ which will write to the given QueueWriter.
 func NewDLQWriter(w QueueWriter) *DLQWriter {
 	return &DLQWriter{

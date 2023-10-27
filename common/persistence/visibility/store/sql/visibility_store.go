@@ -103,24 +103,12 @@ func (s *VisibilityStore) RecordWorkflowExecutionStarted(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
-	searchAttributes, err := s.prepareSearchAttributesForDb(request.InternalVisibilityRequestBase)
+	row, err := s.generateVisibilityRow(request.InternalVisibilityRequestBase)
 	if err != nil {
 		return err
 	}
-	_, err = s.sqlStore.Db.InsertIntoVisibility(ctx, &sqlplugin.VisibilityRow{
-		NamespaceID:      request.NamespaceID,
-		WorkflowID:       request.WorkflowID,
-		RunID:            request.RunID,
-		StartTime:        request.StartTime,
-		ExecutionTime:    request.ExecutionTime,
-		WorkflowTypeName: request.WorkflowTypeName,
-		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		Memo:             request.Memo.Data,
-		Encoding:         request.Memo.EncodingType.String(),
-		TaskQueue:        request.TaskQueue,
-		SearchAttributes: searchAttributes,
-	})
 
+	_, err = s.sqlStore.Db.InsertIntoVisibility(ctx, row)
 	return err
 }
 
@@ -128,26 +116,18 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
-	searchAttributes, err := s.prepareSearchAttributesForDb(request.InternalVisibilityRequestBase)
+	row, err := s.generateVisibilityRow(request.InternalVisibilityRequestBase)
 	if err != nil {
 		return err
 	}
-	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, &sqlplugin.VisibilityRow{
-		NamespaceID:      request.NamespaceID,
-		WorkflowID:       request.WorkflowID,
-		RunID:            request.RunID,
-		StartTime:        request.StartTime,
-		ExecutionTime:    request.ExecutionTime,
-		WorkflowTypeName: request.WorkflowTypeName,
-		CloseTime:        &request.CloseTime,
-		Status:           int32(request.Status),
-		HistoryLength:    &request.HistoryLength,
-		HistorySizeBytes: &request.HistorySizeBytes,
-		Memo:             request.Memo.Data,
-		Encoding:         request.Memo.EncodingType.String(),
-		TaskQueue:        request.TaskQueue,
-		SearchAttributes: searchAttributes,
-	})
+
+	row.CloseTime = &request.CloseTime
+	row.HistoryLength = &request.HistoryLength
+	row.HistorySizeBytes = &request.HistorySizeBytes
+	row.ExecutionDuration = &request.ExecutionDuration
+	row.StateTransitionCount = &request.StateTransitionCount
+
+	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -168,23 +148,12 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 	ctx context.Context,
 	request *store.InternalUpsertWorkflowExecutionRequest,
 ) error {
-	searchAttributes, err := s.prepareSearchAttributesForDb(request.InternalVisibilityRequestBase)
+	row, err := s.generateVisibilityRow(request.InternalVisibilityRequestBase)
 	if err != nil {
 		return err
 	}
-	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, &sqlplugin.VisibilityRow{
-		NamespaceID:      request.NamespaceID,
-		WorkflowID:       request.WorkflowID,
-		RunID:            request.RunID,
-		StartTime:        request.StartTime,
-		ExecutionTime:    request.ExecutionTime,
-		WorkflowTypeName: request.WorkflowTypeName,
-		Status:           int32(request.Status),
-		Memo:             request.Memo.Data,
-		Encoding:         request.Memo.EncodingType.String(),
-		TaskQueue:        request.TaskQueue,
-		SearchAttributes: searchAttributes,
-	})
+
+	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -194,7 +163,6 @@ func (s *VisibilityStore) UpsertWorkflowExecution(
 	}
 	if noRowsAffected > 2 { // either adds a new or deletes old row and adds new row
 		return fmt.Errorf("UpsertWorkflowExecution unexpected numRows (%v) updates", noRowsAffected)
-
 	}
 	return nil
 }
@@ -547,6 +515,29 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	}, nil
 }
 
+func (s *VisibilityStore) generateVisibilityRow(
+	request *store.InternalVisibilityRequestBase,
+) (*sqlplugin.VisibilityRow, error) {
+	searchAttributes, err := s.prepareSearchAttributesForDb(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlplugin.VisibilityRow{
+		NamespaceID:      request.NamespaceID,
+		WorkflowID:       request.WorkflowID,
+		RunID:            request.RunID,
+		StartTime:        request.StartTime,
+		ExecutionTime:    request.ExecutionTime,
+		WorkflowTypeName: request.WorkflowTypeName,
+		Status:           int32(request.Status),
+		Memo:             request.Memo.Data,
+		Encoding:         request.Memo.EncodingType.String(),
+		TaskQueue:        request.TaskQueue,
+		SearchAttributes: searchAttributes,
+	}, nil
+}
+
 func (s *VisibilityStore) prepareSearchAttributesForDb(
 	request *store.InternalVisibilityRequestBase,
 ) (*sqlplugin.VisibilitySearchAttributes, error) {
@@ -608,9 +599,9 @@ func (s *VisibilityStore) rowToInfo(
 		TypeName:      row.WorkflowTypeName,
 		StartTime:     row.StartTime,
 		ExecutionTime: row.ExecutionTime,
-		Memo:          persistence.NewDataBlob(row.Memo, row.Encoding),
 		Status:        enumspb.WorkflowExecutionStatus(row.Status),
 		TaskQueue:     row.TaskQueue,
+		Memo:          persistence.NewDataBlob(row.Memo, row.Encoding),
 	}
 	if row.SearchAttributes != nil && len(*row.SearchAttributes) > 0 {
 		searchAttributes, err := s.processRowSearchAttributes(*row.SearchAttributes, nsName)
@@ -627,6 +618,9 @@ func (s *VisibilityStore) rowToInfo(
 	}
 	if row.HistorySizeBytes != nil {
 		info.HistorySizeBytes = *row.HistorySizeBytes
+	}
+	if row.StateTransitionCount != nil {
+		info.StateTransitionCount = *row.StateTransitionCount
 	}
 	return info, nil
 }

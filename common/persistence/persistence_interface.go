@@ -727,7 +727,17 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// QueueV2 is an interface for a generic FIFO queue. It should eventually supersede the Queue interface.
+	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
+	// need this migration? The main problem is very simple. The `queue_metadata` table in Cassandra has a primary key
+	// of (queue_type). This means that we can only have one queue of each type. This is a problem because we want to
+	// have multiple queues of the same type, but with different names. For example, we want to have a DLQ for
+	// replication tasks from one cluster to another, and cluster names are dynamic, so we can't create separate static
+	// queue types for each cluster. The solution is to add a queue_name column to the table, and make the primary key
+	// (queue_type, queue_name). This allows us to have multiple queues of the same type, but with different names.
+	// Since the new table (which is called `queues` in Cassandra), supports dynamic names, the interface built around
+	// it should also support dynamic names. This is why we need a new interface. There are other types built on top of
+	// this up the stack, like HistoryTaskQueueManager, for which the same principle of needing a new type because we
+	// now support dynamic names applies.
 	QueueV2 interface {
 		// EnqueueMessage adds a message to the back of the queue.
 		EnqueueMessage(

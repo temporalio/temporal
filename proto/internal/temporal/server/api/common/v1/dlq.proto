@@ -8,7 +8,7 @@ import "temporal/api/common/v1/message.proto";
 message HistoryTask {
   // shard_id is included to avoid having to deserialize the task blob.
   int32 shard_id = 1;
-  temporal.api.common.v1.DataBlob task = 2;
+  temporal.api.common.v1.DataBlob blob = 2;
 }
 
 message HistoryDLQTaskMetadata {
@@ -20,7 +20,8 @@ message HistoryDLQTaskMetadata {
 // queue).
 message HistoryDLQTask {
   HistoryDLQTaskMetadata metadata = 1;
-  HistoryTask task = 2;
+  // This is named payload to prevent stuttering (e.g. task.Task).
+  HistoryTask payload = 2;
 }
 
 // HistoryDLQKey is a compound key that identifies a history DLQ.

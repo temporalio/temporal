@@ -74,7 +74,9 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	params := tests.ApplyTestClusterParams(opts)
 	s.clusterNames = clusterNames
-	s.logger = log.NewTestLogger()
+	if s.logger == nil {
+		s.logger = log.NewTestLogger()
+	}
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
