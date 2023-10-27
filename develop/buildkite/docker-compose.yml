@@ -461,5 +461,5 @@ services:
 
 networks:
   services-network:
-    name: services-network
+    name: "network-$BUILDKITE_BUILD_NUMBER"
     driver: bridge
