@@ -502,6 +502,8 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 	return query, nil
 }
 
+// convertComparisonExprValue returns a string, int64, float64, bool or
+// a slice with each value of one of those types.
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
@@ -551,6 +553,7 @@ func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query,
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 }
 
+// ParseSqlValue returns a string, int64 or float64 if the parsing succeeds.
 func ParseSqlValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
