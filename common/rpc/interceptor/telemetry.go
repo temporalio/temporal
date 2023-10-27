@@ -222,8 +222,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 					hasMarker = true
 				case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-					// each child workflow is count as 2 actions. Instead of record as 2,
-					// we would emit another counter with different tag.
+					// Each child workflow counts as 2 actions. We use separate tags to track them separately.
 					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
 				default:
