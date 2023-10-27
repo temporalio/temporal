@@ -104,6 +104,17 @@ func NamespaceTag(value string) Tag {
 	}
 }
 
+// NamespaceIdTag returns a new namespaceId tag.
+func NamespaceIdTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{
+		key:   namespace,
+		value: value,
+	}
+}
+
 var namespaceUnknownTag = &tagImpl{key: namespace, value: unknownValue}
 
 // NamespaceUnknownTag returns a new namespace:unknown tag-value
