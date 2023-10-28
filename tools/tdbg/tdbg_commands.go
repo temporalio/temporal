@@ -26,9 +26,14 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/urfave/cli/v2"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/multierr"
 )
 
 func getCommands(
@@ -36,6 +41,8 @@ func getCommands(
 	dlqServiceProvider *DLQServiceProvider,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	prompterFactory PrompterFactory,
+	taskBlobEncoder TaskBlobEncoder,
+	writer io.Writer,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
@@ -83,7 +90,7 @@ func getCommands(
 		{
 			Name:        "decode",
 			Usage:       "Decode payload",
-			Subcommands: newDecodeCommands(),
+			Subcommands: newDecodeCommands(taskBlobEncoder, writer),
 		},
 	}
 }
@@ -588,7 +595,10 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 	}
 }
 
-func newDecodeCommands() []*cli.Command {
+func newDecodeCommands(
+	taskBlobEncoder TaskBlobEncoder,
+	writer io.Writer,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "proto",
@@ -630,6 +640,51 @@ func newDecodeCommands() []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDecodeBase64(c)
+			},
+		},
+		{
+			Name:  "task",
+			Usage: "Decode a history task blob into a JSON message.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagBinaryFile,
+					Usage:    "file with data in binary format.",
+					Required: true,
+				},
+				&cli.IntFlag{
+					Name:     FlagTaskCategoryID,
+					Usage:    "Task category ID (see the history/tasks package)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagEncoding,
+					Usage:    "Encoding type (see temporal.api.enums.v1.EncodingType)",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) (err error) {
+				encoding := c.String(FlagEncoding)
+				encodingType := enumspb.EncodingType(enumspb.EncodingType_value[encoding])
+				taskCategoryID := c.Int(FlagTaskCategoryID)
+				file, err := os.Open(c.String(FlagBinaryFile))
+				if err != nil {
+					return fmt.Errorf("failed to open file: %w", err)
+				}
+				defer func() {
+					err = multierr.Combine(err, file.Close())
+				}()
+				b, err := io.ReadAll(file)
+				if err != nil {
+					return fmt.Errorf("failed to read file: %w", err)
+				}
+				blob := commonpb.DataBlob{
+					EncodingType: encodingType,
+					Data:         b,
+				}
+				if err := taskBlobEncoder.Encode(writer, taskCategoryID, blob); err != nil {
+					return fmt.Errorf("failed to decode task blob: %w", err)
+				}
+				return nil
 			},
 		},
 	}
