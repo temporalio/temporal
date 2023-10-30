@@ -546,7 +546,7 @@ const (
 	// persistence.
 	// NOTE: Shard ownership assertion is not implemented by any persistence implementation
 	// in this codebase, because assertion is not needed for persistence implementation
-	// that guarantees reader after write consistency. As a result, even if this config is
+	// that guarantees read after write consistency. As a result, even if this config is
 	// enabled, it's a no-op.
 	ShardOwnershipAssertionEnabled = "history.shardOwnershipAssertionEnabled"
 	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
