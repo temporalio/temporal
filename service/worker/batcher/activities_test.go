@@ -45,7 +45,6 @@ type activitiesSuite struct {
 	testsuite.WorkflowTestSuite
 
 	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
 
 	mockFrontendClient *workflowservicemock.MockWorkflowServiceClient
 }
@@ -65,7 +64,6 @@ const NumTotalEvents = 10
 // Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
 // eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
 func generateEventHistory(pattern string) history.History {
-
 	events := make([]*history.HistoryEvent, 0)
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
