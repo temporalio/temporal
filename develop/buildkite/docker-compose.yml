@@ -40,6 +40,37 @@ services:
     environment:
       - discovery.type=single-node
 
+  elasticsearch8:
+    image: elasticsearch:8.0.0
+    networks:
+      services-network:
+        aliases:
+          - elasticsearch8
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms100m -Xmx100m
+
+  opensearch:
+    image: opensearchproject/opensearch:2.6.0
+    networks:
+      services-network:
+        aliases:
+          - opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+
+  prebuild:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+      target: prebuild
+
   build:
     build:
       context: ../..
@@ -48,15 +79,16 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_BRANCH
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - FOSSA_API_KEY
     volumes:
+      - ../../.testoutput:/temporal/.testoutput
+
+  ci-build-misc:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    volumes:
+      # note: this one mounts the whole checkout to get .git
       - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
   db-integration-test:
     build:
@@ -67,17 +99,12 @@ services:
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - cassandra
       - mysql
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -94,16 +121,53 @@ services:
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - cassandra
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+  integration-test-cassandra-es8:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "ES_SEEDS=elasticsearch8"
+      - "ES_VERSION=v8"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
+    depends_on:
+      - cassandra
+      - elasticsearch8
+    volumes:
+      - ../../.testoutput:/temporal/.testoutput
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
+  integration-test-cassandra-opensearch:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    environment:
+      - "CASSANDRA_SEEDS=cassandra"
+      - "ES_SEEDS=opensearch"
+      - "ES_VERSION=v8"
+      - "PERSISTENCE_TYPE=nosql"
+      - "PERSISTENCE_DRIVER=cassandra"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
+    depends_on:
+      - cassandra
+      - opensearch
+    volumes:
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -120,16 +184,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -144,15 +203,10 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=mysql8"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -169,16 +223,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -195,16 +244,11 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres_pgx"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -219,20 +263,15 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
           - integration-test
-  
+
   integration-test-postgresql12-pgx:
     build:
       context: ../..
@@ -242,15 +281,10 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=postgres12_pgx"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -264,13 +298,8 @@ services:
       - "PERSISTENCE_TYPE=sql"
       - "PERSISTENCE_DRIVER=sqlite"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -288,16 +317,11 @@ services:
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - cassandra
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -315,16 +339,11 @@ services:
       - "PERSISTENCE_DRIVER=mysql"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -340,15 +359,10 @@ services:
       - "PERSISTENCE_DRIVER=mysql8"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - mysql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -366,16 +380,11 @@ services:
       - "PERSISTENCE_DRIVER=postgres"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -393,16 +402,11 @@ services:
       - "PERSISTENCE_DRIVER=postgres_pgx"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
       - elasticsearch
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -418,15 +422,10 @@ services:
       - "PERSISTENCE_DRIVER=postgres12"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -442,15 +441,10 @@ services:
       - "PERSISTENCE_DRIVER=postgres12_pgx"
       - "TEST_RUN_COUNT=10"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
     depends_on:
       - postgresql
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
     networks:
       services-network:
         aliases:
@@ -461,29 +455,11 @@ services:
       context: ../..
       dockerfile: ./develop/buildkite/Dockerfile
     environment:
-      - CI
-      - BUILDKITE
-      - BUILDKITE_AGENT_ACCESS_TOKEN
-      - BUILDKITE_JOB_ID
-      - BUILDKITE_BUILD_ID
-      - BUILDKITE_BUILD_NUMBER
-      - BUILDKITE_BRANCH
-      - BUILDKITE_BUILD_URL
-      - BUILDKITE_PROJECT_SLUG
-      - BUILDKITE_COMMIT
-      - BUILDKITE_PULL_REQUEST
-      - BUILDKITE_TAG
-      - BUILDKITE_REPO
-      - BUILDKITE_BUILD_CREATOR
-      - BUILDKITE_BUILD_CREATOR_EMAIL
-      - BUILDKITE_BUILD_CREATOR_TEAMS
-      - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
     volumes:
-      - ../..:/temporal
-      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+      - ../../.testoutput:/temporal/.testoutput
 
 networks:
   services-network:
-    name: services-network
+    name: "network-$BUILDKITE_BUILD_NUMBER"
     driver: bridge

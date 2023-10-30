@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 var startTimeFrom = time.Now().Add(-time.Hour)
@@ -67,7 +68,7 @@ var unsupportedQuery = []string{
 
 func TestSupportedQueryFilters(t *testing.T) {
 	for query, expectedFilter := range supportedQuery {
-		converter := newQueryConverter()
+		converter := newQueryConverter("test-namespace", searchattribute.TestNameTypeMap, nil)
 		filter, err := converter.GetFilter(query)
 		assert.NoError(t, err)
 
@@ -93,7 +94,7 @@ func TestSupportedQueryFilters(t *testing.T) {
 
 func TestUnsupportedQueryFilters(t *testing.T) {
 	for _, query := range unsupportedQuery {
-		converter := newQueryConverter()
+		converter := newQueryConverter("test-namespace", searchattribute.TestNameTypeMap, nil)
 		_, err := converter.GetFilter(query)
 		assert.Error(t, err)
 	}

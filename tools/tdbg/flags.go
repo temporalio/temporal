@@ -81,4 +81,6 @@ var (
 	FlagBinaryFile                 = "binary-file"
 	FlagBase64Data                 = "base64-data"
 	FlagBase64File                 = "base64-file"
+	FlagTaskCategoryID             = "task-category-id"
+	FlagEncoding                   = "encoding"
 )

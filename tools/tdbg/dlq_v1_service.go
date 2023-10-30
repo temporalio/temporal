@@ -26,6 +26,7 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -39,12 +40,14 @@ import (
 type DLQV1Service struct {
 	clientFactory ClientFactory
 	prompter      *Prompter
+	writer        io.Writer
 }
 
-func NewDLQV1Service(clientFactory ClientFactory, prompter *Prompter) *DLQV1Service {
+func NewDLQV1Service(clientFactory ClientFactory, prompter *Prompter, writer io.Writer) *DLQV1Service {
 	return &DLQV1Service{
 		clientFactory: clientFactory,
 		prompter:      prompter,
+		writer:        writer,
 	}
 }
 
@@ -56,7 +59,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	dlqType := c.String(FlagDLQType)
 	sourceCluster := c.String(FlagCluster)
 	shardID := c.Int(FlagShardID)
-	outputFile, err := getOutputFile(c.String(FlagOutputFilename))
+	outputFile, err := getOutputFile(c.String(FlagOutputFilename), ac.writer)
 	if err != nil {
 		return err
 	}
@@ -117,7 +120,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 
 		lastReadMessageID = int(task.SourceTaskId)
 		remainingMessageCount--
-		_, err = outputFile.WriteString(fmt.Sprintf("%v\n", string(taskStr)))
+		_, err = outputFile.Write([]byte(fmt.Sprintf("%v\n", string(taskStr))))
 		if err != nil {
 			return fmt.Errorf("fail to print dlq messages.: %s", err)
 		}

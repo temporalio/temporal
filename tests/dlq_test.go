@@ -46,23 +46,23 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 
-	commonspb "go.temporal.io/server/api/common/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
 )
 
 type (
@@ -74,7 +74,7 @@ type (
 		dlqTasks                chan tasks.Task
 		writer                  bytes.Buffer
 		sdkClientFactory        sdk.ClientFactory
-		tdgbApp                 *cli.App
+		tdbgApp                 *cli.App
 		worker                  sdkworker.Worker
 	}
 	dlqTestCase struct {
@@ -136,13 +136,12 @@ func (s *dlqSuite) SetupSuite() {
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
-	s.tdgbApp = tdbg.NewCliApp(
+	s.tdbgApp = tdbgtest.NewCliApp(
 		func(params *tdbg.Params) {
 			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.hostPort))
 			params.Writer = &s.writer
 		},
 	)
-	s.tdgbApp.ExitErrHandler = func(c *cli.Context, err error) {}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
@@ -275,7 +274,7 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 			}
 			cmdString := strings.Join(args, " ")
 			s.T().Log("TDBG command:", cmdString)
-			err = s.tdgbApp.Run(args)
+			err = s.tdbgApp.Run(args)
 			s.NoError(err)
 
 			s.T().Log("TDBG output:")
@@ -369,22 +368,19 @@ func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.Workflo
 
 	// Verify that the workflow task is in the DLQ.
 	task := s.verifyRunIsInDLQ(run)
-	dlqMessageID := task.Metadata.MessageId
+	dlqMessageID := task.MessageID
 	return run, dlqMessageID
 }
 
-func (s *dlqSuite) verifyRunIsInDLQ(run sdkclient.WorkflowRun) *commonspb.HistoryDLQTask {
+func (s *dlqSuite) verifyRunIsInDLQ(run sdkclient.WorkflowRun) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	dlqTasks := s.readDLQTasks()
 	for _, task := range dlqTasks {
-		var taskInfo persistencespb.TransferTaskInfo
-		err := taskInfo.Unmarshal(task.Payload.Blob.Data)
-		s.NoError(err)
-		if taskInfo.RunId == run.GetRunID() {
+		if task.Payload.RunId == run.GetRunID() {
 			return task
 		}
 	}
 	s.Fail("workflow task not found in DLQ", run.GetRunID())
-	return nil
+	panic("unreachable")
 }
 
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
@@ -414,7 +410,7 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageIDToDelete, 10),
 	}
-	err := s.tdgbApp.Run(args)
+	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
@@ -441,7 +437,7 @@ func (s *dlqSuite) mergeMessages(ctx context.Context, maxMessageID int64) {
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageID, 10),
 		"--" + tdbg.FlagPageSize, "1", // to ensure that we test pagination
 	}
-	err := s.tdgbApp.Run(args)
+	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
@@ -457,7 +453,7 @@ func (s *dlqSuite) mergeMessages(ctx context.Context, maxMessageID int64) {
 }
 
 // readDLQTasks from the transfer task DLQ for this cluster and return them.
-func (s *dlqSuite) readDLQTasks() []*commonspb.HistoryDLQTask {
+func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	file := testutils.CreateTemp(s.T(), "", "*")
 	args := []string{
 		"tdbg",
@@ -468,23 +464,20 @@ func (s *dlqSuite) readDLQTasks() []*commonspb.HistoryDLQTask {
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagOutputFilename, file.Name(),
 	}
-	s.NoError(s.tdgbApp.Run(args))
-	dlqTasks := s.parseHistoryDLQTasks(file)
+	s.NoError(s.tdbgApp.Run(args))
+	dlqTasks := s.readTransferTasks(file)
 	return dlqTasks
 }
 
 // verifyNumTasks verifies that the specified file contains the expected number of DLQ tasks, and that each task has the
 // expected metadata and payload.
 func (s *dlqSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
-	dlqTasks := s.parseHistoryDLQTasks(file)
+	dlqTasks := s.readTransferTasks(file)
 	s.Len(dlqTasks, expectedNumTasks)
 
 	for i, task := range dlqTasks {
-		s.Equal(int64(persistence.FirstQueueMessageID+i), task.Metadata.MessageId)
-
-		var taskInfo persistencespb.TransferTaskInfo
-		err := taskInfo.Unmarshal(task.Payload.Blob.Data)
-		s.NoError(err)
+		s.Equal(int64(persistence.FirstQueueMessageID+i), task.MessageID)
+		taskInfo := task.Payload
 		s.Equal(enums.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
 		s.Equal("test-namespace", taskInfo.NamespaceId)
 		s.Equal("test-workflow-id", taskInfo.WorkflowId)
@@ -493,11 +486,12 @@ func (s *dlqSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	}
 }
 
-// parseHistoryDLQTasks parses the specified file as a JSONL file containing HistoryDLQTask protos and returns them.
-func (s *dlqSuite) parseHistoryDLQTasks(file *os.File) []*commonspb.HistoryDLQTask {
-	return ParseJSONLProtos[*commonspb.HistoryDLQTask](s.Assertions, file, func() *commonspb.HistoryDLQTask {
-		return new(commonspb.HistoryDLQTask)
+func (s *dlqSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
+	dlqTasks, err := tdbgtest.ParseDLQMessages(file, func() *persistencespb.TransferTaskInfo {
+		return new(persistencespb.TransferTaskInfo)
 	})
+	s.NoError(err)
+	return dlqTasks
 }
 
 // EnqueueTask is used to intercept writes to the DLQ, so that we can unblock the test upon completion.
