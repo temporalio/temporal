@@ -139,6 +139,10 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetClusterMetadata(),
 		logger,
 		metrics.NoopMetricsHandler,
+		nil,
+		func() bool {
+			return false
+		},
 	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,

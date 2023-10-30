@@ -32,40 +32,36 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	commonspb "go.temporal.io/server/api/common/v1"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
 )
 
 // This file contains tests for the history replication DLQ feature. It uses a faulty replication task executor to force
@@ -326,10 +322,9 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	clientFactory := tdbg.NewClientFactory(
 		tdbg.WithFrontendAddress(s.cluster2.GetHost().FrontendGRPCAddress()),
 	)
-	app := tdbg.NewCliApp(clientFactory, tasks.NewDefaultTaskCategoryRegistry())
-	app.ExitErrHandler = func(c *cli.Context, err error) {
-		// We don't want the CLI to exit when it encounters an error, so we override the default handler.
-	}
+	app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
+		params.ClientFactory = clientFactory
+	})
 
 	// Run the TDBG command to read replication tasks from the DLQ.
 	// The last message ID is set to MaxInt64 - 1 because the last message ID is exclusive, so if it were
@@ -379,28 +374,27 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// Verify that the replication task contains the correct information (operators will want to know which workflow
 	// failed to replicate).
 	if s.enableQueueV2 {
-		replicationTasks := readDLQReplicationTasks[*commonspb.HistoryDLQTask](
-			s.Assertions,
+		replicationTasks, err := tdbgtest.ParseDLQMessages(
 			file,
-			func() *commonspb.HistoryDLQTask {
-				return &commonspb.HistoryDLQTask{}
+			func() *persistencespb.ReplicationTaskInfo {
+				return new(persistencespb.ReplicationTaskInfo)
 			},
 		)
-		s.NotEmpty(replicationTasks)
-		blob := replicationTasks[0].Task.Task
-		task, err := serialization.ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 		s.NoError(err)
+		s.NotEmpty(replicationTasks)
+		task := replicationTasks[0].Payload
 		s.Equal(enumspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
 		s.Equal(run.GetID(), task.WorkflowId)
 		s.Equal(run.GetRunID(), task.RunId)
 	} else {
-		replicationTasks := readDLQReplicationTasks[*replicationspb.ReplicationTask](
-			s.Assertions,
+		replicationTasks, err := tdbgtest.ParseJSONL(
 			file,
-			func() *replicationspb.ReplicationTask {
-				return &replicationspb.ReplicationTask{}
+			func(decoder *json.Decoder) (*replicationspb.ReplicationTask, error) {
+				task := &replicationspb.ReplicationTask{}
+				return task, jsonpb.UnmarshalNext(decoder, task)
 			},
 		)
+		s.NoError(err)
 		s.NotEmpty(replicationTasks)
 		task := replicationTasks[0]
 		s.Equal(enumspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
@@ -431,25 +425,6 @@ func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() interface{} {
 				taskExecutor:                  taskExecutor,
 			}
 		}
-	}
-}
-
-// This function iterates through the given file parsing replication tasks until it encounters an EOF. It expects the
-// input file to be in JSONL format (JSON objects separated by newlines).
-func readDLQReplicationTasks[T proto.Message](t *require.Assertions, file *os.File, newT func() T) []T {
-	decoder := json.NewDecoder(file)
-	var (
-		unmarshaler      jsonpb.Unmarshaler
-		replicationTasks []T
-	)
-	for {
-		task := newT()
-		err := unmarshaler.UnmarshalNext(decoder, task)
-		if err == io.EOF { // Don't need errors.Is because io.EOF should never be wrapped.
-			return replicationTasks
-		}
-		t.NoError(err)
-		replicationTasks = append(replicationTasks, task)
 	}
 }
 

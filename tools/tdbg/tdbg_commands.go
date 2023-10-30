@@ -26,19 +26,30 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/urfave/cli/v2"
-
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/multierr"
 )
 
-func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func getCommands(
+	clientFactory ClientFactory,
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	prompterFactory PrompterFactory,
+	taskBlobEncoder TaskBlobEncoder,
+	writer io.Writer,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:        "workflow",
 			Aliases:     []string{"w"},
 			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory),
+			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -67,7 +78,7 @@ func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCat
 		{
 			Name:        "dlq",
 			Usage:       "Run admin operation on DLQ",
-			Subcommands: newAdminDLQCommands(clientFactory, taskCategoryRegistry),
+			Subcommands: newAdminDLQCommands(dlqServiceProvider, taskCategoryRegistry),
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
@@ -79,12 +90,12 @@ func getCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCat
 		{
 			Name:        "decode",
 			Usage:       "Decode payload",
-			Subcommands: newDecodeCommands(),
+			Subcommands: newDecodeCommands(taskBlobEncoder, writer),
 		},
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory) []*cli.Command {
+func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -224,7 +235,7 @@ func newAdminWorkflowCommands(clientFactory ClientFactory) []*cli.Command {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c, clientFactory)
+				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
 	}
@@ -482,7 +493,10 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 	}
 }
 
-func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+func newAdminDLQCommands(
+	dlqServiceProvider *DLQServiceProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "read",
@@ -508,7 +522,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 				},
 			),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -521,7 +535,7 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
 			Flags:   getDLQFlags(taskCategoryRegistry),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -529,12 +543,19 @@ func newAdminDLQCommands(clientFactory ClientFactory, taskCategoryRegistry tasks
 			},
 		},
 		{
-			Name:    "merge",
-			Aliases: []string{"m"},
-			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
-			Flags:   getDLQFlags(taskCategoryRegistry),
+			Name:        "merge",
+			Aliases:     []string{"m"},
+			Usage:       "Merge DLQ messages with equal or smaller ids than the provided task id",
+			Description: "This command will delete messages after they've been re-enqueued if using v2.",
+			Flags: append(getDLQFlags(taskCategoryRegistry),
+				&cli.IntFlag{
+					Name: FlagPageSize,
+					Usage: "Batch size to use when purging messages from the DB, v2 only. Will use server default if " +
+						"not provided.",
+				},
+			),
 			Action: func(c *cli.Context) error {
-				ac, err := GetDLQService(c, clientFactory, taskCategoryRegistry)
+				ac, err := dlqServiceProvider.GetDLQService(c)
 				if err != nil {
 					return err
 				}
@@ -563,8 +584,9 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 			Usage: "ShardId, v1 only",
 		},
 		&cli.IntFlag{
-			Name:  FlagLastMessageID,
-			Usage: "The upper boundary of the read message",
+			Name: FlagLastMessageID,
+			Usage: "The upper boundary of messages to operate on. If not provided, all messages will be operated on. " +
+				"However, you will be prompted for confirmation unless the --yes flag is also provided.",
 		},
 		&cli.StringFlag{
 			Name:  FlagTargetCluster,
@@ -573,7 +595,10 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 	}
 }
 
-func newDecodeCommands() []*cli.Command {
+func newDecodeCommands(
+	taskBlobEncoder TaskBlobEncoder,
+	writer io.Writer,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "proto",
@@ -615,6 +640,51 @@ func newDecodeCommands() []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDecodeBase64(c)
+			},
+		},
+		{
+			Name:  "task",
+			Usage: "Decode a history task blob into a JSON message.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagBinaryFile,
+					Usage:    "file with data in binary format.",
+					Required: true,
+				},
+				&cli.IntFlag{
+					Name:     FlagTaskCategoryID,
+					Usage:    "Task category ID (see the history/tasks package)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagEncoding,
+					Usage:    "Encoding type (see temporal.api.enums.v1.EncodingType)",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) (err error) {
+				encoding := c.String(FlagEncoding)
+				encodingType := enumspb.EncodingType(enumspb.EncodingType_value[encoding])
+				taskCategoryID := c.Int(FlagTaskCategoryID)
+				file, err := os.Open(c.String(FlagBinaryFile))
+				if err != nil {
+					return fmt.Errorf("failed to open file: %w", err)
+				}
+				defer func() {
+					err = multierr.Combine(err, file.Close())
+				}()
+				b, err := io.ReadAll(file)
+				if err != nil {
+					return fmt.Errorf("failed to read file: %w", err)
+				}
+				blob := commonpb.DataBlob{
+					EncodingType: encodingType,
+					Data:         b,
+				}
+				if err := taskBlobEncoder.Encode(writer, taskCategoryID, blob); err != nil {
+					return fmt.Errorf("failed to decode task blob: %w", err)
+				}
+				return nil
 			},
 		},
 	}

@@ -1173,9 +1173,9 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 							Metadata: &commonspb.HistoryDLQTaskMetadata{
 								MessageId: 21,
 							},
-							Task: &commonspb.HistoryTask{
+							Payload: &commonspb.HistoryTask{
 								ShardId: 34,
-								Task:    blob,
+								Blob:    blob,
 							},
 						},
 					},
@@ -1202,9 +1202,9 @@ func (s *adminHandlerSuite) TestGetDLQTasks() {
 						Metadata: &commonspb.HistoryDLQTaskMetadata{
 							MessageId: 21,
 						},
-						Task: &commonspb.HistoryTask{
+						Payload: &commonspb.HistoryTask{
 							ShardId: 34,
-							Task:    blob,
+							Blob:    blob,
 						},
 					},
 				},
@@ -1238,10 +1238,12 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 				dlq.WorkflowParams{
 					WorkflowType: dlq.WorkflowTypeDelete,
 					DeleteParams: dlq.DeleteParams{
-						TaskCategory:  int(tasks.CategoryTransfer.ID()),
-						SourceCluster: "test-source-cluster",
-						TargetCluster: "test-target-cluster",
-						MaxMessageID:  42,
+						Key: dlq.Key{
+							TaskCategoryID: tasks.CategoryTransfer.ID(),
+							SourceCluster:  "test-source-cluster",
+							TargetCluster:  "test-target-cluster",
+						},
+						MaxMessageID: 42,
 					},
 				},
 			)
@@ -1271,7 +1273,7 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks() {
 			var token adminservice.DLQJobToken
 			err = token.Unmarshal(response.JobToken)
 			s.NoError(err)
-			s.Equal("delete-dlq-tasks-1_test-source-cluster_test-target-cluster_aG2oua8T", token.WorkflowId)
+			s.Equal("manage-dlq-tasks-1_test-source-cluster_test-target-cluster_aG2oua8T", token.WorkflowId)
 			s.Equal("test-run-id", token.RunId)
 		})
 	}

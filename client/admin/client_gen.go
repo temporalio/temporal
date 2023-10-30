@@ -253,6 +253,16 @@ func (c *clientImpl) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,

@@ -25,14 +25,16 @@
 package tdbg
 
 import (
-	"errors"
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"math"
+	"io"
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/urfave/cli/v2"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -42,11 +44,62 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-type DLQV2Service struct {
-	category      tasks.Category
-	sourceCluster string
-	targetCluster string
-	clientFactory ClientFactory
+type (
+	// DLQV2Service implements DLQService for [persistence.QueueV2].
+	DLQV2Service struct {
+		category        tasks.Category
+		sourceCluster   string
+		targetCluster   string
+		clientFactory   ClientFactory
+		writer          io.Writer
+		prompter        *Prompter
+		taskBlobEncoder TaskBlobEncoder
+	}
+	// DLQMessage is used primarily to form the JSON output of the `read` command. It's only used for v2.
+	DLQMessage struct {
+		// MessageID is the ID of the message within the DLQ. You can use this ID as an input to the `--last_message_id`
+		// flag for the `purge` and `merge` commands.
+		MessageID int64 `json:"message_id"`
+		// ShardID is only used for non-namespace replication tasks.
+		ShardID int32 `json:"shard_id"`
+		// Payload contains the parsed task metadata from the server.
+		Payload *TaskPayload `json:"payload"`
+	}
+	// TaskPayload implements both [json.Marshaler] and [json.Unmarshaler]. This allows us to pretty-print tasks using
+	// jsonpb when serializing and then store the raw bytes of the task payload for later use when deserializing. We
+	// need to store the raw bytes instead of immediately decoding to a concrete type because that logic is dynamic and
+	// can't depend solely on the task category ID in case there are additional task categories in use.
+	TaskPayload struct {
+		taskBlobEncoder TaskBlobEncoder
+		taskCategoryID  int
+		blob            commonpb.DataBlob
+		bytes           []byte
+	}
+)
+
+var (
+	_ json.Marshaler   = (*TaskPayload)(nil)
+	_ json.Unmarshaler = (*TaskPayload)(nil)
+)
+
+func (p *TaskPayload) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	err := p.taskBlobEncoder.Encode(&b, p.taskCategoryID, p.blob)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func (p *TaskPayload) UnmarshalJSON(b []byte) error {
+	p.bytes = b
+	return nil
+}
+
+// Bytes returns the raw bytes of the deserialized TaskPayload. This will return nil if the payload has not been
+// deserialized yet.
+func (p *TaskPayload) Bytes() []byte {
+	return p.bytes
 }
 
 const dlqV2DefaultMaxMessageCount = 100
@@ -56,16 +109,28 @@ func NewDLQV2Service(
 	sourceCluster string,
 	targetCluster string,
 	clientFactory ClientFactory,
+	writer io.Writer,
+	prompter *Prompter,
+	taskBlobEncoder TaskBlobEncoder,
 ) *DLQV2Service {
 	return &DLQV2Service{
-		category:      category,
-		sourceCluster: sourceCluster,
-		targetCluster: targetCluster,
-		clientFactory: clientFactory,
+		category:        category,
+		sourceCluster:   sourceCluster,
+		targetCluster:   targetCluster,
+		clientFactory:   clientFactory,
+		writer:          writer,
+		prompter:        prompter,
+		taskBlobEncoder: taskBlobEncoder,
 	}
 }
 
-func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
+func newEncoder(writer io.Writer) *json.Encoder {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder
+}
+
+func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -76,23 +141,18 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 			return fmt.Errorf("--%s must be positive but was %d", FlagMaxMessageCount, remainingMessageCount)
 		}
 	}
-	var maxMessageID int64 = math.MaxInt64
-	if c.IsSet(FlagLastMessageID) {
-		maxMessageID = c.Int64(FlagLastMessageID)
-		if maxMessageID < persistence.FirstQueueMessageID {
-			return fmt.Errorf(
-				"--%s must be at least %d but was %d",
-				FlagLastMessageID,
-				persistence.FirstQueueMessageID,
-				maxMessageID,
-			)
-		}
-	}
-
-	outputFile, err := getOutputFile(c.String(FlagOutputFilename))
+	maxMessageID, err := ac.getLastMessageID(c, "read")
 	if err != nil {
 		return err
 	}
+
+	outputFile, err := getOutputFile(c.String(FlagOutputFilename), ac.writer)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = multierr.Append(err, outputFile.Close())
+	}()
 	adminClient := ac.clientFactory.AdminClient(c)
 
 	pageSize := c.Int(FlagPageSize)
@@ -115,10 +175,6 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 		},
 	)
 
-	encoder := jsonpb.Marshaler{
-		Indent:       "  ",
-		EmitDefaults: true,
-	}
 	for iterator.HasNext() && remainingMessageCount > 0 {
 		dlqTask, err := iterator.Next()
 		if err != nil {
@@ -127,13 +183,26 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 		if dlqTask.Metadata.MessageId > maxMessageID {
 			break
 		}
-		remainingMessageCount--
-		// TODO: decode the task and print it in a human readable format
-		taskString, err := encoder.MarshalToString(dlqTask)
-		if err != nil {
-			return fmt.Errorf("unable to encode dlq message: %w", err)
+		blob := dlqTask.Payload.Blob
+		if blob == nil {
+			return fmt.Errorf("DLQ task payload blob is nil: %+v", dlqTask)
 		}
-		_, err = outputFile.WriteString(fmt.Sprintf("%v\n", taskString))
+		payload := &TaskPayload{
+			taskBlobEncoder: ac.taskBlobEncoder,
+			blob:            *blob,
+			taskCategoryID:  ac.category.ID(),
+		}
+		message := DLQMessage{
+			MessageID: dlqTask.Metadata.MessageId,
+			ShardID:   dlqTask.Payload.ShardId,
+			Payload:   payload,
+		}
+		err = newEncoder(outputFile).Encode(message)
+		if err != nil {
+			return err
+		}
+		remainingMessageCount--
+		_, err = outputFile.Write([]byte("\n"))
 		if err != nil {
 			return fmt.Errorf("fail to print dlq messages: %s", err)
 		}
@@ -141,12 +210,84 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) error {
 	return nil
 }
 
-func (ac *DLQV2Service) PurgeMessages(*cli.Context) error {
-	return errors.New("purge is not yet implemented for DLQ v2")
+func (ac *DLQV2Service) PurgeMessages(c *cli.Context) error {
+	adminClient := ac.clientFactory.AdminClient(c)
+	lastMessageID, err := ac.getLastMessageID(c, "purge")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+		DlqKey: ac.getDLQKey(),
+		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			MessageId: lastMessageID,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("call to PurgeDLQTasks failed: %w", err)
+	}
+	err = newEncoder(ac.writer).Encode(response)
+	if err != nil {
+		return fmt.Errorf("unable to encode PurgeDLQTasks response: %w", err)
+	}
+	return nil
 }
 
-func (ac *DLQV2Service) MergeMessages(*cli.Context) error {
-	return errors.New("merge is not yet implemented for DLQ v2")
+func (ac *DLQV2Service) MergeMessages(c *cli.Context) error {
+	adminClient := ac.clientFactory.AdminClient(c)
+	lastMessageID, err := ac.getLastMessageID(c, "merge")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	response, err := adminClient.MergeDLQTasks(ctx, &adminservice.MergeDLQTasksRequest{
+		DlqKey: ac.getDLQKey(),
+		InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+			MessageId: lastMessageID,
+		},
+		BatchSize: int32(c.Int(FlagPageSize)), // let the server handle validation and defaulting of batch size.
+	})
+	if err != nil {
+		return fmt.Errorf("call to MergeDLQTasks failed: %w", err)
+	}
+	err = newEncoder(ac.writer).Encode(response)
+	if err != nil {
+		return fmt.Errorf("unable to encode MergeDLQTasks response: %w", err)
+	}
+	return nil
+}
+
+func (ac *DLQV2Service) getDLQKey() *commonspb.HistoryDLQKey {
+	return &commonspb.HistoryDLQKey{
+		TaskCategory:  int32(ac.category.ID()),
+		SourceCluster: ac.sourceCluster,
+		TargetCluster: ac.targetCluster,
+	}
+}
+
+func (ac *DLQV2Service) getLastMessageID(c *cli.Context, action string) (int64, error) {
+	if !c.IsSet(FlagLastMessageID) {
+		msg := fmt.Sprintf(
+			"You did not set --%s. Are you sure you want to %s all messages without an upper bound?",
+			FlagLastMessageID,
+			action,
+		)
+		ac.prompter.Prompt(msg)
+		return persistence.MaxQueueMessageID, nil
+	}
+	lastMessageID := c.Int64(FlagLastMessageID)
+	if lastMessageID < persistence.FirstQueueMessageID {
+		return 0, fmt.Errorf(
+			"--%s must be at least %d but was %d",
+			FlagLastMessageID,
+			persistence.FirstQueueMessageID,
+			lastMessageID,
+		)
+	}
+	return lastMessageID, nil
 }
 
 func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegistry) []tasks.Category {
@@ -157,7 +298,7 @@ func getSupportedDLQTaskCategories(taskCategoryRegistry tasks.TaskCategoryRegist
 		}
 	}
 	slices.SortFunc(categories, func(a, b tasks.Category) int {
-		return int(a.ID() - b.ID())
+		return a.ID() - b.ID()
 	})
 	return categories
 }
@@ -180,12 +321,13 @@ func getCategoryByID(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	categoryIDString string,
 ) (tasks.Category, bool, error) {
+	if categoryIDString == "" {
+		return tasks.Category{}, false, fmt.Errorf("--%s is required", FlagDLQType)
+	}
 	id, err := strconv.Atoi(categoryIDString)
 	if err != nil {
 		return tasks.Category{}, false, fmt.Errorf(
-			"%w: unable to parse category ID as an integer: %s",
-			err,
-			categoryIDString,
+			"%w: unable to parse category ID as an integer: %s", err, categoryIDString,
 		)
 	}
 	for _, c := range getSupportedDLQTaskCategories(taskCategoryRegistry) {

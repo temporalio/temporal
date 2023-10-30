@@ -145,12 +145,11 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 		return nil, err
 	}
 	defer func() {
-		if rec := recover(); rec != nil {
-			ndcWorkflow.GetReleaseFn()(errPanic)
-			panic(rec)
-		} else {
-			ndcWorkflow.GetReleaseFn()(retError)
-		}
+		// it is ok to clear everytime this function is invoked
+		// mutable state will be at most initialized once from shard mutable state cache
+		// mutable state will be usually initialized from input token
+		ndcWorkflow.GetContext().Clear()
+		ndcWorkflow.GetReleaseFn()(retError)
 	}()
 
 	if len(eventsSlice) != 0 {

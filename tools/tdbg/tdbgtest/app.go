@@ -22,46 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues_test
+package tdbgtest
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
+	"github.com/urfave/cli/v2"
+	"go.temporal.io/server/tools/tdbg"
 )
 
-type (
-	testWrapper       struct{}
-	wrappedExecutable struct {
-		queues.Executable
-	}
-)
-
-func TestNewExecutableFactoryWrapper(t *testing.T) {
-	t.Parallel()
-
-	wrapper := testWrapper{}
-	factory := queues.NewExecutableFactory(
-		nil,
-		nil,
-		nil,
-		queues.NewNoopPriorityAssigner(),
-		clock.NewEventTimeSource(),
-		nil,
-		nil,
-		log.NewNoopLogger(),
-		nil,
-	)
-	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
-	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
-	_, ok := executable.(wrappedExecutable)
-	assert.True(t, ok, "expected executable to be wrapped")
-}
-
-func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
-	return wrappedExecutable{e}
+// NewCliApp is a wrapper around [tdbg.NewCliApp] that sets the [cli.App.ExitErrHandler] to a no-op function.
+func NewCliApp(opts ...tdbg.Option) *cli.App {
+	app := tdbg.NewCliApp(opts...)
+	app.ExitErrHandler = func(context *cli.Context, err error) {}
+	return app
 }

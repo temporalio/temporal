@@ -31,8 +31,10 @@ import (
 	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 var allowedComparisonOperators = map[string]struct{}{
@@ -46,9 +48,17 @@ type (
 	}
 )
 
-func newQueryConverter() *converter {
+func newQueryConverter(
+	namespaceName namespace.Name,
+	searchAttributesTypeMap searchattribute.NameTypeMap,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+) *converter {
 	fnInterceptor := newNameInterceptor()
-	fvInterceptor := newValuesInterceptor()
+	fvInterceptor := newValuesInterceptor(
+		namespaceName,
+		searchAttributesTypeMap,
+		searchAttributesMapperProvider,
+	)
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, false)
 	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators)

@@ -51,6 +51,7 @@ var (
 		dynamicconfig.ClusterMetadataRefreshInterval:                 100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval:                  NamespaceCacheRefreshInterval,
 		dynamicconfig.FrontendEnableUpdateWorkflowExecution:          true,
+		dynamicconfig.FrontendAccessHistoryFraction:                  0.5,
 	}
 )
 
