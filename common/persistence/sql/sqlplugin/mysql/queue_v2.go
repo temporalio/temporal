@@ -39,7 +39,7 @@ const (
 	templateRangeDeleteMessagesQueryV2 = `DELETE FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? and message_id <= ?`
 	templateGetLastMessageIDQueryV2    = `SELECT max(message_id) FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? and message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
 	templateCreateQueueMetadataQueryV2 = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
-	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
+	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
 	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=?`
 	templateGetNameFromQueueMetadataV2 = `SELECT queue_name from queues WHERE queue_type=? LIMIT ? OFFSET ?`
 )
