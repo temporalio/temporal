@@ -99,11 +99,6 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/ptypes/wrappers
 github.com/golang/snappy
-github.com/google/go-cmp/cmp
-github.com/google/go-cmp/cmp/internal/diff
-github.com/google/go-cmp/cmp/internal/flags
-github.com/google/go-cmp/cmp/internal/function
-github.com/google/go-cmp/cmp/internal/value
 github.com/google/s2a-go
 github.com/google/s2a-go/fallback
 github.com/google/s2a-go/internal/authinfo
@@ -358,7 +353,6 @@ golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
 golang.org/x/sync/semaphore
-golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/text/cases
 golang.org/x/text/internal
@@ -473,6 +467,7 @@ google.golang.org/grpc/reflection
 google.golang.org/grpc/reflection/grpc_reflection_v1
 google.golang.org/grpc/reflection/grpc_reflection_v1alpha
 google.golang.org/grpc/resolver
+google.golang.org/grpc/resolver/manual
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
@@ -541,6 +536,7 @@ modernc.org/libc/sys/types
 modernc.org/libc/termios
 modernc.org/libc/time
 modernc.org/libc/unistd
+modernc.org/libc/utime
 modernc.org/libc/uuid/uuid
 modernc.org/libc/wctype
 modernc.org/mathutil
