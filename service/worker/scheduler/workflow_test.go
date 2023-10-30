@@ -1718,6 +1718,9 @@ func (s *workflowSuite) TestCANByIterations() {
 		s.Fail("too many starts")
 		return nil, nil
 	}).Times(0).Maybe()
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	}).Times(0).Maybe()
 
 	// this is ignored because we set iters explicitly
 	s.env.RegisterDelayedCallback(func() {
@@ -1755,6 +1758,9 @@ func (s *workflowSuite) TestCANBySuggested() {
 		s.Fail("too many starts", req.Request.WorkflowId)
 		return nil, nil
 	}).Times(0).Maybe()
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	}).Times(0).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SetContinueAsNewSuggested(true)
@@ -1790,6 +1796,9 @@ func (s *workflowSuite) TestCANBySignal() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Fail("too many starts", req.Request.WorkflowId)
 		return nil, nil
+	}).Times(0).Maybe()
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).Times(0).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
