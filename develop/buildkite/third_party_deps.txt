@@ -353,6 +353,7 @@ golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
 golang.org/x/sync/semaphore
+golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/text/cases
 golang.org/x/text/internal
@@ -536,7 +537,6 @@ modernc.org/libc/sys/types
 modernc.org/libc/termios
 modernc.org/libc/time
 modernc.org/libc/unistd
-modernc.org/libc/utime
 modernc.org/libc/uuid/uuid
 modernc.org/libc/wctype
 modernc.org/mathutil
