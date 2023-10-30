@@ -104,6 +104,12 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	if err != nil {
 		return err
 	} else if !apply {
+		e.Logger.Warn("Skipping the replication task",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.ExecutableTask.TaskID()),
+		)
 		e.MetricsHandler.Counter(metrics.ReplicationTasksSkipped.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(metrics.SyncWorkflowStateTaskScope),
