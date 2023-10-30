@@ -498,6 +498,8 @@ const (
 	// HistoryCacheNonUserContextLockTimeout controls how long non-user call (callerType != API or Operator)
 	// will wait on workflow lock acquisition. Requires service restart to take effect.
 	HistoryCacheNonUserContextLockTimeout = "history.cacheNonUserContextLockTimeout"
+	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
+	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"

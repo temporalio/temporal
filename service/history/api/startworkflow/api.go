@@ -180,9 +180,11 @@ func (s *Starter) Invoke(
 		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
 	}
 	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
-	if !errors.As(err, &currentWorkflowConditionFailedError) {
+	if !errors.As(err, &currentWorkflowConditionFailedError) ||
+		len(currentWorkflowConditionFailedError.RunID) == 0 {
 		return nil, err
 	}
+
 	// The history and mutable state we generated above should be deleted by a background process.
 	return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 }
@@ -342,6 +344,8 @@ func (s *Starter) applyWorkflowIDReusePolicy(
 	}
 	var mutableStateInfo *mutableStateInfo
 	// update prev execution and create new execution in one transaction
+	// we already validated that currentWorkflowConditionFailed.RunID is not empty,
+	// so the following update won't try to lock current execution again.
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,

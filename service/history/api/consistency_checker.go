@@ -53,6 +53,7 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			workflowID string,
+			lockPriority workflow.LockPriority,
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
@@ -87,6 +88,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	ctx context.Context,
 	namespaceID string,
 	workflowID string,
+	lockPriority workflow.LockPriority,
 ) (string, error) {
 	// to achieve read after write consistency,
 	// logic need to assert shard ownership *at most once* per read API call
@@ -97,6 +99,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
+		lockPriority,
 	)
 	if err != nil {
 		return "", err
@@ -259,6 +262,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err
@@ -282,6 +286,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
+		lockPriority,
 	)
 	if err != nil {
 		wfContext.GetReleaseFn()(err)
@@ -300,7 +305,21 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 	shardOwnershipAsserted *bool,
 	namespaceID string,
 	workflowID string,
-) (string, error) {
+	lockPriority workflow.LockPriority,
+) (runID string, retErr error) {
+	if c.shardContext.GetConfig().EnableAPIGetCurrentRunIDLock() {
+		_, release, err := c.workflowCache.GetOrCreateCurrentWorkflowExecution(
+			ctx,
+			namespace.ID(namespaceID),
+			workflowID,
+			lockPriority,
+		)
+		if err != nil {
+			return "", err
+		}
+		defer release(retErr)
+	}
+
 	resp, err := c.shardContext.GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
