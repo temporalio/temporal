@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build-misc: bins ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version bins ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -118,6 +118,9 @@ define silent_exec
 endef
 
 ##### Tools #####
+print-go-version:
+	@go version
+
 update-goimports:
 	@printf $(COLOR) "Install/update goimports..."
 	@go install golang.org/x/tools/cmd/goimports@latest
@@ -532,7 +535,7 @@ update-dependencies:
 	@$(MAKE) update-third-party-deps
 
 update-third-party-deps:
-	@go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
+	@GOOS=linux GOARCH=amd64 go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
