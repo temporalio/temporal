@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,6 +46,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
+)
+
+const (
+	pageSize = 1000
 )
 
 var (
@@ -68,7 +73,7 @@ func (a *activities) checkNamespace(namespace string) error {
 	return nil
 }
 
-// BatchActivity is activity for processing batch operation
+// BatchActivity is an activity for processing batch operation.
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
@@ -109,7 +114,9 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		hbd.TotalEstimate = estimateCount
 	}
 	rps := a.getOperationRPS(batchParams.RPS)
-	rateLimiter := rate.NewLimiter(rate.Limit(rps), rps)
+	rateLimit := rate.Limit(rps)
+	burstLimit := int(math.Ceil(rps)) // should never be zero because everything would be rejected
+	rateLimiter := rate.NewLimiter(rateLimit, burstLimit)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
@@ -195,11 +202,12 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-func (a *activities) getOperationRPS(rps int) int {
-	if rps <= 0 {
-		return a.rps(a.namespace.String())
+func (a *activities) getOperationRPS(requestedRPS float64) float64 {
+	maxRPS := float64(a.rps(a.namespace.String()))
+	if requestedRPS <= 0 || requestedRPS > maxRPS {
+		return maxRPS
 	}
-	return rps
+	return requestedRPS
 }
 
 func (a *activities) getOperationConcurrency(concurrency int) int {
@@ -347,7 +355,8 @@ func getResetEventIDByType(ctx context.Context,
 	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger) (int64, error) {
+	logger log.Logger,
+) (int64, error) {
 	switch resetType {
 	case enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK:
 		return getFirstWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, frontendClient, logger)
@@ -363,7 +372,8 @@ func getLastWorkflowTaskEventID(ctx context.Context,
 	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger) (workflowTaskEventID int64, err error) {
+	logger log.Logger,
+) (workflowTaskEventID int64, err error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       namespaceStr,
 		Execution:       workflowExecution,
@@ -401,7 +411,8 @@ func getFirstWorkflowTaskEventID(ctx context.Context,
 	namespaceStr string,
 	workflowExecution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger) (workflowTaskEventID int64, err error) {
+	logger log.Logger,
+) (workflowTaskEventID int64, err error) {
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespaceStr,
 		Execution:       workflowExecution,

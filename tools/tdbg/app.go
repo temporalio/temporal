@@ -31,7 +31,6 @@ import (
 	"runtime/debug"
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -47,6 +46,8 @@ type (
 		TaskCategoryRegistry tasks.TaskCategoryRegistry
 		// Writer is used to write output from tdbg. The default is os.Stdout.
 		Writer io.Writer
+		// TaskBlobEncoder is needed for custom task serialization. The default uses PredefinedTaskBlobDeserializer.
+		TaskBlobEncoder TaskBlobEncoder
 	}
 	// Option modifies the Params for tdbg.
 	Option func(params *Params)
@@ -58,6 +59,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		ClientFactory:        NewClientFactory(),
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 		Writer:               os.Stdout,
+		TaskBlobEncoder:      NewProtoTaskBlobEncoder(NewPredefinedTaskBlobDeserializer()),
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -129,9 +131,17 @@ func NewCliApp(opts ...Option) *cli.App {
 	prompterFactory := NewPrompterFactory()
 	app.Commands = getCommands(
 		params.ClientFactory,
-		NewDLQServiceProvider(params.ClientFactory, params.TaskCategoryRegistry, params.Writer, prompterFactory),
+		NewDLQServiceProvider(
+			params.ClientFactory,
+			params.TaskBlobEncoder,
+			params.TaskCategoryRegistry,
+			params.Writer,
+			prompterFactory,
+		),
 		params.TaskCategoryRegistry,
 		prompterFactory,
+		params.TaskBlobEncoder,
+		params.Writer,
 	)
 	app.ExitErrHandler = handleError
 
@@ -143,12 +153,12 @@ func handleError(c *cli.Context, err error) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "%s %+v\n", color.Red(c, "Error:"), err)
+	_, _ = fmt.Fprintf(os.Stderr, "%s %+v\n", color.Red(c, "Error:"), err)
 	if os.Getenv(showErrorStackEnv) != `` {
-		fmt.Fprintln(os.Stderr, color.Magenta(c, "Stack trace:"))
+		_, _ = fmt.Fprintln(os.Stderr, color.Magenta(c, "Stack trace:"))
 		debug.PrintStack()
 	} else {
-		fmt.Fprintf(os.Stderr, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
+		_, _ = fmt.Fprintf(os.Stderr, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
 	}
 
 	cli.OsExiter(1)

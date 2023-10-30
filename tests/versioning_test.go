@@ -245,11 +245,6 @@ func (s *versioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 
 func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
-	defer dc.RemoveOverride(dynamicconfig.TestMatchingLBForceReadPartition)
-	defer dc.RemoveOverride(dynamicconfig.TestMatchingLBForceWritePartition)
-	defer dc.RemoveOverride(dynamicconfig.TestMatchingDisableSyncMatch)
 	for _, forceForward := range []bool{false, true} {
 		for _, forceAsync := range []bool{false, true} {
 			name := ""
@@ -276,6 +271,11 @@ func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 				name += "AllowSync"
 			}
 			s.Run(name, subtest)
+			dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
+			dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+			dc.RemoveOverride(dynamicconfig.TestMatchingLBForceReadPartition)
+			dc.RemoveOverride(dynamicconfig.TestMatchingLBForceWritePartition)
+			dc.RemoveOverride(dynamicconfig.TestMatchingDisableSyncMatch)
 		}
 	}
 }
