@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
+
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -98,6 +99,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -165,6 +167,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   maxPageCountPerExecution,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -307,6 +310,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -362,6 +366,7 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 		ListWorkflowsPageSize:   1,
 		PageCountPerExecution:   4,
 		EnableVerification:      true,
+		TargetClusterEndpoint:   "test-target",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

@@ -61,9 +61,10 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
-		TargetClusterEndpoint   string `validate:"required"`
-		VerifyIntervalInSeconds int    `validate:"gte=0"`
-		RetentionBiasInSeconds  int    `validate:"gte=0"`
+		TargetClusterEndpoint   string
+		TargetClusterName       string
+		VerifyIntervalInSeconds int `validate:"gte=0"`
+		RetentionBiasInSeconds  int `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
 		LastCloseTime                      time.Time
@@ -107,6 +108,7 @@ type (
 		Namespace             string
 		NamespaceID           string
 		TargetClusterEndpoint string
+		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
 		RetentionBiasDuration time.Duration `validate:"gte=0"`
 		Executions            []commonpb.WorkflowExecution
@@ -282,6 +284,10 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
+	}
+
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
 	}
@@ -405,6 +411,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		if params.EnableVerification {
 			verifyTaskFuture := workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
 				TargetClusterEndpoint: params.TargetClusterEndpoint,
+				TargetClusterName:     params.TargetClusterName,
 				Namespace:             params.Namespace,
 				NamespaceID:           namespaceID,
 				Executions:            workflowExecutions,
