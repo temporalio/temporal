@@ -245,10 +245,22 @@ func newVisibilityStoreFromDataStoreConfig(
 				logger,
 			)
 		default:
-			visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger)
+			visStore, err = newStandardVisibilityStore(
+				dsConfig,
+				persistenceResolver,
+				searchAttributesProvider,
+				searchAttributesMapperProvider,
+				logger,
+			)
 		}
 	} else if dsConfig.Cassandra != nil {
-		visStore, err = newStandardVisibilityStore(dsConfig, persistenceResolver, logger)
+		visStore, err = newStandardVisibilityStore(
+			dsConfig,
+			persistenceResolver,
+			searchAttributesProvider,
+			searchAttributesMapperProvider,
+			logger,
+		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore = newElasticsearchVisibilityStore(
 			dsConfig.Elasticsearch.GetVisibilityIndex(),
@@ -268,6 +280,8 @@ func newVisibilityStoreFromDataStoreConfig(
 func newStandardVisibilityStore(
 	dsConfig config.DataStore,
 	persistenceResolver resolver.ServiceResolver,
+	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
 	logger log.Logger,
 ) (store.VisibilityStore, error) {
 	var (
@@ -294,7 +308,11 @@ func newStandardVisibilityStore(
 		logger.Fatal("invalid config: one of cassandra or sql params must be specified for visibility store")
 		return nil, nil
 	}
-	return standard.NewVisibilityStore(visStore), nil
+	return standard.NewVisibilityStore(
+		visStore,
+		searchAttributesProvider,
+		searchAttributesMapperProvider,
+	), nil
 }
 
 func newElasticsearchVisibilityStore(

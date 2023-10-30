@@ -56,7 +56,11 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 }
 
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
-	vi := NewValuesInterceptor()
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMap,
+		searchattribute.NewTestMapperProvider(nil),
+	)
 
 	cases := []struct {
 		key   string
@@ -73,7 +77,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	}{
 		{value: "2018-06-07T08:04:05.123456789Z", returnErr: false},
 		{value: "2018-06-07T15:04:05+07:00", returnErr: false},
-		{value: "some invalid time string", returnErr: false},
+		{value: "", returnErr: true},
 		{value: "should not be modified", returnErr: false},
 	}
 
@@ -90,7 +94,11 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
-	vi := NewValuesInterceptor()
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMap,
+		searchattribute.NewTestMapperProvider(nil),
+	)
 
 	cases := []struct {
 		key   string
@@ -130,14 +138,18 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
-	vi := NewValuesInterceptor()
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMap,
+		searchattribute.NewTestMapperProvider(nil),
+	)
 
 	cases := []struct {
 		key   string
 		value interface{}
 	}{
 		{key: searchattribute.ExecutionDuration, value: "1"},
-		{key: searchattribute.ExecutionDuration, value: 1},
+		{key: searchattribute.ExecutionDuration, value: int64(1)},
 		{key: searchattribute.ExecutionDuration, value: "5h3m"},
 		{key: searchattribute.ExecutionDuration, value: "00:00:01"},
 		{key: searchattribute.ExecutionDuration, value: "00:00:61"},
@@ -149,11 +161,11 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		returnErr bool
 	}{
 		{value: "1", returnErr: false},
-		{value: 1, returnErr: false},
+		{value: int64(1), returnErr: false},
 		{value: int64(18180000000000), returnErr: false},
 		{value: int64(1000000000), returnErr: false},
 		{value: nil, returnErr: true},
-		{value: "bad value", returnErr: false},
+		{value: nil, returnErr: true},
 		{value: "should not be modified", returnErr: false},
 	}
 

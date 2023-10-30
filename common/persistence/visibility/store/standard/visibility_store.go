@@ -34,11 +34,14 @@ import (
 
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
 	standardStore struct {
-		store store.VisibilityStore
+		store                          store.VisibilityStore
+		searchAttributesProvider       searchattribute.Provider
+		searchAttributesMapperProvider searchattribute.MapperProvider
 	}
 
 	// We wrap the token with a boolean to indicate if it is from list open workflows or list closed workflows,
@@ -59,9 +62,15 @@ type (
 var _ store.VisibilityStore = (*standardStore)(nil)
 var _ listRequest = (*manager.ListWorkflowExecutionsRequest)(nil)
 
-func NewVisibilityStore(store store.VisibilityStore) store.VisibilityStore {
+func NewVisibilityStore(
+	visibilityStore store.VisibilityStore,
+	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+) store.VisibilityStore {
 	return &standardStore{
-		store: store,
+		store:                          visibilityStore,
+		searchAttributesProvider:       searchAttributesProvider,
+		searchAttributesMapperProvider: searchAttributesMapperProvider,
 	}
 }
 
@@ -187,7 +196,12 @@ func (s *standardStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	converter := newQueryConverter()
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	converter := newQueryConverter(request.Namespace, typeMap, s.searchAttributesMapperProvider)
 	filter, err := converter.GetFilter(request.Query)
 	if err != nil {
 		return nil, err
