@@ -96,8 +96,12 @@ func GetOrPollMutableState(
 	// We return the full version histories. Callers need to fetch the last version history item from current branch
 	// and use the last version history item in following calls.
 	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+		logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
 		logger.Warn("Request history branch and current history branch don't match",
-			tag.Value(currentVersionHistory),
+			tag.Value(logItem),
 			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
@@ -127,8 +131,12 @@ func GetOrPollMutableState(
 			return nil, err
 		}
 		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
-			logger.Warn("Request history branch and current history branch are mismatched prior to poll the mutable state.",
-				tag.Value(currentVersionHistory),
+			logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+			if err != nil {
+				return nil, err
+			}
+			logger.Warn("Request history branch and current history branch don't mismatch prior to poll the mutable state.",
+				tag.Value(logItem),
 				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
@@ -162,8 +170,12 @@ func GetOrPollMutableState(
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
+					logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+					if err != nil {
+						return nil, err
+					}
 					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
-						tag.Value(latestVersionHistory),
+						tag.Value(logItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
