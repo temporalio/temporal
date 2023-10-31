@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -53,6 +54,7 @@ func GetOrPollMutableState(
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
 
+	logger := shardContext.GetLogger()
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := ValidateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -94,6 +96,10 @@ func GetOrPollMutableState(
 	// We return the full version histories. Callers need to fetch the last version history item from current branch
 	// and use the last version history item in following calls.
 	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+		logger.Warn("Request history branch and current history branch are mismatched.",
+			tag.Value(currentVersionHistory),
+			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
@@ -121,6 +127,10 @@ func GetOrPollMutableState(
 			return nil, err
 		}
 		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+			logger.Warn("Request history branch and current history branch are mismatched prior to poll the mutable state.",
+				tag.Value(currentVersionHistory),
+				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -152,6 +162,10 @@ func GetOrPollMutableState(
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
+					logger.Warn("Request history branch and current history branch are mismatched after polled the mutable state.",
+						tag.Value(currentVersionHistory),
+						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
