@@ -162,7 +162,7 @@ func GetOrPollMutableState(
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
-					logger.Warn("Request history branch and current history branch are mismatched after polled the mutable state.",
+					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
 						tag.Value(latestVersionHistory),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
