@@ -2365,21 +2365,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 	s.Nil(resp.ExecutionErr)
 }
 
-func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
-	var input map[string]*commonpb.Payload
-	s.Nil(copySearchAttributes(input))
-
-	key := "key"
-	val := payload.EncodeBytes([]byte{'1', '2', '3'})
-	input = map[string]*commonpb.Payload{
-		key: val,
-	}
-	result := copySearchAttributes(input)
-	s.Equal(input, result)
-	result[key].GetData()[0] = '0'
-	s.Equal(byte('1'), val.GetData()[0])
-}
-
 func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	task *tasks.ActivityTask,
 	ai *persistencespb.ActivityInfo,
