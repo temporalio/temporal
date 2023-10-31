@@ -96,7 +96,7 @@ func GetOrPollMutableState(
 	// We return the full version histories. Callers need to fetch the last version history item from current branch
 	// and use the last version history item in following calls.
 	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
-		logger.Warn("Request history branch and current history branch are mismatched.",
+		logger.Warn("Request history branch and current history branch don't match",
 			tag.Value(currentVersionHistory),
 			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
