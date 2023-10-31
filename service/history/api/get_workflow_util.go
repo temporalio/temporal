@@ -135,7 +135,7 @@ func GetOrPollMutableState(
 			if err != nil {
 				return nil, err
 			}
-			logger.Warn("Request history branch and current history branch don't mismatch prior to poll the mutable state.",
+			logger.Warn("Request history branch and current history branch don't match prior to polling the mutable state",
 				tag.Value(logItem),
 				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
