@@ -124,16 +124,16 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.TaskQueueTag(request.TaskQueue.Name),
 			metrics.WorkflowTypeTag(request.WorkflowType.Name),
 		)
-	}
 
-	// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
-	if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
-		s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
-		request.RequestEagerExecution = false
-	}
-	if s.request.FirstWorkflowTaskBackoff != nil && *s.request.FirstWorkflowTaskBackoff > 0 {
-		s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
-		request.RequestEagerExecution = false
+		// Override to false to avoid having to look up the dynamic config throughout the diffrent code paths.
+		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
+			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
+			request.RequestEagerExecution = false
+		}
+		if s.request.FirstWorkflowTaskBackoff != nil && *s.request.FirstWorkflowTaskBackoff > 0 {
+			s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
+			request.RequestEagerExecution = false
+		}
 	}
 	return nil
 }
