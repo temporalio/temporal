@@ -136,7 +136,7 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
 	} else {
 		s.Logger.Info("Running functional test against test cluster")
-		cluster, err := NewCluster(clusterConfig, s.Logger)
+		cluster, err := NewCluster(s.T(), clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
