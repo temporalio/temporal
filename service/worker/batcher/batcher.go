@@ -40,13 +40,12 @@ import (
 )
 
 const (
-	// taskQueueName is the taskqueue name
 	taskQueueName = "temporal-sys-batcher-taskqueue"
 )
 
 type (
-	// Batcher is the background sub-system that execute workflow for batch operations
-	// It is also the context object that get's passed around within the scanner workflows / activities
+	// Batcher is the background sub-system that executes a workflow for batch operations.
+	// It is also the context object that gets passed around within the workflows / activities.
 	Batcher struct {
 		sdkClientFactory sdk.ClientFactory
 		metricsHandler   metrics.Handler
@@ -56,7 +55,7 @@ type (
 	}
 )
 
-// New returns a new instance of batcher daemon Batcher
+// New returns a new instance of the Batcher.
 func New(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -73,9 +72,8 @@ func New(
 	}
 }
 
-// Start starts the scanner
+// Start starts a worker for the Batcher's activity and workflow.
 func (s *Batcher) Start() error {
-	// start worker for batch operation workflows
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,

@@ -1933,6 +1933,29 @@ func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice
 	return &adminservice.CancelDLQJobResponse{Canceled: true}, nil
 }
 
+// AddTasks just translates the admin service's request proto into a history service request proto and then sends it.
+func (adh *AdminHandler) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+) (*adminservice.AddTasksResponse, error) {
+	historyTasks := make([]*historyservice.AddTasksRequest_Task, len(request.Tasks))
+	for i, task := range request.Tasks {
+		historyTasks[i] = &historyservice.AddTasksRequest_Task{
+			CategoryId: task.CategoryId,
+			Blob:       task.Blob,
+		}
+	}
+	historyServiceRequest := &historyservice.AddTasksRequest{
+		ShardId: request.ShardId,
+		Tasks:   historyTasks,
+	}
+	_, err := adh.historyClient.AddTasks(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.AddTasksResponse{}, nil
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
 	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
 }

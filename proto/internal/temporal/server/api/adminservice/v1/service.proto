@@ -162,5 +162,7 @@ service AdminService {
     rpc DescribeDLQJob (DescribeDLQJobRequest) returns (DescribeDLQJobResponse) {}
 
     rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {}
+
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
 }
 

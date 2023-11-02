@@ -61,6 +61,20 @@ func (c *metricClient) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *metricClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.AddTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientAddTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

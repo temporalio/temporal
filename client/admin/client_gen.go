@@ -53,6 +53,16 @@ func (c *clientImpl) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *clientImpl) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,

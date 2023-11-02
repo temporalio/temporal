@@ -788,6 +788,7 @@ message AddTasksRequest {
     temporal.api.common.v1.DataBlob blob = 2;
   }
 
+  // A list of tasks to enqueue or re-enqueue.
   repeated Task tasks = 2;
 }
 

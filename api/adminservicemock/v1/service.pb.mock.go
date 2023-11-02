@@ -101,6 +101,26 @@ func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttributes), varargs...)
 }
 
+// AddTasks mocks base method.
+func (m *MockAdminServiceClient) AddTasks(ctx context.Context, in *adminservice.AddTasksRequest, opts ...grpc.CallOption) (*adminservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockAdminServiceClientMockRecorder) AddTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).AddTasks), varargs...)
+}
+
 // CancelDLQJob mocks base method.
 func (m *MockAdminServiceClient) CancelDLQJob(ctx context.Context, in *adminservice.CancelDLQJobRequest, opts ...grpc.CallOption) (*adminservice.CancelDLQJobResponse, error) {
 	m.ctrl.T.Helper()
@@ -949,6 +969,21 @@ func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 
 func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttributes), arg0, arg1)
+}
+
+// AddTasks mocks base method.
+func (m *MockAdminServiceServer) AddTasks(arg0 context.Context, arg1 *adminservice.AddTasksRequest) (*adminservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockAdminServiceServerMockRecorder) AddTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).AddTasks), arg0, arg1)
 }
 
 // CancelDLQJob mocks base method.

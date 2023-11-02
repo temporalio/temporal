@@ -65,6 +65,21 @@ func (c *retryableClient) AddSearchAttributes(
 	return resp, err
 }
 
+func (c *retryableClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	var resp *adminservice.AddTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
