@@ -24,15 +24,47 @@
 
 package interceptor
 
-import "strings"
+import (
+	"context"
+	"sync/atomic"
 
-// SplitMethodName splits a full method name (e.g. "/service/method") into the "/service/" and
-// "method" parts.
-func SplitMethodName(
-	fullMethodName string,
-) (servicePrefix string, method string) {
-	if i := strings.LastIndex(fullMethodName, "/"); i >= 0 {
-		return fullMethodName[:i+1], fullMethodName[i+1:]
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/api"
+)
+
+type (
+	HealthInterceptor struct {
+		healthy atomic.Bool
 	}
-	return "/unknown/", "unknown"
+)
+
+var _ grpc.UnaryServerInterceptor = (*HealthInterceptor)(nil).Intercept
+
+var notHealthyErr = serviceerror.NewUnavailable("Frontend is not healthy yet")
+
+// NewHealthInterceptor returns a new HealthInterceptor. It starts with state not healthy.
+func NewHealthInterceptor() *HealthInterceptor {
+	return &HealthInterceptor{}
+}
+
+func (i *HealthInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	// only enforce health check on WorkflowService
+	servicePrefix, _ := SplitMethodName(info.FullMethod)
+	if servicePrefix == api.WorkflowServicePrefix {
+		if !i.healthy.Load() {
+			return nil, notHealthyErr
+		}
+	}
+	return handler(ctx, req)
+}
+
+func (i *HealthInterceptor) SetHealthy(healthy bool) {
+	i.healthy.Store(healthy)
 }

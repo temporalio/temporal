@@ -130,6 +130,7 @@ type (
 		healthServer                    *health.Server
 		overrides                       *Overrides
 		membershipMonitor               membership.Monitor
+		healthInterceptor               *interceptor.HealthInterceptor
 
 		// DEPRECATED
 		persistenceExecutionManager persistence.ExecutionManager
@@ -158,6 +159,7 @@ func NewWorkflowHandler(
 	healthServer *health.Server,
 	timeSource clock.TimeSource,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -202,6 +204,7 @@ func NewWorkflowHandler(
 		healthServer:      healthServer,
 		overrides:         NewOverrides(),
 		membershipMonitor: membershipMonitor,
+		healthInterceptor: healthInterceptor,
 	}
 
 	return handler
@@ -219,6 +222,7 @@ func (wh *WorkflowHandler) Start() {
 		go func() {
 			_ = wh.membershipMonitor.WaitUntilInitialized(context.Background())
 			wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
+			wh.healthInterceptor.SetHealthy(true)
 			wh.logger.Info("Frontend is now healthy")
 		}()
 	}
@@ -232,6 +236,7 @@ func (wh *WorkflowHandler) Stop() {
 		common.DaemonStatusStopped,
 	) {
 		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		wh.healthInterceptor.SetHealthy(false)
 	}
 }
 
