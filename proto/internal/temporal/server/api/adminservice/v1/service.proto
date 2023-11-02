@@ -158,5 +158,7 @@ service AdminService {
     rpc PurgeDLQTasks (PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {}
 
     rpc MergeDLQTasks (MergeDLQTasksRequest) returns (MergeDLQTasksResponse) {}
+
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
 }
 

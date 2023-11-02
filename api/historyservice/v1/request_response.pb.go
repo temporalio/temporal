@@ -6775,8 +6775,9 @@ type AddTasksRequest struct {
 	// Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
 	// not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
 	// request, which would be more complicated.
-	ShardId int32                   `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	Tasks   []*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	ShardId int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	// A list of tasks to enqueue or re-enqueue.
+	Tasks []*AddTasksRequest_Task `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
 }
 
 func (m *AddTasksRequest) Reset()      { *m = AddTasksRequest{} }
