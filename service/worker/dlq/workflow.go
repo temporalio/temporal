@@ -87,6 +87,13 @@ type (
 		// The maximum is MaxMergeBatchSize. The default is DefaultMergeBatchSize.
 		BatchSize int
 	}
+	// ProgressQueryResponse is the response to progress query.
+	ProgressQueryResponse struct {
+		MaxMessageIDToProcess  int64
+		LastProcessedMessageID int64
+		WorkflowType           string
+		DlqKey                 Key
+	}
 	// HistoryClient is a subset of the [historyservice.HistoryServiceClient] interface.
 	HistoryClient interface {
 		DeleteDLQTasks(
@@ -124,6 +131,8 @@ const (
 	MaxMergeBatchSize = 1000
 	// DefaultMergeBatchSize is the default value for MergeParams.BatchSize.
 	DefaultMergeBatchSize = 100
+	// QueryTypeProgress is the query to get the progress of the DLQ workflow.
+	QueryTypeProgress = "dlq-job-progress-query"
 
 	errorTypeInvalidWorkflowType = "dlq-error-type-invalid-workflow-type"
 	errorTypeInvalidRequest      = "dlq-error-type-invalid-request"
@@ -173,8 +182,22 @@ func newComponent(client HistoryClient) workercommon.WorkerComponent {
 
 //revive:disable:import-shadowing this doesn't actually shadow imports because it's a method, not a function
 func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) error {
+	queryResponse := ProgressQueryResponse{}
+	queryResponse.WorkflowType = params.WorkflowType
+	err := workflow.SetQueryHandler(ctx, QueryTypeProgress, func() (ProgressQueryResponse, error) {
+		return queryResponse, nil
+	})
+	if err != nil {
+		return err
+	}
 	if params.WorkflowType == WorkflowTypeDelete {
-		return workflow.ExecuteActivity(
+		queryResponse.MaxMessageIDToProcess = params.DeleteParams.MaxMessageID
+		queryResponse.DlqKey = Key{
+			TaskCategoryID: params.DeleteParams.TaskCategoryID,
+			SourceCluster:  params.DeleteParams.SourceCluster,
+			TargetCluster:  params.DeleteParams.TargetCluster,
+		}
+		err = workflow.ExecuteActivity(
 			workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				TaskQueue:           primitives.DLQActivityTQ,
 				RetryPolicy:         deleteActivityRetryPolicy,
@@ -183,8 +206,19 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			deleteTasksActivityName,
 			params.DeleteParams,
 		).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+		queryResponse.LastProcessedMessageID = params.DeleteParams.MaxMessageID
+		return nil
 	} else if params.WorkflowType == WorkflowTypeMerge {
-		return c.mergeTasks(ctx, params.MergeParams)
+		queryResponse.MaxMessageIDToProcess = params.MergeParams.MaxMessageID
+		queryResponse.DlqKey = Key{
+			TaskCategoryID: params.MergeParams.TaskCategoryID,
+			SourceCluster:  params.MergeParams.SourceCluster,
+			TargetCluster:  params.MergeParams.TargetCluster,
+		}
+		return c.mergeTasks(ctx, params.MergeParams, &queryResponse.LastProcessedMessageID)
 	}
 
 	return temporal.NewNonRetryableApplicationError(params.WorkflowType, errorTypeInvalidWorkflowType, nil)
@@ -210,7 +244,7 @@ func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) 
 	return err
 }
 
-func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams) error {
+func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams, lastProcessedMessageID *int64) error {
 	params, err := parseMergeParams(params)
 	if err != nil {
 		return err
@@ -273,7 +307,7 @@ func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams) e
 		if err != nil {
 			return err
 		}
-
+		*lastProcessedMessageID = maxBatchMessageID
 		// 4. Check if we're done.
 		if len(nextPageToken) == 0 {
 			return nil

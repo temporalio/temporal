@@ -92,6 +92,7 @@ var (
 	errUpdateWaitPolicyNotSet = serviceerror.NewInvalidArgument("WaitPolicy is not set on request.")
 	errSourceClusterNotSet    = serviceerror.NewInvalidArgument("SourceCluster is not set on request.")
 	errTargetClusterNotSet    = serviceerror.NewInvalidArgument("TargetCluster is not set on request.")
+	errInvalidDLQJobToken     = serviceerror.NewInvalidArgument("Invalid DLQ job token.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
