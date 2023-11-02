@@ -243,51 +243,37 @@ func (s *versioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 
 func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
-	var overrides map[dynamicconfig.Key]any
-	wrapper := func() {
-		// we override config here as s.T() is unique per subtest.
-		// if we override values in the outer scope then these will be bound to the outer
-		// lifetime and cause the bug fixed by https://github.com/temporalio/temporal/pull/5046
-		for k, v := range overrides {
-			dc.OverrideValue(s.T(), k, v)
-		}
-
-		subtest()
-	}
 	for _, forceForward := range []bool{false, true} {
 		for _, forceAsync := range []bool{false, true} {
-			name := ""
+			name := "NoForward"
 			if forceForward {
 				// force two levels of forwarding
-				overrides = map[dynamicconfig.Key]any{
-					dynamicconfig.MatchingNumTaskqueueReadPartitions:  13,
-					dynamicconfig.MatchingNumTaskqueueWritePartitions: 13,
-					dynamicconfig.TestMatchingLBForceReadPartition:    5,
-					dynamicconfig.TestMatchingLBForceWritePartition:   11,
-				}
-				name += "ForceForward"
-			} else {
-				// force single partition
-				overrides = map[dynamicconfig.Key]any{
-					dynamicconfig.MatchingNumTaskqueueReadPartitions:  1,
-					dynamicconfig.MatchingNumTaskqueueWritePartitions: 1,
-				}
-				name += "NoForward"
+				name = "ForceForward"
 			}
 			if forceAsync {
-				// disallow sync match to force to db
-				overrides = map[dynamicconfig.Key]any{
-					dynamicconfig.TestMatchingDisableSyncMatch: true,
-				}
 				name += "ForceAsync"
 			} else {
-				// default value
-				overrides = map[dynamicconfig.Key]any{
-					dynamicconfig.TestMatchingDisableSyncMatch: false,
-				}
 				name += "AllowSync"
 			}
-			s.Run(name, wrapper)
+
+			s.Run(name, func() {
+				if forceForward {
+					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingLBForceReadPartition, 5)
+					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingLBForceWritePartition, 11)
+				} else {
+					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+					dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+				}
+				if forceAsync {
+					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, true)
+				} else {
+					dc.OverrideValue(s.T(), dynamicconfig.TestMatchingDisableSyncMatch, false)
+				}
+
+				subtest()
+			})
 		}
 	}
 }

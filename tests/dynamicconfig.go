@@ -58,18 +58,14 @@ var (
 
 type dcClient struct {
 	sync.RWMutex
-	overrides      map[dynamicconfig.Key]any
-	suiteOverrides map[dynamicconfig.Key]any
-	fallback       dynamicconfig.Client
+	overrides map[dynamicconfig.Key]any
+	fallback  dynamicconfig.Client
 }
 
 func (d *dcClient) getRawValue(name dynamicconfig.Key) (any, bool) {
 	d.RLock()
 	defer d.RUnlock()
 	v, ok := d.overrides[name]
-	if !ok {
-		v, ok = d.suiteOverrides[name]
-	}
 	return v, ok
 }
 
@@ -80,26 +76,23 @@ func (d *dcClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedV
 	return d.fallback.GetValue(name)
 }
 
-// OverrideValue overrides a value for the duration of a test. All values overridden via
-// this API will be cleared when ClearOverrides is called.
+// OverrideValue overrides a value for the duration of a test. Once the test completes
+// the previous value (if any) will be restored
 func (d *dcClient) OverrideValue(t *testing.T, name dynamicconfig.Key, value any) {
 	d.Lock()
 	defer d.Unlock()
+	priorValue, existed := d.overrides[name]
 	d.overrides[name] = value
 
 	t.Cleanup(func() {
-		d.RemoveOverride(name)
-	})
-}
+		d.Lock()
+		defer d.Unlock()
 
-// OverrideValueForSuite overrides a value for the entirety of a test suite (this object's lifetime)
-func (d *dcClient) OverrideValueForSuite(t *testing.T, name dynamicconfig.Key, value any) {
-	d.Lock()
-	defer d.Unlock()
-	d.suiteOverrides[name] = value
-
-	t.Cleanup(func() {
-		d.RemoveOverrideForSuite(name)
+		if existed {
+			d.overrides[name] = priorValue
+		} else {
+			delete(d.overrides, name)
+		}
 	})
 }
 
@@ -109,31 +102,10 @@ func (d *dcClient) RemoveOverride(name dynamicconfig.Key) {
 	delete(d.overrides, name)
 }
 
-func (d *dcClient) RemoveOverrideForSuite(name dynamicconfig.Key) {
-	replacement, ok := staticOverrides[name]
-
-	d.Lock()
-	defer d.Unlock()
-	if ok {
-		d.suiteOverrides[name] = replacement
-	} else {
-		delete(d.suiteOverrides, name)
-	}
-}
-
-// ResetOverrides clears all overrides specified by OverrideValue but /not/ those
-// overridden by OverrideValueForSuite.
-func (d *dcClient) ResetOverrides() {
-	d.Lock()
-	defer d.Unlock()
-	d.overrides = make(map[dynamicconfig.Key]any)
-}
-
 // newTestDCClient - returns a dynamic config client for functional testing
 func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
 	return &dcClient{
-		overrides:      make(map[dynamicconfig.Key]any),
-		suiteOverrides: maps.Clone(staticOverrides),
-		fallback:       fallback,
+		overrides: maps.Clone(staticOverrides),
+		fallback:  fallback,
 	}
 }
