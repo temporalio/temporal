@@ -3804,7 +3804,6 @@ func (m *PurgeDLQTasksRequest) GetInclusiveMaxTaskMetadata() *v112.HistoryDLQTas
 
 type PurgeDLQTasksResponse struct {
 	// job_token is a token that can be used to query the status of the purge operation.
-	// TODO: add DescribeDLQJob an CancelDLQJob APIs for clients to use these tokens.
 	JobToken []byte `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
 }
 
@@ -3964,7 +3963,6 @@ func (m *MergeDLQTasksRequest) GetBatchSize() int32 {
 }
 
 type MergeDLQTasksResponse struct {
-	// TODO: add DescribeDLQJob an CancelDLQJob APIs for clients to use these tokens.
 	JobToken []byte `protobuf:"bytes,1,opt,name=job_token,json=jobToken,proto3" json:"job_token,omitempty"`
 }
 
@@ -4051,13 +4049,17 @@ func (m *DescribeDLQJobRequest) GetJobId() string {
 }
 
 type DescribeDLQJobResponse struct {
-	DlqKey                 *v112.HistoryDLQKey   `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
-	OperationType          v14.DLQOperationType  `protobuf:"varint,2,opt,name=operation_type,json=operationType,proto3,enum=temporal.server.api.enums.v1.DLQOperationType" json:"operation_type,omitempty"`
-	OperationState         v14.DLQOperationState `protobuf:"varint,3,opt,name=operation_state,json=operationState,proto3,enum=temporal.server.api.enums.v1.DLQOperationState" json:"operation_state,omitempty"`
-	StartTime              *time.Time            `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3,stdtime" json:"start_time,omitempty"`
-	EndTime                *time.Time            `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,stdtime" json:"end_time,omitempty"`
-	MaxMessageId           int64                 `protobuf:"varint,6,opt,name=max_message_id,json=maxMessageId,proto3" json:"max_message_id,omitempty"`
-	LastProcessedMessageId int64                 `protobuf:"varint,7,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3" json:"last_processed_message_id,omitempty"`
+	DlqKey         *v112.HistoryDLQKey   `protobuf:"bytes,1,opt,name=dlq_key,json=dlqKey,proto3" json:"dlq_key,omitempty"`
+	OperationType  v14.DLQOperationType  `protobuf:"varint,2,opt,name=operation_type,json=operationType,proto3,enum=temporal.server.api.enums.v1.DLQOperationType" json:"operation_type,omitempty"`
+	OperationState v14.DLQOperationState `protobuf:"varint,3,opt,name=operation_state,json=operationState,proto3,enum=temporal.server.api.enums.v1.DLQOperationState" json:"operation_state,omitempty"`
+	StartTime      *time.Time            `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3,stdtime" json:"start_time,omitempty"`
+	EndTime        *time.Time            `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,stdtime" json:"end_time,omitempty"`
+	// max_message_id is the ID of the last message(inclusive) to be processed as part of this job.
+	MaxMessageId int64 `protobuf:"varint,6,opt,name=max_message_id,json=maxMessageId,proto3" json:"max_message_id,omitempty"`
+	// last_processed_message_id is the ID of the last message that has been processed.
+	// For PurgeDLQTasks job, it the ID of the last message that was purged.
+	// For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
+	LastProcessedMessageId int64 `protobuf:"varint,7,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3" json:"last_processed_message_id,omitempty"`
 }
 
 func (m *DescribeDLQJobResponse) Reset()      { *m = DescribeDLQJobResponse{} }
@@ -4142,9 +4144,10 @@ func (m *DescribeDLQJobResponse) GetLastProcessedMessageId() int64 {
 }
 
 type CancelDLQJobRequest struct {
-	JobId    string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Reason   string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	Identity string `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	// Job ID of MergeDLQTasks or PurgeDLQTasks job to cancel.
+	JobId string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// The reason for cancellation.
+	Reason string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 }
 
 func (m *CancelDLQJobRequest) Reset()      { *m = CancelDLQJobRequest{} }
@@ -4189,13 +4192,6 @@ func (m *CancelDLQJobRequest) GetJobId() string {
 func (m *CancelDLQJobRequest) GetReason() string {
 	if m != nil {
 		return m.Reason
-	}
-	return ""
-}
-
-func (m *CancelDLQJobRequest) GetIdentity() string {
-	if m != nil {
-		return m.Identity
 	}
 	return ""
 }
@@ -4332,7 +4328,7 @@ func init() {
 }
 
 var fileDescriptor_cc07c1a2abe7cb51 = []byte{
-	// 3714 bytes of a gzipped FileDescriptorProto
+	// 3701 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x3b, 0x4b, 0x6c, 0x1c, 0xc7,
 	0xb1, 0x9c, 0xfd, 0x71, 0xb7, 0xf8, 0x1f, 0x91, 0xe2, 0x6a, 0x69, 0x2e, 0xe9, 0xb1, 0x2c, 0x53,
 	0xb2, 0xbc, 0x7c, 0xa2, 0xed, 0x27, 0xf9, 0x23, 0x08, 0xe2, 0xc7, 0x24, 0x65, 0xd2, 0xb6, 0x86,
@@ -4556,16 +4552,15 @@ var fileDescriptor_cc07c1a2abe7cb51 = []byte{
 	0x65, 0x4f, 0xb9, 0x43, 0xf1, 0xd8, 0xa3, 0xf1, 0x2b, 0x00, 0x2c, 0x01, 0x3f, 0xd2, 0x83, 0xbf,
 	0x12, 0xa5, 0xa1, 0xad, 0xb1, 0x57, 0xa0, 0x48, 0x52, 0xef, 0x23, 0xf5, 0xd9, 0x06, 0x91, 0x63,
 	0x52, 0xe2, 0xd3, 0x30, 0x4a, 0x3c, 0x30, 0x52, 0x41, 0xf2, 0xfc, 0xbf, 0xa9, 0xdf, 0xef, 0xf3,
-	0xa5, 0xcd, 0x60, 0xaf, 0x97, 0x36, 0xca, 0x7b, 0x70, 0x62, 0x45, 0x77, 0x0c, 0x64, 0xf7, 0xe3,
-	0x1f, 0xf2, 0x49, 0x28, 0x78, 0x48, 0xf7, 0x83, 0xdb, 0x25, 0xfe, 0x45, 0x92, 0x35, 0xcb, 0x44,
-	0x0e, 0xb6, 0xf0, 0x01, 0xaf, 0x85, 0x82, 0x6f, 0x65, 0x09, 0x26, 0xe3, 0x33, 0x84, 0x09, 0x9e,
-	0x41, 0xe1, 0x88, 0x4d, 0x52, 0x54, 0x83, 0xef, 0x65, 0xfb, 0xf3, 0x6f, 0xaa, 0x03, 0x5f, 0x7e,
-	0x53, 0x1d, 0xf8, 0xee, 0x9b, 0xaa, 0xf4, 0x3f, 0x0f, 0xab, 0xd2, 0x2f, 0x1f, 0x56, 0xa5, 0x3f,
-	0x3c, 0xac, 0x4a, 0x9f, 0x3f, 0xac, 0x4a, 0x7f, 0x79, 0x58, 0x95, 0xfe, 0xfa, 0xb0, 0x3a, 0xf0,
-	0xdd, 0xc3, 0xaa, 0xf4, 0xe0, 0xdb, 0xea, 0xc0, 0xe7, 0xdf, 0x56, 0x07, 0xbe, 0xfc, 0xb6, 0x3a,
-	0xf0, 0xce, 0xbf, 0x37, 0xdc, 0xd0, 0xda, 0x96, 0xdb, 0xe3, 0x1f, 0x7a, 0xaf, 0x44, 0xbf, 0xeb,
-	0x05, 0x6a, 0x87, 0xe7, 0xff, 0x19, 0x00, 0x00, 0xff, 0xff, 0xc0, 0x6d, 0x38, 0x2c, 0xdc, 0x37,
-	0x00, 0x00,
+	0xa5, 0xcd, 0x60, 0xaf, 0x97, 0x36, 0xca, 0x2a, 0x9c, 0x58, 0xd1, 0x1d, 0x03, 0xd9, 0xfd, 0xf8,
+	0x87, 0x7c, 0x12, 0x0a, 0x1e, 0xd2, 0xfd, 0xe0, 0x76, 0x89, 0x7f, 0x29, 0x4b, 0x30, 0x19, 0xe7,
+	0x12, 0x26, 0x71, 0x06, 0x85, 0x23, 0xc6, 0xa8, 0xa8, 0x06, 0xdf, 0xcb, 0xf6, 0xe7, 0xdf, 0x54,
+	0x07, 0xbe, 0xfc, 0xa6, 0x3a, 0xf0, 0xdd, 0x37, 0x55, 0xe9, 0x7f, 0x1e, 0x56, 0xa5, 0x5f, 0x3e,
+	0xac, 0x4a, 0x7f, 0x78, 0x58, 0x95, 0x3e, 0x7f, 0x58, 0x95, 0xfe, 0xf2, 0xb0, 0x2a, 0xfd, 0xf5,
+	0x61, 0x75, 0xe0, 0xbb, 0x87, 0x55, 0xe9, 0xc1, 0xb7, 0xd5, 0x81, 0xcf, 0xbf, 0xad, 0x0e, 0x7c,
+	0xf9, 0x6d, 0x75, 0xe0, 0x9d, 0x7f, 0x6f, 0xb8, 0xa1, 0x45, 0x2d, 0xb7, 0xc7, 0xbf, 0xf0, 0x5e,
+	0x89, 0x7e, 0xd7, 0x0b, 0x54, 0xd7, 0xcf, 0xff, 0x33, 0x00, 0x00, 0xff, 0xff, 0x7d, 0x13, 0xb0,
+	0x6f, 0xc0, 0x37, 0x00, 0x00,
 }
 
 func (this *RebuildMutableStateRequest) Equal(that interface{}) bool {
@@ -6878,9 +6873,6 @@ func (this *CancelDLQJobRequest) Equal(that interface{}) bool {
 	if this.Reason != that1.Reason {
 		return false
 	}
-	if this.Identity != that1.Identity {
-		return false
-	}
 	return true
 }
 func (this *CancelDLQJobResponse) Equal(that interface{}) bool {
@@ -7932,11 +7924,10 @@ func (this *CancelDLQJobRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 7)
+	s := make([]string, 0, 6)
 	s = append(s, "&adminservice.CancelDLQJobRequest{")
 	s = append(s, "JobId: "+fmt.Sprintf("%#v", this.JobId)+",\n")
 	s = append(s, "Reason: "+fmt.Sprintf("%#v", this.Reason)+",\n")
-	s = append(s, "Identity: "+fmt.Sprintf("%#v", this.Identity)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -11228,13 +11219,6 @@ func (m *CancelDLQJobRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Identity) > 0 {
-		i -= len(m.Identity)
-		copy(dAtA[i:], m.Identity)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Identity)))
-		i--
-		dAtA[i] = 0x1a
-	}
 	if len(m.Reason) > 0 {
 		i -= len(m.Reason)
 		copy(dAtA[i:], m.Reason)
@@ -12732,10 +12716,6 @@ func (m *CancelDLQJobRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovRequestResponse(uint64(l))
 	}
-	l = len(m.Identity)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
 	return n
 }
 
@@ -13754,7 +13734,6 @@ func (this *CancelDLQJobRequest) String() string {
 	s := strings.Join([]string{`&CancelDLQJobRequest{`,
 		`JobId:` + fmt.Sprintf("%v", this.JobId) + `,`,
 		`Reason:` + fmt.Sprintf("%v", this.Reason) + `,`,
-		`Identity:` + fmt.Sprintf("%v", this.Identity) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -23692,38 +23671,6 @@ func (m *CancelDLQJobRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Reason = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Identity", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Identity = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
