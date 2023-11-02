@@ -34,6 +34,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1294,4 +1295,38 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorContains(err, "task category")
 	s.ErrorContains(err, "-1")
+}
+
+func (s *adminHandlerSuite) TestAddDLQTasks_Ok() {
+	s.mockHistoryClient.EXPECT().AddTasks(gomock.Any(), &historyservice.AddTasksRequest{
+		ShardId: 13,
+		Tasks: []*historyservice.AddTasksRequest_Task{
+			{
+				CategoryId: 21,
+				Blob: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         []byte("test-data"),
+				},
+			},
+		},
+	}).Return(nil, nil)
+	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{
+		ShardId: 13,
+		Tasks: []*adminservice.AddTasksRequest_Task{
+			{
+				CategoryId: 21,
+				Blob: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         []byte("test-data"),
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestAddDLQTasks_Err() {
+	s.mockHistoryClient.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
+	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{})
+	s.ErrorIs(err, assert.AnError)
 }

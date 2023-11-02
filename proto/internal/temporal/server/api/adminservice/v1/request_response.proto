@@ -469,3 +469,17 @@ message MergeDLQTasksResponse {
   // TODO: add DescribeDLQJob an CancelDLQJob APIs for clients to use these tokens.
   bytes job_token = 1;
 }
+
+// This is a direct copy of the same proto in the history service. We can't import it, though because of a circular
+// dependency. In addition, we can't extract a common request proto because the shard_id needs to be present in the top
+// proto layer, so we duplicate it. It shouldn't be a big deal because this proto is not very big.
+message AddTasksRequest {
+  int32 shard_id = 1;
+  message Task {
+    int32 category_id = 1;
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}
