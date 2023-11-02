@@ -93,10 +93,28 @@ func Invoke(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			if !isRunning || ci.StartedEventId == common.EmptyEventID {
-				// note we already checked if startedEventID is empty (in consistency predicate)
-				// and reloaded mutable state
+			if !isRunning {
 				return nil, consts.ErrChildExecutionNotFound
+			}
+			if ci.StartedEventId == common.EmptyEventID {
+				// note we already checked if startedEventID is empty (in consistency predicate)
+				// and reloaded mutable state, so if startedEventID is still missing, we need to
+				// record a started event before recording completion event.
+				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
+				if err != nil {
+					return nil, consts.ErrChildExecutionNotFound
+				}
+				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
+					request.GetChildExecution(),
+					initiatedAttr.WorkflowType,
+					initiatedEvent.EventId,
+					initiatedAttr.Header,
+					ci.Clock,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			childExecution := request.GetChildExecution()
