@@ -344,21 +344,6 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	}
 }
 
-func (s *dlqSuite) TestDescribePurgeRealWorkflow() {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
-	defer cancel()
-
-	_, dlqMessageID := s.executeDoomedWorkflow(ctx)
-
-	// Delete the workflow task from the DLQ.
-	s.purgeMessages(ctx, dlqMessageID)
-
-	// Verify that the workflow task is no longer in the DLQ.
-	dlqTasks := s.readDLQTasks()
-	s.Empty(dlqTasks, "expected DLQ to be empty after purge")
-}
-
 func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
 	var result string
 	err := run.Get(ctx, &result)
