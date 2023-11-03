@@ -632,8 +632,8 @@ steps:
       docker: "*"
     command: "make ci-coverage-report"
     artifact_paths:
-      - ".testoutput/summary.out"
-      - ".testoutput/summary.out.html"
+      - ".testoutput/summary.cover.out"
+      - ".testoutput/summary.cover.out.html"
     retry:
       automatic:
         limit: 2

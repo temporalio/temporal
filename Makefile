@@ -357,7 +357,7 @@ functional-test-ndc-coverage: prepare-coverage-test
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
-	@rm -f $(SUMMARY_COVER_PROFILE)
+	@rm -f $(SUMMARY_COVER_PROFILE) $(SUMMARY_COVER_PROFILE).html
 	@if [ -z "$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)" ]; then \
 		echo "No coverage data, aborting!" && exit 1; \
 	fi
