@@ -29,7 +29,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -109,10 +108,6 @@ func (s *archivalSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.isArchived(s.archivalNamespace, execution))
 	s.True(s.isHistoryDeleted(execution))
 	s.True(s.isMutableStateDeleted(namespaceID, execution))
-
-	if rand.Intn(2) == 1 {
-		panic("boom")
-	}
 }
 
 func (s *archivalSuite) TestArchival_ContinueAsNew() {
