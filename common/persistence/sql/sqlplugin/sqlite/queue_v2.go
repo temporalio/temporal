@@ -69,6 +69,10 @@ func (sdb *db) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.Q
 	}
 	return &row, nil
 }
+func (sdb *db) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	// sqlite does not have FOR UPDATE clause. Calling SelectFromQueueV2Metadata() itself.
+	return sdb.SelectFromQueueV2Metadata(ctx, filter)
+}
 func (sdb *db) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataTypeFilter) ([]sqlplugin.QueueV2MetadataRow, error) {
 	var rows []sqlplugin.QueueV2MetadataRow
 	err := sdb.conn.GetContext(ctx,

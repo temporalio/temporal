@@ -29,7 +29,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -321,7 +320,16 @@ func (q *queueV2) getQueueMetadata(
 		QueueType: queueType,
 		QueueName: queueName,
 	}
-	metadata, err := tc.SelectFromQueueV2Metadata(ctx, filter)
+	var (
+		metadata *sqlplugin.QueueV2MetadataRow
+		err      error
+	)
+	switch tc.(type) {
+	case sqlplugin.Tx:
+		metadata, err = tc.SelectFromQueueV2MetadataForUpdate(ctx, filter)
+	default:
+		metadata, err = tc.SelectFromQueueV2Metadata(ctx, filter)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, persistence.NewQueueNotFoundError(queueType, queueName)

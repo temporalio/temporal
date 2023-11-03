@@ -130,11 +130,25 @@ func (db *faultyDB) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplu
 	return db.DB.SelectFromQueueV2Metadata(ctx, filter)
 }
 
+func (db *faultyDB) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, db.selectMetadataError
+	}
+	return db.DB.SelectFromQueueV2MetadataForUpdate(ctx, filter)
+}
+
 func (tx *faultyTx) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
 	if tx.db.selectMetadataError != nil {
 		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
 	}
 	return tx.Tx.SelectFromQueueV2Metadata(ctx, filter)
+}
+
+func (tx *faultyTx) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if tx.db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
+	}
+	return tx.Tx.SelectFromQueueV2MetadataForUpdate(ctx, filter)
 }
 
 func (db *faultyDB) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {

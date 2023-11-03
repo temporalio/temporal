@@ -34,14 +34,15 @@ import (
 )
 
 const (
-	templateEnqueueMessageQueryV2      = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES(:queue_type, :queue_name, :queue_partition, :message_id, :message_payload, :message_encoding)`
-	templateGetMessagesQueryV2         = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? ORDER BY message_id ASC LIMIT ?`
-	templateRangeDeleteMessagesQueryV2 = `DELETE FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? and message_id <= ?`
-	templateGetLastMessageIDQueryV2    = `SELECT max(message_id) FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? and message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
-	templateCreateQueueMetadataQueryV2 = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
-	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
-	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=?`
-	templateGetNameFromQueueMetadataV2 = `SELECT queue_name from queues WHERE queue_type=? LIMIT ? OFFSET ?`
+	templateEnqueueMessageQueryV2            = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES(:queue_type, :queue_name, :queue_partition, :message_id, :message_payload, :message_encoding)`
+	templateGetMessagesQueryV2               = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? ORDER BY message_id ASC LIMIT ?`
+	templateRangeDeleteMessagesQueryV2       = `DELETE FROM queue_messages WHERE queue_type = ? and queue_name = ? and queue_partition = ? and message_id >= ? and message_id <= ?`
+	templateGetLastMessageIDQueryV2          = `SELECT max(message_id) FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? and message_id >= (SELECT message_id FROM queue_messages WHERE queue_type=? and queue_name=? and queue_partition=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
+	templateCreateQueueMetadataQueryV2       = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding, :version)`
+	templateUpdateQueueMetadataQueryV2       = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding, version = :version+1 WHERE queue_type = :queue_type and queue_name = :queue_name and version = :version`
+	templateGetQueueMetadataQueryV2          = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=?`
+	templateGetQueueMetadataQueryV2ForUpdate = `SELECT metadata_payload, metadata_encoding, version from queues WHERE queue_type=? and queue_name=? FOR UPDATE`
+	templateGetNameFromQueueMetadataV2       = `SELECT queue_name from queues WHERE queue_type=? LIMIT ? OFFSET ?`
 )
 
 func (mdb *db) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
@@ -50,12 +51,14 @@ func (mdb *db) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.Que
 		row,
 	)
 }
+
 func (mdb *db) UpdateQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
 	return mdb.conn.NamedExecContext(ctx,
 		templateUpdateQueueMetadataQueryV2,
 		row,
 	)
 }
+
 func (mdb *db) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
 	var row sqlplugin.QueueV2MetadataRow
 	err := mdb.conn.GetContext(ctx,
@@ -69,6 +72,21 @@ func (mdb *db) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.Q
 	}
 	return &row, nil
 }
+
+func (mdb *db) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	var row sqlplugin.QueueV2MetadataRow
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		templateGetQueueMetadataQueryV2ForUpdate,
+		filter.QueueType,
+		filter.QueueName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (mdb *db) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataTypeFilter) ([]sqlplugin.QueueV2MetadataRow, error) {
 	var rows []sqlplugin.QueueV2MetadataRow
 	err := mdb.conn.GetContext(ctx,
@@ -83,12 +101,14 @@ func (mdb *db) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplug
 	}
 	return rows, nil
 }
+
 func (mdb *db) InsertIntoQueueV2Messages(ctx context.Context, row []sqlplugin.QueueV2MessageRow) (sql.Result, error) {
 	return mdb.conn.NamedExecContext(ctx,
 		templateEnqueueMessageQueryV2,
 		row,
 	)
 }
+
 func (mdb *db) RangeSelectFromQueueV2Messages(ctx context.Context, filter sqlplugin.QueueV2MessagesFilter) ([]sqlplugin.QueueV2MessageRow, error) {
 	var rows []sqlplugin.QueueV2MessageRow
 	err := mdb.conn.SelectContext(ctx,
@@ -102,6 +122,7 @@ func (mdb *db) RangeSelectFromQueueV2Messages(ctx context.Context, filter sqlplu
 	)
 	return rows, err
 }
+
 func (mdb *db) RangeDeleteFromQueueV2Messages(ctx context.Context, filter sqlplugin.QueueV2MessagesFilter) (sql.Result, error) {
 	return mdb.conn.ExecContext(ctx,
 		templateRangeDeleteMessagesQueryV2,
