@@ -27,9 +27,11 @@ package backoff
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -223,6 +225,16 @@ func (s *RetrySuite) TestContextErrorFromSomeOtherContext() {
 		NewExponentialRetryPolicy(1*time.Millisecond),
 		retryEverything)
 	s.NoError(err)
+
+	if rand.Intn(2) == 1 {
+		assert.True(s.T(), false)
+	}
+}
+
+func (s *RetrySuite) TestFlakyTestReporting() {
+	if rand.Intn(2) == 1 {
+		assert.True(s.T(), false)
+	}
 }
 
 func (s *RetrySuite) TestThrottleRetryContext() {
