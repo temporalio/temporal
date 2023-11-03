@@ -150,20 +150,21 @@ func newMatchingEngine(
 	mockVisibilityManager manager.VisibilityManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:       taskMgr,
-		historyClient:     mockHistoryClient,
-		taskQueues:        make(map[taskQueueID]taskQueueManager),
-		taskQueueCount:    make(map[taskQueueCounterKey]int),
-		logger:            logger,
-		throttledLogger:   log.ThrottledLogger(logger),
-		metricsHandler:    metrics.NoopMetricsHandler,
-		matchingRawClient: mockMatchingClient,
-		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
-		config:            config,
-		namespaceRegistry: mockNamespaceCache,
-		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
-		timeSource:        clock.NewRealTimeSource(),
-		visibilityManager: mockVisibilityManager,
+		taskManager:          taskMgr,
+		historyClient:        mockHistoryClient,
+		taskQueues:           make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:       make(map[taskQueueCounterKey]int),
+		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
+		logger:               logger,
+		throttledLogger:      log.ThrottledLogger(logger),
+		metricsHandler:       metrics.NoopMetricsHandler,
+		matchingRawClient:    mockMatchingClient,
+		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
+		config:               config,
+		namespaceRegistry:    mockNamespaceCache,
+		clusterMeta:          cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		timeSource:           clock.NewRealTimeSource(),
+		visibilityManager:    mockVisibilityManager,
 	}
 }
 
@@ -350,6 +351,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 				Attempt:                    1,
 				StickyExecutionEnabled:     true,
 				WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				History:                    &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:              nil,
 			}
 			return response, nil
 		}).AnyTimes()
@@ -409,10 +412,80 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		ScheduledTime: nil,
 		StartedTime:   nil,
 		Queries:       nil,
+		History:       &historypb.History{Events: []*historypb.HistoryEvent{}},
+		NextPageToken: nil,
 	}
 
 	s.Nil(err)
 	s.Equal(expectedResp, resp)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_GetHistoryFailure() {
+	namespaceID := namespace.ID(uuid.New())
+	tl := "makeToast"
+	identity := "selfDrivingToaster"
+	fakeErr := serviceerror.NewDataLoss("fake data loss error")
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowType := &commonpb.WorkflowType{
+		Name: "workflow",
+	}
+	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	scheduledEventID := int64(0)
+
+	// History service is using mock
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetMutableStateRequest, arg2 ...interface{}) (*historyservice.GetMutableStateResponse, error) {
+			s.logger.Debug("Mock Received GetMutableState")
+			response := &historyservice.GetMutableStateResponse{
+				PreviousStartedEventId: scheduledEventID,
+				NextEventId:            scheduledEventID + 1,
+				WorkflowType:           workflowType,
+				TaskQueue:              taskQueue,
+				StickyTaskQueue:        &taskqueuepb.TaskQueue{Name: "makeToast-sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY},
+				CurrentBranchToken:     nil,
+			}
+			return response, nil
+		}).AnyTimes()
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.GetWorkflowExecutionHistoryRequest, arg2 ...interface{}) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+			s.logger.Debug("Mock Received GetWorkflowExecutionHistoryRequest")
+			return nil, fakeErr
+		}).AnyTimes()
+
+	query := matchingservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueue:   taskQueue,
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Namespace: "ns",
+			Execution: execution,
+			Query:     &querypb.WorkflowQuery{QueryType: "q"},
+		},
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		_, err := s.matchingEngine.QueryWorkflow(context.Background(), &query)
+		s.ErrorIs(err, fakeErr)
+		wg.Done()
+	}()
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  identity,
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+	wg.Wait()
 }
 
 func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
@@ -1284,8 +1357,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				ScheduledEventId:       scheduledEventID,
 				WorkflowType:           workflowType,
 				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
 			}, nil
 		}).AnyTimes()
+
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; {
@@ -1421,6 +1497,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
+				// scheduledEventID is the key for the workflow task, so needs a different
+				// scheduledEventID for each task for deduplication logic below
+				scheduledEventID++
 
 				_, err := engine.AddActivityTask(context.Background(), &addRequest)
 				if err != nil {
@@ -1443,18 +1522,18 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	identity := "nobody"
 
-	startedTasks := make(map[int64]bool)
+	startedTasks := make(map[int64]struct{})
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
-			if _, ok := startedTasks[taskRequest.TaskId]; ok {
-				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
+			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerror.NewNotFound("already started")
 			}
-			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
 
-			startedTasks[taskRequest.TaskId] = true
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
@@ -1497,20 +1576,20 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					Attempt:          1,
-					NamespaceId:      namespaceID.String(),
-					WorkflowId:       workflowID,
-					RunId:            runID,
-					ScheduledEventId: scheduledEventID,
-					ActivityId:       activityID,
-					ActivityType:     activityTypeName,
+					Attempt:      1,
+					NamespaceId:  namespaceID.String(),
+					WorkflowId:   workflowID,
+					RunId:        runID,
+					ActivityId:   activityID,
+					ActivityType: activityTypeName,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
 					panic(err)
 				}
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
-				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
+
+				// we don't know the expected scheduledEventID for the task polled, so just set it to the result
+				taskToken.ScheduledEventId = resultToken.ScheduledEventId
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
@@ -1576,6 +1655,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
+				// scheduledEventID is the key for the workflow task, so needs a different
+				// scheduledEventID for each task for deduplication logic below
+				scheduledEventID++
 
 				_, err := engine.AddWorkflowTask(context.Background(), &addRequest)
 				if err != nil {
@@ -1594,26 +1676,29 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	identity := "nobody"
 	var startedEventID int64 = 1412
 
-	startedTasks := make(map[int64]bool)
+	startedTasks := make(map[int64]struct{})
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-			if _, ok := startedTasks[taskRequest.TaskId]; ok {
-				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
+			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
-			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.TaskID(taskRequest.TaskId))
-			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
-			startedTasks[taskRequest.TaskId] = true
+
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
-				ScheduledEventId:       scheduledEventID,
+				ScheduledEventId:       taskRequest.GetScheduledEventId(),
 				WorkflowType:           workflowType,
 				Attempt:                1,
+				History:                &historypb.History{Events: []*historypb.HistoryEvent{}},
+				NextPageToken:          nil,
 			}, nil
 		}).AnyTimes()
+
 	for j := 0; j < iterations; j++ {
 		for p := 0; p < engineCount; p++ {
 			engine := engines[p]
@@ -1638,20 +1723,19 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					Attempt:          1,
-					NamespaceId:      namespaceID.String(),
-					WorkflowId:       workflowID,
-					RunId:            runID,
-					ScheduledEventId: scheduledEventID,
-					StartedEventId:   startedEventID,
+					Attempt:        1,
+					NamespaceId:    namespaceID.String(),
+					WorkflowId:     workflowID,
+					RunId:          runID,
+					StartedEventId: startedEventID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
 					panic(err)
 				}
 
-				// taskToken, _ := s.matchingEngine.tokenSerializer.Serialize(token)
-				// s.EqualValues(taskToken, result.Task, fmt.Sprintf("%v!=%v", string(taskToken)))
+				// we don't know the expected scheduledEventID for the task polled, so just set it to the result
+				taskToken.ScheduledEventId = resultToken.ScheduledEventId
 				s.EqualValues(taskToken, resultToken, fmt.Sprintf("%v!=%v", taskToken, resultToken))
 				i++
 			}
@@ -1676,6 +1760,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
+	// test default is 100ms, but make it longer for this test so it's not flaky
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Second)
+
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1702,20 +1789,20 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	ctx, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
-	ctx.finish(errors.New("test error"))
+	task.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
-	s.NotEqual(ctx.event.GetTaskId(), ctx2.event.GetTaskId())
-	s.Equal(ctx.event.Data.GetWorkflowId(), ctx2.event.Data.GetWorkflowId())
-	s.Equal(ctx.event.Data.GetRunId(), ctx2.event.Data.GetRunId())
-	s.Equal(ctx.event.Data.GetScheduledEventId(), ctx2.event.Data.GetScheduledEventId())
+	s.NotEqual(task.event.GetTaskId(), task2.event.GetTaskId())
+	s.Equal(task.event.Data.GetWorkflowId(), task2.event.Data.GetWorkflowId())
+	s.Equal(task.event.Data.GetRunId(), task2.event.Data.GetRunId())
+	s.Equal(task.event.Data.GetScheduledEventId(), task2.event.Data.GetScheduledEventId())
 
-	ctx2.finish(nil)
+	task2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 }
 
@@ -3050,6 +3137,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }
 

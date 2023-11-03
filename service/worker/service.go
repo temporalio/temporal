@@ -26,7 +26,6 @@ package worker
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -85,10 +84,11 @@ type (
 		esClient         esclient.Client
 		config           *Config
 
-		workerManager             *workerManager
-		perNamespaceWorkerManager *perNamespaceWorkerManager
-		scanner                   *scanner.Scanner
-		matchingClient            matchingservice.MatchingServiceClient
+		workerManager                    *workerManager
+		perNamespaceWorkerManager        *perNamespaceWorkerManager
+		scanner                          *scanner.Scanner
+		matchingClient                   matchingservice.MatchingServiceClient
+		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
 
 	// Config contains all the service config for worker
@@ -141,6 +141,7 @@ func NewService(
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
 	matchingClient resource.MatchingClient,
+	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
@@ -168,9 +169,10 @@ func NewService(
 		historyClient:             historyClient,
 		visibilityManager:         visibilityManager,
 
-		workerManager:             workerManager,
-		perNamespaceWorkerManager: perNamespaceWorkerManager,
-		matchingClient:            matchingClient,
+		workerManager:                    workerManager,
+		perNamespaceWorkerManager:        perNamespaceWorkerManager,
+		matchingClient:                   matchingClient,
+		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
 	}
 	if err := s.initScanner(); err != nil {
 		return nil, err
@@ -348,10 +350,6 @@ func (s *Service) Start() {
 	s.clusterMetadata.Start()
 	s.namespaceRegistry.Start()
 
-	// The service is now started up
-	// seed the random generator once for this service
-	rand.Seed(time.Now().UnixNano())
-
 	s.membershipMonitor.Start()
 
 	s.ensureSystemNamespaceExists(context.TODO())
@@ -465,11 +463,6 @@ func (s *Service) startScanner() {
 }
 
 func (s *Service) startReplicator() {
-	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
-		s.clusterMetadata.GetCurrentClusterName(),
-		s.metadataManager,
-		s.logger,
-	)
 	msgReplicator := replicator.NewReplicator(
 		s.clusterMetadata,
 		s.clientBean,
@@ -478,7 +471,7 @@ func (s *Service) startReplicator() {
 		s.hostInfo,
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
-		namespaceReplicationTaskExecutor,
+		s.namespaceReplicationTaskExecutor,
 		s.matchingClient,
 		s.namespaceRegistry,
 	)

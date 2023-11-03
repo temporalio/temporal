@@ -273,7 +273,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.ClusterMetadataLockLatency.GetMetricName(),
+			MetricsName: metrics.DDClusterMetadataLockLatency.GetMetricName(),
 		},
 		{
 			Name: "cluster metadata callback lock",
@@ -286,7 +286,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},
-			MetricsName: metrics.ClusterMetadataCallbackLockLatency.GetMetricName(),
+			MetricsName: metrics.DDClusterMetadataCallbackLockLatency.GetMetricName(),
 		},
 	}
 }

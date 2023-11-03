@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/configs"
@@ -99,6 +100,7 @@ type (
 		controller                   shard.Controller
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
+		taskCategoryRegistry         tasks.TaskCategoryRegistry
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -127,6 +129,7 @@ type (
 		EventNotifier                events.Notifier
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
+		TaskCategoryRegistry         tasks.TaskCategoryRegistry
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -637,7 +640,7 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		category = tasks.CategoryReplication
 	default:
 		var ok bool
-		category, ok = tasks.GetCategoryByID(int32(categoryID))
+		category, ok = h.taskCategoryRegistry.GetCategoryByID(int(categoryID))
 		if !ok {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
 		}
@@ -2155,7 +2158,30 @@ func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
 ) (*historyservice.GetDLQTasksResponse, error) {
-	return getdlqtasks.Invoke(ctx, h.taskQueueManager, request)
+	return getdlqtasks.Invoke(ctx, h.taskQueueManager, h.taskCategoryRegistry, request)
+}
+
+func (h *Handler) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request, h.taskCategoryRegistry)
+}
+
+// AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.
+func (h *Handler) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (*historyservice.AddTasksResponse, error) {
+	shardContext, err := h.controller.GetShardByID(request.ShardId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return engine.AddTasks(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

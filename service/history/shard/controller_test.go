@@ -110,6 +110,7 @@ func NewTestController(
 		SaProvider:                  resource.GetSearchAttributesProvider(),
 		ThrottledLogger:             resource.GetThrottledLogger(),
 		TimeSource:                  resource.GetTimeSource(),
+		TaskCategoryRegistry:        tasks.NewDefaultTaskCategoryRegistry(),
 	})
 
 	return ControllerProvider(
@@ -592,11 +593,11 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	// only for MockEngines: we just need to hook Start/Stop, not verify calls
 	disconnectedMockController := gomock.NewController(nil)
 
-	var engineStarts, engineStops int64
-	var getShards, closeContexts int64
-	var countCloseWg sync.WaitGroup
+	var engineStarts, engineStops atomic.Int64
+	var getShards, closeContexts atomic.Int64
 
 	for shardID := int32(1); shardID <= s.config.NumberOfShards; shardID++ {
+		shardID := shardID
 		queueStates := s.queueStates()
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
@@ -609,24 +610,26 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				if !atomic.CompareAndSwapInt32(status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 					return
 				}
-				atomic.AddInt64(&engineStarts, 1)
+				engineStarts.Add(1)
 			}).AnyTimes()
 			mockEngine.EXPECT().Stop().Do(func() {
 				if !atomic.CompareAndSwapInt32(status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 					return
 				}
-				atomic.AddInt64(&engineStops, 1)
+				engineStops.Add(1)
 			}).AnyTimes()
 			return mockEngine
 		}).AnyTimes()
 		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
 			func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
-				atomic.AddInt64(&getShards, 1)
-				countCloseWg.Add(1)
-				go func(ctx context.Context) {
-					<-ctx.Done()
-					atomic.AddInt64(&closeContexts, 1)
-					countCloseWg.Done()
+				if ctx.Err() != nil {
+					return nil, errors.New("already canceled")
+				}
+				// note that lifecycleCtx could be canceled right here
+				getShards.Add(1)
+				go func(lifecycleCtx context.Context) {
+					<-lifecycleCtx.Done()
+					closeContexts.Add(1)
 				}(req.LifecycleContext)
 				return &persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
@@ -697,13 +700,20 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	workers.Wait()
 	s.shardController.Stop()
 
-	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 1*time.Second), "all contexts did not close")
-
 	// check that things are good
-	s.Assert().Equal(atomic.LoadInt64(&getShards), atomic.LoadInt64(&closeContexts), "getorcreate/close context")
+	// wait for number of GetOrCreateShard calls to stabilize across 100ms, since there could
+	// be some straggler acquireShard goroutines that call it even after shardController.Stop
+	// (which will cancel all lifecycleCtxs).
+	var prevGetShards int64
 	s.Eventually(func() bool {
-		return atomic.LoadInt64(&engineStarts) == atomic.LoadInt64(&engineStops)
-	}, 1*time.Second, 50*time.Millisecond, "engine start/stop")
+		thisGetShards := getShards.Load()
+		ok := thisGetShards == prevGetShards && thisGetShards == closeContexts.Load()
+		prevGetShards = thisGetShards
+		return ok
+	}, 1*time.Second, 100*time.Millisecond, "all contexts did not close")
+	s.Eventually(func() bool {
+		return engineStarts.Load() == engineStops.Load()
+	}, 1*time.Second, 100*time.Millisecond, "engine start/stop")
 }
 
 func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {
@@ -922,21 +932,21 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 	return map[int32]*persistencespb.QueueState{
-		tasks.CategoryTransfer.ID(): {
+		int32(tasks.CategoryTransfer.ID()): {
 			ReaderStates: nil,
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: &tasks.DefaultFireTime,
 				TaskId:   rand.Int63(),
 			},
 		},
-		tasks.CategoryTimer.ID(): {
+		int32(tasks.CategoryTimer.ID()): {
 			ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: timestamp.TimeNowPtrUtc(),
 				TaskId:   rand.Int63(),
 			},
 		},
-		tasks.CategoryReplication.ID(): {
+		int32(tasks.CategoryReplication.ID()): {
 			ReaderStates: map[int64]*persistencespb.QueueReaderState{
 				0: {
 					Scopes: []*persistencespb.QueueSliceScope{

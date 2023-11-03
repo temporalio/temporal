@@ -122,6 +122,7 @@ type (
 		clusterMetadata         cluster.Metadata
 		archivalMetadata        archiver.ArchivalMetadata
 		hostInfoProvider        membership.HostInfoProvider
+		taskCategoryRegistry    tasks.TaskCategoryRegistry
 
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
@@ -233,7 +234,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			s.rwLock.Unlock()
 			return nil
 		},
-		MetricsName: metrics.ShardLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardLockLatency.GetMetricName(),
 	}}
 }
 
@@ -329,7 +330,7 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Ke
 
 	// Truncation here is just to make sure max read level has the same precision as the old logic
 	// in case existing code can't work correctly with precision higher than 1ms.
-	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
+	// Once we validate that the rest of the code works correctly with higher precision, the truncation should be removed.
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
 	s.scheduledTaskMaxReadLevel = util.MaxTime(s.scheduledTaskMaxReadLevel, newMaxReadLevel)
 
@@ -342,7 +343,7 @@ func (s *ContextImpl) GetQueueState(
 	s.rLock()
 	defer s.rUnlock()
 
-	queueState, ok := s.shardInfo.QueueStates[category.ID()]
+	queueState, ok := s.shardInfo.QueueStates[int32(category.ID())]
 	if !ok {
 		return nil, false
 	}
@@ -360,7 +361,7 @@ func (s *ContextImpl) SetQueueState(
 	defer s.wUnlock()
 
 	categoryID := category.ID()
-	s.shardInfo.QueueStates[categoryID] = state
+	s.shardInfo.QueueStates[int32(categoryID)] = state
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -374,13 +375,13 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 	defer s.wUnlock()
 
 	categoryID := tasks.CategoryReplication.ID()
-	queueState, ok := s.shardInfo.QueueStates[categoryID]
+	queueState, ok := s.shardInfo.QueueStates[int32(categoryID)]
 	if !ok {
 		queueState = &persistencespb.QueueState{
 			ExclusiveReaderHighWatermark: nil,
 			ReaderStates:                 make(map[int64]*persistencespb.QueueReaderState),
 		}
-		s.shardInfo.QueueStates[categoryID] = queueState
+		s.shardInfo.QueueStates[int32(categoryID)] = queueState
 	}
 	queueState.ReaderStates[readerID] = readerState
 
@@ -1191,6 +1192,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 		updatedShardInfo.QueueStates,
 		s.immediateTaskExclusiveMaxReadLevel,
 		s.scheduledTaskMaxReadLevel,
+		s.taskCategoryRegistry,
 	)
 
 	ctx, cancel := s.newIOContext()
@@ -1574,6 +1576,12 @@ func (s *ContextImpl) transition(request contextRequest) error {
 			setStateStopped()
 			return nil
 		}
+	case contextStateStopped:
+		switch request.(type) {
+		case contextRequestStop, contextRequestFinishStop:
+			// nothing to do, already stopped
+			return nil
+		}
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
@@ -1598,7 +1606,7 @@ func (s *ContextImpl) notifyQueueProcessor() {
 
 	now := s.timeSource.Now()
 	fakeTasks := make(map[tasks.Category][]tasks.Task)
-	for _, category := range tasks.GetCategories() {
+	for _, category := range s.taskCategoryRegistry.GetCategories() {
 		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 	}
 
@@ -1676,7 +1684,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	var scheduledTaskMaxReadLevel time.Time
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
-	taskCategories := tasks.GetCategories()
+	taskCategories := s.taskCategoryRegistry.GetCategories()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
@@ -1684,7 +1692,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 		maxReadTime := tasks.DefaultFireTime
 		for categoryID, queueState := range shardInfo.QueueStates {
-			category, ok := taskCategories[categoryID]
+			category, ok := taskCategories[int(categoryID)]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
 				continue
 			}
@@ -1923,6 +1931,7 @@ func newContext(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -1952,6 +1961,7 @@ func newContext(
 		clusterMetadata:         clusterMetadata,
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
+		taskCategoryRegistry:    taskCategoryRegistry,
 		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
@@ -2098,16 +2108,16 @@ func trimShardInfo(
 	allClusterInfo map[string]cluster.ClusterInformation,
 	shardInfo *persistencespb.ShardInfo,
 ) *persistencespb.ShardInfo {
-	if shardInfo.QueueStates != nil && shardInfo.QueueStates[tasks.CategoryIDReplication] != nil {
-		for readerID := range shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates {
+	if shardInfo.QueueStates != nil && shardInfo.QueueStates[int32(tasks.CategoryIDReplication)] != nil {
+		for readerID := range shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates {
 			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
 			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
 			if !found || !clusterInfo.Enabled {
-				delete(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates, readerID)
+				delete(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates, readerID)
 			}
 		}
-		if len(shardInfo.QueueStates[tasks.CategoryIDReplication].ReaderStates) == 0 {
-			delete(shardInfo.QueueStates, tasks.CategoryIDReplication)
+		if len(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates) == 0 {
+			delete(shardInfo.QueueStates, int32(tasks.CategoryIDReplication))
 		}
 	}
 	return shardInfo

@@ -53,6 +53,16 @@ func (c *clientImpl) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *clientImpl) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -253,6 +263,16 @@ func (c *clientImpl) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
@@ -261,6 +281,16 @@ func (c *clientImpl) PurgeDLQMessages(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.PurgeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PurgeDLQTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) ReapplyEvents(

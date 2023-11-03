@@ -140,6 +140,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		eventNotifier:                args.EventNotifier,
 		tracer:                       args.TracerProvider.Tracer(consts.LibraryName),
 		taskQueueManager:             args.TaskQueueManager,
+		taskCategoryRegistry:         args.TaskCategoryRegistry,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -220,18 +221,32 @@ func ESProcessorConfigProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 ) service.PersistenceRateLimitingParams {
-	return service.NewPersistenceRateLimitingParams(
+	calculator := shard.NewOwnershipAwareQuotaCalculator(
+		ownershipBasedQuotaScaler,
+		persistenceLazyLoadedServiceResolver,
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+	)
+	namespaceCalculator := shard.NewOwnershipAwareNamespaceQuotaCalculator(
+		ownershipBasedQuotaScaler,
+		persistenceLazyLoadedServiceResolver,
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
-		serviceConfig.PersistencePerShardNamespaceMaxQPS,
-		serviceConfig.EnablePersistencePriorityRateLimiting,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.PersistenceDynamicRateLimitingParams,
-		persistenceLazyLoadedServiceResolver,
 	)
+	return service.PersistenceRateLimitingParams{
+		PersistenceMaxQps: func() int {
+			return int(calculator.GetQuota())
+		},
+		PersistenceNamespaceMaxQps: func(namespace string) int {
+			return int(namespaceCalculator.GetQuota(namespace))
+		},
+		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(serviceConfig.PersistencePerShardNamespaceMaxQPS),
+		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(serviceConfig.EnablePersistencePriorityRateLimiting),
+		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(serviceConfig.OperatorRPSRatio),
+		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(serviceConfig.PersistenceDynamicRateLimitingParams),
+	}
 }
 
 func VisibilityManagerProvider(

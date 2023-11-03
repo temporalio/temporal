@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"math/rand"
 	"net"
 	"os"
 	"sync"
@@ -353,7 +352,6 @@ func (s *Service) Start() {
 
 	// must start resource first
 	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
-	rand.Seed(time.Now().UnixNano())
 
 	s.versionChecker.Start()
 	s.adminHandler.Start()
@@ -429,16 +427,6 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("frontend stopped")
-}
-
-// DEPRECATED: remove interim dynamic config helper for dialing fraction of FE->History calls
-func (c *Config) accessHistory(metricsHandler metrics.Handler) bool {
-	if rand.Float64() < c.AccessHistoryFraction() {
-		metricsHandler.Counter(metrics.AccessHistoryNew).Record(1)
-		return true
-	}
-	metricsHandler.Counter(metrics.AccessHistoryOld).Record(1)
-	return false
 }
 
 func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {

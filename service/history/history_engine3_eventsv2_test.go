@@ -35,10 +35,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -47,9 +47,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -77,6 +80,7 @@ type (
 		workflowCache           wcache.Cache
 		historyEngine           *historyEngineImpl
 		mockExecutionMgr        *persistence.MockExecutionManager
+		mockVisibilityManager   *manager.MockVisibilityManager
 
 		config *configs.Config
 		logger log.Logger
@@ -124,12 +128,22 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockEventsCache = s.mockShard.MockEventsCache
+	s.mockVisibilityManager = s.mockShard.Resource.VisibilityManager
 
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.mockVisibilityManager.EXPECT().
+		ValidateCustomSearchAttributes(gomock.Any()).
+		DoAndReturn(
+			func(searchAttributes map[string]any) (map[string]any, error) {
+				return searchAttributes, nil
+			},
+		).
+		AnyTimes()
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -150,6 +164,7 @@ func (s *engine3Suite) SetupTest() {
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
+		persistenceVisibilityMgr:   s.mockVisibilityManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -163,11 +178,47 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
+	fakeHistory := []*historypb.HistoryEvent{
+		{
+			EventId:   int64(1),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		},
+		{
+			EventId:   int64(2),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{
+							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"TemporalChangeVersion": payload.EncodeString("random-data"),
+						},
+					},
+				},
+			},
+		},
+		{
+			EventId:   int64(3),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: fakeHistory,
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil)
+
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
@@ -198,7 +249,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
 		ScheduledEventId:  2,
-		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -225,6 +275,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
+	expectedResponse.History = &historypb.History{Events: fakeHistory}
+	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)

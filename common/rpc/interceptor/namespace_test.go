@@ -71,6 +71,8 @@ var (
 		"SyncShardStatus":           {},
 		"GetReplicationStatus":      {},
 		"GetDLQTasks":               {},
+		"DeleteDLQTasks":            {},
+		"AddTasks":                  {},
 	}
 )
 

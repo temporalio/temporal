@@ -370,8 +370,8 @@ const (
 	FrontendAccessHistoryFraction = "frontend.accessHistoryFraction" // TODO: remove once migration complete
 
 	// FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-	//  UpdateWorkflowExecution API is under active development and is not ready for production use.
-	//  Default value is `false`. It will be changed to `true` when this API is ready and fully tested.
+	// The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is `false` until the
+	// feature gets more time in production.
 	FrontendEnableUpdateWorkflowExecution = "frontend.enableUpdateWorkflowExecution"
 
 	// FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
@@ -428,6 +428,8 @@ const (
 	MatchingLongPollExpirationInterval = "matching.longPollExpirationInterval"
 	// MatchingSyncMatchWaitDuration is to wait time for sync match
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
+	// MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests
+	MatchingHistoryMaxPageSize = "matching.historyMaxPageSize"
 	// MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
 	// that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
 	// be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
@@ -475,6 +477,10 @@ const (
 
 	// EnableReplicationStream turn on replication stream
 	EnableReplicationStream = "history.enableReplicationStream"
+	// EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
+	// [go.temporal.io/server/common/persistence.QueueV2]. This feature is currently in development. Do NOT use it in
+	// production.
+	EnableHistoryReplicationDLQV2 = "history.enableHistoryReplicationDLQV2"
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -509,6 +515,8 @@ const (
 	EnableHostHistoryCache = "history.enableHostHistoryCache"
 	// HistoryCacheShardLevelMaxSize is max size of history shard level cache
 	HistoryCacheShardLevelMaxSize = "history.shardLevelCacheMaxSize"
+	// EnableAPIGetCurrentRunIDLock controls if a lock should be acquired before getting current run ID for API requests
+	EnableAPIGetCurrentRunIDLock = "history.enableAPIGetCurrentRunIDLock"
 	// HistoryStartupMembershipJoinDelay is the duration a history instance waits
 	// before joining membership after starting.
 	HistoryStartupMembershipJoinDelay = "history.startupMembershipJoinDelay"
@@ -835,6 +843,8 @@ const (
 	ReplicationProcessorSchedulerWorkerCount = "history.ReplicationProcessorSchedulerWorkerCount"
 	// EnableEagerNamespaceRefresher is a feature flag for eagerly refresh namespace during processing replication task
 	EnableEagerNamespaceRefresher = "history.EnableEagerNamespaceRefresher"
+	// EnableReplicationTaskBatching is a feature flag for batching replicate history event task
+	EnableReplicationTaskBatching = "history.EnableReplicationTaskBatching"
 
 	// keys for worker
 
@@ -924,4 +934,7 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
+	// settings for controlling remote activity concurrency for delete namespace workflows.
+	WorkerDeleteNamespaceActivityLimitsConfig = "worker.deleteNamespaceActivityLimitsConfig"
 )

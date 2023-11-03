@@ -93,11 +93,9 @@ func TestTaskProcessorSuite(t *testing.T) {
 }
 
 func (s *taskProcessorSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *taskProcessorSuite) TearDownSuite() {
-
 }
 
 func (s *taskProcessorSuite) SetupTest() {
@@ -146,6 +144,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
+		NewExecutionManagerDLQWriter(),
 	).(*taskProcessorImpl)
 }
 

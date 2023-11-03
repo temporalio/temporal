@@ -61,6 +61,20 @@ func (c *metricClient) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *metricClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.AddTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientAddTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -341,6 +355,20 @@ func (c *metricClient) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.MergeDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientMergeDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.MergeDLQTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
@@ -353,6 +381,20 @@ func (c *metricClient) PurgeDLQMessages(
 	}()
 
 	return c.client.PurgeDLQMessages(ctx, request, opts...)
+}
+
+func (c *metricClient) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.PurgeDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientPurgeDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PurgeDLQTasks(ctx, request, opts...)
 }
 
 func (c *metricClient) ReapplyEvents(

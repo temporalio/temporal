@@ -232,7 +232,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(
 	}
 
 	doc[searchattribute.CloseTime] = request.CloseTime
-	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
+	doc[searchattribute.ExecutionDuration] = request.ExecutionDuration
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
 	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
@@ -886,7 +886,10 @@ func (s *visibilityStore) convertQuery(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapperProvider)
-	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
+	queryConverter := newQueryConverter(
+		nameInterceptor,
+		NewValuesInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider),
+	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).

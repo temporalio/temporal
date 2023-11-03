@@ -27,9 +27,9 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -72,9 +72,8 @@ type (
 		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
-
-		ExecutorWrapper   queues.ExecutorWrapper   `optional:"true"`
-		ExecutableWrapper queues.ExecutableWrapper `optional:"true"`
+		DLQWriter            *queues.DLQWriter
+		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
 	}
 
 	QueueFactoryBase struct {
@@ -92,9 +91,12 @@ type (
 )
 
 var QueueModule = fx.Options(
-	fx.Provide(QueueSchedulerRateLimiterProvider),
-	fx.Provide(NewExecutableDLQWrapper),
 	fx.Provide(
+		QueueSchedulerRateLimiterProvider,
+		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {
+			return tqm
+		},
+		queues.NewDLQWriter,
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
 			Target: NewTransferQueueFactory,
@@ -137,19 +139,12 @@ type additionalQueueFactories struct {
 // added to the `group:"queueFactory"` group. The factories are added to the group only if they are enabled, which
 // is why we must return a list here.
 func getOptionalQueueFactories(
-	archivalMetadata archiver.ArchivalMetadata,
+	registry tasks.TaskCategoryRegistry,
 	params ArchivalQueueFactoryParams,
 ) additionalQueueFactories {
-
-	c := tasks.CategoryArchival
-	// Removing this category will only affect tests because this method is only called once in production,
-	// but it may be called many times across test runs, which would leave the archival queue as a dangling category
-	tasks.RemoveCategory(c.ID())
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
+	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); !ok {
 		return additionalQueueFactories{}
 	}
-	tasks.NewCategory(c.ID(), c.Type(), c.Name())
 	return additionalQueueFactories{
 		Factories: []QueueFactory{
 			NewArchivalQueueFactory(params),
@@ -158,31 +153,36 @@ func getOptionalQueueFactories(
 }
 
 func QueueSchedulerRateLimiterProvider(
+	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
 ) (queues.SchedulerRateLimiter, error) {
 	return queues.NewPrioritySchedulerRateLimiter(
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalMaxQPS,
-		}.GetQuota,
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.TaskSchedulerNamespaceMaxQPS,
+			config.TaskSchedulerGlobalNamespaceMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.TaskSchedulerMaxQPS,
+			config.TaskSchedulerGlobalMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceNamespaceMaxQPS,
+			config.PersistenceGlobalNamespaceMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceMaxQPS,
+			config.PersistenceGlobalMaxQPS,
+		).GetQuota,
 	)
 }
 
@@ -217,34 +217,6 @@ func (f *QueueFactoryBase) Stop() {
 	if f.HostScheduler != nil {
 		f.HostScheduler.Stop()
 	}
-}
-
-func (f *QueueFactoryBase) NewExecutableFactory(
-	executor queues.Executor,
-	scheduler queues.Scheduler,
-	rescheduler queues.Rescheduler,
-	executableWrapper queues.ExecutableWrapper,
-	clusterMetadata cluster.Metadata,
-	namespaceRegistry namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-) queues.ExecutableFactory {
-	factory := queues.NewExecutableFactory(
-		executor,
-		scheduler,
-		rescheduler,
-		f.HostPriorityAssigner,
-		timeSource,
-		namespaceRegistry,
-		clusterMetadata,
-		logger,
-		metricsHandler,
-	)
-	if executableWrapper == nil {
-		return factory
-	}
-	return queues.NewExecutableFactoryWrapper(factory, executableWrapper)
 }
 
 func NewQueueHostRateLimiter(

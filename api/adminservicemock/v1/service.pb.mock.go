@@ -101,6 +101,26 @@ func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttributes), varargs...)
 }
 
+// AddTasks mocks base method.
+func (m *MockAdminServiceClient) AddTasks(ctx context.Context, in *adminservice.AddTasksRequest, opts ...grpc.CallOption) (*adminservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockAdminServiceClientMockRecorder) AddTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).AddTasks), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockAdminServiceClient) CloseShard(ctx context.Context, in *adminservice.CloseShardRequest, opts ...grpc.CallOption) (*adminservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -501,6 +521,26 @@ func (mr *MockAdminServiceClientMockRecorder) MergeDLQMessages(ctx, in interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// MergeDLQTasks mocks base method.
+func (m *MockAdminServiceClient) MergeDLQTasks(ctx context.Context, in *adminservice.MergeDLQTasksRequest, opts ...grpc.CallOption) (*adminservice.MergeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MergeDLQTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.MergeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDLQTasks indicates an expected call of MergeDLQTasks.
+func (mr *MockAdminServiceClientMockRecorder) MergeDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQTasks), varargs...)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *adminservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -519,6 +559,26 @@ func (mr *MockAdminServiceClientMockRecorder) PurgeDLQMessages(ctx, in interface
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).PurgeDLQMessages), varargs...)
+}
+
+// PurgeDLQTasks mocks base method.
+func (m *MockAdminServiceClient) PurgeDLQTasks(ctx context.Context, in *adminservice.PurgeDLQTasksRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PurgeDLQTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.PurgeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PurgeDLQTasks indicates an expected call of PurgeDLQTasks.
+func (mr *MockAdminServiceClientMockRecorder) PurgeDLQTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).PurgeDLQTasks), varargs...)
 }
 
 // ReapplyEvents mocks base method.
@@ -871,6 +931,21 @@ func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttributes), arg0, arg1)
 }
 
+// AddTasks mocks base method.
+func (m *MockAdminServiceServer) AddTasks(arg0 context.Context, arg1 *adminservice.AddTasksRequest) (*adminservice.AddTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.AddTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTasks indicates an expected call of AddTasks.
+func (mr *MockAdminServiceServerMockRecorder) AddTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).AddTasks), arg0, arg1)
+}
+
 // CloseShard mocks base method.
 func (m *MockAdminServiceServer) CloseShard(arg0 context.Context, arg1 *adminservice.CloseShardRequest) (*adminservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1171,6 +1246,21 @@ func (mr *MockAdminServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQMessages), arg0, arg1)
 }
 
+// MergeDLQTasks mocks base method.
+func (m *MockAdminServiceServer) MergeDLQTasks(arg0 context.Context, arg1 *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.MergeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDLQTasks indicates an expected call of MergeDLQTasks.
+func (mr *MockAdminServiceServerMockRecorder) MergeDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQTasks), arg0, arg1)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *adminservice.PurgeDLQMessagesRequest) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1184,6 +1274,21 @@ func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *ad
 func (mr *MockAdminServiceServerMockRecorder) PurgeDLQMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).PurgeDLQMessages), arg0, arg1)
+}
+
+// PurgeDLQTasks mocks base method.
+func (m *MockAdminServiceServer) PurgeDLQTasks(arg0 context.Context, arg1 *adminservice.PurgeDLQTasksRequest) (*adminservice.PurgeDLQTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PurgeDLQTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.PurgeDLQTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PurgeDLQTasks indicates an expected call of PurgeDLQTasks.
+func (mr *MockAdminServiceServerMockRecorder) PurgeDLQTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PurgeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).PurgeDLQTasks), arg0, arg1)
 }
 
 // ReapplyEvents mocks base method.

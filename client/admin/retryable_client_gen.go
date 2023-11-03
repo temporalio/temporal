@@ -65,6 +65,21 @@ func (c *retryableClient) AddSearchAttributes(
 	return resp, err
 }
 
+func (c *retryableClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	var resp *adminservice.AddTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -365,6 +380,21 @@ func (c *retryableClient) MergeDLQMessages(
 	return resp, err
 }
 
+func (c *retryableClient) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	var resp *adminservice.MergeDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.MergeDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
@@ -374,6 +404,21 @@ func (c *retryableClient) PurgeDLQMessages(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PurgeDLQMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PurgeDLQTasks(
+	ctx context.Context,
+	request *adminservice.PurgeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQTasksResponse, error) {
+	var resp *adminservice.PurgeDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PurgeDLQTasks(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

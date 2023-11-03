@@ -25,7 +25,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -54,6 +54,7 @@ func GetOrPollMutableState(
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
 
+	logger := shardContext.GetLogger()
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := ValidateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -65,6 +66,7 @@ func GetOrPollMutableState(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,
+			workflow.LockPriorityHigh,
 		)
 		if err != nil {
 			return nil, err
@@ -79,14 +81,33 @@ func GetOrPollMutableState(
 	if err != nil {
 		return nil, err
 	}
-	if request.CurrentBranchToken == nil {
-		request.CurrentBranchToken = response.CurrentBranchToken
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+	if err != nil {
+		return nil, err
 	}
-	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+	if request.GetVersionHistoryItem() == nil {
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+		request.VersionHistoryItem = lastVersionHistoryItem
+	}
+	// Use the latest event id + event version as the branch identifier. This pair is unique across clusters.
+	// We return the full version histories. Callers need to fetch the last version history item from current branch
+	// and use the last version history item in following calls.
+	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+		logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+		logger.Warn("Request history branch and current history branch don't match",
+			tag.Value(logItem),
+			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
-	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
+	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking.
 	expectedNextEventID := common.FirstEventID
 	if request.ExpectedNextEventId != common.EmptyEventID {
 		expectedNextEventID = request.GetExpectedNextEventId()
@@ -105,8 +126,19 @@ func GetOrPollMutableState(
 		if err != nil {
 			return nil, err
 		}
-		// check again if the current branch token changed
-		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
+		currentVersionHistory, err = versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, err
+		}
+		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+			logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+			if err != nil {
+				return nil, err
+			}
+			logger.Warn("Request history branch and current history branch don't match prior to polling the mutable state",
+				tag.Value(logItem),
+				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
 		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -131,8 +163,22 @@ func GetOrPollMutableState(
 				// Note: Later events could modify response.WorkerVersionStamp and we won't
 				// update it here. That's okay since this return value is only informative and isn't used for task dispatch.
 				// For correctness we could pass it in the Notification event.
-				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
-					return nil, serviceerrors.NewCurrentBranchChanged(event.CurrentBranchToken, request.CurrentBranchToken)
+				latestVersionHistory, err := versionhistory.GetCurrentVersionHistory(event.VersionHistories)
+				if err != nil {
+					return nil, err
+				}
+				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
+				response.VersionHistories = event.VersionHistories
+				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
+					logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+					if err != nil {
+						return nil, err
+					}
+					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
+						tag.Value(logItem),
+						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()))
+					return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 				}
 				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 					return response, nil

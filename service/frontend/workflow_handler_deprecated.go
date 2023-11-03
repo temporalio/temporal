@@ -26,17 +26,14 @@ package frontend
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
-
-	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 )
@@ -75,24 +73,34 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
+		verionHistoryItem *historyspb.VersionHistoryItem,
+	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
+			VersionHistoryItem:  verionHistoryItem,
 		})
-
 		if err != nil {
-			return nil, "", 0, 0, false, err
+			return nil, "", 0, 0, false, nil, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
+		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, "", 0, 0, false, nil, err
+		}
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, "", 0, 0, false, nil, err
+		}
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
 			response.GetNextEventId(),
 			isWorkflowRunning,
+			lastVersionHistoryItem,
 			nil
 	}
 
@@ -124,8 +132,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem)
 			if err != nil {
 				return nil, err
 			}
@@ -138,8 +146,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistory(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, err =
+			queryHistory(namespaceID, execution, queryNextEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -320,21 +328,32 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, error) {
+		versionHistoryItem *historyspb.VersionHistoryItem,
+	) ([]byte, string, int64, *historyspb.VersionHistoryItem, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
 			ExpectedNextEventId: expectedNextEventID,
 			CurrentBranchToken:  currentBranchToken,
+			VersionHistoryItem:  versionHistoryItem,
 		})
-
 		if err != nil {
-			return nil, "", 0, err
+			return nil, "", 0, nil, err
+		}
+
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
+		if err != nil {
+			return nil, "", 0, nil, err
+		}
+		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, "", 0, nil, err
 		}
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventTxnId(),
+			lastVersionHistoryItem,
 			nil
 	}
 
@@ -346,8 +365,8 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 
 	if request.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, err =
-			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstTxnID, continuationToken.VersionHistoryItem, err =
+			queryMutableState(namespaceID, execution, common.FirstEventID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -411,66 +430,6 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 		History:       history,
 		NextPageToken: nextToken,
 	}, nil
-}
-
-// DEPRECATED: TBD
-func (wh *WorkflowHandler) pollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-	callTime := time.Now().UTC()
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
-	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
-		return nil, err
-	}
-
-	if contextNearDeadline(ctx, longPollTailRoom) {
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
-
-	pollerID := uuid.New()
-	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID.String(),
-		PollerId:    pollerID,
-		PollRequest: request,
-	})
-	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		if contextWasCanceled {
-			// Clear error as we don't want to report context cancellation error to count against our SLA.
-			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
-			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-		}
-
-		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
-		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
-		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
-			return nil, err
-		}
-
-		// For all other errors log an error and return it back to client.
-		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxTimeout = ctxDeadline.Sub(callTime).String()
-		}
-		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-			tag.Timeout(ctxTimeout),
-			tag.Error(err))
-		return nil, err
-	}
-
-	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceID, matchingResp, matchingResp.GetBranchToken())
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
 }
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO WorkflowHandler.RespondWorkflowTaskCompleted() and ./service/history/workflowTaskHandlerCallbacks.go

@@ -32,6 +32,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"testing"
 	"time"
 
 	"go.uber.org/fx"
@@ -75,6 +76,7 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -128,9 +130,11 @@ type (
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 
-		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		callbackLock sync.RWMutex // Must be used for above callbacks
+		onGetClaims          func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize          func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		callbackLock         sync.RWMutex // Must be used for above callbacks
+		serviceFxOptions     map[primitives.ServiceName][]fx.Option
+		taskCategoryRegistry tasks.TaskCategoryRegistry
 	}
 
 	// HistoryConfig contains configs for history service
@@ -172,16 +176,19 @@ type (
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
+		// ServiceFxOptions is populated by WithFxOptionsForService.
+		ServiceFxOptions     map[primitives.ServiceName][]fx.Option
+		TaskCategoryRegistry tasks.TaskCategoryRegistry
 	}
 
 	listenHostPort string
 )
 
 // newTemporal returns an instance that hosts full temporal in one process
-func newTemporal(params *TemporalParams) *temporalImpl {
+func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
-		testDCClient.OverrideValue(k, v)
+		testDCClient.OverrideValue(t, k, v)
 	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
@@ -207,8 +214,10 @@ func newTemporal(params *TemporalParams) *temporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
+		serviceFxOptions:                 params.ServiceFxOptions,
+		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
-	impl.overrideHistoryDynamicConfig(testDCClient)
+	impl.overrideHistoryDynamicConfig(t, testDCClient)
 	return impl
 }
 
@@ -441,11 +450,13 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(c.GetTLSConfigProvider),
+		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry, &rpcFactory),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.FrontendService),
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -532,6 +543,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(workflow.NewTaskGeneratorProvider),
+			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -539,6 +551,7 @@ func (c *temporalImpl) startHistory(
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
 			temporal.FxLogAdapter,
+			c.getFxOptionsForService(primitives.HistoryService),
 		)
 		err = app.Err()
 		if err != nil {
@@ -624,11 +637,13 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
+		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.MatchingService),
 	)
 	err = app.Err()
 	if err != nil {
@@ -719,11 +734,13 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(c.GetTLSConfigProvider),
+		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
 		temporal.FxLogAdapter,
+		c.getFxOptionsForService(primitives.WorkerService),
 	)
 	err = app.Err()
 	if err != nil {
@@ -740,6 +757,10 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 	startWG.Done()
 	<-c.shutdownCh
 	c.shutdownWG.Done()
+}
+
+func (c *temporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
+	return fx.Options(c.serviceFxOptions[serviceName]...)
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
@@ -761,6 +782,10 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 		return c.tlsConfigProvider
 	}
 	return nil
+}
+
+func (c *temporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
+	return c.taskCategoryRegistry
 }
 
 func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
@@ -785,40 +810,42 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
-	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
+func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClient) {
+	client.OverrideValue(t, dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.esConfig != nil {
-		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
+		client.OverrideValue(t, dynamicconfig.AdvancedVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		client.OverrideValue(dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
+		client.OverrideValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
-		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+		client.OverrideValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
 	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		client.OverrideValue(dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
+		client.OverrideValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
 	}
 	if c.historyConfig.HistorySizeLimitError != 0 {
-		client.OverrideValue(dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
+		client.OverrideValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
-		client.OverrideValue(dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
+		client.OverrideValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		client.OverrideValue(dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+		client.OverrideValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
 	}
 	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		client.OverrideValue(dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
 	}
 	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		client.OverrideValue(dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
+		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests
-	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
-	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+	client.OverrideValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
+	client.OverrideValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+
+	client.OverrideValue(t, dynamicconfig.EnableAPIGetCurrentRunIDLock, true)
 }
 
 func (c *temporalImpl) newRPCFactory(

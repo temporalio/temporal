@@ -1064,3 +1064,20 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 	s := sqltests.NewVisibilitySuite(t, store)
 	suite.Run(t, s)
 }
+
+func TestSQLiteQueueV2(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	t.Cleanup(func() {
+		factory.Close()
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	})
+	RunQueueV2TestSuiteForSQL(t, factory)
+}

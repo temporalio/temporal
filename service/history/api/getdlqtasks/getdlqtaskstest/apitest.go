@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -39,17 +39,27 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// TestGetDLQTasks is a library test function intended to be invoked from a persistence test suite. It works by
+// TestInvoke is a library test function intended to be invoked from a persistence test suite. It works by
 // enqueueing a task into the DLQ and then calling [getdlqtasks.Invoke] to verify that the right task is returned.
-func TestGetDLQTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) {
+func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 	ctx := context.Background()
 	inTask := &tasks.WorkflowTask{
 		TaskID: 42,
 	}
 	sourceCluster := "test-source-cluster-" + t.Name()
 	targetCluster := "test-target-cluster-" + t.Name()
-	_, err := manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
+	queueType := persistence.QueueTypeHistoryDLQ
+	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: persistence.QueueKey{
+			QueueType:     queueType,
+			Category:      inTask.GetCategory(),
+			SourceCluster: sourceCluster,
+			TargetCluster: targetCluster,
+		},
+	})
+	require.NoError(t, err)
+	_, err = manager.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     queueType,
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 		Task:          inTask,
@@ -58,9 +68,10 @@ func TestGetDLQTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) 
 	res, err := getdlqtasks.Invoke(
 		context.Background(),
 		manager,
+		tasks.NewDefaultTaskCategoryRegistry(),
 		&historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enumsspb.TASK_CATEGORY_TRANSFER,
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},
@@ -70,9 +81,9 @@ func TestGetDLQTasks(t *testing.T, manager persistence.HistoryTaskQueueManager) 
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res.DlqTasks))
 	assert.Equal(t, int64(persistence.FirstQueueMessageID), res.DlqTasks[0].Metadata.MessageId)
-	assert.Equal(t, 1, int(res.DlqTasks[0].Task.ShardId))
+	assert.Equal(t, 1, int(res.DlqTasks[0].Payload.ShardId))
 	serializer := serialization.NewTaskSerializer()
-	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, *res.DlqTasks[0].Task.Task)
+	outTask, err := serializer.DeserializeTask(tasks.CategoryTransfer, *res.DlqTasks[0].Payload.Blob)
 	require.NoError(t, err)
 	assert.Equal(t, inTask, outTask)
 }

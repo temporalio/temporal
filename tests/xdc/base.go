@@ -71,9 +71,12 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 	return config
 }
 
-func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
+func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
+	params := tests.ApplyTestClusterParams(opts)
 	s.clusterNames = clusterNames
-	s.logger = log.NewTestLogger()
+	if s.logger == nil {
+		s.logger = log.NewTestLogger()
+	}
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
@@ -101,13 +104,14 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string) {
 			InitialFailoverVersion: int64(i + 1),
 			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
 		}
+		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 	}
 
-	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	c, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	c, err = tests.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 

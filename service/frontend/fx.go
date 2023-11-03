@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -143,6 +144,7 @@ type GrpcServerOptions struct {
 
 func GrpcServerOptionsProvider(
 	logger log.Logger,
+	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -202,6 +204,8 @@ func GrpcServerOptionsProvider(
 			metricsHandler,
 			logger,
 			audienceGetter,
+			cfg.Global.Authorization.AuthHeaderName,
+			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -500,6 +504,7 @@ func AdminHandlerProvider(
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -527,6 +532,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		persistenceExecutionManager,
+		taskCategoryRegistry,
 	}
 	return NewAdminHandler(args)
 }

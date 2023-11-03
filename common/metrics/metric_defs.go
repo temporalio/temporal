@@ -768,29 +768,45 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled                               = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency                                 = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter                                   = NewCounterDef("queue_actions")
-	QueueActionFailures                                  = NewCounterDef("queue_action_errors")
-	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
-	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
-	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
-	CommandTypeScheduleActivityCounter                   = NewCounterDef("schedule_activity_command")
-	CommandTypeCompleteWorkflowCounter                   = NewCounterDef("complete_workflow_command")
-	CommandTypeFailWorkflowCounter                       = NewCounterDef("fail_workflow_command")
-	CommandTypeCancelWorkflowCounter                     = NewCounterDef("cancel_workflow_command")
-	CommandTypeStartTimerCounter                         = NewCounterDef("start_timer_command")
-	CommandTypeCancelActivityCounter                     = NewCounterDef("cancel_activity_command")
-	CommandTypeCancelTimerCounter                        = NewCounterDef("cancel_timer_command")
-	CommandTypeRecordMarkerCounter                       = NewCounterDef("record_marker_command")
-	CommandTypeCancelExternalWorkflowCounter             = NewCounterDef("cancel_external_workflow_command")
-	CommandTypeContinueAsNewCounter                      = NewCounterDef("continue_as_new_command")
-	CommandTypeSignalExternalWorkflowCounter             = NewCounterDef("signal_external_workflow_command")
-	CommandTypeUpsertWorkflowSearchAttributesCounter     = NewCounterDef("upsert_workflow_search_attributes_command")
-	CommandTypeModifyWorkflowPropertiesCounter           = NewCounterDef("modify_workflow_properties_command")
-	CommandTypeChildWorkflowCounter                      = NewCounterDef("child_workflow_command")
+	TaskSchedulerThrottled      = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency        = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram   = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram    = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter          = NewCounterDef("queue_actions")
+	QueueActionFailures         = NewCounterDef("queue_action_errors")
+	ActivityE2ELatency          = NewTimerDef("activity_end_to_end_latency")
+	AckLevelUpdateCounter       = NewCounterDef("ack_level_update")
+	AckLevelUpdateFailedCounter = NewCounterDef("ack_level_update_failed")
+	CommandCounter              = NewCounterDef("command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeScheduleActivityCounter = NewCounterDef("schedule_activity_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeCompleteWorkflowCounter = NewCounterDef("complete_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeFailWorkflowCounter = NewCounterDef("fail_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeCancelWorkflowCounter = NewCounterDef("cancel_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeStartTimerCounter = NewCounterDef("start_timer_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeCancelActivityCounter = NewCounterDef("cancel_activity_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeCancelTimerCounter = NewCounterDef("cancel_timer_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeRecordMarkerCounter = NewCounterDef("record_marker_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeCancelExternalWorkflowCounter = NewCounterDef("cancel_external_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeContinueAsNewCounter = NewCounterDef("continue_as_new_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeSignalExternalWorkflowCounter = NewCounterDef("signal_external_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeUpsertWorkflowSearchAttributesCounter = NewCounterDef("upsert_workflow_search_attributes_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeModifyWorkflowPropertiesCounter = NewCounterDef("modify_workflow_properties_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
+	CommandTypeChildWorkflowCounter = NewCounterDef("child_workflow_command")
+	// Deprecated: replaced by CommandCounter and will be removed in a future release
 	CommandTypeProtocolMessage                           = NewCounterDef("protocol_message_command")
 	MessageTypeRequestWorkflowExecutionUpdateCounter     = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter      = NewCounterDef("accept_workflow_update_message")
@@ -813,6 +829,7 @@ var (
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
+	BatchableTaskBatchCount                       = NewGaugeDef("batchable_task_batch_count")
 	ConcurrencyUpdateFailureCounter               = NewCounterDef("concurrency_update_failure")
 	ServiceErrShardOwnershipLostCounter           = NewCounterDef("service_errors_shard_ownership_lost")
 	HeartbeatTimeoutCounter                       = NewCounterDef("heartbeat_timeout")
@@ -907,16 +924,18 @@ var (
 	MutableStateDirty                              = NewCounterDef("mutable_state_dirty")
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
-	ClusterMetadataLockLatency                     = NewTimerDef("cluster_metadata_lock_latency")
-	ClusterMetadataCallbackLockLatency             = NewTimerDef("cluster_metadata_callback_lock_latency")
-	ShardControllerLockLatency                     = NewTimerDef("shard_controller_lock_latency")
-	ShardLockLatency                               = NewTimerDef("shard_lock_latency")
-	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
+
+	// Deadlock detector latency metrics
+	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
+	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
+	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
+	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
@@ -1102,4 +1121,6 @@ const (
 	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
 	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
 	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+	MatchingPollWorkflowTaskQueueTag              = "PollWorkflowTaskQueue"
+	HistoryHandleWorkflowTaskStartedTag           = "HandleWorkflowTaskStarted"
 )

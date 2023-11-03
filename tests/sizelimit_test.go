@@ -85,7 +85,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -118,7 +118,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -281,7 +281,7 @@ func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -294,7 +294,7 @@ func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
 		Identity:            identity,
@@ -351,7 +351,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -383,7 +383,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             convert.Int32ToString(int32(i)),
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  activityLargePayload,
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 						ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
@@ -501,7 +501,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,

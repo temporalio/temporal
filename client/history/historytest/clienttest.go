@@ -22,6 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Package historytest contains library test functions for [history.NewClient] that use ahistory task queue manager.
+// These are not test functions themselves because we construct database clients in another package, which will in turn
+// call this function, but we don't want to put the testing logic there because it's not specific to any database, but
+// it is specific to the [history] package.
 package historytest
 
 import (
@@ -35,13 +39,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/enums/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/internal/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
@@ -54,26 +59,13 @@ func (f fakeTracerProvider) Tracer(string, ...trace.TracerOption) trace.Tracer {
 	return nil
 }
 
-// TestClientGetDLQTasks is a library test function which tests [history.NewClient] given a history task queue manager.
-// This is not a test function itself because we construct database clients in another package, which will in turn call
-// this function, but we don't want to put the testing logic there because it's not specific to any database, but it is
-// specific to the [history] package.
-//
-// This test works by doing the following:
+// TestClient works by doing the following:
 //  1. Enqueue some tasks
-//  2. Start a server which serves the GetDLQTasks endpoint
+//  2. Start a server which serves the DLQ endpoints
 //  3. Create a client which connects to the server
 //  4. Use the client to read the tasks
-func TestClientGetDLQTasks(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQueueManager) {
+func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQueueManager) {
 	ctrl := gomock.NewController(t)
-
-	// Note that it is important to include the test name in the cluster name to ensure that the generated queue name is
-	// unique across tests. That way, we can run many queue tests without any risk of queue name collisions.
-	sourceCluster := "source-cluster-" + t.Name()
-	targetCluster := "target-cluster-" + t.Name()
-	numTasks := 2
-
-	enqueueTasks(t, historyTaskQueueManager, numTasks, sourceCluster, targetCluster)
 
 	listener := nettest.NewListener(nettest.NewPipe())
 
@@ -85,13 +77,59 @@ func TestClientGetDLQTasks(t *testing.T, historyTaskQueueManager persistence.His
 
 	client := createClient(ctrl, listener)
 
-	readTasks(t, numTasks, client, sourceCluster, targetCluster)
+	t.Run("ReadDLQTasks", func(t *testing.T) {
+		t.Parallel()
+		queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
+		numTasks := 2
+		_, err := historyTaskQueueManager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
+			QueueKey: queueKey,
+		})
+		require.NoError(t, err)
+		enqueueTasks(t, historyTaskQueueManager, numTasks, queueKey.SourceCluster, queueKey.TargetCluster)
+		readTasks(t, numTasks, client, queueKey.SourceCluster, queueKey.TargetCluster)
+	})
+	t.Run("DeleteDLQTasks", func(t *testing.T) {
+		t.Parallel()
+		queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
+		_, err := historyTaskQueueManager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
+			QueueKey: queueKey,
+		})
+		require.NoError(t, err)
+		enqueueTasks(t, historyTaskQueueManager, 2, queueKey.SourceCluster, queueKey.TargetCluster)
+		dlqKey := &commonspb.HistoryDLQKey{
+			TaskCategory:  int32(tasks.CategoryTransfer.ID()),
+			SourceCluster: queueKey.SourceCluster,
+			TargetCluster: queueKey.TargetCluster,
+		}
+		_, err = client.DeleteDLQTasks(context.Background(), &historyservice.DeleteDLQTasksRequest{
+			DlqKey: dlqKey,
+			InclusiveMaxTaskMetadata: &commonspb.HistoryDLQTaskMetadata{
+				MessageId: persistence.FirstQueueMessageID,
+			},
+		})
+		require.NoError(t, err)
+		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
+			DlqKey:   dlqKey,
+			PageSize: 10,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(res.DlqTasks))
+		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.DlqTasks[0].Metadata.MessageId)
+	})
 
-	grpcServer.GracefulStop()
-	assert.NoError(t, <-serveErrs)
+	t.Cleanup(func() {
+		grpcServer.GracefulStop()
+		assert.NoError(t, <-serveErrs)
+	})
 }
 
-func readTasks(t *testing.T, numTasks int, client historyservice.HistoryServiceClient, sourceCluster string, targetCluster string) {
+func readTasks(
+	t *testing.T,
+	numTasks int,
+	client historyservice.HistoryServiceClient,
+	sourceCluster string,
+	targetCluster string,
+) {
 	t.Helper()
 
 	var nextPageToken []byte
@@ -100,8 +138,8 @@ func readTasks(t *testing.T, numTasks int, client historyservice.HistoryServiceC
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
 	for i := 0; i < numTasks; i++ {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
-			DlqKey: &historyservice.HistoryDLQKey{
-				Category:      enums.TASK_CATEGORY_TRANSFER,
+			DlqKey: &commonspb.HistoryDLQKey{
+				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
 				SourceCluster: sourceCluster,
 				TargetCluster: targetCluster,
 			},
@@ -118,8 +156,9 @@ func readTasks(t *testing.T, numTasks int, client historyservice.HistoryServiceC
 func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
 	historyHandler := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
-		TaskQueueManager: historyTaskQueueManager,
-		TracerProvider:   fakeTracerProvider{},
+		TaskQueueManager:     historyTaskQueueManager,
+		TracerProvider:       fakeTracerProvider{},
+		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 	})
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)
@@ -130,7 +169,7 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
 	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("127.0.0.1:7104"),
-	})
+	}).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),

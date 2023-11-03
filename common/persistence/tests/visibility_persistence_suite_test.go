@@ -466,6 +466,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	})
 	s.Nil(err0)
@@ -480,6 +481,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	})
 	s.Nil(err1)
@@ -555,6 +557,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 				Execution:        workflowExecution,
 				WorkflowTypeName: "visibility-workflow",
 				StartTime:        startTime,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 		})
 		s.Nil(err0)
@@ -781,7 +784,7 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 
 func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
@@ -813,7 +816,7 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 
 func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	switch s.VisibilityMgr.GetStoreNames()[0] {
-	case mysql.PluginName, postgresql.PluginName, cassandra.CassandraPersistenceName:
+	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, cassandra.CassandraPersistenceName:
 		s.T().Skip("Not supported by standard visibility")
 	}
 
@@ -907,6 +910,7 @@ func (s *VisibilityPersistenceSuite) createClosedWorkflowRecord(
 			Execution:        startReq.Execution,
 			WorkflowTypeName: startReq.WorkflowTypeName,
 			StartTime:        startReq.StartTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
 		CloseTime:     closeTime,
 		HistoryLength: 5,
@@ -933,6 +937,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 			Execution:        workflowExecution,
 			WorkflowTypeName: workflowType,
 			StartTime:        startTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:        taskQueue,
 		},
 	}

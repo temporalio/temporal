@@ -494,7 +494,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		return
 	}
 
-	// no more task to load, trigger completion callback
+	// No more tasks to load, trigger completion callback.
 	r.completionFn(r.readerID)
 }
 
@@ -512,7 +512,7 @@ func (r *ReaderImpl) resetNextReadSliceLocked() {
 		return
 	}
 
-	// no more task to load, trigger completion callback
+	// No more tasks to load, trigger completion callback.
 	r.completionFn(r.readerID)
 }
 
@@ -527,7 +527,7 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Persistence layer may lose precision when persisting the task, which essentially move
+	// Persistence layer may lose precision when persisting the task, which essentially moves
 	// task fire time forward. Need to account for that when submitting the task.
 	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)

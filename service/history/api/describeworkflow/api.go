@@ -46,6 +46,21 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.Payload {
+	target := make(map[string]*commonpb.Payload, len(source))
+	for k, v := range source {
+		metadata := make(map[string][]byte, len(v.GetMetadata()))
+		for mk, mv := range v.GetMetadata() {
+			metadata[mk] = mv
+		}
+		target[k] = &commonpb.Payload{
+			Metadata: metadata,
+			Data:     v.GetData(),
+		}
+	}
+	return target
+}
+
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
@@ -73,11 +88,29 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+	// We release the lock on this workflow just before we return from this method, at which point mutable state might
+	// be mutated. Take extra care to clone all response methods as marshalling happens after we return and it is unsafe
+	// to mutate proto fields during marshalling.
 	defer func() { weCtx.GetReleaseFn()(retError) }()
 
 	mutableState := weCtx.GetMutableState()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
+
+	resetPoints := &workflowpb.ResetPoints{
+		Points: make([]*workflowpb.ResetPointInfo, len(executionInfo.AutoResetPoints.GetPoints())),
+	}
+	for i, p := range executionInfo.AutoResetPoints.GetPoints() {
+		resetPoints.Points[i] = &workflowpb.ResetPointInfo{
+			BinaryChecksum:               p.BinaryChecksum,
+			RunId:                        p.RunId,
+			FirstWorkflowTaskCompletedId: p.FirstWorkflowTaskCompletedId,
+			CreateTime:                   p.CreateTime,
+			ExpireTime:                   p.ExpireTime,
+			Resettable:                   p.Resettable,
+		}
+	}
+
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -93,14 +126,13 @@ func Invoke(
 				WorkflowId: executionInfo.WorkflowId,
 				RunId:      executionState.RunId,
 			},
-			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:            executionInfo.StartTime,
-			Status:               executionState.Status,
-			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
-			ExecutionTime:        executionInfo.ExecutionTime,
-			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			AutoResetPoints:      executionInfo.AutoResetPoints,
+			Type:          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+			StartTime:     executionInfo.StartTime,
+			Status:        executionState.Status,
+			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
+			ExecutionTime: executionInfo.ExecutionTime,
+			// Memo and SearchAttributes are set below
+			AutoResetPoints:      resetPoints,
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 			HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
@@ -126,62 +158,58 @@ func Invoke(
 		result.WorkflowExecutionInfo.CloseTime = closeTime
 	}
 
-	if len(mutableState.GetPendingActivityInfos()) > 0 {
-		for _, ai := range mutableState.GetPendingActivityInfos() {
-			p := &workflowpb.PendingActivityInfo{
-				ActivityId: ai.ActivityId,
-			}
-			if ai.CancelRequested {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-			} else if ai.StartedEventId != common.EmptyEventID {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-			} else {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-			}
-			if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
-				p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-				p.HeartbeatDetails = ai.LastHeartbeatDetails
-			}
-			p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
-			if err != nil {
-				return nil, err
-			}
-			if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-				p.ScheduledTime = ai.ScheduledTime
-			} else {
-				p.LastStartedTime = ai.StartedTime
-			}
-			p.LastWorkerIdentity = ai.StartedIdentity
-			if ai.HasRetryPolicy {
-				p.Attempt = ai.Attempt
-				p.ExpirationTime = ai.RetryExpirationTime
-				if ai.RetryMaximumAttempts != 0 {
-					p.MaximumAttempts = ai.RetryMaximumAttempts
-				}
-				if ai.RetryLastFailure != nil {
-					p.LastFailure = ai.RetryLastFailure
-				}
-				if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-					p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-				}
-			} else {
-				p.Attempt = 1
-			}
-			result.PendingActivities = append(result.PendingActivities, p)
+	for _, ai := range mutableState.GetPendingActivityInfos() {
+		p := &workflowpb.PendingActivityInfo{
+			ActivityId: ai.ActivityId,
 		}
+		if ai.CancelRequested {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+		} else if ai.StartedEventId != common.EmptyEventID {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
+		} else {
+			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+		}
+		if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
+			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
+			p.HeartbeatDetails = ai.LastHeartbeatDetails
+		}
+		p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
+		if err != nil {
+			return nil, err
+		}
+		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			p.ScheduledTime = ai.ScheduledTime
+		} else {
+			p.LastStartedTime = ai.StartedTime
+		}
+		p.LastWorkerIdentity = ai.StartedIdentity
+		if ai.HasRetryPolicy {
+			p.Attempt = ai.Attempt
+			p.ExpirationTime = ai.RetryExpirationTime
+			if ai.RetryMaximumAttempts != 0 {
+				p.MaximumAttempts = ai.RetryMaximumAttempts
+			}
+			if ai.RetryLastFailure != nil {
+				p.LastFailure = ai.RetryLastFailure
+			}
+			if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
+				p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
+			}
+		} else {
+			p.Attempt = 1
+		}
+		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
-	if len(mutableState.GetPendingChildExecutionInfos()) > 0 {
-		for _, ch := range mutableState.GetPendingChildExecutionInfos() {
-			p := &workflowpb.PendingChildExecutionInfo{
-				WorkflowId:        ch.StartedWorkflowId,
-				RunId:             ch.StartedRunId,
-				WorkflowTypeName:  ch.WorkflowTypeName,
-				InitiatedId:       ch.InitiatedEventId,
-				ParentClosePolicy: ch.ParentClosePolicy,
-			}
-			result.PendingChildren = append(result.PendingChildren, p)
+	for _, ch := range mutableState.GetPendingChildExecutionInfos() {
+		p := &workflowpb.PendingChildExecutionInfo{
+			WorkflowId:        ch.StartedWorkflowId,
+			RunId:             ch.StartedRunId,
+			WorkflowTypeName:  ch.WorkflowTypeName,
+			InitiatedId:       ch.InitiatedEventId,
+			ParentClosePolicy: ch.ParentClosePolicy,
 		}
+		result.PendingChildren = append(result.PendingChildren, p)
 	}
 
 	if pendingWorkflowTask := mutableState.GetPendingWorkflowTask(); pendingWorkflowTask != nil {
@@ -208,8 +236,12 @@ func Invoke(
 		)
 		return nil, serviceerror.NewInternal("Failed to fetch memo and search attributes")
 	}
-	result.WorkflowExecutionInfo.Memo = relocatableAttributes.Memo
-	result.WorkflowExecutionInfo.SearchAttributes = relocatableAttributes.SearchAttributes
+	result.WorkflowExecutionInfo.Memo = &commonpb.Memo{
+		Fields: clonePayloadMap(relocatableAttributes.Memo.GetFields()),
+	}
+	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
+		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
+	}
 
 	return result, nil
 }

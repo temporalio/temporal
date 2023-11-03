@@ -33,9 +33,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -121,4 +123,56 @@ func TestOverwriteCurrentClusterMetadataWithDBRecord(t *testing.T) {
 	require.Equal(t, int64(10000), cfg.ClusterMetadata.FailoverVersionIncrement)
 	require.True(t, cfg.ClusterMetadata.EnableGlobalNamespace)
 	require.Equal(t, int32(1024), cfg.Persistence.NumHistoryShards)
+}
+
+func TestTaskCategoryRegistryProvider(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		historyState           archiver.ArchivalState
+		visibilityState        archiver.ArchivalState
+		expectArchivalCategory bool
+	}{
+		{
+			name:                   "both disabled",
+			historyState:           archiver.ArchivalDisabled,
+			visibilityState:        archiver.ArchivalDisabled,
+			expectArchivalCategory: false,
+		},
+		{
+			name:                   "history enabled",
+			historyState:           archiver.ArchivalEnabled,
+			visibilityState:        archiver.ArchivalDisabled,
+			expectArchivalCategory: true,
+		},
+		{
+			name:                   "visibility enabled",
+			historyState:           archiver.ArchivalDisabled,
+			visibilityState:        archiver.ArchivalEnabled,
+			expectArchivalCategory: true,
+		},
+		{
+			name:                   "both enabled",
+			historyState:           archiver.ArchivalEnabled,
+			visibilityState:        archiver.ArchivalEnabled,
+			expectArchivalCategory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
+			historyArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
+			historyArchivalConfig.EXPECT().StaticClusterState().Return(tc.historyState).AnyTimes()
+			archivalMetadata.EXPECT().GetHistoryConfig().Return(historyArchivalConfig).AnyTimes()
+			visibilityArchivalConfig := archiver.NewMockArchivalConfig(ctrl)
+			visibilityArchivalConfig.EXPECT().StaticClusterState().Return(tc.visibilityState).AnyTimes()
+			archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityArchivalConfig).AnyTimes()
+			registry := TaskCategoryRegistryProvider(archivalMetadata)
+			_, ok := registry.GetCategoryByID(tasks.CategoryIDArchival)
+			if tc.expectArchivalCategory {
+				require.True(t, ok)
+			} else {
+				require.False(t, ok)
+			}
+		})
+	}
 }

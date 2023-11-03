@@ -33,6 +33,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -58,6 +59,7 @@ var (
 	MissedNamespaceID                        = namespace.ID("missed-namespace-id")
 	WorkflowID                               = "mock-workflow-id"
 	RunID                                    = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
+	WorkflowKey                              = definition.NewWorkflowKey(NamespaceID.String(), WorkflowID, RunID)
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
@@ -185,5 +187,7 @@ func NewDynamicConfig() *configs.Config {
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
+	config.EnableAPIGetCurrentRunIDLock = dynamicconfig.GetBoolPropertyFn(true)
+	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
 	return config
 }

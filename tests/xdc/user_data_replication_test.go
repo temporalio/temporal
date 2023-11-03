@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 
@@ -219,7 +218,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 "force-replication-wf",
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -436,25 +435,17 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 	s.Require().NoError(err)
 
 	_, err = activeFrontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  namespace,
-		WorkflowId: "test",
-		RequestId:  uuid.NewString(),
-		WorkflowType: &commonpb.WorkflowType{
-			Name: "workflow",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
+		Namespace:    namespace,
+		WorkflowId:   "test",
+		RequestId:    uuid.NewString(),
+		WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
-		Identity: "test",
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "v0",
 			UseVersioning: true,

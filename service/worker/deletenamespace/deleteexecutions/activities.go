@@ -49,6 +49,12 @@ type (
 		logger            log.Logger
 	}
 
+	LocalActivities struct {
+		visibilityManager manager.VisibilityManager
+		metricsHandler    metrics.Handler
+		logger            log.Logger
+	}
+
 	GetNextPageTokenParams struct {
 		Namespace     namespace.Name
 		NamespaceID   namespace.ID
@@ -84,7 +90,19 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNextPageTokenParams) ([]byte, error) {
+func NewLocalActivities(
+	visibilityManager manager.VisibilityManager,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *LocalActivities {
+	return &LocalActivities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
+		logger:            logger,
+	}
+}
+
+func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params GetNextPageTokenParams) ([]byte, error) {
 	ctx = headers.SetCallerName(ctx, params.Namespace.String())
 
 	req := &manager.ListWorkflowExecutionsRequestV2{

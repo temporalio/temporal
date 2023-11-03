@@ -88,7 +88,7 @@ func (s *functionalSuite) TestGetWorkflowExecutionHistory_All() {
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -254,7 +254,7 @@ func (s *functionalSuite) TestGetWorkflowExecutionHistory_Close() {
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -413,7 +413,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	workflowType := &commonpb.WorkflowType{Name: workflowTypeName}
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName}
+	taskQueue := &taskqueuepb.TaskQueue{Name: taskqueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{

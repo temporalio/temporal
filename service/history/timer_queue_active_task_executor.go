@@ -177,13 +177,14 @@ Loop:
 		}
 
 		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
-			// timer sequence IDs are sorted, once there is one timer
-			// sequence ID not expired, all after that wil not expired
+			// Timer sequence IDs are sorted; once we encounter a timer whose
+			// sequence ID has not expired, all subsequent timers will not have
+			// expired.
 			break Loop
 		}
 
 		if !mutableState.IsWorkflowExecutionRunning() {
-			release(nil) // release(nil) so mutable state is not unloaded from cache
+			release(nil) // so mutable state is not unloaded from cache
 			return consts.ErrWorkflowCompleted
 		}
 
@@ -194,7 +195,7 @@ Loop:
 	}
 
 	if !timerFired {
-		release(nil) // release(nil) so mutable state is not unloaded from cache
+		release(nil) // so mutable state is not unloaded from cache
 		return errNoTimerFired
 	}
 
@@ -227,7 +228,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
-	// need to clear activity heartbeat timer task mask for new activity timer task creation
+	// Need to clear activity heartbeat timer task mask for new activity timer task creation.
 	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be

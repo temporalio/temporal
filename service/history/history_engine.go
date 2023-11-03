@@ -32,8 +32,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	workflowpb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/service/history/api/addtasks"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -139,6 +141,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		versionChecker             headers.VersionChecker
 		tracer                     trace.Tracer
+		taskCategoryRegistry       tasks.TaskCategoryRegistry
 	}
 )
 
@@ -160,6 +163,8 @@ func NewEngineWithShardContext(
 	tracerProvider trace.TracerProvider,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	eventBlobCache persistence.XDCCache,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	dlqWriter replication.DLQWriter,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -196,6 +201,7 @@ func NewEngineWithShardContext(
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
+		taskCategoryRegistry:       taskCategoryRegistry,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -278,6 +284,7 @@ func NewEngineWithShardContext(
 		eventSerializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
+		dlqWriter,
 	)
 	return historyEngImpl
 }
@@ -391,6 +398,7 @@ func (e *historyEngineImpl) PollMutableState(
 			Execution:           request.Execution,
 			ExpectedNextEventId: request.ExpectedNextEventId,
 			CurrentBranchToken:  request.CurrentBranchToken,
+			VersionHistoryItem:  request.GetVersionHistoryItem(),
 		},
 		e.workflowConsistencyChecker,
 		e.eventNotifier,
@@ -886,4 +894,18 @@ func (e *historyEngineImpl) GetWorkflowExecutionRawHistoryV2(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 ) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	return getworkflowexecutionrawhistoryv2.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.eventNotifier, request)
+}
+
+func (e *historyEngineImpl) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+) (_ *historyservice.AddTasksResponse, retError error) {
+	return addtasks.Invoke(
+		ctx,
+		e.shardContext,
+		e.eventSerializer,
+		int(e.config.NumberOfShards),
+		request,
+		e.taskCategoryRegistry,
+	)
 }

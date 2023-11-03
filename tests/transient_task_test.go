@@ -55,7 +55,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -102,7 +102,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -145,7 +145,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -162,7 +162,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// start with 2mb limit
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
 
 	// workflow logic
 	stage := 0
@@ -251,7 +251,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
@@ -282,7 +282,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 
 	// change the dynamic config so that SuggestContinueAsNew should now be false. the current
 	// workflow task should still see true, but the next one will see false.
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4
 	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
@@ -337,7 +337,7 @@ func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(20 * time.Second),
@@ -374,7 +374,7 @@ func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType:        workflowType,
-					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               nil,
 					WorkflowRunTimeout:  timestamp.DurationPtr(1000 * time.Second),
 					WorkflowTaskTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -394,7 +394,7 @@ func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		Logger:              s.Logger,

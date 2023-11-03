@@ -77,7 +77,6 @@ type (
 	scheduleFunctionalSuite struct {
 		*require.Assertions
 		FunctionalTestBase
-		hostPort      string
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
@@ -91,12 +90,8 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 }
 
 func (s *scheduleFunctionalSuite) SetupSuite() {
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	default:
@@ -163,7 +158,7 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
 					},
@@ -457,7 +452,7 @@ func (s *scheduleFunctionalSuite) TestInput() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:        inputPayloads,
 				},
 			},
@@ -512,7 +507,7 @@ func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},
@@ -595,7 +590,7 @@ func (s *scheduleFunctionalSuite) TestRefresh() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:               wid,
 					WorkflowType:             &commonpb.WorkflowType{Name: wt},
-					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					WorkflowExecutionTimeout: timestamp.DurationPtr(3 * time.Second),
 				},
 			},
@@ -672,7 +667,7 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 
 	// disable per-ns worker so that the schedule workflow never runs
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	dc.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
@@ -687,7 +682,7 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},
@@ -747,8 +742,8 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 	// waiting one minute) we have to cause the whole worker to be stopped and started. The
 	// sleeps are needed because the refresh is asynchronous, and there's no way to get access
 	// to the actual rate limiter object to refresh it directly.
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -778,7 +773,7 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 						WorkflowId:   fmt.Sprintf(wid, i),
 						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					},
 				},
 			},
@@ -810,7 +805,7 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 	}
 
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -833,7 +828,7 @@ func (s *scheduleFunctionalSuite) TestNextTimeCache() {
 				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 					WorkflowId:   wid,
 					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				},
 			},
 		},

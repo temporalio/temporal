@@ -727,7 +727,17 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// QueueV2 is an interface for a generic FIFO queue. It should eventually supersede the Queue interface.
+	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
+	// need this migration? The main problem is very simple. The `queue_metadata` table in Cassandra has a primary key
+	// of (queue_type). This means that we can only have one queue of each type. This is a problem because we want to
+	// have multiple queues of the same type, but with different names. For example, we want to have a DLQ for
+	// replication tasks from one cluster to another, and cluster names are dynamic, so we can't create separate static
+	// queue types for each cluster. The solution is to add a queue_name column to the table, and make the primary key
+	// (queue_type, queue_name). This allows us to have multiple queues of the same type, but with different names.
+	// Since the new table (which is called `queues` in Cassandra), supports dynamic names, the interface built around
+	// it should also support dynamic names. This is why we need a new interface. There are other types built on top of
+	// this up the stack, like HistoryTaskQueueManager, for which the same principle of needing a new type because we
+	// now support dynamic names applies.
 	QueueV2 interface {
 		// EnqueueMessage adds a message to the back of the queue.
 		EnqueueMessage(
@@ -739,6 +749,17 @@ type (
 			ctx context.Context,
 			request *InternalReadMessagesRequest,
 		) (*InternalReadMessagesResponse, error)
+		// CreateQueue creates a new queue. An error will be returned if the queue already exists. In addition, an error
+		// will be returned if you attempt to operate on a queue with something like EnqueueMessage or ReadMessages
+		// before the queue is created.
+		CreateQueue(
+			ctx context.Context,
+			request *InternalCreateQueueRequest,
+		) (*InternalCreateQueueResponse, error)
+		RangeDeleteMessages(
+			ctx context.Context,
+			request *InternalRangeDeleteMessagesRequest,
+		) (*InternalRangeDeleteMessagesResponse, error)
 	}
 
 	QueueV2Type int
@@ -772,5 +793,25 @@ type (
 	InternalReadMessagesResponse struct {
 		Messages      []QueueV2Message
 		NextPageToken []byte
+	}
+
+	InternalCreateQueueRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+	}
+
+	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	// InternalRangeDeleteMessagesRequest deletes all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
+		// empty
 	}
 )

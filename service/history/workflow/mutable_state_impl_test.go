@@ -1230,27 +1230,157 @@ func (s *mutableStateSuite) getResetPointsBinaryChecksumsFromMutableState() []st
 	return binaryChecksums
 }
 
-func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_CollapseUpsert() {
+func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
+	testCases := []struct {
+		name  string
+		tasks []tasks.Task
+		res   []enumsspb.TaskType
+	}{
+		{
+			name: "start upsert close delete",
+			tasks: []tasks.Task{
+				&tasks.StartExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.CloseExecutionVisibilityTask{},
+				&tasks.DeleteExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+			},
+		},
+		{
+			name: "upsert close delete",
+			tasks: []tasks.Task{
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.CloseExecutionVisibilityTask{},
+				&tasks.DeleteExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+			},
+		},
+		{
+			name: "close delete",
+			tasks: []tasks.Task{
+				&tasks.CloseExecutionVisibilityTask{},
+				&tasks.DeleteExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+			},
+		},
+		{
+			name: "delete",
+			tasks: []tasks.Task{
+				&tasks.DeleteExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+			},
+		},
+		{
+			name: "start upsert close",
+			tasks: []tasks.Task{
+				&tasks.StartExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.CloseExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			},
+		},
+		{
+			name: "upsert close",
+			tasks: []tasks.Task{
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.CloseExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			},
+		},
+		{
+			name: "close",
+			tasks: []tasks.Task{
+				&tasks.CloseExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			},
+		},
+		{
+			name: "start upsert",
+			tasks: []tasks.Task{
+				&tasks.StartExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
+			},
+		},
+		{
+			name: "upsert",
+			tasks: []tasks.Task{
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
+			},
+		},
+		{
+			name: "start",
+			tasks: []tasks.Task{
+				&tasks.StartExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
+			},
+		},
+		{
+			name: "upsert start delete close",
+			tasks: []tasks.Task{
+				&tasks.UpsertExecutionVisibilityTask{},
+				&tasks.StartExecutionVisibilityTask{},
+				&tasks.DeleteExecutionVisibilityTask{},
+				&tasks.CloseExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+			},
+		},
+		{
+			name: "close upsert",
+			tasks: []tasks.Task{
+				&tasks.CloseExecutionVisibilityTask{},
+				&tasks.UpsertExecutionVisibilityTask{},
+			},
+			res: []enumsspb.TaskType{
+				enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
+			},
+		},
+	}
+
 	ms := s.mutableState
 
-	ms.taskGenerator.GenerateUpsertVisibilityTask()
-	ms.taskGenerator.GenerateUpsertVisibilityTask()
-	ms.taskGenerator.GenerateUpsertVisibilityTask()
-	s.Equal(3, len(ms.InsertTasks[tasks.CategoryVisibility]))
-
-	ms.closeTransactionCollapseUpsertVisibilityTasks()
-	s.Equal(1, len(ms.InsertTasks[tasks.CategoryVisibility]))
-}
-
-func (s *mutableStateSuite) TestCollapseUpsertVisibilityTasks_DontCollapseOthers() {
-	ms := s.mutableState
-
-	// it doesn't make any sense to have two start tasks, but just for testing logic
-	startEvent := &historypb.HistoryEvent{Version: 1}
-	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
-	ms.taskGenerator.GenerateRecordWorkflowStartedTasks(startEvent)
-	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
-
-	ms.closeTransactionCollapseUpsertVisibilityTasks()
-	s.Equal(2, len(ms.InsertTasks[tasks.CategoryVisibility]))
+	for _, tc := range testCases {
+		s.Run(
+			tc.name,
+			func() {
+				ms.InsertTasks[tasks.CategoryVisibility] = []tasks.Task{}
+				ms.AddTasks(tc.tasks...)
+				ms.closeTransactionCollapseVisibilityTasks()
+				visTasks := ms.InsertTasks[tasks.CategoryVisibility]
+				s.Equal(len(tc.res), len(visTasks))
+				for i, expectTaskType := range tc.res {
+					s.Equal(expectTaskType, visTasks[i].GetType())
+				}
+			},
+		)
+	}
 }

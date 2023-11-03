@@ -33,6 +33,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *metricClient) AddTasks(
+	ctx context.Context,
+	request *historyservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.AddTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientAddTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -45,6 +59,20 @@ func (c *metricClient) CloseShard(
 	}()
 
 	return c.client.CloseShard(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteDLQTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDeleteDLQTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteDLQTasks(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteWorkflowExecution(

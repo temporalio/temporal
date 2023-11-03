@@ -38,6 +38,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/server/service/history/tests"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
@@ -83,7 +84,8 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any()).Times(1)
-		out.updates = update.NewRegistry(func() update.UpdateStore { return out.ms })
+		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(1)
+		out.updates = update.NewRegistry(func() update.Store { return out.ms })
 		var effects effect.Buffer
 		config := configs.NewConfig(
 			dynamicconfig.NewCollection(

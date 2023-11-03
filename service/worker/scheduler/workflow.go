@@ -65,6 +65,9 @@ const (
 	BatchAndCacheTimeQueries = 1
 	// use cache v2, and include ids in jitter
 	NewCacheAndJitter = 2
+	// Don't put possibly-overlapping runs (from SCHEDULE_OVERLAP_POLICY_ALLOW_ALL) in
+	// RunningWorkflows.
+	DontTrackOverlapping = 3
 )
 
 const (
@@ -75,9 +78,10 @@ const (
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
-	SignalNameUpdate  = "update"
-	SignalNamePatch   = "patch"
-	SignalNameRefresh = "refresh"
+	SignalNameUpdate   = "update"
+	SignalNamePatch    = "patch"
+	SignalNameRefresh  = "refresh"
+	SignalNameForceCAN = "force-continue-as-new"
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
@@ -93,6 +97,8 @@ const (
 	rateLimitedErrorType = "RateLimited"
 
 	nextTimeCacheV1Size = 10
+
+	impossibleHistorySize = 1e6 // just for testing, no real history can be this long
 )
 
 type (
@@ -118,6 +124,7 @@ type (
 		// Signal requests
 		pendingPatch  *schedpb.SchedulePatch
 		pendingUpdate *schedspb.FullUpdateRequest
+		forceCAN      bool
 
 		uuidBatch []string
 
@@ -137,8 +144,8 @@ type (
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
-		IterationsBeforeContinueAsNew     int
-		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
+		IterationsBeforeContinueAsNew     int           // Number of iterations per run, or 0 to use server-suggested
+		SleepWhilePaused                  bool          // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize       int
@@ -186,13 +193,13 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		IterationsBeforeContinueAsNew:     500,
+		IterationsBeforeContinueAsNew:     500, // TODO: change to 0 to use GetContinueAsNewSuggested
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
-		Version:                           NewCacheAndJitter,
+		Version:                           DontTrackOverlapping,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -246,7 +253,19 @@ func (s *scheduler) run() error {
 	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
+	iters := s.tweakables.IterationsBeforeContinueAsNew
+	for {
+		info := workflow.GetInfo(s.ctx)
+		suggestContinueAsNew := info.GetCurrentHistoryLength() >= impossibleHistorySize
+		if s.tweakables.IterationsBeforeContinueAsNew > 0 {
+			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
+			iters--
+		} else {
+			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested() || s.forceCAN
+		}
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
+			break
+		}
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
@@ -285,7 +304,6 @@ func (s *scheduler) run() error {
 		// 3. a workflow that we were watching finished
 		s.sleep(nextWakeup)
 		s.updateTweakables()
-
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
@@ -574,6 +592,9 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
+	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
+	sel.AddReceive(forceCAN, s.handleForceCANSignal)
+
 	// if we're paused or out of actions, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
 		nextWakeup = time.Time{}
@@ -706,6 +727,12 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
 	s.State.NeedRefresh = true
+}
+
+func (s *scheduler) handleForceCANSignal(ch workflow.ReceiveChannel, _ bool) {
+	ch.Receive(s.ctx, nil)
+	s.logger.Debug("got force-continue-as-new signal")
+	s.forceCAN = true
 }
 
 func (s *scheduler) processSignals() bool {
@@ -964,7 +991,8 @@ func (s *scheduler) processBuffer() bool {
 			continue
 		}
 		metricsWithTag.Counter(metrics.ScheduleActionSuccess.GetMetricName()).Inc(1)
-		s.recordAction(result)
+		nonOverlapping := start == action.nonOverlappingStart
+		s.recordAction(result, nonOverlapping)
 	}
 
 	// Terminate or cancel if required (terminate overrides cancel if both are present)
@@ -993,10 +1021,11 @@ func (s *scheduler) processBuffer() bool {
 	return tryAgain
 }
 
-func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
+func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult, nonOverlapping bool) {
 	s.Info.ActionCount++
 	s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
-	if result.StartWorkflowResult != nil {
+	canTrack := nonOverlapping || !s.hasMinVersion(DontTrackOverlapping)
+	if canTrack && result.StartWorkflowResult != nil {
 		s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
 	}
 }
@@ -1029,6 +1058,13 @@ func (s *scheduler) startWorkflow(
 	}
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
+	lastCompletionResult, continuedFailure := s.State.LastCompletionResult, s.State.ContinuedFailure
+	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL && s.hasMinVersion(DontTrackOverlapping) {
+		// ALLOW_ALL runs don't participate in lastCompletionResult/continuedFailure at all
+		lastCompletionResult = nil
+		continuedFailure = nil
+	}
+
 	req := &schedspb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1045,8 +1081,8 @@ func (s *scheduler) startWorkflow(
 			Memo:                     newWorkflow.Memo,
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
-			LastCompletionResult:     s.State.LastCompletionResult,
-			ContinuedFailure:         s.State.ContinuedFailure,
+			LastCompletionResult:     lastCompletionResult,
+			ContinuedFailure:         continuedFailure,
 		},
 	}
 	for {

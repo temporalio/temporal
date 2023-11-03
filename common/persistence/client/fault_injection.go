@@ -148,6 +148,7 @@ func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
 	d.Queue.UpdateRate(rate)
 	d.ClusterMDStore.UpdateRate(rate)
 }
+
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
 	if d.TaskStore == nil {
 		baseFactory, err := d.baseFactory.NewTaskStore()
@@ -189,7 +190,6 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 	}
 	return d.ShardStore, nil
 }
-
 func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.MetadataStore, error) {
 	if d.MetadataStore == nil {
 		baseStore, err := d.baseFactory.NewMetadataStore()
@@ -456,18 +456,44 @@ func NewFaultInjectionQueueV2(rate float64, baseQueue persistence.QueueV2) *Faul
 	}
 }
 
-func (f *FaultInjectionQueueV2) EnqueueMessage(ctx context.Context, request *persistence.InternalEnqueueMessageRequest) (*persistence.InternalEnqueueMessageResponse, error) {
+func (f *FaultInjectionQueueV2) EnqueueMessage(
+	ctx context.Context,
+	request *persistence.InternalEnqueueMessageRequest,
+) (*persistence.InternalEnqueueMessageResponse, error) {
 	if err := f.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
 	return f.baseQueue.EnqueueMessage(ctx, request)
 }
 
-func (f *FaultInjectionQueueV2) ReadMessages(ctx context.Context, request *persistence.InternalReadMessagesRequest) (*persistence.InternalReadMessagesResponse, error) {
+func (f *FaultInjectionQueueV2) ReadMessages(
+	ctx context.Context,
+	request *persistence.InternalReadMessagesRequest,
+) (*persistence.InternalReadMessagesResponse, error) {
 	if err := f.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
 	return f.baseQueue.ReadMessages(ctx, request)
+}
+
+func (f *FaultInjectionQueueV2) CreateQueue(
+	ctx context.Context,
+	request *persistence.InternalCreateQueueRequest,
+) (*persistence.InternalCreateQueueResponse, error) {
+	if err := f.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return f.baseQueue.CreateQueue(ctx, request)
+}
+
+func (f *FaultInjectionQueueV2) RangeDeleteMessages(
+	ctx context.Context,
+	request *persistence.InternalRangeDeleteMessagesRequest,
+) (*persistence.InternalRangeDeleteMessagesResponse, error) {
+	if err := f.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return f.baseQueue.RangeDeleteMessages(ctx, request)
 }
 
 func NewFaultInjectionExecutionStore(
