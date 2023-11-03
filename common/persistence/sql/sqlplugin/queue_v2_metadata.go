@@ -38,7 +38,6 @@ type (
 		QueueName        string
 		MetadataPayload  []byte
 		MetadataEncoding string
-		Version          int64
 	}
 
 	QueueV2MetadataFilter struct {

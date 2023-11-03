@@ -403,7 +403,6 @@ func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.D
 		QueueName:        queueName,
 		MetadataPayload:  bytes,
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -526,7 +525,6 @@ func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplu
 		QueueName:        queueName,
 		MetadataPayload:  []byte("invalid_payload"),
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -550,7 +548,6 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 		QueueName:        queueName,
 		MetadataPayload:  []byte("test"),
 		MetadataEncoding: "invalid_encoding",
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
