@@ -562,6 +562,54 @@ func newAdminDLQCommands(
 				return ac.MergeMessages(c)
 			},
 		},
+		{
+			Name:        "job",
+			Usage:       "Run admin operation on DLQ Job",
+			Subcommands: newAdminDLQJobCommands(dlqServiceProvider),
+		},
+	}
+}
+
+func newAdminDLQJobCommands(
+	dlqServiceProvider *DLQServiceProvider,
+) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:        "describe",
+			Aliases:     []string{"d"},
+			Usage:       "Get details of the DLQ job with provided job ID",
+			Description: "This command will get details of the DLQ job with provided job ID if using v2",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "ID of the DLQ job",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				ac := dlqServiceProvider.GetDLQJobService()
+				return ac.DescribeJob(c)
+			},
+		},
+		{
+			Name:        "cancel",
+			Aliases:     []string{"c"},
+			Usage:       "Cancel the DLQ job with provided job ID",
+			Description: "This command will cancel the DLQ job with provided job ID",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "ID of the DLQ job",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for job cancellation",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				ac := dlqServiceProvider.GetDLQJobService()
+				return ac.CancelJob(c)
+			},
+		},
 	}
 }
 
