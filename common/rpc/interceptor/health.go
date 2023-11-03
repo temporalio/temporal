@@ -56,8 +56,9 @@ func (i *HealthInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	// only enforce health check on WorkflowService
-	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
+	// only enforce health check on WorkflowService and OperatorService
+	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) ||
+		strings.HasPrefix(info.FullMethod, api.OperatorServicePrefix) {
 		if !i.healthy.Load() {
 			return nil, notHealthyErr
 		}
