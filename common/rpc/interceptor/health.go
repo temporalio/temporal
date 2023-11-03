@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
@@ -56,8 +57,7 @@ func (i *HealthInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	// only enforce health check on WorkflowService
-	servicePrefix, _ := SplitMethodName(info.FullMethod)
-	if servicePrefix == api.WorkflowServicePrefix {
+	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		if !i.healthy.Load() {
 			return nil, notHealthyErr
 		}
