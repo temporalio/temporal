@@ -110,7 +110,7 @@ func (s *archivalSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.isHistoryDeleted(execution))
 	s.True(s.isMutableStateDeleted(namespaceID, execution))
 
-	if rand.Intn(1) == 1 {
+	if rand.Intn(2) == 1 {
 		panic("boom")
 	}
 }
