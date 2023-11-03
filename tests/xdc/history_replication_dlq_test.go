@@ -50,7 +50,6 @@ import (
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -164,11 +163,6 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.enableQueueV2 {
-				if tests.TestFlags.PersistenceType != config.StoreTypeNoSQL {
-					t.Skip("this test only works with cassandra")
-				}
-			}
 			s := &historyReplicationDLQSuite{
 				enableReplicationStream: tc.enableReplicationStream,
 				enableQueueV2:           tc.enableQueueV2,
