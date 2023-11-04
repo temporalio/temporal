@@ -38,7 +38,6 @@ type (
 		QueueName        string
 		MetadataPayload  []byte
 		MetadataEncoding string
-		Version          int64
 	}
 
 	QueueV2MetadataFilter struct {
@@ -56,6 +55,7 @@ type (
 		InsertIntoQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
 		UpdateQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
 		SelectFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
+		SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
 		SelectNameFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataTypeFilter) ([]QueueV2MetadataRow, error)
 	}
 )
