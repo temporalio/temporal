@@ -294,7 +294,9 @@ func (m *ReadQueueMessagesNextPageToken) GetLastReadMessageId() int64 {
 // common proto for all task proto types.
 type HistoryTask struct {
 	// shard_id that this task belonged to when it was created. Technically, you can derive this from the task data
-	// blob, but it's useful to have it here for quick access and to avoid deserializing the blob.
+	// blob, but it's useful to have it here for quick access and to avoid deserializing the blob. Note that this may be
+	// different from the shard id of this task in the current cluster because it could have come from a cluster with a
+	// different shard id. This will always be the shard id of the task in its original cluster.
 	ShardId int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	// blob that contains the history task proto. There is a GoLang-specific generic deserializer for this blob, but
 	// there is no common proto for all task proto types, so deserializing in other languages will require a custom
