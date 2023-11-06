@@ -162,9 +162,6 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *dlqSuite) SetupTest() {
-	if TestFlags.PersistenceType == "sql" {
-		s.T().Skip("skipping DLQ tests for SQL persistence")
-	}
 	s.setAssertions()
 	s.failingWorkflowIDPrefix = "dlq-test-terminal-wfts-"
 }

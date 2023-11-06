@@ -122,7 +122,8 @@ type InclusiveMessageRange struct {
 
 type DeleteRange struct {
 	InclusiveMessageRange
-	NewMinMessageID int64
+	NewMinMessageID  int64
+	MessagesToDelete int64
 }
 
 // GetDeleteRange returns the range of messages to delete, and a boolean indicating whether there is any update to be
@@ -138,6 +139,7 @@ func GetDeleteRange(request DeleteRequest) (DeleteRange, bool) {
 			// Never actually delete the last message
 			MaxMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID-1),
 		},
-		NewMinMessageID: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID) + 1,
+		NewMinMessageID:  min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID) + 1,
+		MessagesToDelete: min(request.LastIDToDeleteInclusive, request.ExistingMessageRange.MaxMessageID) - request.ExistingMessageRange.MinMessageID + 1,
 	}, true
 }

@@ -89,10 +89,11 @@ type (
 	}
 	// ProgressQueryResponse is the response to progress query.
 	ProgressQueryResponse struct {
-		MaxMessageIDToProcess  int64
-		LastProcessedMessageID int64
-		WorkflowType           string
-		DlqKey                 Key
+		MaxMessageIDToProcess     int64
+		LastProcessedMessageID    int64
+		NumberOfMessagesProcessed int64
+		WorkflowType              string
+		DlqKey                    Key
 	}
 	// HistoryClient is a subset of the [historyservice.HistoryServiceClient] interface.
 	HistoryClient interface {
@@ -197,6 +198,7 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			SourceCluster:  params.DeleteParams.SourceCluster,
 			TargetCluster:  params.DeleteParams.TargetCluster,
 		}
+		var response historyservice.DeleteDLQTasksResponse
 		err = workflow.ExecuteActivity(
 			workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				TaskQueue:           primitives.DLQActivityTQ,
@@ -205,11 +207,12 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			}),
 			deleteTasksActivityName,
 			params.DeleteParams,
-		).Get(ctx, nil)
+		).Get(ctx, &response)
 		if err != nil {
 			return err
 		}
 		queryResponse.LastProcessedMessageID = params.DeleteParams.MaxMessageID
+		queryResponse.NumberOfMessagesProcessed = response.MessagesDeleted
 		return nil
 	} else if params.WorkflowType == WorkflowTypeMerge {
 		queryResponse.MaxMessageIDToProcess = params.MergeParams.MaxMessageID
@@ -218,13 +221,13 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			SourceCluster:  params.MergeParams.SourceCluster,
 			TargetCluster:  params.MergeParams.TargetCluster,
 		}
-		return c.mergeTasks(ctx, params.MergeParams, &queryResponse.LastProcessedMessageID)
+		return c.mergeTasks(ctx, params.MergeParams, &queryResponse.LastProcessedMessageID, &queryResponse.NumberOfMessagesProcessed)
 	}
 
 	return temporal.NewNonRetryableApplicationError(params.WorkflowType, errorTypeInvalidWorkflowType, nil)
 }
 
-func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) error {
+func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) (*historyservice.DeleteDLQTasksResponse, error) {
 	req := &historyservice.DeleteDLQTasksRequest{
 		DlqKey: &commonspb.HistoryDLQKey{
 			TaskCategory:  int32(params.TaskCategoryID),
@@ -236,15 +239,20 @@ func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) 
 		},
 	}
 
-	_, err := c.historyClient.DeleteDLQTasks(ctx, req)
+	resp, err := c.historyClient.DeleteDLQTasks(ctx, req)
 	if err != nil {
-		return c.convertServerErr(err, "DeleteDLQTasks failed")
+		return nil, c.convertServerErr(err, "DeleteDLQTasks failed")
 	}
 
-	return err
+	return resp, err
 }
 
-func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams, lastProcessedMessageID *int64) error {
+func (c *workerComponent) mergeTasks(
+	ctx workflow.Context,
+	params MergeParams,
+	lastProcessedMessageID *int64,
+	numberOfMessagesProcessed *int64,
+) error {
 	params, err := parseMergeParams(params)
 	if err != nil {
 		return err
@@ -308,6 +316,7 @@ func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams, l
 			return err
 		}
 		*lastProcessedMessageID = maxBatchMessageID
+		*numberOfMessagesProcessed = int64(len(tasks))
 		// 4. Check if we're done.
 		if len(nextPageToken) == 0 {
 			return nil

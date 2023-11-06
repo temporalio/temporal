@@ -1290,7 +1290,7 @@ type (
 	}
 
 	DeleteTasksResponse struct {
-		// empty
+		MessagesDeleted int64
 	}
 )
 

@@ -210,7 +210,7 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	ctx context.Context,
 	request *DeleteTasksRequest,
 ) (*DeleteTasksResponse, error) {
-	_, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
+	resp, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
 		QueueType:                   request.QueueKey.QueueType,
 		QueueName:                   request.QueueKey.GetQueueName(),
 		InclusiveMaxMessageMetadata: request.InclusiveMaxMessageMetadata,
@@ -218,7 +218,7 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	if err != nil {
 		return nil, err
 	}
-	return &DeleteTasksResponse{}, nil
+	return &DeleteTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

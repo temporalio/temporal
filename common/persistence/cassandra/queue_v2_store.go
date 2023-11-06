@@ -322,7 +322,9 @@ func (s *queueV2Store) RangeDeleteMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+	return &persistence.InternalRangeDeleteMessagesResponse{
+		MessagesDeleted: deleteRange.MessagesToDelete,
+	}, nil
 }
 
 func (s *queueV2Store) updateQueue(
