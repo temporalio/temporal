@@ -609,7 +609,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromChildExecutionInfoMaps: %w", err)
 		}
 		_, err = tx.DeleteAllFromActivityInfoMaps(ctx, sqlplugin.ActivityInfoMapsAllFilter{
 			ShardID:     request.ShardID,
@@ -618,7 +618,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromActivityInfoMaps: %w", err)
 		}
 		_, err = tx.DeleteAllFromRequestCancelInfoMaps(ctx, sqlplugin.RequestCancelInfoMapsAllFilter{
 			ShardID:     request.ShardID,
@@ -627,7 +627,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromRequestCancelInfoMaps: %w", err)
 		}
 		_, err = tx.DeleteAllFromSignalInfoMaps(ctx, sqlplugin.SignalInfoMapsAllFilter{
 			ShardID:     request.ShardID,
@@ -636,7 +636,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromSignalInfoMaps: %w", err)
 		}
 		_, err = tx.DeleteAllFromTimerInfoMaps(ctx, sqlplugin.TimerInfoMapsAllFilter{
 			ShardID:     request.ShardID,
@@ -645,7 +645,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromTimerInfoMaps: %w", err)
 		}
 		_, err = tx.DeleteAllFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsAllFilter{
 			ShardID:     request.ShardID,
@@ -654,7 +654,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteAllFromSignalsRequestedSets: %w", err)
 		}
 		_, err = tx.DeleteFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
 			ShardID:     request.ShardID,
@@ -663,7 +663,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			RunID:       runID,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to execute DeleteFromBufferedEvents: %w", err)
 		}
 		_, err = tx.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 			ShardID:     request.ShardID,
@@ -671,7 +671,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			WorkflowID:  request.WorkflowID,
 			RunID:       runID,
 		})
-		return err
+		return fmt.Errorf("failed to delete workflow execution %v: %w", request, err)
 	})
 }
 
