@@ -1862,9 +1862,9 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobId))
+	err := jt.Unmarshal([]byte(request.JobToken))
 	if err != nil {
-		return nil, errInvalidDLQJobToken
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
 	client := adh.sdkClientFactory.GetSystemClient()
 	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
@@ -1895,7 +1895,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 	case dlq.WorkflowTypeMerge:
 		opType = enumsspb.DLQ_OPERATION_TYPE_MERGE
 	default:
-		return nil, serviceerror.NewInternal("Invalid DLQ workflow type")
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid DLQ workflow type: %v", opType))
 	}
 	return &adminservice.DescribeDLQJobResponse{
 		DlqKey: &commonspb.HistoryDLQKey{
@@ -1914,9 +1914,9 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
-	err := jt.Unmarshal([]byte(request.JobId))
+	err := jt.Unmarshal([]byte(request.JobToken))
 	if err != nil {
-		return nil, errInvalidDLQJobToken
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
 	client := adh.sdkClientFactory.GetSystemClient()
 	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)

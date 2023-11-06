@@ -6737,6 +6737,7 @@ func (m *DeleteDLQTasksRequest) GetInclusiveMaxTaskMetadata() *v117.HistoryDLQTa
 }
 
 type DeleteDLQTasksResponse struct {
+	// messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
 	MessagesDeleted int64 `protobuf:"varint,1,opt,name=messages_deleted,json=messagesDeleted,proto3" json:"messages_deleted,omitempty"`
 }
 

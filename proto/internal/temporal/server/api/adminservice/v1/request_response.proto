@@ -470,7 +470,8 @@ message MergeDLQTasksResponse {
 }
 
 message DescribeDLQJobRequest {
-  string job_id = 1;
+  // Job token of MergeDLQTasks or PurgeDLQTasks job.
+  string job_token = 1;
 }
 
 message DescribeDLQJobResponse {
@@ -488,15 +489,15 @@ message DescribeDLQJobResponse {
 }
 
 message CancelDLQJobRequest {
-  // Job ID of MergeDLQTasks or PurgeDLQTasks job to cancel.
-  string job_id = 1;
+  // Job token of MergeDLQTasks or PurgeDLQTasks job to cancel.
+  string job_token = 1;
   // The reason for cancellation.
   string reason = 2;
 }
 
 message CancelDLQJobResponse {
-  // This is true if the workflow was successfully canceled by this request and false if
-  // the workflow was already canceled.
+  // This is true if the workflow was successfully terminated by this request and false if
+  // the workflow was already completed or terminated.
   bool canceled = 1;
 }
 
