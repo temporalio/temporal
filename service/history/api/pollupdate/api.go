@@ -28,10 +28,12 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/api/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +43,12 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
+const (
+	unspecifiedStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
+	acceptedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED
+	completedStage   = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
+)
+
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
@@ -48,12 +56,9 @@ func Invoke(
 	ctxLookup api.WorkflowConsistencyChecker,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
-	if waitStage != enums.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
-	}
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
-	upd, ok, err := func() (*update.Update, bool, error) {
+	wfKey, upd, ok, err := func() (*definition.WorkflowKey, *update.Update, bool, error) {
 		wfctx, err := ctxLookup.GetWorkflowContext(
 			ctx,
 			nil,
@@ -66,12 +71,13 @@ func Invoke(
 			workflow.LockPriorityHigh,
 		)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
 		release := wfctx.GetReleaseFn()
 		defer release(nil)
 		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		return upd, found, nil
+		wfKey := wfctx.GetWorkflowKey()
+		return &wfKey, upd, found, nil
 	}()
 	if err != nil {
 		return nil, err
@@ -79,21 +85,49 @@ func Invoke(
 	if !ok {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
-	namespaceID := namespace.ID(req.GetNamespaceId())
-	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-	// If the long-poll times out due to serverTimeout then return a non-error empty response.
-	stage, outcome, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
-	if err != nil {
-		return nil, err
+
+	var stage enumspb.UpdateWorkflowExecutionLifecycleStage
+	var outcome *updatepb.Outcome
+
+	switch waitStage {
+	case unspecifiedStage:
+		stage, outcome, err = upd.LifecycleStage()
+		if err != nil {
+			return nil, err
+		}
+	case acceptedStage, completedStage:
+		stage, outcome, err = waitLifecycleStage(ctx, upd, waitStage, shardContext, req.GetNamespaceId())
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
 	}
 	return &historyservice.PollWorkflowExecutionUpdateResponse{
 		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
 			Outcome: outcome,
 			Stage:   stage,
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: wfKey.WorkflowID,
+					RunId:      wfKey.RunID,
+				},
+				UpdateId: updateRef.UpdateId,
+			},
 		},
 	}, nil
+}
+
+func waitLifecycleStage(ctx context.Context, upd *update.Update,
+	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	shardContext shard.Context, namespaceId string) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+
+	namespaceID := namespace.ID(namespaceId)
+	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return unspecifiedStage, nil, err
+	}
+	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	// If the long-poll times out due to serverTimeout then return a non-error empty response.
+	return upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 }

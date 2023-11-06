@@ -689,39 +689,66 @@ func TestWaitLifecycleStage(t *testing.T) {
 	)
 	const (
 		unspecifiedStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
+		admittedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED
 		acceptedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED
 		completedStage   = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
 		serverTimeout    = 10 * time.Millisecond
 	)
 
-	assertUnspecified := func(ctx context.Context, t *testing.T, upd *update.Update) {
-		_, _, err := upd.WaitLifecycleStage(ctx, unspecifiedStage, serverTimeout)
-		require.Error(t, err)
+	assertAdmitted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		assert := func(stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+			require.NoError(t, err)
+			require.Equal(t, admittedStage, stage)
+			require.Nil(t, outcome)
+		}
+		stage, outcome, err := upd.LifecycleStage()
+		assert(stage, outcome, err)
 	}
 
-	assertAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+	assertAccepted := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
+		assert := func(stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+			require.NoError(t, err)
+			require.Equal(t, acceptedStage, stage)
+			require.Nil(t, outcome)
+		}
+		if alreadyInState {
+			stage, outcome, err := upd.LifecycleStage()
+			assert(stage, outcome, err)
+		}
 		stage, outcome, err := upd.WaitLifecycleStage(ctx, acceptedStage, serverTimeout)
-		require.NoError(t, err)
-		require.Equal(t, acceptedStage, stage)
-		require.Nil(t, outcome)
+		assert(stage, outcome, err)
 	}
 
-	assertSuccess := func(ctx context.Context, t *testing.T, upd *update.Update) {
+	assertSuccess := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
+		assert := func(stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+			require.NoError(t, err)
+			require.Equal(t, completedStage, stage)
+			require.Nil(t, outcome.GetFailure())
+			require.NotNil(t, outcome.GetSuccess())
+			require.Equal(t, resp.Outcome, outcome)
+		}
+		if alreadyInState {
+			stage, outcome, err := upd.LifecycleStage()
+			assert(stage, outcome, err)
+		}
 		stage, outcome, err := upd.WaitLifecycleStage(ctx, completedStage, serverTimeout)
-		require.NoError(t, err)
-		require.Equal(t, completedStage, stage)
-		require.Nil(t, outcome.GetFailure())
-		require.NotNil(t, outcome.GetSuccess())
-		require.Equal(t, resp.Outcome, outcome)
+		assert(stage, outcome, err)
 	}
 
-	assertFailure := func(ctx context.Context, t *testing.T, upd *update.Update) {
+	assertFailure := func(ctx context.Context, t *testing.T, upd *update.Update, alreadyInState bool) {
+		assert := func(stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+			require.NoError(t, err)
+			require.Equal(t, completedStage, stage)
+			require.NotNil(t, outcome.GetFailure())
+			require.Nil(t, outcome.GetSuccess())
+			require.Equal(t, rej.Failure, outcome.GetFailure())
+		}
+		if alreadyInState {
+			stage, outcome, err := upd.LifecycleStage()
+			assert(stage, outcome, err)
+		}
 		stage, outcome, err := upd.WaitLifecycleStage(ctx, completedStage, serverTimeout)
-		require.NoError(t, err)
-		require.Equal(t, completedStage, stage)
-		require.NotNil(t, outcome.GetFailure())
-		require.Nil(t, outcome.GetSuccess())
-		require.Equal(t, rej.Failure, outcome.GetFailure())
+		assert(stage, outcome, err)
 	}
 
 	assertSoftTimeoutWhileWaitingForAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
@@ -748,12 +775,12 @@ func TestWaitLifecycleStage(t *testing.T) {
 	t.Run("test non-blocking calls (accepted)", func(t *testing.T) {
 		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-		assertUnspecified(ctx, t, upd)
+		assertAdmitted(ctx, t, upd)
 		applyMessage(ctx, &req, upd)  // => Requested
 		applyMessage(ctx, &acpt, upd) // => Accepted
-		assertAccepted(ctx, t, upd)
+		assertAccepted(ctx, t, upd, true)
 		applyMessage(ctx, &resp, upd) // => Completed (success)
-		assertSuccess(ctx, t, upd)
+		assertSuccess(ctx, t, upd, true)
 	})
 
 	t.Run("test non-blocking calls (rejected)", func(t *testing.T) {
@@ -761,7 +788,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		applyMessage(ctx, &req, upd) // => Requested
 		applyMessage(ctx, &rej, upd) // => Completed (failure)
-		assertFailure(ctx, t, upd)
+		assertFailure(ctx, t, upd, true)
 	})
 
 	t.Run("test blocking calls (accepted)", func(t *testing.T) {
@@ -770,7 +797,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		applyMessage(ctx, &req, upd) // => Requested
 		done := make(chan any)
 		go func() {
-			assertAccepted(ctx, t, upd)
+			assertAccepted(ctx, t, upd, false)
 			close(done)
 		}()
 		go applyMessage(ctx, &acpt, upd) // => Accepted
@@ -779,7 +806,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		ctx = context.Background()
 		done = make(chan any)
 		go func() {
-			assertSuccess(ctx, t, upd)
+			assertSuccess(ctx, t, upd, false)
 			close(done)
 		}()
 		go applyMessage(ctx, &resp, upd) // => Completed (success)
@@ -792,7 +819,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 		applyMessage(ctx, &req, upd) // => Requested
 		done := make(chan any)
 		go func() {
-			assertFailure(ctx, t, upd)
+			assertFailure(ctx, t, upd, false)
 			close(done)
 		}()
 		go applyMessage(ctx, &rej, upd) // => Completed (failure)
@@ -807,6 +834,15 @@ func TestWaitLifecycleStage(t *testing.T) {
 		ctx, cancel = context.WithTimeout(context.Background(), serverTimeout/2)
 		defer cancel()
 		assertContextDeadlineExceededWhileWaitingForAccepted(ctx, t, upd)
+	})
+
+	t.Run("may not wait for Unspecified nor Admitted states", func(t *testing.T) {
+		ctx := context.Background()
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		_, _, err := upd.WaitLifecycleStage(ctx, unspecifiedStage, serverTimeout)
+		require.Error(t, err)
+		_, _, err = upd.WaitLifecycleStage(ctx, admittedStage, serverTimeout)
+		require.Error(t, err)
 	})
 }
 

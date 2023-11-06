@@ -71,14 +71,15 @@ type (
 	}
 
 	// Update is a state machine for the update protocol. It reads and writes
-	// messages from the go.temporal.io/api/update/v1 package. The update state
-	// machine is straightforward except in that it provides "provisional"
-	// in-between states where the update has received a message that has
-	// modified its internal state but those changes have not been made visible
-	// to clients yet (e.g. accepted or outcome futures have not been set yet).
-	// The observable changes are bound to the EventStore's effect.Controller
-	// and will be triggered when those effects are applied.
-	// State transitions (OnMessage calls) must be done while holding the workflow lock.
+	// messages from the go.temporal.io/api/update/v1 package. See the diagram
+	// in service/history/workflow/update/README.md. The update state machine is
+	// straightforward except in that it provides "provisional" in-between
+	// states where the update has received a message that has modified its
+	// internal state but those changes have not been made visible to clients
+	// yet (e.g. accepted or outcome futures have not been set yet). The
+	// observable changes are bound to the EventStore's effect.Controller and
+	// will be triggered when those effects are applied. State transitions
+	// (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
@@ -209,6 +210,22 @@ func (u *Update) waitLifecycleStage(
 	return stage, outcome, err
 }
 
+// LifecycleStage returns the enumspb.UpdateWorkflowExecutionLifecycleStage
+// corresponding to the current state of this Update, and the Outcome if it has one.
+func (u *Update) LifecycleStage() (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+	stage, err = u.state.LifecycleStage()
+	if err != nil {
+		return unspecifiedStage, nil, err
+	}
+	if u.outcome.Ready() {
+		outcome, err = u.outcome.Get(context.Background())
+	}
+	if err != nil {
+		return unspecifiedStage, nil, err
+	}
+	return stage, outcome, err
+}
+
 // WaitOutcome observes this Update's completion, returning the Outcome when it
 // is available. This call will block until the Outcome is known or the provided
 // context.Context expires. It is safe to call this method outside of workflow lock.
@@ -250,8 +267,11 @@ func (u *Update) WaitAccepted(ctx context.Context) (enumspb.UpdateWorkflowExecut
 // Body field contains an instance from the same list. Writes to the EventStore
 // occur synchronously but externally observable effects on this Update (e.g.
 // emitting an Outcome or an Accepted) are registered with the EventStore to be
-// applied after the durable updates are committed. If the EventStore rolls
-// back its effects, this state machine does the same.
+// applied after the durable updates are committed. If the EventStore rolls back
+// its effects, this state machine does the same.
+//
+// If you modify the state machine please update the diagram in
+// service/history/workflow/update/README.md.
 func (u *Update) OnMessage(
 	ctx context.Context,
 	msg proto.Message,

@@ -66,6 +66,7 @@ type (
 		api.WorkflowContext
 		GetUpdateRegistryFunc func(context.Context) update.Registry
 		GetReleaseFnFunc      func() wcache.ReleaseCacheFunc
+		GetWorkflowKeyFunc    func() definition.WorkflowKey
 	}
 
 	mockReg struct {
@@ -99,16 +100,27 @@ func (m mockAPICtx) GetUpdateRegistry(ctx context.Context) update.Registry {
 	return m.GetUpdateRegistryFunc(ctx)
 }
 
+func (m mockAPICtx) GetWorkflowKey() definition.WorkflowKey {
+	return m.GetWorkflowKeyFunc()
+}
+
 func (m mockReg) Find(ctx context.Context, updateID string) (*update.Update, bool) {
 	return m.FindFunc(ctx, updateID)
 }
 
 func TestPollOutcome(t *testing.T) {
+	namespaceId := t.Name() + "-namespace-id"
+	workflowId := t.Name() + "-workflow-id"
+	runId := t.Name() + "-run-id"
+	updateID := t.Name() + "-update-id"
 	reg := mockReg{}
 	apiCtx := mockAPICtx{
 		GetReleaseFnFunc: func() wcache.ReleaseCacheFunc { return func(error) {} },
 		GetUpdateRegistryFunc: func(context.Context) update.Registry {
 			return reg
+		},
+		GetWorkflowKeyFunc: func() definition.WorkflowKey {
+			return definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}
 		},
 	}
 	wfcc := mockWFConsistencyChecker{
@@ -133,13 +145,12 @@ func TestPollOutcome(t *testing.T) {
 	shardContext.EXPECT().GetConfig().Return(mockConfig).AnyTimes()
 	shardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry).AnyTimes()
 
-	updateID := t.Name() + "-update-id"
 	req := historyservice.PollWorkflowExecutionUpdateRequest{
 		Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
 			UpdateRef: &updatepb.UpdateRef{
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: t.Name() + "-workflow-id",
-					RunId:      t.Name() + "-run-id",
+					WorkflowId: workflowId,
+					RunId:      runId,
 				},
 				UpdateId: updateID,
 			},
