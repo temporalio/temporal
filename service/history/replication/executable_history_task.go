@@ -180,6 +180,26 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 			return err
 		}
 		return e.Execute()
+	case *serviceerrors.ImportMissingEvent:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName)
+		defer cancel()
+
+		if err := e.Import(
+			ctx,
+			e.ExecutableTask.SourceClusterName(),
+			retryErr,
+			ResendAttempt,
+		); err != nil {
+			return err
+		}
+		return e.Execute()
 	default:
 		e.Logger.Error("history replication task encountered error",
 			tag.WorkflowNamespaceID(e.NamespaceID),

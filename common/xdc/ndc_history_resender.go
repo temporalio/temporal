@@ -68,6 +68,17 @@ type (
 			endEventID int64,
 			endEventVersion int64,
 		) error
+		GetSingleWorkflowHistoryPagingIterator(
+			ctx context.Context,
+			remoteClusterName string,
+			namespaceID namespace.ID,
+			workflowID string,
+			runID string,
+			startEventID int64,
+			startEventVersion int64,
+			endEventID int64,
+			endEventVersion int64,
+		) collection.Iterator[historyBatch]
 	}
 
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
@@ -81,14 +92,16 @@ type (
 	}
 
 	historyBatch struct {
-		versionHistory *historyspb.VersionHistory
-		rawEventBatch  *commonpb.DataBlob
+		VersionHistory *historyspb.VersionHistory
+		RawEventBatch  *commonpb.DataBlob
 	}
 )
 
 const (
 	defaultPageSize = int32(100)
 )
+
+var _ NDCHistoryResender = (*NDCHistoryResenderImpl)(nil)
 
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
@@ -161,8 +174,8 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			namespaceID,
 			workflowID,
 			runID,
-			batch.rawEventBatch,
-			batch.versionHistory.GetItems())
+			batch.RawEventBatch,
+			batch.VersionHistory.GetItems())
 
 		err = n.sendReplicationRawRequest(resendCtx, replicationRequest)
 		if err != nil {
@@ -175,6 +188,20 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 	}
 	return nil
+}
+
+func (n *NDCHistoryResenderImpl) GetSingleWorkflowHistoryPagingIterator(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID string, runID string, startEventID int64, startEventVersion int64, endEventID int64, endEventVersion int64) collection.Iterator[historyBatch] {
+	return collection.NewPagingIterator(n.getPaginationFn(
+		ctx,
+		remoteClusterName,
+		namespaceID,
+		workflowID,
+		runID,
+		startEventID,
+		startEventVersion,
+		endEventID,
+		endEventVersion,
+	))
 }
 
 func (n *NDCHistoryResenderImpl) getPaginationFn(
@@ -212,8 +239,8 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 		versionHistory := response.GetVersionHistory()
 		for _, history := range response.GetHistoryBatches() {
 			batch := historyBatch{
-				versionHistory: versionHistory,
-				rawEventBatch:  history,
+				VersionHistory: versionHistory,
+				RawEventBatch:  history,
 			}
 			batches = append(batches, batch)
 		}

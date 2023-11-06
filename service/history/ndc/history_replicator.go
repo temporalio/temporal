@@ -274,14 +274,29 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		}
 	}()
 
+	mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
+
+	// import check
+	versionHistoryPast, _ := r.parseVersionHistoryItems(task.getVersionHistory().Items)
+	if _, isNotFound := err.(*serviceerror.NotFound); len(versionHistoryPast) != 0 && isNotFound {
+		return serviceerrors.NewImportMissingEvent(
+			"Failed to replicate event",
+			task.getNamespaceID().String(),
+			task.getWorkflowID(),
+			task.getRunID(),
+			common.FirstEventID,
+			versionHistoryPast[0].Version,
+			versionHistoryPast[len(versionHistoryPast)-1].EventId,
+			versionHistoryPast[len(versionHistoryPast)-1].Version,
+		)
+	}
+
 	switch task.getFirstEvent().GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		return r.applyStartEvents(ctx, wfContext, releaseFn, task)
-
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
 		switch err.(type) {
 		case nil:
 			mutableState, _, err = r.mutableStateMapper.FlushBufferEvents(ctx, wfContext, mutableState, task)
@@ -326,6 +341,15 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 			return err
 		}
 	}
+}
+
+func (r *HistoryReplicatorImpl) parseVersionHistoryItems(versionHistoryItems []*historyspb.VersionHistoryItem) ([]*historyspb.VersionHistoryItem, []*historyspb.VersionHistoryItem) {
+	for i := len(versionHistoryItems) - 1; i >= 0; i-- {
+		if versionHistoryItems[i].Version%r.clusterMetadata.GetClusterID() == 0 {
+			return versionHistoryItems[i:], versionHistoryItems[:i]
+		}
+	}
+	return nil, versionHistoryItems
 }
 
 func (r *HistoryReplicatorImpl) applyStartEvents(
