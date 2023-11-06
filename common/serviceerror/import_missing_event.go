@@ -24,10 +24,6 @@
 
 package serviceerror
 
-import (
-	"github.com/gogo/status"
-)
-
 type (
 	// ImportMissingEvent represents import missing event error.
 	ImportMissingEvent struct {
@@ -39,7 +35,6 @@ type (
 		StartEventVersion int64
 		EndEventId        int64
 		EndEventVersion   int64
-		st                *status.Status
 	}
 )
 

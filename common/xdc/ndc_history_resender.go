@@ -190,7 +190,17 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	return nil
 }
 
-func (n *NDCHistoryResenderImpl) GetSingleWorkflowHistoryPagingIterator(ctx context.Context, remoteClusterName string, namespaceID namespace.ID, workflowID string, runID string, startEventID int64, startEventVersion int64, endEventID int64, endEventVersion int64) collection.Iterator[historyBatch] {
+func (n *NDCHistoryResenderImpl) GetSingleWorkflowHistoryPagingIterator(
+	ctx context.Context,
+	remoteClusterName string,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	startEventID int64,
+	startEventVersion int64,
+	endEventID int64,
+	endEventVersion int64,
+) collection.Iterator[historyBatch] {
 	return collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
 		remoteClusterName,
