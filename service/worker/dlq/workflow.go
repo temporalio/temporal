@@ -316,7 +316,7 @@ func (c *workerComponent) mergeTasks(
 			return err
 		}
 		*lastProcessedMessageID = maxBatchMessageID
-		*numberOfMessagesProcessed = int64(len(tasks))
+		*numberOfMessagesProcessed += int64(len(tasks))
 		// 4. Check if we're done.
 		if len(nextPageToken) == 0 {
 			return nil

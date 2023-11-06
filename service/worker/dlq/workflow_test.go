@@ -206,6 +206,8 @@ func TestModule(t *testing.T) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 2
 				params.expectedQueryResp.MaxMessageIDToProcess = 2
+				params.expectedQueryResp.NumberOfMessagesProcessed = 1
+				params.expectedQueryResp.LastProcessedMessageID = 0
 				var (
 					getRequests []*historyservice.GetDLQTasksRequest
 					addRequests []*historyservice.AddTasksRequest
@@ -254,6 +256,7 @@ func TestModule(t *testing.T) {
 				params.workflowParams.MergeParams.MaxMessageID = 3
 				params.expectedQueryResp.MaxMessageIDToProcess = 3
 				params.expectedQueryResp.LastProcessedMessageID = 3
+				params.expectedQueryResp.NumberOfMessagesProcessed = 4
 				params.client.getTasksFn = func(
 					req *historyservice.GetDLQTasksRequest,
 				) (*historyservice.GetDLQTasksResponse, error) {
@@ -478,10 +481,11 @@ func (p *testParams) setDefaultDeleteParams(t *testing.T) {
 		},
 	}
 	p.expectedQueryResp = dlq.ProgressQueryResponse{
-		MaxMessageIDToProcess:  p.workflowParams.DeleteParams.MaxMessageID,
-		LastProcessedMessageID: p.workflowParams.DeleteParams.MaxMessageID,
-		WorkflowType:           p.workflowParams.WorkflowType,
-		DlqKey:                 p.workflowParams.DeleteParams.Key,
+		MaxMessageIDToProcess:     p.workflowParams.DeleteParams.MaxMessageID,
+		LastProcessedMessageID:    p.workflowParams.DeleteParams.MaxMessageID,
+		NumberOfMessagesProcessed: 0,
+		WorkflowType:              p.workflowParams.WorkflowType,
+		DlqKey:                    p.workflowParams.DeleteParams.Key,
 	}
 }
 
@@ -530,10 +534,11 @@ func (p *testParams) setDefaultParams(t *testing.T) {
 	}
 	p.queryExpectation = func(response dlq.ProgressQueryResponse) {
 		require.NotNil(t, response)
-		require.Equal(t, response.MaxMessageIDToProcess, p.expectedQueryResp.MaxMessageIDToProcess)
-		require.Equal(t, response.LastProcessedMessageID, p.expectedQueryResp.LastProcessedMessageID)
-		require.Equal(t, response.WorkflowType, p.expectedQueryResp.WorkflowType)
-		require.EqualValues(t, response.DlqKey, p.expectedQueryResp.DlqKey)
+		require.Equal(t, p.expectedQueryResp.MaxMessageIDToProcess, response.MaxMessageIDToProcess)
+		require.Equal(t, p.expectedQueryResp.LastProcessedMessageID, response.LastProcessedMessageID)
+		require.Equal(t, p.expectedQueryResp.WorkflowType, response.WorkflowType)
+		require.Equal(t, p.expectedQueryResp.NumberOfMessagesProcessed, response.NumberOfMessagesProcessed)
+		require.EqualValues(t, p.expectedQueryResp.DlqKey, response.DlqKey)
 	}
 }
 
