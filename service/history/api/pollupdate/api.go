@@ -28,12 +28,15 @@ import (
 	"context"
 	"fmt"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -41,8 +44,13 @@ import (
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
+	shardContext shard.Context,
 	ctxLookup api.WorkflowConsistencyChecker,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	if waitStage != enums.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		return nil, serviceerror.NewUnimplemented(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
+	}
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
 	upd, ok, err := func() (*update.Update, bool, error) {
@@ -71,13 +79,21 @@ func Invoke(
 	if !ok {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
-	outcome, err := upd.WaitOutcome(ctx)
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	// If the long-poll times out due to serverTimeout then return a non-error empty response.
+	stage, outcome, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
 	return &historyservice.PollWorkflowExecutionUpdateResponse{
 		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
 			Outcome: outcome,
+			Stage:   stage,
 		},
 	}, nil
 }
