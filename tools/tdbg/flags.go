@@ -66,7 +66,7 @@ var (
 	FlagTLSDisableHostVerification = "tls-disable-host-verification"
 	FlagTLSServerName              = "tls-server-name"
 	FlagLastMessageID              = "last-message-id"
-	FlagJobID                      = "job-id"
+	FlagJobToken                   = "job-token"
 	FlagReason                     = "reason"
 	FlagYes                        = "yes"
 	FlagMore                       = "more"
