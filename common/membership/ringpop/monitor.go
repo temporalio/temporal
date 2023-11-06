@@ -32,7 +32,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"go.temporal.io/server/common/config"
@@ -59,7 +59,8 @@ const (
 )
 
 type monitor struct {
-	status int32
+	stateLock sync.Mutex
+	status    int32
 
 	lifecycleCtx    context.Context
 	lifecycleCancel context.CancelFunc
@@ -114,14 +115,17 @@ func newMonitor(
 	return rpo
 }
 
+// Start the membership monitor. Stop() can be called concurrently so we relinquish the state lock when
+// it's safe for Stop() to run, which is at any point when we are neither updating the status field nor
+// starting rings
 func (rpo *monitor) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&rpo.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	rpo.stateLock.Lock()
+	if rpo.status != common.DaemonStatusInitialized {
+		rpo.stateLock.Unlock()
 		return
 	}
+	rpo.status = common.DaemonStatusStarted
+	rpo.stateLock.Unlock()
 
 	broadcastAddress, err := rpo.broadcastHostPortResolver()
 	if err != nil {
@@ -136,9 +140,16 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	rpo.rp.start(
+	err = rpo.rp.start(
 		func() ([]string, error) { return rpo.fetchCurrentBootstrapHostports() },
 		healthyHostLastHeartbeatCutoff/2)
+	if err != nil {
+		// Stop() called during Start()'s execution. This is ok
+		if strings.Contains(err.Error(), "destroyed while attempting to join") {
+			return
+		}
+		rpo.logger.Fatal("failed to start ringpop", tag.Error(err))
+	}
 
 	labels, err := rpo.rp.Labels()
 	if err != nil {
@@ -153,9 +164,12 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to set ring pop ServiceRole label", tag.Error(err))
 	}
 
+	// Our individual rings may not support concurrent start/stop calls so we reacquire the state lock while acting upon them
+	rpo.stateLock.Lock()
 	for _, ring := range rpo.rings {
 		ring.Start()
 	}
+	rpo.stateLock.Unlock()
 
 	rpo.initialized.Set(struct{}{}, nil)
 }
@@ -304,6 +318,11 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
 	loopUpsertMembership := func() {
 		for {
+			select {
+			case <-rpo.lifecycleCtx.Done():
+				return
+			default:
+			}
 			err := rpo.upsertMyMembership(rpo.lifecycleCtx, request)
 
 			if err != nil {
@@ -318,14 +337,16 @@ func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterM
 	go loopUpsertMembership()
 }
 
+// Stop the membership monitor and all associated rings. This holds the state lock
+// for the entire call as the individual ring Start/Stop functions may not be safe to
+// call concurrently
 func (rpo *monitor) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&rpo.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	rpo.stateLock.Lock()
+	defer rpo.stateLock.Unlock()
+	if rpo.status != common.DaemonStatusStarted {
 		return
 	}
+	rpo.status = common.DaemonStatusStopped
 
 	rpo.lifecycleCancel()
 
