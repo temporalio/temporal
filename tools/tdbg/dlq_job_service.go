@@ -52,7 +52,7 @@ func NewDLQJobService(
 
 func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	jobID, err := ac.getJobID(c)
+	jobToken, err := ac.getJobToken(c)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	defer cancel()
 
 	response, err := adminClient.DescribeDLQJob(ctx, &adminservice.DescribeDLQJobRequest{
-		JobId: jobID,
+		JobId: jobToken,
 	})
 	if err != nil {
 		return fmt.Errorf("call to MergeDLQTasks failed: %w", err)
@@ -74,7 +74,7 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 
 func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	jobID, err := ac.getJobID(c)
+	jobToken, err := ac.getJobToken(c)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	defer cancel()
 
 	response, err := adminClient.CancelDLQJob(ctx, &adminservice.CancelDLQJobRequest{
-		JobId:  jobID,
+		JobId:  jobToken,
 		Reason: reason,
 	})
 	if err != nil {
@@ -99,14 +99,14 @@ func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	return nil
 }
 
-func (ac *DLQJobService) getJobID(c *cli.Context) (string, error) {
-	if !c.IsSet(FlagJobID) {
+func (ac *DLQJobService) getJobToken(c *cli.Context) (string, error) {
+	if !c.IsSet(FlagJobToken) {
 		return "", fmt.Errorf(
 			"--%s must be set",
-			FlagJobID,
+			FlagJobToken,
 		)
 	}
-	jobID := c.String(FlagJobID)
+	jobID := c.String(FlagJobToken)
 	return jobID, nil
 }
 
@@ -114,7 +114,7 @@ func (ac *DLQJobService) getReason(c *cli.Context) (string, error) {
 	if !c.IsSet(FlagReason) {
 		return "", fmt.Errorf(
 			"--%s must be set",
-			FlagJobID,
+			FlagReason,
 		)
 	}
 	reason := c.String(FlagReason)
