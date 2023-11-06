@@ -318,6 +318,11 @@ func (rpo *monitor) fetchCurrentBootstrapHostports() ([]string, error) {
 func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
 	loopUpsertMembership := func() {
 		for {
+			select {
+			case <-rpo.lifecycleCtx.Done():
+				return
+			default:
+			}
 			err := rpo.upsertMyMembership(rpo.lifecycleCtx, request)
 
 			if err != nil {
