@@ -183,7 +183,7 @@ func (rpo *monitor) Start() {
 }
 
 // bootstrap ring pop service by discovering the bootstrap hosts and joining the ring pop cluster
-func (r *monitor) bootstrapRingPop(
+func (rpo *monitor) bootstrapRingPop(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) error {
@@ -199,13 +199,13 @@ func (r *monitor) bootstrapRingPop(
 		bootParams := &swim.BootstrapOptions{
 			ParallelismFactor: 10,
 			JoinSize:          1,
-			MaxJoinDuration:   r.maxJoinDuration,
+			MaxJoinDuration:   rpo.maxJoinDuration,
 			DiscoverProvider:  statichosts.New(hostPorts...),
 		}
 
-		_, err = r.rp.Bootstrap(bootParams)
+		_, err = rpo.rp.Bootstrap(bootParams)
 		if err != nil {
-			r.logger.Warn("unable to bootstrap ringpop. retrying", tag.Error(err))
+			rpo.logger.Warn("unable to bootstrap ringpop. retrying", tag.Error(err))
 		}
 		return err
 	}
