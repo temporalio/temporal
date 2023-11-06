@@ -63,7 +63,6 @@ const (
 )
 
 type serviceResolver struct {
-	status      int32
 	service     primitives.ServiceName
 	port        int
 	rp          *service
@@ -91,7 +90,6 @@ func newServiceResolver(
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
-		status:      common.DaemonStatusInitialized,
 		service:     service,
 		port:        port,
 		rp:          rp,
@@ -111,14 +109,6 @@ func newHashRing() *hashring.HashRing {
 
 // Start starts the oracle
 func (r *serviceResolver) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
 	r.rp.AddListener(r)
 	if err := r.refresh(); err != nil {
 		r.logger.Fatal("unable to start ring pop service resolver", tag.Error(err))
@@ -130,14 +120,6 @@ func (r *serviceResolver) Start() {
 
 // Stop stops the resolver
 func (r *serviceResolver) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
 	r.rp.RemoveListener(r)

@@ -25,6 +25,7 @@
 package ringpop
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -72,23 +73,23 @@ func newService(
 func (r *service) start(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
-) {
+) error {
 	if !atomic.CompareAndSwapInt32(
 		&r.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		return nil
 	}
 
-	r.bootstrap(bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
+	return r.bootstrap(bootstrapHostPostRetriever, bootstrapRetryBackoffInterval)
 }
 
 // bootstrap ring pop service by discovering the bootstrap hosts and joining the ring pop cluster
 func (r *service) bootstrap(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
-) {
+) error {
 	policy := backoff.NewExponentialRetryPolicy(bootstrapRetryBackoffInterval).
 		WithBackoffCoefficient(1).
 		WithMaximumAttempts(maxBootstrapRetries)
@@ -113,8 +114,9 @@ func (r *service) bootstrap(
 	}
 	err := backoff.ThrottleRetry(op, policy, nil)
 	if err != nil {
-		r.logger.Fatal("unable to bootstrap ringpop. exhausted all retries", tag.Error(err))
+		return fmt.Errorf("exhausted all retries: %w", err)
 	}
+	return nil
 }
 
 // stop ring pop service by destroying the ring pop instance
