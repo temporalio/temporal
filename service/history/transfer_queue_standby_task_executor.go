@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -52,6 +53,11 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
+const (
+	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
+	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
+)
+
 type (
 	transferQueueStandbyTaskExecutor struct {
 		*transferQueueTaskExecutorBase
@@ -59,10 +65,11 @@ type (
 		clusterName        string
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
-)
 
-var (
-	errVerificationFailed = errors.New("failed to verify target workflow state")
+	verificationErr struct {
+		msg string
+		err error
+	}
 )
 
 func newTransferQueueStandbyTaskExecutor(
@@ -281,16 +288,12 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 				return verifyChildCompletionRecordedInfo, nil
 			default:
-				t.logger.Error("Failed to verify child execution completion recoreded",
-					tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
-					tag.WorkflowID(transferTask.GetWorkflowID()),
-					tag.WorkflowRunID(transferTask.GetRunID()),
-					tag.Error(err),
-				)
-
-				// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+				// NOTE: we do not return the error directly here as it will cause the mutable state to be cleared and reloaded upon retry
 				// it's unnecessary as the error is in the target workflow, not this workflow.
-				return nil, errVerificationFailed
+				return nil, &verificationErr{
+					msg: recordChildCompletionVerificationFailedMsg,
+					err: err,
+				}
 			}
 		}
 		return nil, nil
@@ -435,16 +438,12 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 			return &startChildExecutionPostActionInfo{}, nil
 		default:
-			t.logger.Error("Failed to verify first workflow task scheduled",
-				tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
-				tag.WorkflowID(transferTask.GetWorkflowID()),
-				tag.WorkflowRunID(transferTask.GetRunID()),
-				tag.Error(err),
-			)
-
-			// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+			// NOTE: we do not return the error directly here as it will cause the mutable state to be cleared and reloaded upon retry
 			// it's unnecessary as the error is in the target workflow, not this workflow.
-			return nil, errVerificationFailed
+			return nil, &verificationErr{
+				msg: recordChildCompletionVerificationFailedMsg,
+				err: err,
+			}
 		}
 	}
 
@@ -488,7 +487,8 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	defer func() {
-		if retError == consts.ErrTaskRetry || retError == errVerificationFailed {
+		var verificationErr *verificationErr
+		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
 			release(nil)
 		} else {
 			release(retError)
@@ -650,4 +650,12 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
+}
+
+func (e *verificationErr) Error() string {
+	return fmt.Sprintf("%v: %v", e.msg, e.err.Error())
+}
+
+func (e *verificationErr) Unwrap() error {
+	return e.err
 }

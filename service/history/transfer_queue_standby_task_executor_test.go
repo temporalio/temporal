@@ -637,7 +637,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, errors.New("some random error"))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(errVerificationFailed, resp.ExecutionErr)
+	var verificationErr *verificationErr
+	s.True(errors.As(resp.ExecutionErr, &verificationErr))
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
@@ -1049,7 +1050,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(errVerificationFailed, resp.ExecutionErr)
+	var verificationErr *verificationErr
+	s.True(errors.As(resp.ExecutionErr, &verificationErr))
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
