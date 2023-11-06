@@ -32,6 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -193,15 +194,17 @@ func TestRequestAcceptComplete(t *testing.T) {
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err = upd.WaitAccepted(ctx)
+		stage, _, err := upd.WaitAccepted(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update acceptance should not be observable until effects are applied")
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, stage)
 
 		effects.Apply(ctx)
 		t.Log("update state should now be Accepted")
 
-		outcome, err := upd.WaitAccepted(ctx)
+		stage, outcome, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, stage)
 		require.Nil(t, outcome,
 			"update is accepted but not completed so outcome should be nil")
 	})
@@ -213,15 +216,16 @@ func TestRequestAcceptComplete(t *testing.T) {
 
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err = upd.WaitOutcome(ctx)
+		_, _, err = upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded,
 			"update outcome should not be observable until effects are applied")
 
 		effects.Apply(ctx)
 		t.Log("update state should now be Completed")
 
-		gotOutcome, err := upd.WaitOutcome(ctx)
+		stage, gotOutcome, err := upd.WaitOutcome(ctx)
 		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, stage)
 		require.Equal(t, resp.Outcome, gotOutcome)
 		require.True(t, completed)
 	})
@@ -266,14 +270,14 @@ func TestRequestReject(t *testing.T) {
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 			t.Cleanup(cncl)
-			_, err := upd.WaitAccepted(ctx)
+			_, _, err := upd.WaitAccepted(ctx)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
 		}
 		{
 			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 			t.Cleanup(cncl)
-			_, err := upd.WaitOutcome(ctx)
+			_, _, err := upd.WaitOutcome(ctx)
 			require.ErrorIs(t, err, context.DeadlineExceeded,
 				"update acceptance failure should not be observable until effects are applied")
 		}
@@ -281,12 +285,14 @@ func TestRequestReject(t *testing.T) {
 		effects.Apply(ctx)
 		t.Log("update state should now be Completed")
 
-		acptOutcome, err := upd.WaitAccepted(ctx)
+		stage, acptOutcome, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, stage)
 		require.Equal(t, rej.Failure, acptOutcome.GetFailure())
 
-		outcome, err := upd.WaitOutcome(ctx)
+		stage, outcome, err := upd.WaitOutcome(ctx)
 		require.NoError(t, err)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, stage)
 		require.Equal(t, rej.Failure, outcome.GetFailure())
 
 		require.True(t, completed)
@@ -495,13 +501,13 @@ func TestDoubleRollback(t *testing.T) {
 	t.Run("not accepted", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitAccepted(ctx)
+		_, _, err := upd.WaitAccepted(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
+		_, _, err := upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 	t.Run("back to requested state", func(t *testing.T) {
@@ -538,7 +544,7 @@ func TestRollbackCompletion(t *testing.T) {
 	t.Run("not completed", func(t *testing.T) {
 		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
 		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
+		_, _, err := upd.WaitOutcome(ctx)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		require.False(t, completed)
 	})
@@ -569,7 +575,7 @@ func TestRejectionWithAcceptanceWaiter(t *testing.T) {
 	)
 	ch := make(chan any, 1)
 	go func() {
-		fail, err := upd.WaitAccepted(ctx)
+		_, fail, err := upd.WaitAccepted(ctx)
 		if err != nil {
 			ch <- err
 			return

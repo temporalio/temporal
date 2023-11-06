@@ -26,12 +26,16 @@ package update
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
 	"go.temporal.io/server/common"
@@ -159,8 +163,12 @@ func newCompleted(
 // WaitOutcome observes this Update's completion, returning the Outcome when it
 // is available. This call will block until the Outcome is known or the provided
 // context.Context expires. It is safe to call this method outside of workflow lock.
-func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
-	return u.outcome.Get(ctx)
+func (u *Update) WaitOutcome(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
+	outcome, err := u.outcome.Get(ctx)
+	if err != nil {
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome, err
+	}
+	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
 }
 
 // WaitAccepted blocks on the acceptance of this update, returning nil if has
@@ -168,22 +176,73 @@ func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
 // It is safe to call this method outside of workflow lock.
-func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
+func (u *Update) WaitAccepted(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
 	if u.outcome.Ready() {
-		// being complete implies being accepted, return the completed outcome
+		// Being complete implies being accepted; return the completed outcome
 		// here because we can.
-		return u.outcome.Get(ctx)
+		return u.WaitOutcome(ctx)
 	}
 	fail, err := u.accepted.Get(ctx)
 	if err != nil {
-		return nil, err
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, err
 	}
 	if fail != nil {
-		return &updatepb.Outcome{
+		outcome := &updatepb.Outcome{
 			Value: &updatepb.Outcome_Failure{Failure: fail},
-		}, nil
+		}
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
 	}
-	return nil, nil
+	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil, nil
+}
+
+// WaitLifecycleStage waits until the Update has reached at least `waitStage` or
+// a timeout. If the Update reaches `waitStage` with no timeout, the most
+// advanced stage known to have been reached is returned, along with the outcome
+// if any. If there is a timeout due to the supplied soft timeout, then
+// unspecified stage and nil outcome are returned, without an error. If there is
+// a timeout due to context deadline expiry, then the error is returned as usual.
+func (u *Update) WaitLifecycleStage(ctx context.Context, waitStage enumspb.UpdateWorkflowExecutionLifecycleStage, softTimeout time.Duration) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+	stage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
+	switch waitStage {
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		return u.waitLifecycleStage(ctx, u.WaitAccepted, softTimeout)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		return u.waitLifecycleStage(ctx, u.WaitOutcome, softTimeout)
+	default:
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, serviceerror.NewUnimplemented(
+			fmt.Sprintf("%v is not implemented", waitStage))
+	}
+}
+
+func (u *Update) waitLifecycleStage(ctx context.Context, waitFn func(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error), softTimeout time.Duration) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
+
+	type result struct {
+		stage   enumspb.UpdateWorkflowExecutionLifecycleStage
+		outcome *updatepb.Outcome
+		err     error
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, softTimeout)
+		defer cancel()
+		stage, outcome, err := waitFn(ctx)
+		if err != nil && common.IsContextDeadlineExceededErr(err) {
+			// Handle the deadline expiry as a violation of a soft deadline:
+			// return non-error empty response.
+			ch <- result{stage, nil, nil}
+		} else {
+			ch <- result{stage, outcome, err}
+		}
+	}()
+
+	select {
+	case res := <-ch:
+		return res.stage, res.outcome, res.err
+	case <-ctx.Done():
+		// Handle a context deadline expiry as usual.
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, ctx.Err()
+	}
 }
 
 // OnMessage delivers a message to the Update state machine. The proto.Message
