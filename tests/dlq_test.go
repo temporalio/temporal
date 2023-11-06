@@ -348,6 +348,62 @@ func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 	s.Equal("hello", result)
 }
 
+// This test executes an actual workflow for which we've set up an executor wrapper to return a terminal error. After
+// the workflow task is added to the DLQ, this test then purges the DLQ and call DescribeDLQJob api to verify.
+func (s *dlqSuite) TestPurgeAndDescribe() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	_, dlqMessageID := s.executeDoomedWorkflow(ctx)
+
+	// Delete the workflow task from the DLQ.
+	token := s.purgeMessages(ctx, dlqMessageID)
+
+	// Verify that the workflow task is no longer in the DLQ.
+	dlqTasks := s.readDLQTasks()
+	s.Empty(dlqTasks, "expected DLQ to be empty after purge")
+	response := s.describeJob(token)
+	s.Equal(enums.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
+	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
+	s.Equal(dlqMessageID, response.MaxMessageId)
+	s.Equal(dlqMessageID, response.LastProcessedMessageId)
+}
+
+// This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. After
+// Merge operation invoked, this test calls DescribeDLQJob to verify.
+func (s *dlqSuite) TestMergeAndDescribe() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+
+	// Verify that we can execute a normal workflow.
+	run := s.executeWorkflow(ctx, "dlq-test-ok-workflow-id")
+	s.validateWorkflowRun(ctx, run)
+
+	// Execute several doomed workflows.
+	numWorkflows := 3
+	var runs []sdkclient.WorkflowRun
+	for i := 0; i < numWorkflows; i++ {
+		run, dlqMessageID := s.executeDoomedWorkflow(ctx)
+		s.Equal(int64(i), dlqMessageID)
+		runs = append(runs, run)
+	}
+
+	// Re-enqueue the workflow tasks from the DLQ, but don't fail its WFTs this time.
+	s.failingWorkflowIDPrefix = "some-workflow-id-that-wont-exist"
+	s.mergeMessages(ctx, int64(numWorkflows-1))
+
+	// Verify that the workflow task was deleted from the DLQ after merging.
+	dlqTasks := s.readDLQTasks()
+	s.Empty(dlqTasks)
+
+	// Verify that the workflows now eventually complete successfully.
+	for i := 0; i < numWorkflows; i++ {
+		s.validateWorkflowRun(ctx, runs[i])
+	}
+}
+
 // executeDoomedWorkflow runs a workflow that is guaranteed to produce a workflow task that will be added to the DLQ. It
 // then returns the sdk workflow run and the message ID of the DLQ message for the failed workflow task.
 func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
@@ -397,7 +453,7 @@ func (s *dlqSuite) executeWorkflow(ctx context.Context, workflowID string) sdkcl
 }
 
 // purgeMessages from the DLQ up to and including the specified message ID, blocking until the purge workflow completes.
-func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) {
+func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) []byte {
 	args := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -420,6 +476,7 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
 	s.NoError(run.Get(ctx, nil))
+	return response.GetJobToken()
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, blocking until the merge workflow completes.
@@ -464,6 +521,27 @@ func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.Transfer
 	s.NoError(s.tdbgApp.Run(args))
 	dlqTasks := s.readTransferTasks(file)
 	return dlqTasks
+}
+
+// Calls describe dlq job and verify the output
+func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse {
+	args := []string{
+		"tdbg",
+		"--" + tdbg.FlagYes,
+		"dlq",
+		"--" + tdbg.FlagDLQVersion, "v2",
+		"job",
+		"describe",
+		"--" + tdbg.FlagJobID, string(token),
+	}
+	err := s.tdbgApp.Run(args)
+	s.NoError(err)
+	output := s.writer.Bytes()
+	fmt.Println(string(output))
+	s.writer.Truncate(0)
+	var response adminservice.DescribeDLQJobResponse
+	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
+	return response
 }
 
 // verifyNumTasks verifies that the specified file contains the expected number of DLQ tasks, and that each task has the
