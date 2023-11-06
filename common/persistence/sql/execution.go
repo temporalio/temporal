@@ -671,7 +671,10 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 			WorkflowID:  request.WorkflowID,
 			RunID:       runID,
 		})
-		return fmt.Errorf("failed to delete workflow execution %v: %w", request, err)
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteFromExecutions: %w", err)
+		}
+		return nil
 	})
 }
 
