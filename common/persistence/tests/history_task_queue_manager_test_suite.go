@@ -98,7 +98,7 @@ func (q faultyQueue) RangeDeleteMessages(
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
-	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue, 1)
+	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue)
 	t.Run("TestHistoryTaskQueueManagerEnqueueTasks", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerEnqueueTasks(t, historyTaskQueueManager)
@@ -142,7 +142,7 @@ func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:           queue,
 		createQueueErr: retErr,
-	}, 1)
+	})
 	_, err := manager.CreateQueue(context.Background(), &persistence.CreateQueueRequest{
 		QueueKey: persistencetest.GetQueueKey(t),
 	})
@@ -203,7 +203,7 @@ func testHistoryTaskQueueManagerEnqueueTasksErr(t *testing.T, queue persistence.
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:       queue,
 		enqueueErr: retErr,
-	}, 1)
+	})
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
@@ -313,7 +313,7 @@ func testHistoryTaskQueueManagerDeleteTasksErr(t *testing.T, queue persistence.Q
 	manager := persistence.NewHistoryTaskQueueManager(faultyQueue{
 		base:                   queue,
 		rangeDeleteMessagesErr: retErr,
-	}, 1)
+	})
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
@@ -343,5 +343,6 @@ func enqueueTask(
 		SourceCluster: queueKey.SourceCluster,
 		TargetCluster: queueKey.TargetCluster,
 		Task:          task,
+		SourceShardID: 1,
 	})
 }

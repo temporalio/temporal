@@ -107,12 +107,25 @@ func TestHistoryTaskQueueManager_ErrSerializeTaskToEnqueue(t *testing.T) {
 	t.Parallel()
 
 	task := tasks.NewFakeTask(definition.WorkflowKey{}, tasks.Category{}, time.Time{})
-	m := persistence.NewHistoryTaskQueueManager(nil, 1)
+	m := persistence.NewHistoryTaskQueueManager(nil)
 	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
-		Task: task,
+		Task:          task,
+		SourceShardID: 1,
 	})
 	assert.ErrorContains(t, err, persistence.ErrMsgSerializeTaskToEnqueue, "EnqueueTask should return "+
 		"ErrMsgSerializeTaskToEnqueue when the task cannot be serialized due to an invalid task category")
+}
+
+func TestHistoryTaskQueueManager_InvalidShardID(t *testing.T) {
+	t.Parallel()
+
+	task := &tasks.WorkflowTask{}
+	m := persistence.NewHistoryTaskQueueManager(nil)
+	_, err := m.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
+		Task:          task,
+		SourceShardID: 0,
+	})
+	assert.ErrorIs(t, err, persistence.ErrShardIDInvalid)
 }
 
 // corruptQueue is a QueueV2 implementation that returns a single message that cannot be deserialized into a task.
@@ -140,7 +153,7 @@ func (f corruptQueue) ReadMessages(
 func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{})
 	_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 		QueueKey: persistence.QueueKey{
 			Category: tasks.CategoryTransfer,
@@ -155,7 +168,7 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testi
 func TestHistoryTaskQueueManager_ReadTasks_NonPositivePageSize(t *testing.T) {
 	t.Parallel()
 
-	m := persistence.NewHistoryTaskQueueManager(corruptQueue{}, 1)
+	m := persistence.NewHistoryTaskQueueManager(corruptQueue{})
 	for _, pageSize := range []int{0, -1} {
 		_, err := m.ReadTasks(context.Background(), &persistence.ReadTasksRequest{
 			QueueKey: persistence.QueueKey{

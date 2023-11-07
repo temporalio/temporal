@@ -97,6 +97,11 @@ func (s *executableSuite) SetupTest() {
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			ShardCount: 1,
+		},
+	}).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 }
@@ -352,7 +357,7 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -372,7 +377,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 func (s *executableSuite) TestExecute_DLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -394,7 +399,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -416,7 +421,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
 		p.dlqEnabled = func() bool {
 			return true
 		}
