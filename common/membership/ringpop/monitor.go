@@ -143,15 +143,12 @@ func (rpo *monitor) Start() {
 	// TODO - Note this presents a small race condition as we write our identity before we bootstrap ringpop.
 	// This is a current limitation of the current structure of the ringpop library as
 	// we must know our seed nodes before bootstrapping
-	err = rpo.startHeartbeat(broadcastAddress)
-	if err != nil {
+
+	if err = rpo.startHeartbeat(broadcastAddress); err != nil {
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
-	err = rpo.bootstrapRingPop(
-		func() ([]string, error) { return rpo.fetchCurrentBootstrapHostports() },
-		healthyHostLastHeartbeatCutoff/2)
-	if err != nil {
+	if err = rpo.bootstrapRingPop(); err != nil {
 		// Stop() called during Start()'s execution. This is ok
 		if strings.Contains(err.Error(), "destroyed while attempting to join") {
 			return
@@ -183,15 +180,12 @@ func (rpo *monitor) Start() {
 }
 
 // bootstrap ring pop service by discovering the bootstrap hosts and joining the ring pop cluster
-func (rpo *monitor) bootstrapRingPop(
-	bootstrapHostPostRetriever func() ([]string, error),
-	bootstrapRetryBackoffInterval time.Duration,
-) error {
-	policy := backoff.NewExponentialRetryPolicy(bootstrapRetryBackoffInterval).
+func (rpo *monitor) bootstrapRingPop() error {
+	policy := backoff.NewExponentialRetryPolicy(healthyHostLastHeartbeatCutoff / 2).
 		WithBackoffCoefficient(1).
 		WithMaximumAttempts(maxBootstrapRetries)
 	op := func() error {
-		hostPorts, err := bootstrapHostPostRetriever()
+		hostPorts, err := rpo.fetchCurrentBootstrapHostports()
 		if err != nil {
 			return err
 		}
@@ -209,8 +203,8 @@ func (rpo *monitor) bootstrapRingPop(
 		}
 		return err
 	}
-	err := backoff.ThrottleRetry(op, policy, nil)
-	if err != nil {
+
+	if err := backoff.ThrottleRetry(op, policy, nil); err != nil {
 		return fmt.Errorf("exhausted all retries: %w", err)
 	}
 	return nil
