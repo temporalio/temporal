@@ -26,9 +26,10 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
+
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
-	"io"
 )
 
 type (
