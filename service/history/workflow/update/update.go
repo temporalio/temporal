@@ -201,7 +201,11 @@ func (u *Update) WaitAccepted(ctx context.Context) (enumspb.UpdateWorkflowExecut
 // if any. If there is a timeout due to the supplied soft timeout, then
 // unspecified stage and nil outcome are returned, without an error. If there is
 // a timeout due to context deadline expiry, then the error is returned as usual.
-func (u *Update) WaitLifecycleStage(ctx context.Context, waitStage enumspb.UpdateWorkflowExecutionLifecycleStage, softTimeout time.Duration) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+func (u *Update) WaitLifecycleStage(
+	ctx context.Context,
+	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	softTimeout time.Duration) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
+
 	stage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
 	switch waitStage {
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
@@ -214,7 +218,10 @@ func (u *Update) WaitLifecycleStage(ctx context.Context, waitStage enumspb.Updat
 	}
 }
 
-func (u *Update) waitLifecycleStage(ctx context.Context, waitFn func(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error), softTimeout time.Duration) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
+func (u *Update) waitLifecycleStage(
+	ctx context.Context,
+	waitFn func(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error),
+	softTimeout time.Duration) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
 
 	type result struct {
 		stage   enumspb.UpdateWorkflowExecutionLifecycleStage
