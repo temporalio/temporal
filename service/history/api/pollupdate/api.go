@@ -49,7 +49,7 @@ func Invoke(
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	if waitStage != enums.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		return nil, serviceerror.NewUnimplemented(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("support for LifecycleStage=%v is not implemented", waitStage))
 	}
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
