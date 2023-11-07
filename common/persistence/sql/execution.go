@@ -601,13 +601,81 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 ) error {
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.Db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
-		ShardID:     request.ShardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  request.WorkflowID,
-		RunID:       runID,
+	return m.txExecute(ctx, "DeleteWorkflowExecution", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteAllFromChildExecutionInfoMaps(ctx, sqlplugin.ChildExecutionInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromChildExecutionInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromActivityInfoMaps(ctx, sqlplugin.ActivityInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromActivityInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromRequestCancelInfoMaps(ctx, sqlplugin.RequestCancelInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromRequestCancelInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromSignalInfoMaps(ctx, sqlplugin.SignalInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromSignalInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromTimerInfoMaps(ctx, sqlplugin.TimerInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromTimerInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromSignalsRequestedSets: %w", err)
+		}
+		_, err = tx.DeleteFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteFromBufferedEvents: %w", err)
+		}
+		_, err = tx.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteFromExecutions: %w", err)
+		}
+		return nil
 	})
-	return err
 }
 
 // its possible for a new run of the same workflow to have started after the run we are deleting
