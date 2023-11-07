@@ -224,7 +224,7 @@ func (u *Update) waitLifecycleStage(ctx context.Context, waitFn func(ctx context
 	ch := make(chan result, 1)
 
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, softTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), softTimeout)
 		defer cancel()
 		stage, outcome, err := waitFn(ctx)
 		if err != nil && common.IsContextDeadlineExceededErr(err) {
