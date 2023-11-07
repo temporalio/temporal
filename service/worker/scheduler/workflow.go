@@ -193,7 +193,7 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		IterationsBeforeContinueAsNew:     500, // TODO: change to 0 to use GetContinueAsNewSuggested
+		IterationsBeforeContinueAsNew:     0,
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
