@@ -577,8 +577,8 @@ func newAdminDLQJobCommands(
 		{
 			Name:        "describe",
 			Aliases:     []string{"d"},
-			Usage:       "Get details of the DLQ job with provided job ID",
-			Description: "This command will get details of the DLQ job with provided job ID if using v2",
+			Usage:       "Get details of the DLQ job with provided job token",
+			Description: "This command will get details of the DLQ job with provided job token if using v2",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagJobToken,
@@ -593,12 +593,12 @@ func newAdminDLQJobCommands(
 		{
 			Name:        "cancel",
 			Aliases:     []string{"c"},
-			Usage:       "Cancel the DLQ job with provided job ID",
-			Description: "This command will cancel the DLQ job with provided job ID",
+			Usage:       "Cancel the DLQ job with provided job token",
+			Description: "This command will cancel the DLQ job with provided job token",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagJobToken,
-					Usage: "ID of the DLQ job",
+					Usage: "Token of the DLQ job",
 				},
 				&cli.StringFlag{
 					Name:  FlagReason,
