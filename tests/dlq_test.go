@@ -370,6 +370,7 @@ func (s *dlqSuite) TestPurgeDescribeAndCancel() {
 	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
+	s.Equal(dlqMessageID+1, response.MessagesProcessed)
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(token)
