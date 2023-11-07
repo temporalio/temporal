@@ -291,65 +291,8 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 // causes the workflow task to be added to the DLQ. This tests the end-to-end functionality of the DLQ, whereas the
 // above test is more for testing specific CLI flags when reading from the DLQ. After the workflow task is added to the
 // DLQ, this test then purges the DLQ and verifies that the task was deleted.
+// This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *dlqSuite) TestPurgeRealWorkflow() {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
-	defer cancel()
-
-	_, dlqMessageID := s.executeDoomedWorkflow(ctx)
-
-	// Delete the workflow task from the DLQ.
-	s.purgeMessages(ctx, dlqMessageID)
-
-	// Verify that the workflow task is no longer in the DLQ.
-	dlqTasks := s.readDLQTasks()
-	s.Empty(dlqTasks, "expected DLQ to be empty after purge")
-}
-
-// This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. This
-// causes the workflow tasks to be added to the DLQ. This tests the end-to-end functionality of the DLQ, whereas the
-// above test is more for testing specific CLI flags when reading from the DLQ.
-func (s *dlqSuite) TestMergeRealWorkflow() {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
-	defer cancel()
-
-	// Verify that we can execute a normal workflow.
-	run := s.executeWorkflow(ctx, "dlq-test-ok-workflow-id")
-	s.validateWorkflowRun(ctx, run)
-
-	// Execute several doomed workflows.
-	numWorkflows := 3
-	var runs []sdkclient.WorkflowRun
-	for i := 0; i < numWorkflows; i++ {
-		run, _ := s.executeDoomedWorkflow(ctx)
-		runs = append(runs, run)
-	}
-
-	// Re-enqueue the workflow tasks from the DLQ, but don't fail its WFTs this time.
-	s.failingWorkflowIDPrefix = "some-workflow-id-that-wont-exist"
-	s.mergeMessages(ctx, int64(numWorkflows-1))
-
-	// Verify that the workflow task was deleted from the DLQ after merging.
-	dlqTasks := s.readDLQTasks()
-	s.Empty(dlqTasks)
-
-	// Verify that the workflows now eventually complete successfully.
-	for i := 0; i < numWorkflows; i++ {
-		s.validateWorkflowRun(ctx, runs[i])
-	}
-}
-
-func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
-	var result string
-	err := run.Get(ctx, &result)
-	s.NoError(err)
-	s.Equal("hello", result)
-}
-
-// This test executes an actual workflow for which we've set up an executor wrapper to return a terminal error. After
-// the workflow task is added to the DLQ, this test then purges the DLQ and call DescribeDLQJob and CancelDLQJob api to verify.
-func (s *dlqSuite) TestPurgeDescribeAndCancel() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -376,9 +319,11 @@ func (s *dlqSuite) TestPurgeDescribeAndCancel() {
 	s.Equal(false, cancelResponse.Canceled)
 }
 
-// This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. After
-// Merge operation invoked, this test calls DescribeDLQJob and CancelDLQJob to verify.
-func (s *dlqSuite) TestMergeDescribeAndCancel() {
+// This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. This
+// causes the workflow tasks to be added to the DLQ. This tests the end-to-end functionality of the DLQ, whereas the
+// above test is more for testing specific CLI flags when reading from the DLQ.
+// This test will then call DescribeDLQJob and CancelDLQJob api to verify.
+func (s *dlqSuite) TestMergeRealWorkflow() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -420,6 +365,13 @@ func (s *dlqSuite) TestMergeDescribeAndCancel() {
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(token)
 	s.Equal(false, cancelResponse.Canceled)
+}
+
+func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
+	var result string
+	err := run.Get(ctx, &result)
+	s.NoError(err)
+	s.Equal("hello", result)
 }
 
 // executeDoomedWorkflow runs a workflow that is guaranteed to produce a workflow task that will be added to the DLQ. It
