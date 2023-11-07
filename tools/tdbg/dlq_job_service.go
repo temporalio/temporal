@@ -60,10 +60,10 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	defer cancel()
 
 	response, err := adminClient.DescribeDLQJob(ctx, &adminservice.DescribeDLQJobRequest{
-		JobId: jobToken,
+		JobToken: jobToken,
 	})
 	if err != nil {
-		return fmt.Errorf("call to MergeDLQTasks failed: %w", err)
+		return fmt.Errorf("call to DescribeDLQJob failed: %w", err)
 	}
 	err = newEncoder(ac.writer).Encode(response)
 	if err != nil {
@@ -86,8 +86,8 @@ func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	defer cancel()
 
 	response, err := adminClient.CancelDLQJob(ctx, &adminservice.CancelDLQJobRequest{
-		JobId:  jobToken,
-		Reason: reason,
+		JobToken: jobToken,
+		Reason:   reason,
 	})
 	if err != nil {
 		return fmt.Errorf("call to CancelDLQJob failed: %w", err)
