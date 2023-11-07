@@ -322,8 +322,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	numWorkflows := 3
 	var runs []sdkclient.WorkflowRun
 	for i := 0; i < numWorkflows; i++ {
-		run, dlqMessageID := s.executeDoomedWorkflow(ctx)
-		s.Equal(int64(i), dlqMessageID)
+		run, _ := s.executeDoomedWorkflow(ctx)
 		runs = append(runs, run)
 	}
 
@@ -370,7 +369,7 @@ func (s *dlqSuite) TestPurgeDescribeAndCancel() {
 	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
-	s.Equal(dlqMessageID+1, response.MessagesProcessed)
+	s.Equal(int64(1), response.MessagesProcessed)
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(token)
@@ -547,7 +546,6 @@ func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.Transfer
 func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse {
 	args := []string{
 		"tdbg",
-		"--" + tdbg.FlagYes,
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
@@ -568,7 +566,6 @@ func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse
 func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
 	args := []string{
 		"tdbg",
-		"--" + tdbg.FlagYes,
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",

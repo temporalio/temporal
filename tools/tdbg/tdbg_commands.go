@@ -582,7 +582,7 @@ func newAdminDLQJobCommands(
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagJobToken,
-					Usage: "ID of the DLQ job",
+					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -598,7 +598,7 @@ func newAdminDLQJobCommands(
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagJobToken,
-					Usage: "Token of the DLQ job",
+					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
 				},
 				&cli.StringFlag{
 					Name:  FlagReason,
