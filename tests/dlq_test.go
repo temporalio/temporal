@@ -415,7 +415,7 @@ func (s *dlqSuite) TestMergeDescribeAndCancel() {
 	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(int64(numWorkflows-1), response.MaxMessageId)
 	s.Equal(int64(numWorkflows-1), response.LastProcessedMessageId)
-	// TODO Add messagesProcessed after merging adminservice PR
+	s.Equal(int64(numWorkflows), response.MessagesProcessed)
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(token)
