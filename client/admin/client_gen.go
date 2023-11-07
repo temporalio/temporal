@@ -63,6 +63,16 @@ func (c *clientImpl) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) CancelDLQJob(
+	ctx context.Context,
+	request *adminservice.CancelDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CancelDLQJobResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CancelDLQJob(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -91,6 +101,16 @@ func (c *clientImpl) DescribeCluster(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeDLQJob(
+	ctx context.Context,
+	request *adminservice.DescribeDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDLQJobResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(

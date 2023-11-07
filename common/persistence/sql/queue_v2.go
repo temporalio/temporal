@@ -250,6 +250,7 @@ func (q *queueV2) RangeDeleteMessages(
 			persistence.FirstQueueMessageID,
 		)
 	}
+	var resp *persistence.InternalRangeDeleteMessagesResponse
 	err := q.txExecute(ctx, "RangeDeleteMessages", func(tx sqlplugin.Tx) error {
 		qm, err := q.getQueueMetadata(ctx, tx, request.QueueType, request.QueueName)
 		if err != nil {
@@ -284,6 +285,9 @@ func (q *queueV2) RangeDeleteMessages(
 			},
 		})
 		if !ok {
+			resp = &persistence.InternalRangeDeleteMessagesResponse{
+				MessagesDeleted: 0,
+			}
 			return nil
 		}
 		msgFilter := sqlplugin.QueueV2MessagesFilter{
@@ -319,12 +323,15 @@ func (q *queueV2) RangeDeleteMessages(
 				err),
 			)
 		}
+		resp = &persistence.InternalRangeDeleteMessagesResponse{
+			MessagesDeleted: deleteRange.MessagesToDelete,
+		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+	return resp, nil
 }
 
 func (q *queueV2) getQueueMetadata(

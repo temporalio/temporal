@@ -771,7 +771,10 @@ message DeleteDLQTasksRequest {
     temporal.server.api.common.v1.HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
 }
 
-message DeleteDLQTasksResponse {}
+message DeleteDLQTasksResponse {
+    // messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
+    int64 messages_deleted = 1;
+}
 
 message AddTasksRequest {
   // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If

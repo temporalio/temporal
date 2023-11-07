@@ -812,6 +812,6 @@ type (
 	}
 
 	InternalRangeDeleteMessagesResponse struct {
-		// empty
+		MessagesDeleted int64
 	}
 )

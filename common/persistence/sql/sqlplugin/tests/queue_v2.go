@@ -583,12 +583,13 @@ func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplu
 		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
 		require.NoError(t, err)
 	}
-	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+	resp, err := q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
 		QueueType:                   queueType,
 		QueueName:                   queueKey.GetQueueName(),
 		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: persistence.FirstQueueMessageID + 2},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, int64(3), resp.MessagesDeleted)
 	result, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),

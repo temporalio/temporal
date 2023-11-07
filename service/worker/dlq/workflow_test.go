@@ -54,7 +54,9 @@ type (
 		workflowParams dlq.WorkflowParams
 		client         *testHistoryClient
 		// expectation is run with the result of the workflow execution
-		expectation func(err error)
+		expectation       func(err error)
+		expectedQueryResp dlq.ProgressQueryResponse
+		queryExpectation  func(response dlq.ProgressQueryResponse)
 	}
 	// This client allows the test to set custom functions for each of its methods.
 	testHistoryClient struct {
@@ -77,6 +79,7 @@ func TestModule(t *testing.T) {
 		{
 			name: "invalid_workflow_type",
 			configure: func(t *testing.T, params *testParams) {
+				params.setDefaultDeleteParams(t)
 				params.workflowParams.WorkflowType = "my-invalid-workflow-type"
 				params.expectation = func(err error) {
 					var applicationErr *temporal.ApplicationError
@@ -84,6 +87,10 @@ func TestModule(t *testing.T) {
 					assert.True(t, applicationErr.NonRetryable(),
 						"Invalid workflow type should be non-retryable")
 					assert.ErrorContains(t, err, "my-invalid-workflow-type")
+				}
+				params.queryExpectation = func(response dlq.ProgressQueryResponse) {
+					assert.NotNil(t, response)
+					assert.Equal(t, params.workflowParams.WorkflowType, response.WorkflowType)
 				}
 			},
 		},
@@ -198,6 +205,9 @@ func TestModule(t *testing.T) {
 			configure: func(t *testing.T, params *testParams) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 2
+				params.expectedQueryResp.MaxMessageIDToProcess = 2
+				params.expectedQueryResp.NumberOfMessagesProcessed = 1
+				params.expectedQueryResp.LastProcessedMessageID = 0
 				var (
 					getRequests []*historyservice.GetDLQTasksRequest
 					addRequests []*historyservice.AddTasksRequest
@@ -236,6 +246,7 @@ func TestModule(t *testing.T) {
 					}
 					assert.Len(t, requestsByShardID[1].GetTasks(), 1)
 				}
+				params.expectedQueryResp.LastProcessedMessageID = 0
 			},
 		},
 		{
@@ -243,6 +254,9 @@ func TestModule(t *testing.T) {
 			configure: func(t *testing.T, params *testParams) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 3
+				params.expectedQueryResp.MaxMessageIDToProcess = 3
+				params.expectedQueryResp.LastProcessedMessageID = 3
+				params.expectedQueryResp.NumberOfMessagesProcessed = 4
 				params.client.getTasksFn = func(
 					req *historyservice.GetDLQTasksRequest,
 				) (*historyservice.GetDLQTasksResponse, error) {
@@ -273,6 +287,7 @@ func TestModule(t *testing.T) {
 			configure: func(t *testing.T, params *testParams) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 1
+				params.expectedQueryResp.MaxMessageIDToProcess = 1
 				res := &historyservice.GetDLQTasksResponse{
 					DlqTasks: []*commonspb.HistoryDLQTask{
 						{
@@ -312,6 +327,7 @@ func TestModule(t *testing.T) {
 			configure: func(t *testing.T, params *testParams) {
 				params.setDefaultMergeParams(t)
 				params.workflowParams.MergeParams.MaxMessageID = 1
+				params.expectedQueryResp.MaxMessageIDToProcess = 1
 				res := &historyservice.GetDLQTasksResponse{
 					DlqTasks: []*commonspb.HistoryDLQTask{
 						{
@@ -386,6 +402,12 @@ func TestModule(t *testing.T) {
 			env.ExecuteWorkflow(dlq.WorkflowName, params.workflowParams)
 			err := env.GetWorkflowError()
 			params.expectation(err)
+			resp, err := env.QueryWorkflow(dlq.QueryTypeProgress)
+			require.NoError(t, err)
+			queryResp := dlq.ProgressQueryResponse{}
+			err = resp.Get(&queryResp)
+			require.NoError(t, err)
+			params.queryExpectation(queryResp)
 		})
 	}
 }
@@ -458,6 +480,13 @@ func (p *testParams) setDefaultDeleteParams(t *testing.T) {
 			},
 		},
 	}
+	p.expectedQueryResp = dlq.ProgressQueryResponse{
+		MaxMessageIDToProcess:     p.workflowParams.DeleteParams.MaxMessageID,
+		LastProcessedMessageID:    p.workflowParams.DeleteParams.MaxMessageID,
+		NumberOfMessagesProcessed: 0,
+		WorkflowType:              p.workflowParams.WorkflowType,
+		DlqKey:                    p.workflowParams.DeleteParams.Key,
+	}
 }
 
 func (p *testParams) setDefaultMergeParams(t *testing.T) {
@@ -471,6 +500,12 @@ func (p *testParams) setDefaultMergeParams(t *testing.T) {
 				TargetCluster:  "target-cluster",
 			},
 		},
+	}
+	p.expectedQueryResp = dlq.ProgressQueryResponse{
+		MaxMessageIDToProcess:  p.workflowParams.MergeParams.MaxMessageID,
+		LastProcessedMessageID: p.workflowParams.MergeParams.MaxMessageID,
+		WorkflowType:           p.workflowParams.WorkflowType,
+		DlqKey:                 p.workflowParams.MergeParams.Key,
 	}
 }
 
@@ -493,6 +528,17 @@ func (p *testParams) setDefaultParams(t *testing.T) {
 	}
 	p.expectation = func(err error) {
 		require.NoError(t, err)
+	}
+	p.queryExpectation = func(response dlq.ProgressQueryResponse) {
+		require.NotNil(t, response)
+	}
+	p.queryExpectation = func(response dlq.ProgressQueryResponse) {
+		require.NotNil(t, response)
+		require.Equal(t, p.expectedQueryResp.MaxMessageIDToProcess, response.MaxMessageIDToProcess)
+		require.Equal(t, p.expectedQueryResp.LastProcessedMessageID, response.LastProcessedMessageID)
+		require.Equal(t, p.expectedQueryResp.WorkflowType, response.WorkflowType)
+		require.Equal(t, p.expectedQueryResp.NumberOfMessagesProcessed, response.NumberOfMessagesProcessed)
+		require.EqualValues(t, p.expectedQueryResp.DlqKey, response.DlqKey)
 	}
 }
 
