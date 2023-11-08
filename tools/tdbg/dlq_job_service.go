@@ -36,8 +36,6 @@ type (
 	DLQJobService struct {
 		clientFactory ClientFactory
 		writer        io.Writer
-		//prompter        *Prompter
-		//taskBlobEncoder TaskBlobEncoder
 	}
 )
 
@@ -53,13 +51,9 @@ func NewDLQJobService(
 
 func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	jobToken, err := ac.getJobToken(c)
-	if err != nil {
-		return err
-	}
+	jobToken := c.String(FlagJobToken)
 	ctx, cancel := newContext(c)
 	defer cancel()
-
 	response, err := adminClient.DescribeDLQJob(ctx, &adminservice.DescribeDLQJobRequest{
 		JobToken: jobToken,
 	})
@@ -75,17 +69,10 @@ func (ac *DLQJobService) DescribeJob(c *cli.Context) error {
 
 func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 	adminClient := ac.clientFactory.AdminClient(c)
-	jobToken, err := ac.getJobToken(c)
-	if err != nil {
-		return err
-	}
-	reason, err := ac.getReason(c)
-	if err != nil {
-		return err
-	}
+	jobToken := c.String(FlagJobToken)
+	reason := c.String(FlagReason)
 	ctx, cancel := newContext(c)
 	defer cancel()
-
 	response, err := adminClient.CancelDLQJob(ctx, &adminservice.CancelDLQJobRequest{
 		JobToken: jobToken,
 		Reason:   reason,
@@ -98,26 +85,4 @@ func (ac *DLQJobService) CancelJob(c *cli.Context) error {
 		return fmt.Errorf("unable to encode CancelDLQJob response: %w", err)
 	}
 	return nil
-}
-
-func (ac *DLQJobService) getJobToken(c *cli.Context) (string, error) {
-	if !c.IsSet(FlagJobToken) {
-		return "", fmt.Errorf(
-			"--%s must be set",
-			FlagJobToken,
-		)
-	}
-	jobID := c.String(FlagJobToken)
-	return jobID, nil
-}
-
-func (ac *DLQJobService) getReason(c *cli.Context) (string, error) {
-	if !c.IsSet(FlagReason) {
-		return "", fmt.Errorf(
-			"--%s must be set",
-			FlagReason,
-		)
-	}
-	reason := c.String(FlagReason)
-	return reason, nil
 }

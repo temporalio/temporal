@@ -581,10 +581,10 @@ func newAdminDLQJobCommands(
 			Description: "This command will get details of the DLQ job with provided job token if using v2",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  FlagJobToken,
-					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
+					Name:     FlagJobToken,
+					Usage:    "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
 					Required: true,
-				}
+				},
 			},
 			Action: func(c *cli.Context) error {
 				ac := dlqServiceProvider.GetDLQJobService()
@@ -598,13 +598,13 @@ func newAdminDLQJobCommands(
 			Description: "This command will cancel the DLQ job with provided job token",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  FlagJobToken,
-					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
+					Name:     FlagJobToken,
+					Usage:    "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
 					Required: true,
 				},
 				&cli.StringFlag{
-					Name:  FlagReason,
-					Usage: "Reason for job cancellation",
+					Name:     FlagReason,
+					Usage:    "Reason for job cancellation",
 					Required: true,
 				},
 			},
