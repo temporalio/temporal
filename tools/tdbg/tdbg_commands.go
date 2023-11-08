@@ -599,10 +599,12 @@ func newAdminDLQJobCommands(
 				&cli.StringFlag{
 					Name:  FlagJobToken,
 					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
+					Required: true,
 				},
 				&cli.StringFlag{
 					Name:  FlagReason,
 					Usage: "Reason for job cancellation",
+					Required: true,
 				},
 			},
 			Action: func(c *cli.Context) error {
