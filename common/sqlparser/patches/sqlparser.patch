@@ -1,0 +1,316 @@
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: .git
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: .gitignore
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: .travis.yml
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: CONTRIBUTORS.md
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: LICENSE.md
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: README.md
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/analyzer.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//analyzer.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/analyzer.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//analyzer.go	2018-06-06 07:45:09.000000000 -0700
+@@ -19,15 +19,13 @@
+ // analyzer.go contains utility analysis functions.
+ 
+ import (
++	"errors"
+ 	"fmt"
+ 	"strconv"
+ 	"strings"
+ 	"unicode"
+ 
+-	"vitess.io/vitess/go/sqltypes"
+-	"vitess.io/vitess/go/vt/vterrors"
+-
+-	vtrpcpb "vitess.io/vitess/go/vt/proto/vtrpc"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ // These constants are used to identify the SQL statement type.
+@@ -219,7 +217,7 @@
+ 		case IntVal:
+ 			n, err := sqltypes.NewIntegral(string(node.Val))
+ 			if err != nil {
+-				return sqltypes.PlanValue{}, vterrors.Errorf(vtrpcpb.Code_INVALID_ARGUMENT, "%v", err)
++				return sqltypes.PlanValue{}, fmt.Errorf("%v", err)
+ 			}
+ 			return sqltypes.PlanValue{Value: n}, nil
+ 		case StrVal:
+@@ -227,7 +225,7 @@
+ 		case HexVal:
+ 			v, err := node.HexDecode()
+ 			if err != nil {
+-				return sqltypes.PlanValue{}, vterrors.Errorf(vtrpcpb.Code_INVALID_ARGUMENT, "%v", err)
++				return sqltypes.PlanValue{}, fmt.Errorf("%v", err)
+ 			}
+ 			return sqltypes.PlanValue{Value: sqltypes.MakeTrusted(sqltypes.VarBinary, v)}, nil
+ 		}
+@@ -243,7 +241,7 @@
+ 				return sqltypes.PlanValue{}, err
+ 			}
+ 			if innerpv.ListKey != "" || innerpv.Values != nil {
+-				return sqltypes.PlanValue{}, vterrors.New(vtrpcpb.Code_UNIMPLEMENTED, "unsupported: nested lists")
++				return sqltypes.PlanValue{}, errors.New("unsupported: nested lists")
+ 			}
+ 			pv.Values = append(pv.Values, innerpv)
+ 		}
+@@ -251,7 +249,7 @@
+ 	case *NullVal:
+ 		return sqltypes.PlanValue{}, nil
+ 	}
+-	return sqltypes.PlanValue{}, vterrors.Errorf(vtrpcpb.Code_INVALID_ARGUMENT, "expression is too complex '%v'", String(node))
++	return sqltypes.PlanValue{}, fmt.Errorf("expression is too complex '%v'", String(node))
+ }
+ 
+ // StringIn is a convenience function that returns
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/analyzer_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//analyzer_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/analyzer_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//analyzer_test.go	2018-06-06 07:45:09.000000000 -0700
+@@ -21,7 +21,7 @@
+ 	"strings"
+ 	"testing"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ func TestPreview(t *testing.T) {
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/ast.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//ast.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/ast.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//ast.go	2018-06-06 07:45:09.000000000 -0700
+@@ -22,14 +22,11 @@
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
++	"log"
+ 	"strings"
+ 
+-	"vitess.io/vitess/go/sqltypes"
+-	"vitess.io/vitess/go/vt/log"
+-	"vitess.io/vitess/go/vt/vterrors"
+-
+-	querypb "vitess.io/vitess/go/vt/proto/query"
+-	vtrpcpb "vitess.io/vitess/go/vt/proto/vtrpc"
++	"github.com/xwb1989/sqlparser/dependency/querypb"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ // Instructions for creating new types: If a type
+@@ -52,11 +49,11 @@
+ 	tokenizer := NewStringTokenizer(sql)
+ 	if yyParse(tokenizer) != 0 {
+ 		if tokenizer.partialDDL != nil {
+-			log.Warningf("ignoring error parsing DDL '%s': %v", sql, tokenizer.LastError)
++			log.Printf("ignoring error parsing DDL '%s': %v", sql, tokenizer.LastError)
+ 			tokenizer.ParseTree = tokenizer.partialDDL
+ 			return tokenizer.ParseTree, nil
+ 		}
+-		return nil, vterrors.New(vtrpcpb.Code_INVALID_ARGUMENT, tokenizer.LastError.Error())
++		return nil, tokenizer.LastError
+ 	}
+ 	return tokenizer.ParseTree, nil
+ }
+@@ -2249,7 +2246,7 @@
+ 		return NewStrVal(value.ToBytes()), nil
+ 	default:
+ 		// We cannot support sqltypes.Expression, or any other invalid type.
+-		return nil, vterrors.Errorf(vtrpcpb.Code_INTERNAL, "cannot convert value %v to AST", value)
++		return nil, fmt.Errorf("cannot convert value %v to AST", value)
+ 	}
+ }
+ 
+@@ -3394,6 +3391,20 @@
+ 	return nil
+ }
+ 
++// Backtick produces a backticked literal given an input string.
++func Backtick(in string) string {
++	var buf bytes.Buffer
++	buf.WriteByte('`')
++	for _, c := range in {
++		buf.WriteRune(c)
++		if c == '`' {
++			buf.WriteByte('`')
++		}
++	}
++	buf.WriteByte('`')
++	return buf.String()
++}
++
+ func formatID(buf *TrackedBuffer, original, lowered string) {
+ 	isDbSystemVariable := false
+ 	if len(original) > 1 && original[:2] == "@@" {
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/ast_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//ast_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/ast_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//ast_test.go	2018-06-05 07:41:09.000000000 -0700
+@@ -24,7 +24,7 @@
+ 	"testing"
+ 	"unsafe"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ func TestAppend(t *testing.T) {
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/comments.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//comments.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/comments.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//comments.go	2018-06-06 07:45:09.000000000 -0700
+@@ -145,7 +145,7 @@
+ 			// Single line comment
+ 			index := strings.Index(sql, "\n")
+ 			if index == -1 {
+-				return ""
++				return sql
+ 			}
+ 			sql = sql[index+1:]
+ 		}
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/comments_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//comments_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/comments_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//comments_test.go	2018-06-06 07:45:08.000000000 -0700
+@@ -187,7 +187,7 @@
+ 		outSQL: "bar",
+ 	}, {
+ 		input:  "-- /* foo */ bar",
+-		outSQL: "",
++		outSQL: "-- /* foo */ bar",
+ 	}, {
+ 		input:  "foo -- bar */",
+ 		outSQL: "foo -- bar */",
+@@ -201,7 +201,7 @@
+ 		outSQL: "a",
+ 	}, {
+ 		input:  `-- foo bar`,
+-		outSQL: "",
++		outSQL: "-- foo bar",
+ 	}}
+ 	for _, testCase := range testCases {
+ 		gotSQL := StripLeadingComments(testCase.input)
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: dependency
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/encodable.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//encodable.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/encodable.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//encodable.go	2017-10-18 18:06:33.000000000 -0700
+@@ -19,7 +19,7 @@
+ import (
+ 	"bytes"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ // This file contains types that are 'Encodable'.
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/encodable_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//encodable_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/encodable_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//encodable_test.go	2017-10-18 18:06:33.000000000 -0700
+@@ -20,7 +20,7 @@
+ 	"bytes"
+ 	"testing"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ func TestEncodable(t *testing.T) {
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: github_test.go
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/normalizer.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//normalizer.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/normalizer.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//normalizer.go	2017-10-18 18:06:33.000000000 -0700
+@@ -19,9 +19,9 @@
+ import (
+ 	"fmt"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ 
+-	querypb "vitess.io/vitess/go/vt/proto/query"
++	"github.com/xwb1989/sqlparser/dependency/querypb"
+ )
+ 
+ // Normalize changes the statement to use bind values, and
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/normalizer_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//normalizer_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/normalizer_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//normalizer_test.go	2017-11-27 22:10:51.000000000 -0800
+@@ -21,8 +21,8 @@
+ 	"reflect"
+ 	"testing"
+ 
+-	"vitess.io/vitess/go/sqltypes"
+-	querypb "vitess.io/vitess/go/vt/proto/query"
++	"github.com/xwb1989/sqlparser/dependency/querypb"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ func TestNormalize(t *testing.T) {
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/parsed_query.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//parsed_query.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/parsed_query.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//parsed_query.go	2017-10-22 13:30:37.000000000 -0700
+@@ -18,12 +18,10 @@
+ 
+ import (
+ 	"bytes"
+-	"encoding/json"
+ 	"fmt"
+ 
+-	"vitess.io/vitess/go/sqltypes"
+-
+-	querypb "vitess.io/vitess/go/vt/proto/query"
++	"github.com/xwb1989/sqlparser/dependency/querypb"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ // ParsedQuery represents a parsed query where
+@@ -71,12 +69,6 @@
+ 	return buf.Bytes(), nil
+ }
+ 
+-// MarshalJSON is a custom JSON marshaler for ParsedQuery.
+-// Note that any queries longer that 512 bytes will be truncated.
+-func (pq *ParsedQuery) MarshalJSON() ([]byte, error) {
+-	return json.Marshal(TruncateForUI(pq.Query))
+-}
+-
+ // EncodeValue encodes one bind variable value into the query.
+ func EncodeValue(buf *bytes.Buffer, value *querypb.BindVariable) {
+ 	if value.Type != querypb.Type_TUPLE {
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/parsed_query_test.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//parsed_query_test.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/parsed_query_test.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//parsed_query_test.go	2017-10-18 18:06:33.000000000 -0700
+@@ -20,9 +20,9 @@
+ 	"reflect"
+ 	"testing"
+ 
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ 
+-	querypb "vitess.io/vitess/go/vt/proto/query"
++	"github.com/xwb1989/sqlparser/dependency/querypb"
+ )
+ 
+ func TestNewParsedQuery(t *testing.T) {
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: patches
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: quick
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/redact_query.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//redact_query.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/redact_query.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//redact_query.go	2018-06-06 07:42:56.000000000 -0700
+@@ -1,6 +1,6 @@
+ package sqlparser
+ 
+-import querypb "vitess.io/vitess/go/vt/proto/query"
++import querypb "github.com/xwb1989/sqlparser/dependency/querypb"
+ 
+ // RedactSQLQuery returns a sql string with the params stripped out for display
+ func RedactSQLQuery(sql string) (string, error) {
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: tests
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/token.go /Users/bramp/go/src/github.com/xwb1989/sqlparser//token.go
+--- /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/token.go	2018-06-05 08:45:47.000000000 -0700
++++ /Users/bramp/go/src/github.com/xwb1989/sqlparser//token.go	2018-06-06 07:45:09.000000000 -0700
+@@ -22,8 +22,8 @@
+ 	"fmt"
+ 	"io"
+ 
+-	"vitess.io/vitess/go/bytes2"
+-	"vitess.io/vitess/go/sqltypes"
++	"github.com/xwb1989/sqlparser/dependency/bytes2"
++	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+ )
+ 
+ const (
+Only in /Users/bramp/go/src/vitess.io/vitess/go//vt/sqlparser/: truncate_query.go
+Only in /Users/bramp/go/src/github.com/xwb1989/sqlparser//: y.output
