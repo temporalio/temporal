@@ -25,8 +25,12 @@
 package worker
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -60,9 +64,28 @@ var Module = fx.Options(
 	scheduler.Module,
 	batcher.Module,
 	dlq.Module,
-	fx.Provide(func(c resource.HistoryClient) dlq.HistoryClient {
-		return c
-	}),
+	fx.Provide(
+		func(c resource.HistoryClient) dlq.HistoryClient {
+			return c
+		},
+		func(m cluster.Metadata) dlq.CurrentClusterName {
+			return dlq.CurrentClusterName(m.GetCurrentClusterName())
+		},
+		func(b client.Bean) dlq.TaskClientDialer {
+			return dlq.TaskClientDialerFn(func(_ context.Context, address string) (dlq.TaskClient, error) {
+				c, err := b.GetRemoteAdminClient(address)
+				if err != nil {
+					return nil, err
+				}
+				return dlq.AddTasksFn(func(
+					ctx context.Context,
+					req *adminservice.AddTasksRequest,
+				) (*adminservice.AddTasksResponse, error) {
+					return c.AddTasks(ctx, req)
+				}), nil
+			})
+		},
+	),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),

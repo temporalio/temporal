@@ -54,13 +54,12 @@ func TestNewExecutionManagerDLQWriter(t *testing.T) {
 	t.Parallel()
 
 	executionManager := &fakeExecutionManager{}
-	writer := replication.NewExecutionManagerDLQWriter()
+	writer := replication.NewExecutionManagerDLQWriter(executionManager)
 	replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
 		TaskId: 21,
 	}
-	err := writer.WriteTaskToDLQ(context.Background(), replication.WriteRequest{
+	err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
 		ShardID:             13,
-		ExecutionManager:    executionManager,
 		SourceCluster:       "test-source-cluster",
 		ReplicationTaskInfo: replicationTaskInfo,
 	})
@@ -107,7 +106,6 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				taskSerializer,
 				"test-current-cluster",
 			)
-			executionManager := &fakeExecutionManager{}
 
 			replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
 				NamespaceId: string(tests.NamespaceID),
@@ -116,20 +114,17 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				TaskType:    tc.taskType,
 				TaskId:      21,
 			}
-			err := writer.WriteTaskToDLQ(context.Background(), replication.WriteRequest{
+			err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
 				ShardID:             13,
-				ExecutionManager:    executionManager,
 				SourceCluster:       "test-source-cluster",
 				ReplicationTaskInfo: replicationTaskInfo,
 			})
 			if tc.expectErr {
 				require.Error(t, err)
 				assert.Contains(t, strings.ToLower(err.Error()), "unknown replication task type")
-				assert.Empty(t, executionManager.requests)
 				assert.Empty(t, queueWriter.EnqueueTaskRequests)
 			} else {
 				require.NoError(t, err)
-				assert.Empty(t, executionManager.requests)
 				require.Len(t, queueWriter.EnqueueTaskRequests, 1)
 				request := queueWriter.EnqueueTaskRequests[0]
 				assert.Equal(t, string(tests.NamespaceID), request.Task.GetNamespaceID())

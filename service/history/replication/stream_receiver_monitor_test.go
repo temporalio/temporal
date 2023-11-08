@@ -93,7 +93,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 		ShardController: s.shardController,
 		MetricsHandler:  metrics.NoopMetricsHandler,
 		Logger:          log.NewNoopLogger(),
-		DLQWriter:       NewExecutionManagerDLQWriter(),
+		DLQWriter:       NoopDLQWriter{},
 	}
 	s.streamReceiverMonitor = NewStreamReceiverMonitor(
 		processToolBox,
