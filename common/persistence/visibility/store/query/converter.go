@@ -34,7 +34,8 @@ import (
 	"strings"
 
 	"github.com/olivere/elastic/v7"
-	"github.com/xwb1989/sqlparser"
+
+	"go.temporal.io/server/common/sqlparser"
 )
 
 type (

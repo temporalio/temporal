@@ -27,9 +27,8 @@
 package elasticsearch
 
 import (
-	"github.com/xwb1989/sqlparser"
-
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/sqlparser"
 )
 
 var allowedComparisonOperators = map[string]struct{}{

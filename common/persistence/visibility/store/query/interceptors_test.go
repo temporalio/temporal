@@ -30,9 +30,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/xwb1989/sqlparser"
-
 	"github.com/stretchr/testify/assert"
+
+	"go.temporal.io/server/common/sqlparser"
 )
 
 type (

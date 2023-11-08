@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/xwb1989/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlparser"
 )
 
 const (

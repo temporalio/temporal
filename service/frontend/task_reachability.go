@@ -32,7 +32,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlparser"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )

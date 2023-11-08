@@ -31,9 +31,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
-
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/sqlparser"
 )
 
 type (

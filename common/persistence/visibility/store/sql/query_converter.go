@@ -31,14 +31,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlparser"
 )
 
 type (

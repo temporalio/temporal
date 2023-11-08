@@ -29,9 +29,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/xwb1989/sqlparser"
 
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/sqlparser"
 )
 
 type (

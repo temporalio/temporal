@@ -230,11 +230,6 @@ github.com/uber-go/tally/v4/m3/thriftudp
 github.com/uber-go/tally/v4/prometheus
 github.com/uber-go/tally/v4/statsd
 github.com/uber-go/tally/v4/thirdparty/github.com/apache/thrift/lib/go/thrift
-github.com/xwb1989/sqlparser
-github.com/xwb1989/sqlparser/dependency/bytes2
-github.com/xwb1989/sqlparser/dependency/hack
-github.com/xwb1989/sqlparser/dependency/querypb
-github.com/xwb1989/sqlparser/dependency/sqltypes
 go.opencensus.io/internal
 go.opencensus.io/internal/tagencoding
 go.opencensus.io/metric/metricdata

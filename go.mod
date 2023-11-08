@@ -34,7 +34,6 @@ require (
 	github.com/uber-go/tally/v4 v4.1.7
 	github.com/urfave/cli v1.22.14
 	github.com/urfave/cli/v2 v2.4.0
-	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.45.0
 	go.opentelemetry.io/otel v1.19.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.42.0
