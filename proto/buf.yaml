@@ -1,6 +1,4 @@
 version: v1beta1
-deps:
-- buf.build/googleapis/googleapis
 build:
   roots:
     - internal
