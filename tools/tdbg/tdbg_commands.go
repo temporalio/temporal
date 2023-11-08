@@ -583,7 +583,8 @@ func newAdminDLQJobCommands(
 				&cli.StringFlag{
 					Name:  FlagJobToken,
 					Usage: "Token of the DLQ job. This token will be printed in the output of merge and purge commands",
-				},
+					Required: true,
+				}
 			},
 			Action: func(c *cli.Context) error {
 				ac := dlqServiceProvider.GetDLQJobService()
