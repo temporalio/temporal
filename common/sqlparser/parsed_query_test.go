@@ -20,9 +20,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+	"go.temporal.io/server/common/sqlparser/dependency/sqltypes"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 func TestNewParsedQuery(t *testing.T) {

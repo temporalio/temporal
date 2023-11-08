@@ -24,7 +24,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+	"go.temporal.io/server/common/sqlparser/dependency/sqltypes"
 )
 
 func TestAppend(t *testing.T) {

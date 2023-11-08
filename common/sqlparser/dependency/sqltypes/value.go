@@ -23,10 +23,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/xwb1989/sqlparser/dependency/bytes2"
-	"github.com/xwb1989/sqlparser/dependency/hack"
+	"go.temporal.io/server/common/sqlparser/dependency/bytes2"
+	"go.temporal.io/server/common/sqlparser/dependency/hack"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 var (

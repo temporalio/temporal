@@ -17,7 +17,7 @@ limitations under the License.
 package sqltypes
 
 import (
-	querypb "github.com/xwb1989/sqlparser/dependency/querypb"
+	querypb "go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 // Functions in this file should only be used for testing.

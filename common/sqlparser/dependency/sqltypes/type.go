@@ -19,7 +19,7 @@ package sqltypes
 import (
 	"fmt"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 // This file provides wrappers and support

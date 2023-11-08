@@ -19,7 +19,7 @@ package sqlparser
 import (
 	"bytes"
 
-	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+	"go.temporal.io/server/common/sqlparser/dependency/sqltypes"
 )
 
 // This file contains types that are 'Encodable'.

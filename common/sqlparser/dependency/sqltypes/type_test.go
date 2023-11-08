@@ -19,7 +19,7 @@ package sqltypes
 import (
 	"testing"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 func TestTypeValues(t *testing.T) {

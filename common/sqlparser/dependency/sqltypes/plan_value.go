@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 // PlanValue represents a value or a list of values for

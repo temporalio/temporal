@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 func TestProtoConversions(t *testing.T) {

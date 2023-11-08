@@ -19,9 +19,9 @@ package sqlparser
 import (
 	"fmt"
 
-	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+	"go.temporal.io/server/common/sqlparser/dependency/sqltypes"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
 )
 
 // Normalize changes the statement to use bind values, and

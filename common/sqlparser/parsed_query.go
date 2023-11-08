@@ -20,8 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/xwb1989/sqlparser/dependency/querypb"
-	"github.com/xwb1989/sqlparser/dependency/sqltypes"
+	"go.temporal.io/server/common/sqlparser/dependency/querypb"
+	"go.temporal.io/server/common/sqlparser/dependency/sqltypes"
 )
 
 // ParsedQuery represents a parsed query where
