@@ -160,41 +160,6 @@ func newCompleted(
 	return upd
 }
 
-// WaitOutcome observes this Update's completion, returning the Outcome when it
-// is available. This call will block until the Outcome is known or the provided
-// context.Context expires. It is safe to call this method outside of workflow lock.
-func (u *Update) WaitOutcome(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
-	outcome, err := u.outcome.Get(ctx)
-	if err != nil {
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome, err
-	}
-	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
-}
-
-// WaitAccepted blocks on the acceptance of this update, returning nil if has
-// been accepted but not yet completed or the overall Outcome if the update has
-// been completed (including completed by rejection). This call will block until
-// the acceptance occurs or the provided context.Context expires.
-// It is safe to call this method outside of workflow lock.
-func (u *Update) WaitAccepted(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
-	if u.outcome.Ready() {
-		// Being complete implies being accepted; return the completed outcome
-		// here because we can.
-		return u.WaitOutcome(ctx)
-	}
-	fail, err := u.accepted.Get(ctx)
-	if err != nil {
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, err
-	}
-	if fail != nil {
-		outcome := &updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: fail},
-		}
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
-	}
-	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil, nil
-}
-
 // WaitLifecycleStage waits until the Update has reached at least `waitStage` or
 // a timeout. If the Update reaches `waitStage` with no timeout, the most
 // advanced stage known to have been reached is returned, along with the outcome
@@ -250,6 +215,41 @@ func (u *Update) waitLifecycleStage(
 		// Handle a context deadline expiry as usual.
 		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, ctx.Err()
 	}
+}
+
+// WaitOutcome observes this Update's completion, returning the Outcome when it
+// is available. This call will block until the Outcome is known or the provided
+// context.Context expires. It is safe to call this method outside of workflow lock.
+func (u *Update) WaitOutcome(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
+	outcome, err := u.outcome.Get(ctx)
+	if err != nil {
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome, err
+	}
+	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
+}
+
+// WaitAccepted blocks on the acceptance of this update, returning nil if has
+// been accepted but not yet completed or the overall Outcome if the update has
+// been completed (including completed by rejection). This call will block until
+// the acceptance occurs or the provided context.Context expires.
+// It is safe to call this method outside of workflow lock.
+func (u *Update) WaitAccepted(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
+	if u.outcome.Ready() {
+		// Being complete implies being accepted; return the completed outcome
+		// here because we can.
+		return u.WaitOutcome(ctx)
+	}
+	fail, err := u.accepted.Get(ctx)
+	if err != nil {
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, err
+	}
+	if fail != nil {
+		outcome := &updatepb.Outcome{
+			Value: &updatepb.Outcome_Failure{Failure: fail},
+		}
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome, nil
+	}
+	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil, nil
 }
 
 // OnMessage delivers a message to the Update state machine. The proto.Message
