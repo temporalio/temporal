@@ -133,7 +133,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> AND
 %right <bytes> NOT '!'
 %left <bytes> BETWEEN CASE WHEN THEN ELSE END
-%left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
+%left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN STARTS_WITH
 %left <bytes> '|'
 %left <bytes> '&'
 %left <bytes> SHIFT_LEFT SHIFT_RIGHT
@@ -1979,6 +1979,14 @@ condition:
   {
     $$ = &ComparisonExpr{Left: $1, Operator: NotRegexpStr, Right: $4}
   }
+| value_expression STARTS_WITH value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: StartsWithStr, Right: $3}
+  }
+| value_expression NOT STARTS_WITH value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: NotStartsWithStr, Right: $4}
+  }
 | value_expression BETWEEN value_expression AND value_expression
   {
     $$ = &RangeCond{Left: $1, Operator: BetweenStr, From: $3, To: $5}
@@ -3000,6 +3008,7 @@ reserved_keyword:
 | SEPARATOR
 | SET
 | SHOW
+| STARTS_WITH
 | STRAIGHT_JOIN
 | TABLE
 | TABLES

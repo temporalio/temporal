@@ -6,10 +6,10 @@ install: update-tools bins
 bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
-all: update-tools clean proto bins check test
+all: update-tools clean proto yacc bins check test
 
 # Used by Buildkite.
-ci-build-misc: print-go-version bins ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version bins ci-update-tools shell-check copyright-check proto yacc go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -68,6 +68,9 @@ PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell go list -modfile build/go.mod -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
 PROTO_OUT := api
+
+YACC_FILES = $(shell find . -name "*.y")
+YACC_DIRS = $(sort $(dir $(YACC_FILES)))
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -159,10 +162,21 @@ update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
-update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum
+update-tools: update-goimports update-linters update-mockgen update-proto-plugins update-proto-linters update-gotestsum update-goyacc
 
 # update-linters is not included because in CI linters are run by github actions.
-ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum
+ci-update-tools: update-goimports update-mockgen update-proto-plugins update-proto-linters update-gotestsum update-goyacc
+
+##### yacc #####
+update-goyacc:
+	@printf $(COLOR) "Install/update goyacc..."
+	@go install golang.org/x/tools/cmd/goyacc@latest
+
+yacc:
+	@printf $(COLOR) "Build yacc files..."
+	$(foreach YACC_FILE,$(YACC_FILES),\
+		@goyacc -o $(basename $(YACC_FILE)).go $(YACC_FILE) \
+	$(NEWLINE))
 
 ##### Proto #####
 $(PROTO_OUT):

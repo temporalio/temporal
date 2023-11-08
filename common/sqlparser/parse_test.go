@@ -322,6 +322,10 @@ var (
 	}, {
 		input: "select /* not regexp */ 1 from t where a not regexp b",
 	}, {
+		input: "select /* starts_with */ 1 from t where a starts_with b",
+	}, {
+		input: "select /* not starts_with */ 1 from t where a not starts_with b",
+	}, {
 		input:  "select /* rlike */ 1 from t where a rlike b",
 		output: "select /* rlike */ 1 from t where a regexp b",
 	}, {

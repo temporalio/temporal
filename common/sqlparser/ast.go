@@ -2111,6 +2111,8 @@ const (
 	NotLikeStr           = "not like"
 	RegexpStr            = "regexp"
 	NotRegexpStr         = "not regexp"
+	StartsWithStr        = "starts_with"
+	NotStartsWithStr     = "not starts_with"
 	JSONExtractOp        = "->"
 	JSONUnquoteExtractOp = "->>"
 )

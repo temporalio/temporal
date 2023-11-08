@@ -335,6 +335,7 @@ var keywords = map[string]int{
 	"ssl":                 UNUSED,
 	"start":               START,
 	"starting":            UNUSED,
+	"starts_with":         STARTS_WITH,
 	"status":              STATUS,
 	"stored":              UNUSED,
 	"straight_join":       STRAIGHT_JOIN,
