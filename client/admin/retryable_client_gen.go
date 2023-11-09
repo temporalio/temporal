@@ -65,6 +65,36 @@ func (c *retryableClient) AddSearchAttributes(
 	return resp, err
 }
 
+func (c *retryableClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	var resp *adminservice.AddTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CancelDLQJob(
+	ctx context.Context,
+	request *adminservice.CancelDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CancelDLQJobResponse, error) {
+	var resp *adminservice.CancelDLQJobResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelDLQJob(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -104,6 +134,21 @@ func (c *retryableClient) DescribeCluster(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeDLQJob(
+	ctx context.Context,
+	request *adminservice.DescribeDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDLQJobResponse, error) {
+	var resp *adminservice.DescribeDLQJobResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeDLQJob(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

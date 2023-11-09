@@ -2037,10 +2037,8 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2204,10 +2202,8 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2291,10 +2287,8 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueReadPartitions)
-	dc.OverrideValue(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	defer dc.RemoveOverride(dynamicconfig.MatchingNumTaskqueueWritePartitions)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
@@ -2475,8 +2469,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	defer dc.RemoveOverride(dynamicconfig.ReachabilityQuerySetDurationSinceDefault)
-	dc.OverrideValue(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 	// Verify new workflows aren't reachable
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
@@ -2615,8 +2608,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
-	defer dc.RemoveOverride(dynamicconfig.ReachabilityQuerySetDurationSinceDefault)
-	dc.OverrideValue(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
+	dc.OverrideValue(s.T(), dynamicconfig.ReachabilityQuerySetDurationSinceDefault, time.Microsecond)
 
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)

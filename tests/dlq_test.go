@@ -162,9 +162,6 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *dlqSuite) SetupTest() {
-	if TestFlags.PersistenceType == "sql" {
-		s.T().Skip("skipping DLQ tests for SQL persistence")
-	}
 	s.setAssertions()
 	s.failingWorkflowIDPrefix = "dlq-test-terminal-wfts-"
 }
@@ -212,6 +209,7 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

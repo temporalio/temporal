@@ -22,40 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqlplugin
+package replication
 
-import (
-	"context"
-	"database/sql"
+import "context"
 
-	"go.temporal.io/server/common/persistence"
-)
+// NoopDLQWriter is a DLQWriter that does nothing. The zero value is a valid instance.
+type NoopDLQWriter struct {
+}
 
-type (
-	// QueueV2MetadataRow represents a row in queue_metadata table
-	QueueV2MetadataRow struct {
-		QueueType        persistence.QueueV2Type
-		QueueName        string
-		MetadataPayload  []byte
-		MetadataEncoding string
-	}
+var _ DLQWriter = NoopDLQWriter{}
 
-	QueueV2MetadataFilter struct {
-		QueueType persistence.QueueV2Type
-		QueueName string
-	}
-
-	QueueV2MetadataTypeFilter struct {
-		QueueType  persistence.QueueV2Type
-		PageSize   int
-		PageOffset int64
-	}
-
-	QueueV2Metadata interface {
-		InsertIntoQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
-		UpdateQueueV2Metadata(ctx context.Context, row *QueueV2MetadataRow) (sql.Result, error)
-		SelectFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
-		SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter QueueV2MetadataFilter) (*QueueV2MetadataRow, error)
-		SelectNameFromQueueV2Metadata(ctx context.Context, filter QueueV2MetadataTypeFilter) ([]QueueV2MetadataRow, error)
-	}
-)
+func (w NoopDLQWriter) WriteTaskToDLQ(context.Context, DLQWriteRequest) error {
+	return nil
+}

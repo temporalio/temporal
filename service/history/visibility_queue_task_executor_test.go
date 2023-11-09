@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -616,4 +617,19 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		nil,
 		metrics.NoopMetricsHandler,
 	)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestCopyMapPayload() {
+	var input map[string]*commonpb.Payload
+	s.Nil(copyMapPayload(input))
+
+	key := "key"
+	val := payload.EncodeBytes([]byte{'1', '2', '3'})
+	input = map[string]*commonpb.Payload{
+		key: val,
+	}
+	result := copyMapPayload(input)
+	s.Equal(input, result)
+	result[key].GetData()[0] = '0'
+	s.Equal(byte('1'), val.GetData()[0])
 }

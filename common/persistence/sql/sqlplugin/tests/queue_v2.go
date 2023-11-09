@@ -130,11 +130,25 @@ func (db *faultyDB) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplu
 	return db.DB.SelectFromQueueV2Metadata(ctx, filter)
 }
 
+func (db *faultyDB) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, db.selectMetadataError
+	}
+	return db.DB.SelectFromQueueV2MetadataForUpdate(ctx, filter)
+}
+
 func (tx *faultyTx) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
 	if tx.db.selectMetadataError != nil {
 		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
 	}
 	return tx.Tx.SelectFromQueueV2Metadata(ctx, filter)
+}
+
+func (tx *faultyTx) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if tx.db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
+	}
+	return tx.Tx.SelectFromQueueV2MetadataForUpdate(ctx, filter)
 }
 
 func (db *faultyDB) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
@@ -389,7 +403,6 @@ func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.D
 		QueueName:        queueName,
 		MetadataPayload:  bytes,
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -512,7 +525,6 @@ func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplu
 		QueueName:        queueName,
 		MetadataPayload:  []byte("invalid_payload"),
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -536,7 +548,6 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 		QueueName:        queueName,
 		MetadataPayload:  []byte("test"),
 		MetadataEncoding: "invalid_encoding",
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -572,12 +583,13 @@ func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplu
 		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
 		require.NoError(t, err)
 	}
-	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+	resp, err := q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
 		QueueType:                   queueType,
 		QueueName:                   queueKey.GetQueueName(),
 		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: persistence.FirstQueueMessageID + 2},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, int64(3), resp.MessagesDeleted)
 	result, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),

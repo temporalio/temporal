@@ -37,15 +37,16 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/persistence"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -60,6 +61,7 @@ type (
 		// MergeParams is only used for WorkflowTypeMerge.
 		MergeParams MergeParams
 	}
+
 	// Key uniquely identifies a DLQ.
 	Key struct {
 		// TaskCategoryID is the id used by [go.temporal.io/server/service/history/tasks.TaskCategoryRegistry].
@@ -72,12 +74,14 @@ type (
 		// if we add cross-cluster tasks in the future.
 		TargetCluster string
 	}
+
 	// DeleteParams contain the target DLQ and the max message ID to delete up to.
 	DeleteParams struct {
 		Key
 		// MaxMessageID is inclusive.
 		MaxMessageID int64
 	}
+
 	// MergeParams contain the target DLQ and the max message ID to merge up to.
 	MergeParams struct {
 		Key
@@ -87,26 +91,71 @@ type (
 		// The maximum is MaxMergeBatchSize. The default is DefaultMergeBatchSize.
 		BatchSize int
 	}
-	// HistoryClient is a subset of the [historyservice.HistoryServiceClient] interface.
+	// ProgressQueryResponse is the response to progress query.
+	ProgressQueryResponse struct {
+		MaxMessageIDToProcess     int64
+		LastProcessedMessageID    int64
+		NumberOfMessagesProcessed int64
+		WorkflowType              string
+		DlqKey                    Key
+	}
+
+	// HistoryClient contains the subset of methods from [historyservice.HistoryServiceClient] that we need, to make it
+	// easier to implement in tests.
 	HistoryClient interface {
 		DeleteDLQTasks(
 			ctx context.Context,
 			in *historyservice.DeleteDLQTasksRequest,
 			opts ...grpc.CallOption,
 		) (*historyservice.DeleteDLQTasksResponse, error)
-		AddTasks(
-			ctx context.Context,
-			in *historyservice.AddTasksRequest,
-			opts ...grpc.CallOption,
-		) (*historyservice.AddTasksResponse, error)
 		GetDLQTasks(
 			ctx context.Context,
 			in *historyservice.GetDLQTasksRequest,
 			opts ...grpc.CallOption,
 		) (*historyservice.GetDLQTasksResponse, error)
 	}
+
+	// TaskClient contains the subset of methods from [adminservice.AdminServiceClient] that we need, to make it easier
+	// to implement in tests.
+	TaskClient interface {
+		AddTasks(
+			ctx context.Context,
+			in *adminservice.AddTasksRequest,
+		) (*adminservice.AddTasksResponse, error)
+	}
+
+	// AddTasksFn provides a convenient method for implementing the [TaskClient] interface.
+	AddTasksFn func(
+		ctx context.Context,
+		req *adminservice.AddTasksRequest,
+	) (*adminservice.AddTasksResponse, error)
+
+	// TaskClientDialer is a function that returns a [TaskClient] given a cluster name.
+	TaskClientDialer interface {
+		// Dial returns a [TaskClient] given a cluster name. You don't need to close this client. Note that some
+		// implementations will cache clients.
+		Dial(ctx context.Context, cluster string) (TaskClient, error)
+	}
+
+	// TaskClientDialerFn is a function that returns a [TaskClient] given an address.
+	TaskClientDialerFn func(ctx context.Context, address string) (TaskClient, error)
+
+	// CurrentClusterName is its own type just to make fx injection easier. It's similar to the same type that exists
+	// in the persistence package, but I thought that re-using that would look weird here because it has nothing to do
+	// with persistence.
+	CurrentClusterName string
+
+	workerComponentParams struct {
+		fx.In
+		HistoryClient      HistoryClient
+		CurrentClusterName CurrentClusterName
+		TaskClientDialer   TaskClientDialer
+	}
+
 	workerComponent struct {
-		historyClient HistoryClient
+		historyClient      HistoryClient
+		taskClientDialer   TaskClientDialer
+		currentClusterName string
 	}
 )
 
@@ -124,6 +173,8 @@ const (
 	MaxMergeBatchSize = 1000
 	// DefaultMergeBatchSize is the default value for MergeParams.BatchSize.
 	DefaultMergeBatchSize = 100
+	// QueryTypeProgress is the query to get the progress of the DLQ workflow.
+	QueryTypeProgress = "dlq-job-progress-query"
 
 	errorTypeInvalidWorkflowType = "dlq-error-type-invalid-workflow-type"
 	errorTypeInvalidRequest      = "dlq-error-type-invalid-request"
@@ -140,8 +191,8 @@ const (
 )
 
 var (
-	// Module provides a [workercommon.WorkerComponent] annotated with [workercommon.WorkerComponentTag] to the graph, given
-	// a [HistoryClient] dependency.
+	// Module provides a [workercommon.WorkerComponent] annotated with [workercommon.WorkerComponentTag] to the graph,
+	// given a [HistoryClient], a [TaskClientDialer], and a value for [CurrentClusterName].
 	Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
 	ErrNegativeBatchSize      = errors.New("BatchSize must be positive or 0 to use the default")
@@ -165,16 +216,33 @@ var (
 	}
 )
 
-func newComponent(client HistoryClient) workercommon.WorkerComponent {
+func newComponent(params workerComponentParams) workercommon.WorkerComponent {
 	return &workerComponent{
-		historyClient: client,
+		historyClient:      params.HistoryClient,
+		currentClusterName: string(params.CurrentClusterName),
+		taskClientDialer:   params.TaskClientDialer,
 	}
 }
 
 //revive:disable:import-shadowing this doesn't actually shadow imports because it's a method, not a function
 func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) error {
+	queryResponse := ProgressQueryResponse{}
+	queryResponse.WorkflowType = params.WorkflowType
+	err := workflow.SetQueryHandler(ctx, QueryTypeProgress, func() (ProgressQueryResponse, error) {
+		return queryResponse, nil
+	})
+	if err != nil {
+		return err
+	}
 	if params.WorkflowType == WorkflowTypeDelete {
-		return workflow.ExecuteActivity(
+		queryResponse.MaxMessageIDToProcess = params.DeleteParams.MaxMessageID
+		queryResponse.DlqKey = Key{
+			TaskCategoryID: params.DeleteParams.TaskCategoryID,
+			SourceCluster:  params.DeleteParams.SourceCluster,
+			TargetCluster:  params.DeleteParams.TargetCluster,
+		}
+		var response historyservice.DeleteDLQTasksResponse
+		err = workflow.ExecuteActivity(
 			workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				TaskQueue:           primitives.DLQActivityTQ,
 				RetryPolicy:         deleteActivityRetryPolicy,
@@ -182,15 +250,27 @@ func (c *workerComponent) workflow(ctx workflow.Context, params WorkflowParams) 
 			}),
 			deleteTasksActivityName,
 			params.DeleteParams,
-		).Get(ctx, nil)
+		).Get(ctx, &response)
+		if err != nil {
+			return err
+		}
+		queryResponse.LastProcessedMessageID = params.DeleteParams.MaxMessageID
+		queryResponse.NumberOfMessagesProcessed = response.MessagesDeleted
+		return nil
 	} else if params.WorkflowType == WorkflowTypeMerge {
-		return c.mergeTasks(ctx, params.MergeParams)
+		queryResponse.MaxMessageIDToProcess = params.MergeParams.MaxMessageID
+		queryResponse.DlqKey = Key{
+			TaskCategoryID: params.MergeParams.TaskCategoryID,
+			SourceCluster:  params.MergeParams.SourceCluster,
+			TargetCluster:  params.MergeParams.TargetCluster,
+		}
+		return c.mergeTasks(ctx, params.MergeParams, &queryResponse.LastProcessedMessageID, &queryResponse.NumberOfMessagesProcessed)
 	}
 
 	return temporal.NewNonRetryableApplicationError(params.WorkflowType, errorTypeInvalidWorkflowType, nil)
 }
 
-func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) error {
+func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) (*historyservice.DeleteDLQTasksResponse, error) {
 	req := &historyservice.DeleteDLQTasksRequest{
 		DlqKey: &commonspb.HistoryDLQKey{
 			TaskCategory:  int32(params.TaskCategoryID),
@@ -202,15 +282,20 @@ func (c *workerComponent) deleteTasks(ctx context.Context, params DeleteParams) 
 		},
 	}
 
-	_, err := c.historyClient.DeleteDLQTasks(ctx, req)
+	resp, err := c.historyClient.DeleteDLQTasks(ctx, req)
 	if err != nil {
-		return c.convertServerErr(err, "DeleteDLQTasks failed")
+		return nil, c.convertServerErr(err, "DeleteDLQTasks failed")
 	}
 
-	return err
+	return resp, err
 }
 
-func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams) error {
+func (c *workerComponent) mergeTasks(
+	ctx workflow.Context,
+	params MergeParams,
+	lastProcessedMessageID *int64,
+	numberOfMessagesProcessed *int64,
+) error {
 	params, err := parseMergeParams(params)
 	if err != nil {
 		return err
@@ -241,18 +326,18 @@ func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams) e
 		nextPageToken = response.NextPageToken
 
 		// 1.b. Filter out tasks from messages beyond the last-desired message.
-		tasks := make([]*commonspb.HistoryTask, 0, len(response.DlqTasks))
+		historyTasks := make([]*commonspb.HistoryTask, 0, len(response.DlqTasks))
 		maxBatchMessageID := int64(persistence.FirstQueueMessageID)
 
 		for _, task := range response.DlqTasks {
 			if task.Metadata.MessageId <= params.MaxMessageID {
-				tasks = append(tasks, task.Payload)
+				historyTasks = append(historyTasks, task.Payload)
 				maxBatchMessageID = max(maxBatchMessageID, task.Metadata.MessageId)
 			}
 		}
 
 		// 2. Re-enqueue tasks.
-		err = workflow.ExecuteActivity(ctx, reEnqueueTasksActivityName, params, tasks).Get(ctx, nil)
+		err = workflow.ExecuteActivity(ctx, reEnqueueTasksActivityName, params, historyTasks).Get(ctx, nil)
 		if err != nil {
 			return err
 		}
@@ -273,7 +358,8 @@ func (c *workerComponent) mergeTasks(ctx workflow.Context, params MergeParams) e
 		if err != nil {
 			return err
 		}
-
+		*lastProcessedMessageID = maxBatchMessageID
+		*numberOfMessagesProcessed += int64(len(historyTasks))
 		// 4. Check if we're done.
 		if len(nextPageToken) == 0 {
 			return nil
@@ -318,25 +404,33 @@ func parseMergeParams(params MergeParams) (MergeParams, error) {
 func (c *workerComponent) reEnqueueTasks(
 	ctx context.Context,
 	params MergeParams,
-	tasks []*commonspb.HistoryTask,
+	historyTasks []*commonspb.HistoryTask,
 ) error {
-	tasksByShard := make(map[int32][]*historyservice.AddTasksRequest_Task)
-
-	for _, task := range tasks {
-		newTask := &historyservice.AddTasksRequest_Task{
+	// Group tasks by shard ID.
+	tasksByShard := make(map[int32][]*adminservice.AddTasksRequest_Task)
+	for _, task := range historyTasks {
+		newTask := &adminservice.AddTasksRequest_Task{
 			CategoryId: int32(params.TaskCategoryID),
 			Blob:       task.Blob,
 		}
 		tasksByShard[task.ShardId] = append(tasksByShard[task.ShardId], newTask)
 	}
 
-	for shardID, historyTasks := range tasksByShard {
-		_, err := c.historyClient.AddTasks(ctx, &historyservice.AddTasksRequest{
+	// Connect to the admin service with the source cluster.
+	taskClient, err := c.taskClientDialer.Dial(ctx, params.SourceCluster)
+	if err != nil {
+		return fmt.Errorf("unable to dial admin service for cluster %q: %w", params.SourceCluster, err)
+	}
+
+	for shardID, batch := range tasksByShard {
+		_, err := taskClient.AddTasks(ctx, &adminservice.AddTasksRequest{
 			ShardId: shardID,
-			Tasks:   historyTasks,
+			Tasks:   batch,
 		})
 		if err != nil {
-			return c.convertServerErr(err, "AddTasks failed while re-enqueuing tasks")
+			return c.convertServerErr(err, fmt.Sprintf(
+				"AddTasks failed while re-enqueuing tasks to shard %d", shardID,
+			))
 		}
 	}
 
@@ -411,4 +505,17 @@ func (c *workerComponent) DedicatedActivityWorkerOptions() *workercommon.Dedicat
 			),
 		},
 	}
+}
+
+// Dial implements [TaskClientDialer] by calling the [TaskClientDialerFn] with the cluster name.
+func (f TaskClientDialerFn) Dial(ctx context.Context, cluster string) (TaskClient, error) {
+	return f(ctx, cluster)
+}
+
+// AddTasks implements [TaskClient] by calling the [AddTasksFn] with the request.
+func (f AddTasksFn) AddTasks(
+	ctx context.Context,
+	in *adminservice.AddTasksRequest,
+) (*adminservice.AddTasksResponse, error) {
+	return f(ctx, in)
 }

@@ -269,7 +269,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -277,6 +277,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		assert.Equal(t, int64(2), resp.MessagesDeleted)
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
@@ -300,7 +301,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		msg, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID), msg.Metadata.ID)
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -308,6 +309,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		assert.Equal(t, int64(1), resp.MessagesDeleted)
 		msg, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), msg.Metadata.ID, "Even though all"+
@@ -329,7 +331,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			require.NoError(t, err)
 			assert.Equal(t, int64(persistence.FirstQueueMessageID+i), msg.Metadata.ID)
 		}
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -337,6 +339,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		require.Equal(t, int64(3), resp.MessagesDeleted)
 		_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
@@ -364,16 +367,26 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < 2; i++ {
-			_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
-				QueueType: queueType,
-				QueueName: queueName,
-				InclusiveMaxMessageMetadata: persistence.MessageMetadata{
-					ID: persistence.FirstQueueMessageID,
-				},
-			})
-			require.NoError(t, err)
-		}
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+				ID: persistence.FirstQueueMessageID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), resp.MessagesDeleted)
+
+		resp, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+				ID: persistence.FirstQueueMessageID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(0), resp.MessagesDeleted)
+
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,

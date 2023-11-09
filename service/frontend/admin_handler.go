@@ -1860,6 +1860,102 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 	}, nil
 }
 
+func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
+	jt := adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.JobToken))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
+	}
+	client := adh.sdkClientFactory.GetSystemClient()
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	if err != nil {
+		return nil, err
+	}
+	response, err := client.QueryWorkflow(ctx, jt.WorkflowId, jt.RunId, dlq.QueryTypeProgress)
+	if err != nil {
+		return nil, err
+	}
+	var queryResponse dlq.ProgressQueryResponse
+	if err = response.Get(&queryResponse); err != nil {
+		return nil, err
+	}
+	var state enumsspb.DLQOperationState
+	switch execution.WorkflowExecutionInfo.Status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		state = enumsspb.DLQ_OPERATION_STATE_RUNNING
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		state = enumsspb.DLQ_OPERATION_STATE_COMPLETED
+	default:
+		state = enumsspb.DLQ_OPERATION_STATE_FAILED
+	}
+	var opType enumsspb.DLQOperationType
+	switch queryResponse.WorkflowType {
+	case dlq.WorkflowTypeDelete:
+		opType = enumsspb.DLQ_OPERATION_TYPE_PURGE
+	case dlq.WorkflowTypeMerge:
+		opType = enumsspb.DLQ_OPERATION_TYPE_MERGE
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid DLQ workflow type: %v", opType))
+	}
+	return &adminservice.DescribeDLQJobResponse{
+		DlqKey: &commonspb.HistoryDLQKey{
+			TaskCategory:  int32(queryResponse.DlqKey.TaskCategoryID),
+			SourceCluster: queryResponse.DlqKey.SourceCluster,
+			TargetCluster: queryResponse.DlqKey.TargetCluster,
+		},
+		OperationType:          opType,
+		OperationState:         state,
+		MaxMessageId:           queryResponse.MaxMessageIDToProcess,
+		LastProcessedMessageId: queryResponse.LastProcessedMessageID,
+		StartTime:              execution.WorkflowExecutionInfo.StartTime,
+		EndTime:                execution.WorkflowExecutionInfo.CloseTime,
+	}, nil
+}
+
+func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
+	jt := adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.JobToken))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
+	}
+	client := adh.sdkClientFactory.GetSystemClient()
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	if err != nil {
+		return nil, err
+	}
+	if execution.WorkflowExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return &adminservice.CancelDLQJobResponse{Canceled: false}, nil
+	}
+	err = client.TerminateWorkflow(ctx, jt.WorkflowId, jt.RunId, request.Reason)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.CancelDLQJobResponse{Canceled: true}, nil
+}
+
+// AddTasks just translates the admin service's request proto into a history service request proto and then sends it.
+func (adh *AdminHandler) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+) (*adminservice.AddTasksResponse, error) {
+	historyTasks := make([]*historyservice.AddTasksRequest_Task, len(request.Tasks))
+	for i, task := range request.Tasks {
+		historyTasks[i] = &historyservice.AddTasksRequest_Task{
+			CategoryId: task.CategoryId,
+			Blob:       task.Blob,
+		}
+	}
+	historyServiceRequest := &historyservice.AddTasksRequest{
+		ShardId: request.ShardId,
+		Tasks:   historyTasks,
+	}
+	_, err := adh.historyClient.AddTasks(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.AddTasksResponse{}, nil
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
 	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
 }
