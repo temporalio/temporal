@@ -57,6 +57,7 @@ var Module = fx.Provide(
 	eagerNamespaceRefresherProvider,
 	sequentialTaskQueueFactoryProvider,
 	dlqWriterAdapterProvider,
+	historyPaginatedFetcherProvider,
 	newDLQWriterToggle,
 )
 
@@ -80,6 +81,21 @@ func eagerNamespaceRefresherProvider(
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
+	)
+}
+func historyPaginatedFetcherProvider(
+	config *configs.Config,
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) HistoryPaginatedFetcher {
+	return NewHistoryPaginatedFetcher(
+		namespaceRegistry,
+		clientBean,
+		serializer,
+		config.StandbyTaskReReplicationContextTimeout,
+		logger,
 	)
 }
 
