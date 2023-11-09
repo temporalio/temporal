@@ -48,7 +48,7 @@ func GetNextPageTokenForQueueV2(value int64) []byte {
 	// This can never fail if you inspect the implementation.
 	b, _ := token.Marshal()
 
-	// See the comment above pageTokenPrefixByte for why we want to do this.
+	// See the comment above PageTokenPrefixByte for why we want to do this.
 	return append([]byte{PageTokenPrefixByte}, b...)
 }
 
@@ -67,7 +67,7 @@ func GetMinMessageIDToReadForQueueV2(
 	}
 	var token persistencespb.ReadQueueNextPageToken
 
-	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
+	// Skip the first byte. See the comment on PageTokenPrefixByte for more details.
 	err := token.Unmarshal(nextPageToken[1:])
 	if err != nil {
 		return 0, fmt.Errorf(
