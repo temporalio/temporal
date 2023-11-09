@@ -195,11 +195,12 @@ func (u *Update) waitLifecycleStage(
 	}
 	ch := make(chan result, 1)
 
+	waitCtx, cancel := context.WithTimeout(context.Background(), softTimeout)
+	defer cancel()
+
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), softTimeout)
-		defer cancel()
-		stage, outcome, err := waitFn(ctx)
-		if ctx.Err() != nil {
+		stage, outcome, err := waitFn(waitCtx)
+		if waitCtx.Err() != nil {
 			// Handle the deadline expiry as a violation of a soft deadline:
 			// return non-error empty response.
 			ch <- result{stage, nil, nil}
