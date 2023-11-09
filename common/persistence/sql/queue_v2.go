@@ -423,7 +423,7 @@ func (q *queueV2) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	offset, err := getOffsetToListQueues(request.NextPageToken)
+	offset, err := persistence.ExtractPageTokenForQueueV2(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -447,31 +447,13 @@ func (q *queueV2) ListQueues(
 		queues = append(queues, row.QueueName)
 	}
 	nextPageTokenValue := offset + int64(len(queues))
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(nextPageTokenValue)
+	var nextPageToken []byte
+	if len(queues) > 0 {
+		nextPageToken = persistence.GetNextPageTokenForQueueV2(nextPageTokenValue)
+	}
 	response := &persistence.InternalListQueuesResponse{
 		QueueNames:    queues,
 		NextPageToken: nextPageToken,
 	}
 	return response, nil
-}
-
-func getOffsetToListQueues(
-	nextPageToken []byte,
-) (int64, error) {
-	if len(nextPageToken) == 0 {
-		return 0, nil
-	}
-	var token persistencespb.ReadQueueNextPageToken
-
-	// Skip the first byte. See the comment on persistence.PageTokenPrefixByte for more details.
-	err := token.Unmarshal(nextPageToken[1:])
-	if err != nil {
-		return 0, fmt.Errorf(
-			"%w: %q: %v",
-			persistence.ErrInvalidListQueuesNextPageToken,
-			nextPageToken,
-			err,
-		)
-	}
-	return token.Token, nil
 }
