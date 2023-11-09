@@ -284,16 +284,22 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			})
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+				// Case 1: Target workflow is in the desired state.
 				return nil, nil
 			case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-				return verifyChildCompletionRecordedInfo, nil
+				// Case 2: Target workflow is not in the desired state.
+				// Returning a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
+				return &struct{}{}, nil
 			default:
-				// NOTE: we do not return the error directly here as it will cause the mutable state to be cleared and reloaded upon retry
-				// it's unnecessary as the error is in the target workflow, not this workflow.
-				return nil, &verificationErr{
+				// Case 3: Verification itself failed.
+				// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
+				// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
+				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
+				// That's unnecessary as the error is in the target workflow, not this workflow.
+				return &verificationErr{
 					msg: recordChildCompletionVerificationFailedMsg,
 					err: err,
-				}
+				}, nil
 			}
 		}
 		return nil, nil
@@ -419,9 +425,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			if err != nil {
 				return nil, err
 			}
-			return &startChildExecutionPostActionInfo{
-				historyResendInfo: historyResendInfo,
-			}, nil
+			return historyResendInfo, nil
 		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -434,16 +438,22 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		})
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+			// Case 1: Target workflow is in the desired state.
 			return nil, nil
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-			return &startChildExecutionPostActionInfo{}, nil
+			// Case 2:Ttarget workflow is not in the desired state.
+			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
+			return &struct{}{}, nil
 		default:
-			// NOTE: we do not return the error directly here as it will cause the mutable state to be cleared and reloaded upon retry
-			// it's unnecessary as the error is in the target workflow, not this workflow.
-			return nil, &verificationErr{
+			// Case 3: Verification itself failed.
+			// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
+			// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
+			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
+			// That's unnecessary as the error is in the target workflow, not this workflow.
+			return &verificationErr{
 				msg: recordChildCompletionVerificationFailedMsg,
 				err: err,
-			}
+			}, nil
 		}
 	}
 
@@ -505,14 +515,14 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(ctx, weContext, mutableState)
+	postActionInfo, err := actionFn(ctx, weContext, mutableState)
 	if err != nil {
 		return err
 	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
-	return postActionFn(ctx, taskInfo, historyResendInfo, t.logger)
+	return postActionFn(ctx, taskInfo, postActionInfo, t.logger)
 }
 
 func (t *transferQueueStandbyTaskExecutor) pushActivity(
@@ -565,8 +575,7 @@ func (t *transferQueueStandbyTaskExecutor) startChildExecutionResendPostAction(
 		return nil
 	}
 
-	historyResendInfo := postActionInfo.(*startChildExecutionPostActionInfo).historyResendInfo
-	if historyResendInfo != nil {
+	if historyResendInfo, ok := postActionInfo.(*historyResendInfo); ok {
 		return t.fetchHistoryFromRemote(ctx, taskInfo, historyResendInfo, log)
 	}
 
