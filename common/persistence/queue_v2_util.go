@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	// PageTokenPrefixByte is the first byte of the serialized page token. It's used to ensure that the page token is
+	// pageTokenPrefixByte is the first byte of the serialized page token. It's used to ensure that the page token is
 	// not empty. Without this, if the last_read_message_id is 0, the serialized page token would be empty, and clients
 	// could erroneously assume that there are no more messages beyond the first page. This is purely used to ensure
 	// that tokens are non-empty; it is not used to verify that the token is valid like the magic byte in some other
 	// protocols.
-	PageTokenPrefixByte = 0
+	pageTokenPrefixByte = 0
 )
 
 func GetNextPageTokenForQueueV2(value int64) []byte {
@@ -48,8 +48,8 @@ func GetNextPageTokenForQueueV2(value int64) []byte {
 	// This can never fail if you inspect the implementation.
 	b, _ := token.Marshal()
 
-	// See the comment above PageTokenPrefixByte for why we want to do this.
-	return append([]byte{PageTokenPrefixByte}, b...)
+	// See the comment above pageTokenPrefixByte for why we want to do this.
+	return append([]byte{pageTokenPrefixByte}, b...)
 }
 
 func GetMinMessageIDToReadForQueueV2(
@@ -77,7 +77,7 @@ func ExtractPageTokenForQueueV2(nextPageToken []byte) (int64, error) {
 		return 0, nil
 	}
 	var token persistencespb.ReadQueueNextPageToken
-	// Skip the first byte. See the comment on PageTokenPrefixByte for more details.
+	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
 	err := token.Unmarshal(nextPageToken[1:])
 	if err != nil {
 		return 0, fmt.Errorf(
