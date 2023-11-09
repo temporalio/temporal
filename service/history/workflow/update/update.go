@@ -199,7 +199,7 @@ func (u *Update) waitLifecycleStage(
 		ctx, cancel := context.WithTimeout(context.Background(), softTimeout)
 		defer cancel()
 		stage, outcome, err := waitFn(ctx)
-		if err != nil && common.IsContextDeadlineExceededErr(err) {
+		if ctx.Err() != nil {
 			// Handle the deadline expiry as a violation of a soft deadline:
 			// return non-error empty response.
 			ch <- result{stage, nil, nil}
