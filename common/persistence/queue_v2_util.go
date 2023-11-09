@@ -41,13 +41,9 @@ const (
 	PageTokenPrefixByte = 0
 )
 
-func GetNextPageTokenForQueueV2(result []QueueV2Message) []byte {
-	if len(result) == 0 {
-		return nil
-	}
-	lastReadMessageID := result[len(result)-1].MetaData.ID
+func GetNextPageTokenForQueueV2(value int64) []byte {
 	token := &persistencespb.ReadQueueNextPageToken{
-		Token: lastReadMessageID,
+		Token: value,
 	}
 	// This can never fail if you inspect the implementation.
 	b, _ := token.Marshal()
@@ -81,7 +77,8 @@ func GetMinMessageIDToReadForQueueV2(
 			err,
 		)
 	}
-	return token.Token + 1, nil
+	lastReadMessageID := token.Token
+	return lastReadMessageID + 1, nil
 }
 
 func GetPartitionForQueueV2(

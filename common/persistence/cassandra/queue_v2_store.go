@@ -220,7 +220,10 @@ func (s *queueV2Store) ReadMessages(
 		return nil, gocql.ConvertError("QueueV2ReadMessages", err)
 	}
 
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
+	var nextPageToken []byte
+	if len(messages) > 0 {
+		nextPageToken = persistence.GetNextPageTokenForQueueV2(messageID)
+	}
 
 	return &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
@@ -481,14 +484,12 @@ func (s *queueV2Store) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-
 	iter := s.session.Query(
 		templateGetQueueNamesQuery,
 		request.QueueType,
 	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
 
 	var queues []string
-
 	for {
 		var queue string
 		if !iter.Scan(&queue) {
@@ -496,11 +497,9 @@ func (s *queueV2Store) ListQueues(
 		}
 		queues = append(queues, queue)
 	}
-
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("QueueV2ListQueues", err)
 	}
-
 	return &persistence.InternalListQueuesResponse{
 		QueueNames:    queues,
 		NextPageToken: iter.PageState(),

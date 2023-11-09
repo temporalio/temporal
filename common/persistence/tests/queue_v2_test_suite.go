@@ -55,7 +55,6 @@ func RunQueueV2TestSuite(t *testing.T, q persistence.QueueV2) {
 	})
 	require.NoError(t, err)
 	t.Run("TestListQueues", func(t *testing.T) {
-		//t.Parallel()
 		testListQueues(ctx, t, q)
 	})
 	t.Run("TestHappyPath", func(t *testing.T) {
@@ -433,6 +432,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			QueueType: queueType,
 			QueueName: queueName,
 		})
+		require.NoError(t, err)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 			QueueType:     queueType,
 			PageSize:      10,
@@ -448,6 +448,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			QueueType: queueType,
 			QueueName: queueName,
 		})
+		require.NoError(t, err)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 			QueueType:     queueType,
 			PageSize:      10,
@@ -483,6 +484,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			PageSize:      1,
 			NextPageToken: response.NextPageToken,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 1, len(response.QueueNames))
 		listedQueueNames = append(listedQueueNames, response.QueueNames...)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
@@ -490,6 +492,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			PageSize:      3,
 			NextPageToken: response.NextPageToken,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 3, len(response.QueueNames))
 		listedQueueNames = append(listedQueueNames, response.QueueNames...)
 		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
@@ -497,6 +500,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 			PageSize:      1,
 			NextPageToken: response.NextPageToken,
 		})
+		require.NoError(t, err)
 		require.Equal(t, 0, len(response.QueueNames))
 		for _, queueName := range queueNames {
 			require.Contains(t, listedQueueNames, queueName)
@@ -514,18 +518,6 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Error(t, err)
 		require.ErrorIs(t, err, persistence.ErrNonPositiveListQueuesPageSize)
 	})
-	//t.Run("NegativeOffset", func(t *testing.T) {
-	//	t.Parallel()
-	//	queueType := persistence.QueueTypeHistoryDLQ
-	//	token := persistence.GetNextPageTokenForListQueueV2(0, -1)
-	//	_, err := queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
-	//		QueueType:     queueType,
-	//		PageSize:      1,
-	//		NextPageToken: token,
-	//	})
-	//	require.Error(t, err)
-	//	require.ErrorIs(t, err, persistence.ErrNegativeListQueuesOffset)
-	//})
 	t.Run("InvalidPageToken", func(t *testing.T) {
 		t.Parallel()
 		queueType := persistence.QueueTypeHistoryDLQ
