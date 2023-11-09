@@ -496,6 +496,16 @@ func (f *FaultInjectionQueueV2) RangeDeleteMessages(
 	return f.baseQueue.RangeDeleteMessages(ctx, request)
 }
 
+func (f *FaultInjectionQueueV2) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if err := f.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return f.baseQueue.ListQueues(ctx, request)
+}
+
 func NewFaultInjectionExecutionStore(
 	rate float64,
 	executionStore persistence.ExecutionStore,

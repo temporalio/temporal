@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -410,4 +411,76 @@ func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.Qu
 		return persistence.FirstQueueMessageID, nil
 	}
 	return maxMessageID + 1, nil
+}
+
+func (q *queueV2) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if request.PageSize <= 0 {
+		return nil, persistence.ErrNonPositiveListQueuesPageSize
+	}
+	offset, err := getOffsetToListQueues(
+		request.NextPageToken,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if offset < 0 {
+		return nil, persistence.ErrNegativeListQueuesOffset
+	}
+	rows, err := q.Db.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
+		QueueType:  request.QueueType,
+		PageSize:   request.PageSize,
+		PageOffset: offset,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+			"ListQueues failed for type: %v. SelectNameFromQueueV2Metadata operation failed. Error: %v",
+			request.QueueType,
+			err),
+		)
+	}
+	var queues []string
+	for _, row := range rows {
+		queues = append(queues, row.QueueName)
+	}
+	nextPageToken := getNextListQueuesPageToken(offset, int64(len(queues)))
+	response := &persistence.InternalListQueuesResponse{
+		QueueNames:    queues,
+		NextPageToken: nextPageToken,
+	}
+	return response, nil
+}
+
+func getOffsetToListQueues(
+	nextPageToken []byte,
+) (int64, error) {
+	if len(nextPageToken) == 0 {
+		return 0, nil
+	}
+	var token persistencespb.ReadQueueNextPageToken
+
+	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
+	err := token.Unmarshal(nextPageToken[1:])
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%w: %q: %v",
+			persistence.ErrInvalidListQueuesNextPageToken,
+			nextPageToken,
+			err,
+		)
+	}
+	return token.Token, nil
+}
+
+func getNextListQueuesPageToken(lastOffset int64, resultSize int64) []byte {
+	token := &persistencespb.ReadQueueNextPageToken{
+		Token: lastOffset + resultSize,
+	}
+	// This can never fail if you inspect the implementation.
+	b, _ := token.Marshal()
+
+	// See the comment above pageTokenPrefixByte for why we want to do this.
+	return append([]byte{persistence.PageTokenPrefixByte}, b...)
 }

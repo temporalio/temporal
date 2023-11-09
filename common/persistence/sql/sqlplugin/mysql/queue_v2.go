@@ -89,7 +89,7 @@ func (mdb *db) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sq
 
 func (mdb *db) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataTypeFilter) ([]sqlplugin.QueueV2MetadataRow, error) {
 	var rows []sqlplugin.QueueV2MetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.conn.SelectContext(ctx,
 		&rows,
 		templateGetNameFromQueueMetadataV2,
 		filter.QueueType,

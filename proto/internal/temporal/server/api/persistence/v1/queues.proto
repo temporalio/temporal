@@ -46,8 +46,8 @@ message QueueSliceRange {
     TaskKey exclusive_max = 2;
 }
 
-message ReadQueueMessagesNextPageToken {
-    int64 last_read_message_id = 1;
+message ReadQueueNextPageToken {
+    int64 token = 1;
 }
 
 // HistoryTask represents an internal history service task for a particular shard. We use a blob because there is no
