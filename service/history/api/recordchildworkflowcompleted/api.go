@@ -72,8 +72,8 @@ func Invoke(
 				return true
 			}
 
-			_, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			return !isRunning // !(potential stale)
+			_, childInitEventFound := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			return childInitEventFound
 		},
 		definition.NewWorkflowKey(
 			request.NamespaceId,
