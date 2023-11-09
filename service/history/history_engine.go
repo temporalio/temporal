@@ -684,7 +684,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	token, err := e.nDCHistoryImporter.ImportWorkflow(
+	token, eventsApplied, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
@@ -699,7 +699,8 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 		return nil, err
 	}
 	return &historyservice.ImportWorkflowExecutionResponse{
-		Token: token,
+		Token:         token,
+		EventsApplied: eventsApplied,
 	}, nil
 }
 
