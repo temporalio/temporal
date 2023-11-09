@@ -176,7 +176,10 @@ func (q *queueV2) ReadMessages(
 		}
 		messages = append(messages, message)
 	}
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
+	var nextPageToken []byte
+	if len(messages) > 0 {
+		nextPageToken = persistence.GetNextPageTokenForQueueV2(messages[len(messages)-1].MetaData.ID)
+	}
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -420,9 +423,7 @@ func (q *queueV2) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	offset, err := getOffsetToListQueues(
-		request.NextPageToken,
-	)
+	offset, err := getOffsetToListQueues(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +446,8 @@ func (q *queueV2) ListQueues(
 	for _, row := range rows {
 		queues = append(queues, row.QueueName)
 	}
-	nextPageToken := getNextListQueuesPageToken(offset, int64(len(queues)))
+	nextPageTokenValue := offset + int64(len(queues))
+	nextPageToken := persistence.GetNextPageTokenForQueueV2(nextPageTokenValue)
 	response := &persistence.InternalListQueuesResponse{
 		QueueNames:    queues,
 		NextPageToken: nextPageToken,
@@ -461,7 +463,7 @@ func getOffsetToListQueues(
 	}
 	var token persistencespb.ReadQueueNextPageToken
 
-	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
+	// Skip the first byte. See the comment on persistence.PageTokenPrefixByte for more details.
 	err := token.Unmarshal(nextPageToken[1:])
 	if err != nil {
 		return 0, fmt.Errorf(
@@ -472,15 +474,4 @@ func getOffsetToListQueues(
 		)
 	}
 	return token.Token, nil
-}
-
-func getNextListQueuesPageToken(lastOffset int64, resultSize int64) []byte {
-	token := &persistencespb.ReadQueueNextPageToken{
-		Token: lastOffset + resultSize,
-	}
-	// This can never fail if you inspect the implementation.
-	b, _ := token.Marshal()
-
-	// See the comment above pageTokenPrefixByte for why we want to do this.
-	return append([]byte{persistence.PageTokenPrefixByte}, b...)
 }
