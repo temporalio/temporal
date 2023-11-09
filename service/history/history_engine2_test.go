@@ -1846,7 +1846,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	// started event not found, should automatically be added
 	wfMs = workflow.TestCloneToProto(ms)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil).Times(2)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(initiatedEvent, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	_, err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
