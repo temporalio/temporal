@@ -645,6 +645,141 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 	require.Equal(t, wantAcceptedEventID, gotAcceptedEventID)
 }
 
+func TestWaitLifecycleStage(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx       = context.Background()
+		completed = false
+		effects   = effect.Buffer{}
+		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
+		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
+		acpt      = updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208}
+		rej       = updatepb.Rejection{
+			RejectedRequest: &req,
+			Failure:         &failurepb.Failure{Message: "An intentional failure"},
+		}
+		resp              = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
+		acceptedEventData = struct {
+			updateID                         string
+			acceptedRequestMessageId         string
+			acceptedRequestSequencingEventId int64
+			acceptedRequest                  *updatepb.Request
+		}{}
+		store = mockEventStore{
+			Controller: &effects,
+			AddWorkflowExecutionUpdateAcceptedEventFunc: func(
+				updateID string,
+				acceptedRequestMessageId string,
+				acceptedRequestSequencingEventId int64,
+				acceptedRequest *updatepb.Request,
+			) (*historypb.HistoryEvent, error) {
+				acceptedEventData.updateID = updateID
+				acceptedEventData.acceptedRequestMessageId = acceptedRequestMessageId
+				acceptedEventData.acceptedRequestSequencingEventId = acceptedRequestSequencingEventId
+				acceptedEventData.acceptedRequest = acceptedRequest
+				return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
+			},
+			AddWorkflowExecutionUpdateCompletedEventFunc: func(
+				acceptedEventID int64,
+				res *updatepb.Response,
+			) (*historypb.HistoryEvent, error) {
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+	)
+	const (
+		unspecifiedStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
+		acceptedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED
+		completedStage   = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
+		serverTimeout    = 10 * time.Millisecond
+	)
+
+	assertUnspecified := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		_, _, err := upd.WaitLifecycleStage(ctx, unspecifiedStage, serverTimeout)
+		require.Error(t, err)
+	}
+
+	assertAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		stage, outcome, err := upd.WaitLifecycleStage(ctx, acceptedStage, serverTimeout)
+		require.NoError(t, err)
+		require.Equal(t, acceptedStage, stage)
+		require.Nil(t, outcome)
+	}
+
+	assertSuccess := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		stage, outcome, err := upd.WaitLifecycleStage(ctx, completedStage, serverTimeout)
+		require.NoError(t, err)
+		require.Equal(t, completedStage, stage)
+		require.Nil(t, outcome.GetFailure())
+		require.NotNil(t, outcome.GetSuccess())
+		require.Equal(t, resp.Outcome, outcome)
+	}
+
+	assertFailure := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		stage, outcome, err := upd.WaitLifecycleStage(ctx, completedStage, serverTimeout)
+		require.NoError(t, err)
+		require.Equal(t, completedStage, stage)
+		require.NotNil(t, outcome.GetFailure())
+		require.Nil(t, outcome.GetSuccess())
+		require.Equal(t, rej.Failure, outcome.GetFailure())
+	}
+
+	applyMessage := func(ctx context.Context, msg proto.Message, upd *update.Update) {
+		err := upd.OnMessage(ctx, msg, store)
+		require.NoError(t, err)
+		effects.Apply(ctx)
+	}
+
+	t.Run("test non-blocking calls (accepted)", func(t *testing.T) {
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		assertUnspecified(ctx, t, upd)
+		applyMessage(ctx, &req, upd)  // => Requested
+		applyMessage(ctx, &acpt, upd) // => Accepted
+		assertAccepted(ctx, t, upd)
+		applyMessage(ctx, &resp, upd) // => Completed
+		assertSuccess(ctx, t, upd)
+	})
+
+	t.Run("test non-blocking calls (rejected)", func(t *testing.T) {
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		applyMessage(ctx, &req, upd) // => Requested
+		applyMessage(ctx, &rej, upd) // => Rejected
+		assertFailure(ctx, t, upd)
+	})
+
+	t.Run("test blocking calls (accepted)", func(t *testing.T) {
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		applyMessage(ctx, &req, upd) // => Requested
+		done := make(chan any)
+		go func() {
+			assertAccepted(ctx, t, upd)
+			close(done)
+		}()
+		go applyMessage(ctx, &acpt, upd) // => Accepted
+		<-done
+
+		done = make(chan any)
+		go func() {
+			assertSuccess(ctx, t, upd)
+			close(done)
+		}()
+		go applyMessage(ctx, &resp, upd) // => Completed
+		<-done
+	})
+
+	t.Run("test blocking calls (rejected)", func(t *testing.T) {
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		applyMessage(ctx, &req, upd) // => Requested
+		done := make(chan any)
+		go func() {
+			assertFailure(ctx, t, upd)
+			close(done)
+		}()
+		go applyMessage(ctx, &rej, upd) // => Rejected
+		<-done
+	})
+}
+
 func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {
 	t.Helper()
 	a, err := types.MarshalAny(pb)
