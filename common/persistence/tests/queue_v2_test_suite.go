@@ -502,6 +502,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		})
 		require.NoError(t, err)
 		require.Equal(t, 0, len(response.QueueNames))
+		require.Empty(t, response.NextPageToken)
 		for _, queueName := range queueNames {
 			require.Contains(t, listedQueueNames, queueName)
 
