@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -152,6 +153,15 @@ func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
 	}
 
 	return newHostInfo(addr, r.getLabelsMap()), nil
+}
+
+func (r *serviceResolver) LookupN(key string, n int) []membership.HostInfo {
+	addresses := r.ring().LookupN(key, n)
+	if len(addresses) == 0 {
+		r.RequestRefresh()
+		return []membership.HostInfo{}
+	}
+	return util.MapSlice(addresses, membership.NewHostInfoFromAddress)
 }
 
 func (r *serviceResolver) AddListener(

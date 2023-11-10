@@ -159,7 +159,7 @@ func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("other1"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("other1")})
 
 	s.manager.namespaceCallback(ns, false)
 	// main work happens in a goroutine
@@ -176,7 +176,7 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
@@ -202,9 +202,11 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns3/0").Return(membership.NewHostInfoFromAddress("self"), nil)
-	s.serviceResolver.EXPECT().Lookup("ns3/1").Return(membership.NewHostInfoFromAddress("other"), nil)
-	s.serviceResolver.EXPECT().Lookup("ns3/2").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns3", 3).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+		membership.NewHostInfoFromAddress("other"),
+		membership.NewHostInfoFromAddress("self"),
+	})
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
@@ -237,7 +239,18 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfoFromAddress("self"), nil).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+	}).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN("ns2", 2).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+		membership.NewHostInfoFromAddress("self"),
+	}).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN("ns3", 3).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+		membership.NewHostInfoFromAddress("self"),
+		membership.NewHostInfoFromAddress("self"),
+	}).AnyTimes()
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	cli2 := mocksdk.NewMockClient(s.controller)
@@ -288,9 +301,11 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 			return &workercommon.PerNSDedicatedWorkerOptions{Enabled: ns.Name().String() == "ns1"}
 		}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
-	s.serviceResolver.EXPECT().Lookup("ns2/0").Return(membership.NewHostInfoFromAddress("self"), nil)
-	s.serviceResolver.EXPECT().Lookup("ns2/1").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
+	s.serviceResolver.EXPECT().LookupN("ns2", 2).Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("self"),
+		membership.NewHostInfoFromAddress("self"),
+	})
 
 	cli1 := mocksdk.NewMockClient(s.controller)
 	cli2 := mocksdk.NewMockClient(s.controller)
@@ -331,7 +346,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
@@ -351,7 +366,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 
 	// restore it
 	nsRestored := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 	cli2 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
@@ -380,13 +395,13 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	}).AnyTimes()
 
 	// we don't own it at first
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("other"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("other")})
 
 	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// now we own it
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
@@ -398,7 +413,7 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	time.Sleep(50 * time.Millisecond)
 
 	// now we don't own it anymore
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("other"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("other")})
 	wkr1.EXPECT().Stop()
 	cli1.EXPECT().Close()
 
@@ -416,9 +431,9 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(nil, errors.New("resolver error"))
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(nil, errors.New("resolver error again"))
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil)
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{})
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{})
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
@@ -445,7 +460,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfoFromAddress("self"), nil).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")}).AnyTimes()
 
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)

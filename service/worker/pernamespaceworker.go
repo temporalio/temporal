@@ -262,21 +262,18 @@ func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 
 func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, int, error) {
 	totalWorkers := wm.config.PerNamespaceWorkerCount(ns.Name().String())
-	// This can result in fewer than the intended number of workers if totalWorkers > 1, because
-	// multiple lookups might land on the same node. To compensate, we increase the number of
-	// pollers in that case, but it would be better to try to spread them across our nodes.
-	// TODO: implement this properly using LookupN in serviceResolver
-	multiplicity := 0
-	for i := 0; i < totalWorkers; i++ {
-		key := fmt.Sprintf("%s/%d", ns.ID().String(), i)
-		target, err := wm.serviceResolver.Lookup(key)
-		if err != nil {
-			return 0, 0, err
-		}
-		if target.Identity() == wm.self.Identity() {
-			multiplicity++
-		}
+	key := ns.ID().String()
+	targets := wm.serviceResolver.LookupN(key, totalWorkers)
+	if len(targets) == 0 {
+		return 0, 0, membership.ErrInsufficientHosts
 	}
+	IsLocal := func(info membership.HostInfo) bool { return info.Identity() == wm.self.Identity() }
+	multiplicity := util.FoldSlice(targets, 0, func(acc int, t membership.HostInfo) int {
+		if IsLocal(t) {
+			acc++
+		}
+		return acc
+	})
 	return multiplicity, totalWorkers, nil
 }
 
