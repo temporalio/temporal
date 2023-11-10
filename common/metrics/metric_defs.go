@@ -331,28 +331,10 @@ const (
 	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
 	OperatorDeleteNamespaceScope = "OperatorDeleteNamespace"
 
-	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
-	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
-	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
-	FrontendPollActivityTaskQueueScope = "PollActivityTaskQueue"
-	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
-	FrontendRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
-	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RecordActivityTaskHeartbeatById
-	FrontendRecordActivityTaskHeartbeatByIdScope = "RecordActivityTaskHeartbeatById"
-	// FrontendRespondWorkflowTaskCompletedScope is the metric scope for frontend.RespondWorkflowTaskCompleted
-	FrontendRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// FrontendPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
 	FrontendPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
-	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
-	FrontendSignalWorkflowExecutionScope = "SignalWorkflowExecution"
-	// FrontendSignalWithStartWorkflowExecutionScope is the metric scope for frontend.SignalWithStartWorkflowExecution
-	FrontendSignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
-	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
-	FrontendQueryWorkflowScope = "QueryWorkflow"
-	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
-	FrontendResetWorkflowExecutionScope = "ResetWorkflowExecution"
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope = "VersionCheck"
