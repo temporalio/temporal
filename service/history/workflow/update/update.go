@@ -188,34 +188,19 @@ func (u *Update) waitLifecycleStage(
 	waitFn func(ctx context.Context) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error),
 	softTimeout time.Duration) (enumspb.UpdateWorkflowExecutionLifecycleStage, *updatepb.Outcome, error) {
 
-	type result struct {
-		stage   enumspb.UpdateWorkflowExecutionLifecycleStage
-		outcome *updatepb.Outcome
-		err     error
-	}
-	ch := make(chan result, 1)
-
-	waitCtx, cancel := context.WithTimeout(context.Background(), softTimeout)
+	innerCtx, cancel := context.WithTimeout(context.Background(), softTimeout)
 	defer cancel()
-
-	go func() {
-		stage, outcome, err := waitFn(waitCtx)
-		if waitCtx.Err() != nil {
-			// Handle the deadline expiry as a violation of a soft deadline:
-			// return non-error empty response.
-			ch <- result{stage, nil, nil}
-		} else {
-			ch <- result{stage, outcome, err}
-		}
-	}()
-
-	select {
-	case res := <-ch:
-		return res.stage, res.outcome, res.err
-	case <-ctx.Done():
+	stage, outcome, err := waitFn(innerCtx)
+	if ctx.Err() != nil {
 		// Handle a context deadline expiry as usual.
 		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, ctx.Err()
 	}
+	if innerCtx.Err() != nil {
+		// Handle the deadline expiry as a violation of a soft deadline:
+		// return non-error empty response.
+		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil, nil
+	}
+	return stage, outcome, err
 }
 
 // WaitOutcome observes this Update's completion, returning the Outcome when it
