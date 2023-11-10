@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -648,7 +649,6 @@ func TestAcceptEventIDInCompletedEvent(t *testing.T) {
 func TestWaitLifecycleStage(t *testing.T) {
 	t.Parallel()
 	var (
-		ctx       = context.Background()
 		completed = false
 		effects   = effect.Buffer{}
 		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
@@ -724,6 +724,21 @@ func TestWaitLifecycleStage(t *testing.T) {
 		require.Equal(t, rej.Failure, outcome.GetFailure())
 	}
 
+	assertSoftTimeoutWhileWaitingForAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		stage, outcome, err := upd.WaitLifecycleStage(ctx, acceptedStage, serverTimeout)
+		require.NoError(t, err)
+		require.Equal(t, unspecifiedStage, stage)
+		require.Nil(t, outcome)
+	}
+
+	assertContextDeadlineExceededWhileWaitingForAccepted := func(ctx context.Context, t *testing.T, upd *update.Update) {
+		_, _, err := upd.WaitLifecycleStage(ctx, acceptedStage, serverTimeout)
+		require.Error(t, err)
+		require.Error(t, ctx.Err())
+		require.True(t, common.IsContextDeadlineExceededErr(err))
+		require.True(t, common.IsContextDeadlineExceededErr(ctx.Err()))
+	}
+
 	applyMessage := func(ctx context.Context, msg proto.Message, upd *update.Update) {
 		err := upd.OnMessage(ctx, msg, store)
 		require.NoError(t, err)
@@ -731,23 +746,26 @@ func TestWaitLifecycleStage(t *testing.T) {
 	}
 
 	t.Run("test non-blocking calls (accepted)", func(t *testing.T) {
+		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		assertUnspecified(ctx, t, upd)
 		applyMessage(ctx, &req, upd)  // => Requested
 		applyMessage(ctx, &acpt, upd) // => Accepted
 		assertAccepted(ctx, t, upd)
-		applyMessage(ctx, &resp, upd) // => Completed
+		applyMessage(ctx, &resp, upd) // => Completed (success)
 		assertSuccess(ctx, t, upd)
 	})
 
 	t.Run("test non-blocking calls (rejected)", func(t *testing.T) {
+		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		applyMessage(ctx, &req, upd) // => Requested
-		applyMessage(ctx, &rej, upd) // => Rejected
+		applyMessage(ctx, &rej, upd) // => Completed (failure)
 		assertFailure(ctx, t, upd)
 	})
 
 	t.Run("test blocking calls (accepted)", func(t *testing.T) {
+		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		applyMessage(ctx, &req, upd) // => Requested
 		done := make(chan any)
@@ -758,16 +776,18 @@ func TestWaitLifecycleStage(t *testing.T) {
 		go applyMessage(ctx, &acpt, upd) // => Accepted
 		<-done
 
+		ctx = context.Background()
 		done = make(chan any)
 		go func() {
 			assertSuccess(ctx, t, upd)
 			close(done)
 		}()
-		go applyMessage(ctx, &resp, upd) // => Completed
+		go applyMessage(ctx, &resp, upd) // => Completed (success)
 		<-done
 	})
 
 	t.Run("test blocking calls (rejected)", func(t *testing.T) {
+		ctx := context.Background()
 		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
 		applyMessage(ctx, &req, upd) // => Requested
 		done := make(chan any)
@@ -775,8 +795,18 @@ func TestWaitLifecycleStage(t *testing.T) {
 			assertFailure(ctx, t, upd)
 			close(done)
 		}()
-		go applyMessage(ctx, &rej, upd) // => Rejected
+		go applyMessage(ctx, &rej, upd) // => Completed (failure)
 		<-done
+	})
+
+	t.Run("timeout is soft iff due to server-imposed deadline", func(t *testing.T) {
+		upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout*2)
+		defer cancel()
+		assertSoftTimeoutWhileWaitingForAccepted(ctx, t, upd)
+		ctx, cancel = context.WithTimeout(context.Background(), serverTimeout/2)
+		defer cancel()
+		assertContextDeadlineExceededWhileWaitingForAccepted(ctx, t, upd)
 	})
 }
 
