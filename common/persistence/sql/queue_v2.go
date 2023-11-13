@@ -176,10 +176,7 @@ func (q *queueV2) ReadMessages(
 		}
 		messages = append(messages, message)
 	}
-	var nextPageToken []byte
-	if len(messages) > 0 {
-		nextPageToken = persistence.GetNextPageTokenForQueueV2(messages[len(messages)-1].MetaData.ID)
-	}
+	nextPageToken := persistence.GetNextPageTokenForReadMessages(messages)
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -423,7 +420,7 @@ func (q *queueV2) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	offset, err := persistence.ExtractPageTokenForQueueV2(request.NextPageToken)
+	offset, err := persistence.GetOffsetForListQueues(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -446,10 +443,10 @@ func (q *queueV2) ListQueues(
 	for _, row := range rows {
 		queues = append(queues, row.QueueName)
 	}
-	nextPageTokenValue := offset + int64(len(queues))
+	queueNumber := offset + int64(len(queues))
 	var nextPageToken []byte
 	if len(queues) > 0 {
-		nextPageToken = persistence.GetNextPageTokenForQueueV2(nextPageTokenValue)
+		nextPageToken = persistence.GetNextPageTokenForListQueues(queueNumber)
 	}
 	response := &persistence.InternalListQueuesResponse{
 		QueueNames:    queues,

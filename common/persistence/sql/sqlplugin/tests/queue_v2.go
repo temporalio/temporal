@@ -654,7 +654,7 @@ func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, b
 	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
 		QueueType:     queueType,
 		PageSize:      1,
-		NextPageToken: persistence.GetNextPageTokenForQueueV2(-1),
+		NextPageToken: persistence.GetNextPageTokenForListQueues(-1),
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, persistence.ErrNegativeListQueuesOffset)

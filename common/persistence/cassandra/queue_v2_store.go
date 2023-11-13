@@ -215,11 +215,7 @@ func (s *queueV2Store) ReadMessages(
 		return nil, gocql.ConvertError("QueueV2ReadMessages", err)
 	}
 
-	var nextPageToken []byte
-	if len(messages) > 0 {
-		nextPageToken = persistence.GetNextPageTokenForQueueV2(messageID)
-	}
-
+	nextPageToken := persistence.GetNextPageTokenForReadMessages(messages)
 	return &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
