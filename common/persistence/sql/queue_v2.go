@@ -443,10 +443,10 @@ func (q *queueV2) ListQueues(
 	for _, row := range rows {
 		queues = append(queues, row.QueueName)
 	}
-	queueNumber := offset + int64(len(queues))
+	lastReadQueueNumber := offset + int64(len(queues))
 	var nextPageToken []byte
 	if len(queues) > 0 {
-		nextPageToken = persistence.GetNextPageTokenForListQueues(queueNumber)
+		nextPageToken = persistence.GetNextPageTokenForListQueues(lastReadQueueNumber)
 	}
 	response := &persistence.InternalListQueuesResponse{
 		QueueNames:    queues,
