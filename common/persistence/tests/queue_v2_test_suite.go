@@ -426,8 +426,12 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.NoError(t, err)
 		require.Equal(t, 0, len(response.QueueNames))
 
+		// List of all created queues
+		var queueNames []string
+
 		// List one queue.
 		queueName := "test-queue-" + t.Name() + "first"
+		queueNames = append(queueNames, queueName)
 		_, err = queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 			QueueType: queueType,
 			QueueName: queueName,
@@ -444,6 +448,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 
 		// List multiple queues.
 		queueName = "test-queue-" + t.Name() + "second"
+		queueNames = append(queueNames, queueName)
 		_, err = queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 			QueueType: queueType,
 			QueueName: queueName,
@@ -459,11 +464,10 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Contains(t, response.QueueNames, queueName)
 
 		// List multiple queues in pages.
-		var queueNames []string
 		for i := 0; i < 3; i++ {
 			queueNames = append(queueNames, "test-queue-"+t.Name()+strconv.Itoa(i))
 		}
-		for _, queueName := range queueNames {
+		for _, queueName := range queueNames[2:] {
 			_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 				QueueType: queueType,
 				QueueName: queueName,
