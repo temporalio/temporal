@@ -63,10 +63,6 @@ const (
 	replicaPoints          = 100
 )
 
-type membershipManager interface {
-	AddListener()
-}
-
 type serviceResolver struct {
 	service     primitives.ServiceName
 	port        int
@@ -156,12 +152,16 @@ func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
 }
 
 func (r *serviceResolver) LookupN(key string, n int) []membership.HostInfo {
+	if n <= 0 {
+		return nil
+	}
 	addresses := r.ring().LookupN(key, n)
 	if len(addresses) == 0 {
 		r.RequestRefresh()
-		return []membership.HostInfo{}
+		return nil
 	}
-	return util.MapSlice(addresses, membership.NewHostInfoFromAddress)
+	labels := r.getLabelsMap()
+	return util.MapSlice(addresses, func(address string) membership.HostInfo { return newHostInfo(address, labels) })
 }
 
 func (r *serviceResolver) AddListener(

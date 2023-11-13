@@ -119,9 +119,12 @@ func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([
 
 // MapSlice given slice xs []T and f(T) S produces slice []S by applying f to every element of xs
 func MapSlice[T, S any](xs []T, f func(T) S) []S {
-	var result []S
-	for _, s := range xs {
-		result = append(result, f(s))
+	if xs == nil {
+		return nil
+	}
+	result := make([]S, len(xs))
+	for i, s := range xs {
+		result[i] = f(s)
 	}
 	return result
 }
@@ -144,6 +147,19 @@ func FoldSlice[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
 		acc = reducer(acc, val)
 	}
 	return acc
+}
+
+// RepeatSlice given slice and a number (n) produces a new slice containing original slice n times
+// if n is non-positive will produce nil
+func RepeatSlice[T any](xs []T, n int) []T {
+	if xs == nil || n <= 0 {
+		return nil
+	}
+	ys := make([]T, n*len(xs))
+	for i := 0; i < n; i++ {
+		copy(ys[i*len(xs):], xs)
+	}
+	return ys
 }
 
 // Coalesce returns the first non-zero value of its arguments, or the zero value for the type

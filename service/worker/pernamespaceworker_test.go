@@ -85,7 +85,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		HostName:          "self",
 		Config: &Config{
 			PerNamespaceWorkerCount: func(ns string) int {
-				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns])
 			},
 			PerNamespaceWorkerOptions: func(ns string) map[string]any {
 				switch ns {
@@ -192,8 +192,22 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 	cli1.EXPECT().Close()
 }
 
+/*
+		Given machine has ownership of the namespace
+		When name space change reported
+		Then worker should be started with configuration proportional to administratively set configuration ensuring
+	    fair distribution across all the machines owning the namespace
+*/
 func (s *perNsWorkerManagerSuite) TestMultiplicity() {
-	ns := testns("ns3", enumspb.NAMESPACE_STATE_REGISTERED) // three workers
+	machinesOwningNamespace := []membership.HostInfo{
+		membership.NewHostInfoFromAddress("other-1"),
+		membership.NewHostInfoFromAddress("other-2"),
+		membership.NewHostInfoFromAddress("self"),
+	}
+	desiredWorkersNumber := 6 //  should match mock configuration in line 88
+	expectedMultiplicity := 2
+
+	ns := testns("ns3", enumspb.NAMESPACE_STATE_REGISTERED)
 
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
@@ -202,11 +216,7 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.serviceResolver.EXPECT().LookupN("ns3", 3).Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("self"),
-		membership.NewHostInfoFromAddress("other"),
-		membership.NewHostInfoFromAddress("self"),
-	})
+	s.serviceResolver.EXPECT().LookupN("ns3", desiredWorkersNumber).Return(machinesOwningNamespace)
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
@@ -217,10 +227,11 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 		s.Equal(2000, options.MaxConcurrentLocalActivityExecutionSize)
 		s.Equal(2000, options.MaxConcurrentActivityExecutionSize)
 	}).Return(wkr1)
-	s.cmp1.EXPECT().Register(wkr1, ns, workercommon.RegistrationDetails{TotalWorkers: 3, Multiplicity: 2})
+	s.cmp1.EXPECT().Register(wkr1, ns, workercommon.RegistrationDetails{TotalWorkers: desiredWorkersNumber, Multiplicity: expectedMultiplicity})
 	wkr1.EXPECT().Start()
 
 	s.manager.namespaceCallback(ns, false)
+
 	time.Sleep(50 * time.Millisecond)
 
 	wkr1.EXPECT().Stop()
@@ -235,6 +246,7 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
+
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
@@ -244,32 +256,32 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 	}).AnyTimes()
 	s.serviceResolver.EXPECT().LookupN("ns2", 2).Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("self"),
+	}).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN("ns3", 6).Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("self"),
 	}).AnyTimes()
-	s.serviceResolver.EXPECT().LookupN("ns3", 3).Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("self"),
-		membership.NewHostInfoFromAddress("self"),
-		membership.NewHostInfoFromAddress("self"),
-	}).AnyTimes()
+
 	cli1 := mocksdk.NewMockClient(s.controller)
 	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
-	cli2 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient(matchOptions("ns2")).Return(cli2)
-	cli3 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli3)
 	wkr := mocksdk.NewMockWorker(s.controller)
 	s.cfactory.EXPECT().NewWorker(matchStrict{cli1}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(100, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(2, options.MaxConcurrentActivityTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
 	}).Return(wkr)
+
+	cli2 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns2")).Return(cli2)
 	s.cfactory.EXPECT().NewWorker(matchStrict{cli2}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(200.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(7500*time.Millisecond, options.StickyScheduleToStartTimeout)
 	}).Return(wkr)
+
+	cli3 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli3)
 	s.cfactory.EXPECT().NewWorker(matchStrict{cli3}, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
-		s.Equal(6, options.MaxConcurrentWorkflowTaskPollers)
+		s.Equal(12, options.MaxConcurrentWorkflowTaskPollers)
 		s.Equal(0.0, options.WorkerLocalActivitiesPerSecond)
 		s.Equal(0*time.Millisecond, options.StickyScheduleToStartTimeout)
 	}).Return(wkr)
@@ -279,6 +291,7 @@ func (s *perNsWorkerManagerSuite) TestOptions() {
 	s.manager.namespaceCallback(ns1, false)
 	s.manager.namespaceCallback(ns2, false)
 	s.manager.namespaceCallback(ns3, false)
+
 	time.Sleep(50 * time.Millisecond)
 
 	wkr.EXPECT().Stop().AnyTimes()
@@ -302,10 +315,7 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 		}).AnyTimes()
 
 	s.serviceResolver.EXPECT().LookupN("ns1", 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
-	s.serviceResolver.EXPECT().LookupN("ns2", 2).Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("self"),
-		membership.NewHostInfoFromAddress("self"),
-	})
+	s.serviceResolver.EXPECT().LookupN("ns2", 2).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")})
 
 	cli1 := mocksdk.NewMockClient(s.controller)
 	cli2 := mocksdk.NewMockClient(s.controller)
