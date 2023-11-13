@@ -59,6 +59,22 @@ service MatchingService {
     rpc RespondQueryTaskCompleted (RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
     }
 
+    // Request from frontend to synchronously dispatch a nexus task to a worker.
+    rpc DispatchNexusTask (DispatchNexusTaskRequest) returns (DispatchNexusTaskResponse) {
+    }
+
+    // Request from worker (via frontend) to long poll on nexus tasks.
+    rpc PollNexusTaskQueue (PollNexusTaskQueueRequest) returns (PollNexusTaskQueueResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskCompleted (RespondNexusTaskCompletedRequest) returns (RespondNexusTaskCompletedResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskFailed (RespondNexusTaskFailedRequest) returns (RespondNexusTaskFailedResponse) {
+    }
+
     // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
     // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
     // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not

@@ -494,6 +494,21 @@ func (mr *MockHandlerMockRecorder) PollActivityTaskQueue(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollActivityTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollActivityTaskQueue), arg0, arg1)
 }
 
+// PollNexusTaskQueue mocks base method.
+func (m *MockHandler) PollNexusTaskQueue(arg0 context.Context, arg1 *v10.PollNexusTaskQueueRequest) (*v10.PollNexusTaskQueueResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollNexusTaskQueue", arg0, arg1)
+	ret0, _ := ret[0].(*v10.PollNexusTaskQueueResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollNexusTaskQueue indicates an expected call of PollNexusTaskQueue.
+func (mr *MockHandlerMockRecorder) PollNexusTaskQueue(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollNexusTaskQueue", reflect.TypeOf((*MockHandler)(nil).PollNexusTaskQueue), arg0, arg1)
+}
+
 // PollWorkflowExecutionUpdate mocks base method.
 func (m *MockHandler) PollWorkflowExecutionUpdate(arg0 context.Context, arg1 *v10.PollWorkflowExecutionUpdateRequest) (*v10.PollWorkflowExecutionUpdateResponse, error) {
 	m.ctrl.T.Helper()
@@ -717,6 +732,36 @@ func (m *MockHandler) RespondActivityTaskFailedById(arg0 context.Context, arg1 *
 func (mr *MockHandlerMockRecorder) RespondActivityTaskFailedById(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondActivityTaskFailedById", reflect.TypeOf((*MockHandler)(nil).RespondActivityTaskFailedById), arg0, arg1)
+}
+
+// RespondNexusTaskCompleted mocks base method.
+func (m *MockHandler) RespondNexusTaskCompleted(arg0 context.Context, arg1 *v10.RespondNexusTaskCompletedRequest) (*v10.RespondNexusTaskCompletedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RespondNexusTaskCompleted", arg0, arg1)
+	ret0, _ := ret[0].(*v10.RespondNexusTaskCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RespondNexusTaskCompleted indicates an expected call of RespondNexusTaskCompleted.
+func (mr *MockHandlerMockRecorder) RespondNexusTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondNexusTaskCompleted", reflect.TypeOf((*MockHandler)(nil).RespondNexusTaskCompleted), arg0, arg1)
+}
+
+// RespondNexusTaskFailed mocks base method.
+func (m *MockHandler) RespondNexusTaskFailed(arg0 context.Context, arg1 *v10.RespondNexusTaskFailedRequest) (*v10.RespondNexusTaskFailedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RespondNexusTaskFailed", arg0, arg1)
+	ret0, _ := ret[0].(*v10.RespondNexusTaskFailedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RespondNexusTaskFailed indicates an expected call of RespondNexusTaskFailed.
+func (mr *MockHandlerMockRecorder) RespondNexusTaskFailed(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondNexusTaskFailed", reflect.TypeOf((*MockHandler)(nil).RespondNexusTaskFailed), arg0, arg1)
 }
 
 // RespondQueryTaskCompleted mocks base method.
