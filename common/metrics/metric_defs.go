@@ -651,18 +651,8 @@ const (
 	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
 	OperatorDeleteNamespaceScope = "OperatorDeleteNamespace"
 
-	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
-	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
 	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
 	FrontendPollWorkflowTaskQueueScope = "PollWorkflowTaskQueue"
-	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
-	FrontendPollActivityTaskQueueScope = "PollActivityTaskQueue"
-	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
-	FrontendRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
-	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RecordActivityTaskHeartbeatById
-	FrontendRecordActivityTaskHeartbeatByIdScope = "RecordActivityTaskHeartbeatById"
-	// FrontendRespondWorkflowTaskCompletedScope is the metric scope for frontend.RespondWorkflowTaskCompleted
-	FrontendRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
 	// FrontendRespondWorkflowTaskFailedScope is the metric scope for frontend.RespondWorkflowTaskFailed
 	FrontendRespondWorkflowTaskFailedScope = "RespondWorkflowTaskFailed"
 	// FrontendRespondQueryTaskCompletedScope is the metric scope for frontend.RespondQueryTaskCompleted
@@ -689,10 +679,6 @@ const (
 	FrontendGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// FrontendPollForWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
 	FrontendPollForWorkflowExecutionRawHistoryScope = "PollForWorkflowExecutionRawHistory"
-	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
-	FrontendSignalWorkflowExecutionScope = "SignalWorkflowExecution"
-	// FrontendSignalWithStartWorkflowExecutionScope is the metric scope for frontend.SignalWithStartWorkflowExecution
-	FrontendSignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
 	// FrontendTerminateWorkflowExecutionScope is the metric scope for frontend.TerminateWorkflowExecution
 	FrontendTerminateWorkflowExecutionScope = "TerminateWorkflowExecution"
 	// FrontendDeleteWorkflowExecutionScope is the metric scope for frontend.DeleteWorkflowExecution
@@ -719,8 +705,6 @@ const (
 	FrontendUpdateNamespaceScope = "UpdateNamespace"
 	// FrontendDeprecateNamespaceScope is the metric scope for frontend.DeprecateNamespace
 	FrontendDeprecateNamespaceScope = "DeprecateNamespace"
-	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
-	FrontendQueryWorkflowScope = "QueryWorkflow"
 	// FrontendDescribeWorkflowExecutionScope is the metric scope for frontend.DescribeWorkflowExecution
 	FrontendDescribeWorkflowExecutionScope = "DescribeWorkflowExecution"
 	// FrontendDescribeTaskQueueScope is the metric scope for frontend.DescribeTaskQueue
@@ -731,8 +715,6 @@ const (
 	FrontendResetStickyTaskQueueScope = "ResetStickyTaskQueue"
 	// FrontendListNamespacesScope is the metric scope for frontend.ListNamespace
 	FrontendListNamespacesScope = "ListNamespaces"
-	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
-	FrontendResetWorkflowExecutionScope = "ResetWorkflowExecution"
 	// FrontendGetSearchAttributesScope is the metric scope for frontend.GetSearchAttributes
 	FrontendGetSearchAttributesScope = "GetSearchAttributes"
 	// FrontendGetClusterInfoScope is the metric scope for frontend.GetClusterInfo
