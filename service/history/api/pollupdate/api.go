@@ -96,7 +96,14 @@ func Invoke(
 			return nil, err
 		}
 	case acceptedStage, completedStage:
-		stage, outcome, err = waitLifecycleStage(ctx, upd, waitStage, shardContext, req.GetNamespaceId())
+		namespaceID := namespace.ID(req.GetNamespaceId())
+		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+		if err != nil {
+			return nil, err
+		}
+		serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
+		// If the long-poll times out due to serverTimeout then return a non-error empty response.
+		stage, outcome, err = upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 		if err != nil {
 			return nil, err
 		}
@@ -116,18 +123,4 @@ func Invoke(
 			},
 		},
 	}, nil
-}
-
-func waitLifecycleStage(ctx context.Context, upd *update.Update,
-	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
-	shardContext shard.Context, namespaceId string) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
-
-	namespaceID := namespace.ID(namespaceId)
-	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return unspecifiedStage, nil, err
-	}
-	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
-	// If the long-poll times out due to serverTimeout then return a non-error empty response.
-	return upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 }
