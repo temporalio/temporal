@@ -362,6 +362,26 @@ func (h *Handler) ReplicateTaskQueueUserData(
 	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
+// DispatchNexusTask implements matchingservice.MatchingServiceServer.
+func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+	panic("unimplemented")
+}
+
+// PollNexusTaskQueue implements matchingservice.MatchingServiceServer.
+func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	panic("unimplemented")
+}
+
+// RespondNexusTaskCompleted implements matchingservice.MatchingServiceServer.
+func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+	panic("unimplemented")
+}
+
+// RespondNexusTaskFailed implements matchingservice.MatchingServiceServer.
+func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+	panic("unimplemented")
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

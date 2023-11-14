@@ -3727,6 +3727,21 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}, nil
 }
 
+// PollNexusTaskQueue implements Handler.
+func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	panic("unimplemented")
+}
+
+// RespondNexusTaskCompleted implements Handler.
+func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	panic("unimplemented")
+}
+
+// RespondNexusTaskFailed implements Handler.
+func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	panic("unimplemented")
+}
+
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String()); err != nil {
 		return err
