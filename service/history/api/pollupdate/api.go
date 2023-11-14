@@ -123,11 +123,11 @@ func waitLifecycleStage(ctx context.Context, upd *update.Update,
 	shardContext shard.Context, namespaceId string) (stage enumspb.UpdateWorkflowExecutionLifecycleStage, outcome *updatepb.Outcome, err error) {
 
 	namespaceID := namespace.ID(namespaceId)
-	namespaceRegistry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return unspecifiedStage, nil, err
 	}
-	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	return upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 }
