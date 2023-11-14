@@ -116,7 +116,8 @@ message GetShardResponse {
 
 message ListHistoryTasksRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   temporal.server.api.history.v1.TaskRange task_range = 3;
   int32 batch_size = 4;
   bytes next_page_token = 5;
@@ -139,7 +140,8 @@ message Task {
 
 message RemoveTaskRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   int64 task_id = 3;
   google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
