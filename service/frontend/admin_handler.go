@@ -1956,6 +1956,22 @@ func (adh *AdminHandler) AddTasks(
 	return &adminservice.AddTasksResponse{}, nil
 }
 
+func (adh *AdminHandler) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+) (*adminservice.ListQueuesResponse, error) {
+	historyServiceRequest := &historyservice.ListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	}
+	resp, err := adh.historyClient.ListQueues(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ListQueuesResponse{QueueNames: resp.QueueNames}, nil
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
 	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
 }

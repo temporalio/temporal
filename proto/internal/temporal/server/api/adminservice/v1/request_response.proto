@@ -515,3 +515,13 @@ message AddTasksRequest {
 
 message AddTasksResponse {}
 
+message ListQueuesRequest {
+  int32 queue_type = 1;
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+  repeated string queue_names = 1;
+}
+

@@ -281,6 +281,18 @@ func (c *clientImpl) DeleteDLQTasks(
 	return historyClient.DeleteDLQTasks(ctx, in, opts...)
 }
 
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	in *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListQueuesResponse, error) {
+	historyClient, err := c.getAnyClient("ListQueues")
+	if err != nil {
+		return nil, err
+	}
+	return historyClient.ListQueues(ctx, in, opts...)
+}
+
 func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
 	conn, _, err := c.connections.getAnyClientConn()
 	if err != nil {

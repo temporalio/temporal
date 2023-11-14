@@ -221,6 +221,21 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	return &DeleteTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
 }
 
+func (m HistoryTaskQueueManagerImpl) ListQueues(
+	ctx context.Context,
+	request *ListQueuesRequest,
+) (*ListQueuesResponse, error) {
+	resp, err := m.queue.ListQueues(ctx, &InternalListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ListQueuesResponse{QueueNames: resp.QueueNames}, nil
+}
+
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string
 // itself. This is used to generate a unique suffix for the queue name.
 func combineUnique(strs ...string) string {
