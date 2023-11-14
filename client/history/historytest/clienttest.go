@@ -166,9 +166,11 @@ func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *
 
 func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) historyservice.HistoryServiceClient {
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
+	address := membership.NewHostInfoFromAddress("127.0.0.1:7104")
 	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("127.0.0.1:7104"),
+		address,
 	}).AnyTimes()
+	serviceResolver.EXPECT().Lookup(gomock.Any()).Return(address, nil).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),

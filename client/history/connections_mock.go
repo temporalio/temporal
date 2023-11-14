@@ -32,7 +32,45 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	grpc "google.golang.org/grpc"
 )
+
+// MockRPCFactory is a mock of RPCFactory interface.
+type MockRPCFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockRPCFactoryMockRecorder
+}
+
+// MockRPCFactoryMockRecorder is the mock recorder for MockRPCFactory.
+type MockRPCFactoryMockRecorder struct {
+	mock *MockRPCFactory
+}
+
+// NewMockRPCFactory creates a new mock instance.
+func NewMockRPCFactory(ctrl *gomock.Controller) *MockRPCFactory {
+	mock := &MockRPCFactory{ctrl: ctrl}
+	mock.recorder = &MockRPCFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRPCFactory) EXPECT() *MockRPCFactoryMockRecorder {
+	return m.recorder
+}
+
+// CreateInternodeGRPCConnection mocks base method.
+func (m *MockRPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateInternodeGRPCConnection", rpcAddress)
+	ret0, _ := ret[0].(*grpc.ClientConn)
+	return ret0
+}
+
+// CreateInternodeGRPCConnection indicates an expected call of CreateInternodeGRPCConnection.
+func (mr *MockRPCFactoryMockRecorder) CreateInternodeGRPCConnection(rpcAddress interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateInternodeGRPCConnection", reflect.TypeOf((*MockRPCFactory)(nil).CreateInternodeGRPCConnection), rpcAddress)
+}
 
 // MockconnectionPool is a mock of connectionPool interface.
 type MockconnectionPool struct {
@@ -69,22 +107,6 @@ func (m *MockconnectionPool) getAllClientConns() []clientConnection {
 func (mr *MockconnectionPoolMockRecorder) getAllClientConns() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAllClientConns", reflect.TypeOf((*MockconnectionPool)(nil).getAllClientConns))
-}
-
-// getAnyClientConn mocks base method.
-func (m *MockconnectionPool) getAnyClientConn() (clientConnection, bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getAnyClientConn")
-	ret0, _ := ret[0].(clientConnection)
-	ret1, _ := ret[1].(bool)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// getAnyClientConn indicates an expected call of getAnyClientConn.
-func (mr *MockconnectionPoolMockRecorder) getAnyClientConn() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAnyClientConn", reflect.TypeOf((*MockconnectionPool)(nil).getAnyClientConn))
 }
 
 // getOrCreateClientConn mocks base method.
