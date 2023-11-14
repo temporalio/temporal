@@ -134,13 +134,17 @@ var (
 		"ListBatchOperations":                {Scope: ScopeNamespace, Access: AccessReadOnly},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
-		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},
-		"RemoveSearchAttributes":   {Scope: ScopeNamespace, Access: AccessAdmin},
-		"ListSearchAttributes":     {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"DeleteNamespace":          {Scope: ScopeNamespace, Access: AccessAdmin},
-		"AddOrUpdateRemoteCluster": {Scope: ScopeCluster, Access: AccessAdmin},
-		"RemoveRemoteCluster":      {Scope: ScopeCluster, Access: AccessAdmin},
-		"ListClusters":             {Scope: ScopeCluster, Access: AccessAdmin},
+		"AddSearchAttributes":                {Scope: ScopeNamespace, Access: AccessAdmin},
+		"RemoveSearchAttributes":             {Scope: ScopeNamespace, Access: AccessAdmin},
+		"ListSearchAttributes":               {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"DeleteNamespace":                    {Scope: ScopeNamespace, Access: AccessAdmin},
+		"AddOrUpdateRemoteCluster":           {Scope: ScopeCluster, Access: AccessAdmin},
+		"RemoveRemoteCluster":                {Scope: ScopeCluster, Access: AccessAdmin},
+		"ListClusters":                       {Scope: ScopeCluster, Access: AccessAdmin},
+		"CreateOrUpdateNexusIncomingService": {Scope: ScopeCluster, Access: AccessAdmin},
+		"DeleteNexusIncomingService":         {Scope: ScopeCluster, Access: AccessAdmin},
+		"GetNexusIncomingService":            {Scope: ScopeCluster, Access: AccessAdmin},
+		"ListNexusIncomingServices":          {Scope: ScopeCluster, Access: AccessAdmin},
 	}
 )
 
