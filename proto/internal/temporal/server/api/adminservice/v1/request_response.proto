@@ -486,7 +486,7 @@ message DescribeDLQJobResponse {
   // For PurgeDLQTasks job, it the ID of the last message that was purged.
   // For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
   int64 last_processed_message_id = 7;
-  // messages_processed is the total number of messages processed so far by the DLQ job.
+  // messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
   int64 messages_processed = 8;
 }
 

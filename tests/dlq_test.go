@@ -483,30 +483,14 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 
 // mergeMessages from the DLQ up to and including the specified message ID, blocking until the merge workflow completes.
 func (s *dlqSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte {
-	args := []string{
-		"tdbg",
-		"--" + tdbg.FlagYes,
-		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
-		"merge",
-		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
-		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageID, 10),
-		"--" + tdbg.FlagPageSize, "1", // to ensure that we test pagination
-	}
-	err := s.tdbgApp.Run(args)
-	s.NoError(err)
-	output := s.writer.Bytes()
-	s.writer.Truncate(0)
-	var response adminservice.MergeDLQTasksResponse
-	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
-
+	tokenBytes := s.mergeMessagesWithoutBlocking(ctx, maxMessageID)
 	var token adminservice.DLQJobToken
-	s.NoError(token.Unmarshal(response.GetJobToken()))
+	s.NoError(token.Unmarshal(tokenBytes))
 
 	systemSDKClient := s.sdkClientFactory.GetSystemClient()
 	run := systemSDKClient.GetWorkflow(ctx, token.WorkflowId, token.RunId)
 	s.NoError(run.Get(ctx, nil))
-	return response.GetJobToken()
+	return tokenBytes
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, returns immediately after running tdbg command.
@@ -649,8 +633,6 @@ func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.E
 
 // ReadTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.
 func (m *testTaskQueueManager) DeleteTasks(ctx context.Context, request *persistence.DeleteTasksRequest) (*persistence.DeleteTasksResponse, error) {
-	select {
-	case <-m.suite.deleteBlockCh:
-		return m.HistoryTaskQueueManager.DeleteTasks(ctx, request)
-	}
+	<-m.suite.deleteBlockCh
+	return m.HistoryTaskQueueManager.DeleteTasks(ctx, request)
 }
