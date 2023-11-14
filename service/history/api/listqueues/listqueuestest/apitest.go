@@ -50,7 +50,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		targetCluster := "test-target-cluster-" + t.Name()
 		queueType := persistence.QueueTypeHistoryDLQ
 		var queueKeys []persistence.QueueKey
-		for i := 0; i < 2; i++ {
+		for i := 0; i < 3; i++ {
 			queueKey := persistence.QueueKey{
 				QueueType:     queueType,
 				Category:      inTask.GetCategory(),
@@ -64,18 +64,21 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 
 		var listedQueueNames []string
 		var nextPageToken []byte
-		for i := 0; i < 2; i++ {
+		for i := int32(1); ; i++ {
 			res, err := listqueues.Invoke(
 				context.Background(),
 				manager,
 				&historyservice.ListQueuesRequest{
 					QueueType:     int32(queueType),
-					PageSize:      100,
+					PageSize:      i,
 					NextPageToken: nextPageToken,
 				},
 			)
 			require.NoError(t, err)
 			listedQueueNames = append(listedQueueNames, res.QueueNames...)
+			if len(res.NextPageToken) == 0 {
+				break
+			}
 			nextPageToken = res.NextPageToken
 		}
 		for _, queueKey := range queueKeys {
