@@ -29,7 +29,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/status"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/codes"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -362,19 +364,16 @@ func (h *Handler) ReplicateTaskQueueUserData(
 	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
-// DispatchNexusTask implements matchingservice.MatchingServiceServer.
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
-	panic("unimplemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// PollNexusTaskQueue implements matchingservice.MatchingServiceServer.
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (*matchingservice.PollNexusTaskQueueResponse, error) {
-	panic("unimplemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// RespondNexusTaskCompleted implements matchingservice.MatchingServiceServer.
 func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
-	panic("unimplemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
 // RespondNexusTaskFailed implements matchingservice.MatchingServiceServer.
