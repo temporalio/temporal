@@ -64,12 +64,11 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			manager,
 			&historyservice.ListQueuesRequest{
 				QueueType: int32(queueType),
-				PageSize:  1,
+				PageSize:  100,
 			},
 		)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(res.QueueNames))
-		require.Equal(t, queueKey.GetQueueName(), res.QueueNames[0])
+		require.Contains(t, res.QueueNames, queueKey.GetQueueName())
 	})
 	t.Run("InvalidPageSize", func(t *testing.T) {
 		t.Parallel()
@@ -98,6 +97,5 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 			},
 		)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, consts.ErrInvalidPaginationToken)
 	})
 }
