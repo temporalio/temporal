@@ -123,7 +123,7 @@ func (s *executableTaskSuite) SetupTest() {
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 
-			DLQWriter:               NewExecutionManagerDLQWriter(),
+			DLQWriter:               NoopDLQWriter{},
 			HistoryPaginatedFetcher: s.remoteHistoryFetcher,
 		},
 		rand.Int63(),
