@@ -47,6 +47,9 @@ import (
 
 var Module = fx.Provide(
 	NewTaskFetcherFactory,
+	func(m persistence.ExecutionManager) ExecutionManager {
+		return m
+	},
 	NewExecutionManagerDLQWriter,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,

@@ -122,6 +122,7 @@ func (s *executableTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+
 			DLQWriter:               NewExecutionManagerDLQWriter(),
 			HistoryPaginatedFetcher: s.remoteHistoryFetcher,
 		},

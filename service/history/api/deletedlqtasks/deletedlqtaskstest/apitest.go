@@ -57,6 +57,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 				SourceCluster: queueKey.SourceCluster,
 				TargetCluster: queueKey.TargetCluster,
 				Task:          &tasks.WorkflowTask{},
+				SourceShardID: 1,
 			})
 			require.NoError(t, err)
 		}

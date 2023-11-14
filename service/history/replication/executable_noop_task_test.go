@@ -97,7 +97,7 @@ func (s *executableNoopTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-			DLQWriter:               NewExecutionManagerDLQWriter(),
+			DLQWriter:               NoopDLQWriter{},
 		},
 		rand.Int63(),
 		time.Unix(0, rand.Int63()),

@@ -36,6 +36,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
+const (
+	startWorkflow = "StartWorkflowExecution"
+	queryWorkflow = "QueryWorkflow"
+)
+
 func TestEmitActionMetric(t *testing.T) {
 	controller := gomock.NewController(t)
 	register := namespace.NewMockRegistry(controller)
@@ -48,18 +53,18 @@ func TestEmitActionMetric(t *testing.T) {
 		expectEmitMetrics bool
 	}{
 		{
-			metrics.FrontendQueryWorkflowScope,
-			api.WorkflowServicePrefix + metrics.FrontendQueryWorkflowScope,
+			queryWorkflow,
+			api.WorkflowServicePrefix + queryWorkflow,
 			true,
 		},
 		{
-			metrics.FrontendQueryWorkflowScope,
-			metrics.FrontendQueryWorkflowScope,
+			queryWorkflow,
+			api.AdminServicePrefix + queryWorkflow,
 			false,
 		},
 		{
 			metrics.MatchingClientAddWorkflowTaskScope,
-			api.WorkflowServicePrefix + metrics.FrontendQueryWorkflowScope,
+			api.WorkflowServicePrefix + queryWorkflow,
 			false,
 		},
 	}
@@ -98,9 +103,9 @@ func TestOperationOverwrite(t *testing.T) {
 			"OperatorDeleteNamespace",
 		},
 		{
-			metrics.FrontendStartWorkflowExecutionScope,
-			api.WorkflowServicePrefix + metrics.FrontendStartWorkflowExecutionScope,
-			metrics.FrontendStartWorkflowExecutionScope,
+			startWorkflow,
+			api.WorkflowServicePrefix + startWorkflow,
+			startWorkflow,
 		},
 	}
 

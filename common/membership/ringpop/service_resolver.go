@@ -62,10 +62,14 @@ const (
 	replicaPoints          = 100
 )
 
+type membershipManager interface {
+	AddListener()
+}
+
 type serviceResolver struct {
 	service     primitives.ServiceName
 	port        int
-	rp          *service
+	rp          *ringpop.Ringpop
 	refreshChan chan struct{}
 	shutdownCh  chan struct{}
 	shutdownWG  sync.WaitGroup
@@ -86,7 +90,7 @@ var _ membership.ServiceResolver = (*serviceResolver)(nil)
 func newServiceResolver(
 	service primitives.ServiceName,
 	port int,
-	rp *service,
+	rp *ringpop.Ringpop,
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
