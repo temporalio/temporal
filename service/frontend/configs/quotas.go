@@ -74,6 +74,8 @@ var (
 		"RespondActivityTaskCompletedById": 2,
 		"RespondWorkflowTaskCompleted":     2,
 		"RespondWorkflowTaskFailed":        2,
+		"RespondNexusTaskCompleted":        2,
+		"RespondNexusTaskFailed":           2,
 		"RespondQueryTaskCompleted":        2,
 
 		// priority 3
@@ -82,6 +84,7 @@ var (
 		"QueryWorkflow":                      3,
 		"PollWorkflowTaskQueue":              3,
 		"PollActivityTaskQueue":              3,
+		"PollNexusTaskQueue":                 3,
 		"PollWorkflowExecutionUpdate":        3,
 		"GetWorkflowExecutionHistoryReverse": 3,
 		"GetWorkerBuildIdCompatibility":      3,

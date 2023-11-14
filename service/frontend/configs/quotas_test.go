@@ -140,6 +140,8 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"RespondActivityTaskCompleted":     {},
 		"RespondActivityTaskCompletedById": {},
 		"RespondWorkflowTaskCompleted":     {},
+		"RespondNexusTaskCompleted":        {},
+		"RespondNexusTaskFailed":           {},
 
 		"ResetWorkflowExecution":        {},
 		"DescribeWorkflowExecution":     {},
@@ -148,6 +150,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"RespondQueryTaskCompleted":     {},
 		"PollWorkflowTaskQueue":         {},
 		"PollActivityTaskQueue":         {},
+		"PollNexusTaskQueue":            {},
 		"GetWorkerBuildIdCompatibility": {},
 		"GetWorkerTaskReachability":     {},
 		"DeleteWorkflowExecution":       {},
