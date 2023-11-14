@@ -221,7 +221,7 @@ func Invoke(
 	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
-	stage, outcome, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
+	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -234,8 +234,8 @@ func Invoke(
 				},
 				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: outcome,
-			Stage:   stage,
+			Outcome: status.Outcome,
+			Stage:   status.Stage,
 		},
 	}
 

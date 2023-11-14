@@ -86,12 +86,11 @@ func Invoke(
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
 
-	var stage enumspb.UpdateWorkflowExecutionLifecycleStage
-	var outcome *updatepb.Outcome
+	var status update.UpdateStatus
 
 	switch waitStage {
 	case unspecifiedStage:
-		stage, outcome, err = upd.LifecycleStage()
+		status, err = upd.Status()
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +102,7 @@ func Invoke(
 		}
 		serverTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
 		// If the long-poll times out due to serverTimeout then return a non-error empty response.
-		stage, outcome, err = upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
+		status, err = upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 		if err != nil {
 			return nil, err
 		}
@@ -112,8 +111,8 @@ func Invoke(
 	}
 	return &historyservice.PollWorkflowExecutionUpdateResponse{
 		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
-			Outcome: outcome,
-			Stage:   stage,
+			Outcome: status.Outcome,
+			Stage:   status.Stage,
 			UpdateRef: &updatepb.UpdateRef{
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: wfKey.WorkflowID,

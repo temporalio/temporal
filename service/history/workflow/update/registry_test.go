@@ -178,25 +178,25 @@ func TestFindOrCreate(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, completedUpdateID)
 		require.NoError(t, err)
 		require.True(t, found)
-		stage, acptOutcome, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err, "completed update should also be accepted")
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, stage)
-		require.Equal(t, completedOutcome, acptOutcome,
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, completedOutcome, status.Outcome,
 			"completed update should have an outcome")
-		stage, got, err := upd.WaitOutcome(ctx)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, stage)
+		status, err = upd.WaitOutcome(ctx)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.NoError(t, err, "completed update should have an outcome")
-		require.Equal(t, completedOutcome, got,
+		require.Equal(t, completedOutcome, status.Outcome,
 			"completed update should have an outcome")
 	})
 	t.Run("find stored accepted", func(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, acceptedUpdateID)
 		require.NoError(t, err)
 		require.True(t, found)
-		stage, acptOutcome, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, stage)
-		require.Nil(t, acptOutcome)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome)
 	})
 }
 
@@ -445,6 +445,6 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	upd, found := reg.Find(ctx, completedUpdateID)
 	require.True(t, found)
 
-	_, _, err := upd.WaitOutcome(ctx)
+	_, err := upd.WaitOutcome(ctx)
 	require.ErrorIs(t, expectError, err)
 }
