@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -175,7 +176,7 @@ func (q *queueV2) ReadMessages(
 		}
 		messages = append(messages, message)
 	}
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
+	nextPageToken := persistence.GetNextPageTokenForReadMessages(messages)
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -410,4 +411,46 @@ func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.Qu
 		return persistence.FirstQueueMessageID, nil
 	}
 	return maxMessageID + 1, nil
+}
+
+func (q *queueV2) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if request.PageSize <= 0 {
+		return nil, persistence.ErrNonPositiveListQueuesPageSize
+	}
+	offset, err := persistence.GetOffsetForListQueues(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	if offset < 0 {
+		return nil, persistence.ErrNegativeListQueuesOffset
+	}
+	rows, err := q.Db.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
+		QueueType:  request.QueueType,
+		PageSize:   request.PageSize,
+		PageOffset: offset,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+			"ListQueues failed for type: %v. SelectNameFromQueueV2Metadata operation failed. Error: %v",
+			request.QueueType,
+			err),
+		)
+	}
+	var queues []string
+	for _, row := range rows {
+		queues = append(queues, row.QueueName)
+	}
+	lastReadQueueNumber := offset + int64(len(queues))
+	var nextPageToken []byte
+	if len(queues) > 0 {
+		nextPageToken = persistence.GetNextPageTokenForListQueues(lastReadQueueNumber)
+	}
+	response := &persistence.InternalListQueuesResponse{
+		QueueNames:    queues,
+		NextPageToken: nextPageToken,
+	}
+	return response, nil
 }

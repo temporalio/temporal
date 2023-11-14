@@ -75,7 +75,7 @@ func (sdb *db) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sq
 }
 func (sdb *db) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataTypeFilter) ([]sqlplugin.QueueV2MetadataRow, error) {
 	var rows []sqlplugin.QueueV2MetadataRow
-	err := sdb.conn.GetContext(ctx,
+	err := sdb.conn.SelectContext(ctx,
 		&rows,
 		templateGetNameFromQueueMetadataV2,
 		filter.QueueType,
