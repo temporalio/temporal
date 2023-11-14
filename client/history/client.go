@@ -31,6 +31,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -64,6 +65,11 @@ type clientImpl struct {
 	redirector      redirector
 	timeout         time.Duration
 	tokenSerializer common.TaskTokenSerializer
+	// shardIndex is incremented every time a shard-agnostic API is invoked. It is used to load balance requests
+	// across hosts by picking an essentially random host. We use an index here so that we don't need to inject any
+	// random number generator in order to make tests deterministic. We use a uint instead of an int because we
+	// don't want this to become negative if we ever overflow.
+	shardIndex atomic.Uint32
 }
 
 // NewClient creates a new history service gRPC client
@@ -72,7 +78,7 @@ func NewClient(
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
 	numberOfShards int32,
-	rpcFactory common.RPCFactory,
+	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
 	connections := newConnectionPool(historyServiceResolver, rpcFactory)
@@ -281,14 +287,19 @@ func (c *clientImpl) DeleteDLQTasks(
 	return historyClient.DeleteDLQTasks(ctx, in, opts...)
 }
 
+// getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
+// for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
 func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
-	conn, _, err := c.connections.getAnyClientConn()
+	// Subtract 1 so that the first index is 0 because Add returns the new value.
+	shardIndex := c.shardIndex.Add(1) - 1
+	// Add 1 at the end because shard IDs are 1-indexed.
+	shardID := shardIndex%uint32(c.numberOfShards) + 1
+	client, err := c.redirector.clientForShardID(int32(shardID))
 	if err != nil {
-		msg := fmt.Sprintf("can't find history host to serve %q API: %v", apiName, err)
+		msg := fmt.Sprintf("can't find history host to serve API: %q, err: %v", apiName, err)
 		return nil, serviceerror.NewUnavailable(msg)
 	}
-	historyClient := conn.historyClient
-	return historyClient, nil
+	return client, nil
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

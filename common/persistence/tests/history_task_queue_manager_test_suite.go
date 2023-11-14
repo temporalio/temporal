@@ -95,6 +95,16 @@ func (q faultyQueue) RangeDeleteMessages(
 	return q.base.RangeDeleteMessages(ctx, req)
 }
 
+func (q faultyQueue) ListQueues(
+	ctx context.Context,
+	req *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if q.rangeDeleteMessagesErr != nil {
+		return nil, q.rangeDeleteMessagesErr
+	}
+	return q.base.ListQueues(ctx, req)
+}
+
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {

@@ -91,6 +91,7 @@ func newVisibilityArchiver(
 		Endpoint:         config.Endpoint,
 		Region:           aws.String(config.Region),
 		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
+		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
 	}
 	sess, err := session.NewSession(s3Config)
 	if err != nil {

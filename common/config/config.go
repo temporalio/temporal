@@ -497,6 +497,7 @@ type (
 		Region           string  `yaml:"region"`
 		Endpoint         *string `yaml:"endpoint"`
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
+		LogLevel         uint    `yaml:"logLevel"`
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
