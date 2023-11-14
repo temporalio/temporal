@@ -87,7 +87,7 @@ func (s state) LifecycleStage() (enumspb.UpdateWorkflowExecutionLifecycleStage, 
 	case stateCompleted:
 		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nil
 	}
-	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, fmt.Errorf("unrecognized state: %v", s)
+	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, fmt.Errorf("unrecognized state: %v", s) // nolint:goerr113
 }
 
 func (s state) Matches(mask stateSet) bool {
