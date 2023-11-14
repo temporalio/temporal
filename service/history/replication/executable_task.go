@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -52,10 +53,13 @@ import (
 const (
 	taskStatePending = int32(ctasks.TaskStatePending)
 
-	taskStateAborted      = int32(ctasks.TaskStateAborted)
-	taskStateCancelled    = int32(ctasks.TaskStateCancelled)
-	taskStateAcked        = int32(ctasks.TaskStateAcked)
-	taskStateNacked       = int32(ctasks.TaskStateNacked)
+	taskStateAborted   = int32(ctasks.TaskStateAborted)
+	taskStateCancelled = int32(ctasks.TaskStateCancelled)
+	taskStateAcked     = int32(ctasks.TaskStateAcked)
+	taskStateNacked    = int32(ctasks.TaskStateNacked)
+)
+
+const (
 	historyImportBlobSize = 16
 	historyImportPageSize = 256 * 1024 // 256K
 )
@@ -508,19 +512,19 @@ func (e *ExecutableTaskImpl) Import(
 				tag.Error(err))
 			return err
 		}
-		if versionHistory != nil && versionHistory != batch.VersionHistory {
-			return serviceerror.NewInternal("VersionHistory is changed during importing")
+
+		if versionHistory != nil && !versionhistory.IsVersionHistoryItemsInSameBranch(versionHistory.Items, batch.VersionHistory.Items) {
+			return serviceerror.NewInternal("History Branch changed during importing")
 		}
+		versionHistory = batch.VersionHistory
 
 		blobSize++
 		blobs = append(blobs, batch.RawEventBatch)
 		if blobSize >= historyImportBlobSize || len(blobs) >= historyImportPageSize {
-			returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, batch.VersionHistory, token)
-
+			returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
 			if err != nil {
 				return err
 			}
-
 			blobs = []*commonpb.DataBlob{}
 			blobSize = 0
 			token = returnedToken
@@ -528,13 +532,13 @@ func (e *ExecutableTaskImpl) Import(
 	}
 	if len(blobs) != 0 {
 		returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
-
 		if err != nil {
 			return err
 		}
 		token = returnedToken
 	}
 
+	// call with empty event blob to commit the import
 	blobs = []*commonpb.DataBlob{}
 	returnedToken, err := e.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey.NamespaceID, workflowKey.WorkflowID, workflowKey.RunID, blobs, versionHistory, token)
 	if err != nil || len(returnedToken) != 0 {

@@ -496,6 +496,12 @@ func (s *executableTaskSuite) TestImport_Success() {
 
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{1, 0, 1},
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 3, Version: 0},
+			{EventId: 5, Version: 4},
+			{EventId: 7, Version: 6},
+			{EventId: 9, Version: 10},
+		},
 	}
 	dataBlob1 := &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -514,9 +520,13 @@ func (s *executableTaskSuite) TestImport_Success() {
 		VersionHistory: versionHistory,
 	}
 
+	// in total, historyImportBlobSize + 1 batches returned. So the expected call to ImportWorkflowExecution API is:
+	// 1. ImportWorkflowExecution with event[0, historyImportBlobSize), inside the iteration
+	// 2. ImportWorkflowExecution with event[historyImportBlobSize], outside the loop
+	// 3. ImportWorkflowExecution to commit the import
 	times := 0
 	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]historyBatch, []byte, error) {
-		if times == 0 {
+		if times < historyImportBlobSize {
 			times++
 			return []historyBatch{historyBatch1}, []byte{1, 1, 0}, nil
 		}
@@ -542,8 +552,13 @@ func (s *executableTaskSuite) TestImport_Success() {
 		workflowId,
 	).Return(shardContext, nil).Times(1)
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).Times(1)
-	returnToken := []byte{1, 0, 0, 1}
+	returnToken1 := []byte{1, 0, 0, 1}
+	returnToken2 := []byte{1, 0, 0, 1, 1, 1, 1, 0}
 
+	expectedBlob1 := []*commonpb.DataBlob{}
+	for i := 0; i < historyImportBlobSize; i++ {
+		expectedBlob1 = append(expectedBlob1, dataBlob1)
+	}
 	gomock.InOrder(
 		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
 			NamespaceId: namespaceId,
@@ -551,11 +566,23 @@ func (s *executableTaskSuite) TestImport_Success() {
 				WorkflowId: workflowId,
 				RunId:      runId,
 			},
-			HistoryBatches: []*commonpb.DataBlob{dataBlob1, dataBlob2},
+			HistoryBatches: expectedBlob1,
 			VersionHistory: versionHistory,
 			Token:          nil,
 		}).Return(&historyservice.ImportWorkflowExecutionResponse{
-			Token: returnToken,
+			Token: returnToken1,
+		}, nil).Times(1),
+		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
+			NamespaceId: namespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowId,
+				RunId:      runId,
+			},
+			HistoryBatches: []*commonpb.DataBlob{dataBlob2},
+			VersionHistory: versionHistory,
+			Token:          returnToken1,
+		}).Return(&historyservice.ImportWorkflowExecutionResponse{
+			Token: returnToken2,
 		}, nil).Times(1),
 		engine.EXPECT().ImportWorkflowExecution(gomock.Any(), &historyservice.ImportWorkflowExecutionRequest{
 			NamespaceId: namespaceId,
@@ -565,7 +592,7 @@ func (s *executableTaskSuite) TestImport_Success() {
 			},
 			HistoryBatches: []*commonpb.DataBlob{},
 			VersionHistory: versionHistory,
-			Token:          returnToken,
+			Token:          returnToken2,
 		}).Return(&historyservice.ImportWorkflowExecutionResponse{
 			Token: nil,
 		}, nil).Times(1),
