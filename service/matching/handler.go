@@ -376,9 +376,24 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
-// RespondNexusTaskFailed implements matchingservice.MatchingServiceServer.
 func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (*matchingservice.RespondNexusTaskFailedResponse, error) {
-	panic("unimplemented")
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) CreateOrUpdateNexusService(ctx context.Context, request *matchingservice.CreateOrUpdateNexusServiceRequest) (*matchingservice.CreateOrUpdateNexusServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) DeleteNexusService(ctx context.Context, request *matchingservice.DeleteNexusServiceRequest) (*matchingservice.DeleteNexusServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) GetNexusService(ctx context.Context, request *matchingservice.GetNexusServiceRequest) (*matchingservice.GetNexusServiceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) ListNexusServices(ctx context.Context, request *matchingservice.ListNexusServicesRequest) (*matchingservice.ListNexusServicesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
