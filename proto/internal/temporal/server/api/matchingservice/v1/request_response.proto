@@ -343,7 +343,7 @@ message PollNexusTaskQueueRequest {
     string poller_id = 2;
     // Original WorkflowService poll request as received by the frontend.
     temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
-    // Non-empty if this task was forwarded from a child partition.
+    // Non-empty if this poll was forwarded from a child partition.
     string forwarded_source = 4;
 }
 

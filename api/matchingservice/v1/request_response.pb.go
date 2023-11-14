@@ -2562,7 +2562,7 @@ type PollNexusTaskQueueRequest struct {
 	PollerId string `protobuf:"bytes,2,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	// Original WorkflowService poll request as received by the frontend.
 	Request *v1.PollNexusTaskQueueRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
-	// Non-empty if this task was forwarded from a child partition.
+	// Non-empty if this poll was forwarded from a child partition.
 	ForwardedSource string `protobuf:"bytes,4,opt,name=forwarded_source,json=forwardedSource,proto3" json:"forwarded_source,omitempty"`
 }
 
