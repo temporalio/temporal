@@ -54,5 +54,8 @@ func Invoke(
 		}
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListQueues failed. Error: %v", err))
 	}
-	return &historyservice.ListQueuesResponse{QueueNames: resp.QueueNames}, nil
+	return &historyservice.ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }

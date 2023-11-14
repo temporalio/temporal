@@ -523,5 +523,6 @@ message ListQueuesRequest {
 
 message ListQueuesResponse {
   repeated string queue_names = 1;
+  bytes next_page_token = 2;
 }
 

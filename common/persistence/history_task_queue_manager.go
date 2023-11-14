@@ -233,7 +233,10 @@ func (m HistoryTaskQueueManagerImpl) ListQueues(
 	if err != nil {
 		return nil, err
 	}
-	return &ListQueuesResponse{QueueNames: resp.QueueNames}, nil
+	return &ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

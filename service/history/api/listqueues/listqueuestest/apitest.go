@@ -26,6 +26,7 @@ package listqueuestest
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,27 +49,38 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		sourceCluster := "test-source-cluster-" + t.Name()
 		targetCluster := "test-target-cluster-" + t.Name()
 		queueType := persistence.QueueTypeHistoryDLQ
-		queueKey := persistence.QueueKey{
-			QueueType:     queueType,
-			Category:      inTask.GetCategory(),
-			SourceCluster: sourceCluster,
-			TargetCluster: targetCluster,
+		var queueKeys []persistence.QueueKey
+		for i := 0; i < 2; i++ {
+			queueKey := persistence.QueueKey{
+				QueueType:     queueType,
+				Category:      inTask.GetCategory(),
+				SourceCluster: sourceCluster + strconv.Itoa(i),
+				TargetCluster: targetCluster + strconv.Itoa(i),
+			}
+			queueKeys = append(queueKeys, queueKey)
+			_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{QueueKey: queueKey})
+			require.NoError(t, err)
 		}
-		_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{
-			QueueKey: queueKey,
-		})
-		require.NoError(t, err)
 
-		res, err := listqueues.Invoke(
-			context.Background(),
-			manager,
-			&historyservice.ListQueuesRequest{
-				QueueType: int32(queueType),
-				PageSize:  100,
-			},
-		)
-		require.NoError(t, err)
-		require.Contains(t, res.QueueNames, queueKey.GetQueueName())
+		var listedQueueNames []string
+		var nextPageToken []byte
+		for i := 0; i < 2; i++ {
+			res, err := listqueues.Invoke(
+				context.Background(),
+				manager,
+				&historyservice.ListQueuesRequest{
+					QueueType:     int32(queueType),
+					PageSize:      100,
+					NextPageToken: nextPageToken,
+				},
+			)
+			require.NoError(t, err)
+			listedQueueNames = append(listedQueueNames, res.QueueNames...)
+			nextPageToken = res.NextPageToken
+		}
+		for _, queueKey := range queueKeys {
+			require.Contains(t, listedQueueNames, queueKey.GetQueueName())
+		}
 	})
 	t.Run("InvalidPageSize", func(t *testing.T) {
 		t.Parallel()

@@ -1969,7 +1969,10 @@ func (adh *AdminHandler) ListQueues(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.ListQueuesResponse{QueueNames: resp.QueueNames}, nil
+	return &adminservice.ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
