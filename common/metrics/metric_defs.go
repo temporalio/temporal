@@ -913,7 +913,7 @@ var (
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
 	DLQWrites                                      = NewCounterDef(
 		"dlq_writes",
-		WithDescription("The number of times a history task is enqueued to a DLQ"),
+		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
 	)
 
 	// Deadlock detector latency metrics

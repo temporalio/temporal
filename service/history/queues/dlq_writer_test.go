@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
@@ -94,13 +95,9 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	errorMsg := "GetNamespaceByID failed"
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, errors.New(errorMsg)).AnyTimes()
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
-	writer := queues.NewDLQWriter(
-		queueWriter,
-		clusterMetadata,
-		metrics.NoopMetricsHandler,
-		logger,
-		namespaceRegistry,
-	)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metricsHandler, logger, namespaceRegistry)
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -123,6 +120,12 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	assert.Contains(t, logger.records[0].msg, "Failed to get namespace name while trying to write a task to DLQ")
 	assert.Equal(t, logger.records[0].tags[1].Value(), errorMsg)
 	assert.Contains(t, logger.records[1].msg, "Task enqueued to DLQ")
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.DLQWrites.GetMetricName()]
+	assert.Len(t, recordings, 1)
+	counter, ok := recordings[0].Value.(int64)
+	assert.True(t, ok)
+	assert.Equal(t, int64(1), counter)
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
@@ -138,7 +141,10 @@ func TestDLQWriter_Ok(t *testing.T) {
 	})
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry)
+	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metricsHandler, logger, namespaceRegistry)
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -157,4 +163,12 @@ func TestDLQWriter_Ok(t *testing.T) {
 	request := queueWriter.EnqueueTaskRequests[0]
 	expectedShardID := tasks.GetShardIDForTask(task, 100)
 	assert.Equal(t, expectedShardID, request.SourceShardID)
+	assert.NotEmpty(t, logger.records)
+	assert.Contains(t, logger.records[0].msg, "Task enqueued to DLQ")
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.DLQWrites.GetMetricName()]
+	assert.Len(t, recordings, 1)
+	counter, ok := recordings[0].Value.(int64)
+	assert.True(t, ok)
+	assert.Equal(t, int64(1), counter)
 }
