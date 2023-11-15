@@ -34,7 +34,7 @@ import (
 	"strings"
 
 	"github.com/olivere/elastic/v7"
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 )
 
 type (
