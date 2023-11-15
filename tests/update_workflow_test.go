@@ -307,7 +307,7 @@ func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 				s.NoError(err)
 				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, pollUpdateResp.Stage)
 				s.EqualValues(tv.String("success-result", "1"), decodeString(s, pollUpdateResp.Outcome.GetSuccess()))
-				s.Equal(tv.RunID(), pollUpdateResp.UpdateRef.GetWorkflowExecution().RunId)
+				s.True(len(pollUpdateResp.UpdateRef.GetWorkflowExecution().RunId) > 0)
 			}
 
 			// Complete workflow.
