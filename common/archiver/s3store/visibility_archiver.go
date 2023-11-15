@@ -74,6 +74,7 @@ const (
 	secondaryIndexKeyCloseTimeout   = "closeTimeout"
 	primaryIndexKeyWorkflowTypeName = "workflowTypeName"
 	primaryIndexKeyWorkflowID       = "workflowID"
+	primaryIndexKeyRunID            = "runID"
 )
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on s3
@@ -165,6 +166,8 @@ func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArch
 		{primaryIndexKeyWorkflowTypeName, request.WorkflowTypeName, secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},
 		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
 		{primaryIndexKeyWorkflowID, request.GetWorkflowId(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},
+		{primaryIndexKeyRunID, request.GetRunId(), secondaryIndexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime)},
+		{primaryIndexKeyRunID, request.GetRunId(), secondaryIndexKeyStartTimeout, timestamp.TimeValue(request.StartTime)},
 	}
 }
 
@@ -277,6 +280,10 @@ func (v *visibilityArchiver) query(
 	if request.parsedQuery.workflowID != nil {
 		primaryIndex = primaryIndexKeyWorkflowID
 		primaryIndexValue = request.parsedQuery.workflowID
+	}
+	if request.parsedQuery.runID != nil {
+		primaryIndex = primaryIndexKeyRunID
+		primaryIndexValue = request.parsedQuery.runID
 	}
 
 	prefix := constructIndexedVisibilitySearchPrefix(

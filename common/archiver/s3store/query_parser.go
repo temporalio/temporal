@@ -49,6 +49,7 @@ type (
 	parsedQuery struct {
 		workflowTypeName *string
 		workflowID       *string
+		runID            *string
 		startTime        *time.Time
 		closeTime        *time.Time
 		searchPrecision  *string
@@ -59,6 +60,7 @@ type (
 const (
 	WorkflowTypeName = "WorkflowTypeName"
 	WorkflowID       = "WorkflowId"
+	RunID            = "RunId"
 	StartTime        = "StartTime"
 	CloseTime        = "CloseTime"
 	SearchPrecision  = "SearchPrecision"
@@ -91,8 +93,8 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
 	}
-	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil {
-		return nil, errors.New("WorkflowId or WorkflowTypeName is required in query")
+	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil && parsedQuery.runID == nil {
+		return nil, errors.New("WorkflowId or WorkflowTypeName or RunId is required in query")
 	}
 	if parsedQuery.workflowID != nil && parsedQuery.workflowTypeName != nil {
 		return nil, errors.New("only one of WorkflowId or WorkflowTypeName can be specified in a query")
@@ -176,6 +178,18 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return fmt.Errorf("can not query %s multiple times", WorkflowID)
 		}
 		parsedQuery.workflowID = convert.StringPtr(val)
+	case RunID:
+		val, err := extractStringValue(valStr)
+		if err != nil {
+			return err
+		}
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", RunID)
+		}
+		if parsedQuery.runID != nil {
+			return fmt.Errorf("can not query %s multiple times", RunID)
+		}
+		parsedQuery.runID = convert.StringPtr(val)
 	case CloseTime:
 		timestamp, err := convertToTime(valStr)
 		if err != nil {

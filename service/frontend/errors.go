@@ -112,6 +112,7 @@ var (
 	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace info with error: %v"
 	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
 	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
+	errUnableToListArchivedWorkflowExecutionMessage   = "Unable To list archived workflow execution: WorkflowID %s RunID %s"
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
