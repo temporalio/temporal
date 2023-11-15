@@ -122,6 +122,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	assert.NotEmpty(t, logger.records)
 	assert.Contains(t, logger.records[0].msg, "Failed to get namespace name while trying to write a task to DLQ")
 	assert.Equal(t, logger.records[0].tags[1].Value(), errorMsg)
+	assert.Contains(t, logger.records[1].msg, "Task enqueued to DLQ")
 }
 
 func TestDLQWriter_Ok(t *testing.T) {
