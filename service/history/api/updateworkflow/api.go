@@ -214,11 +214,11 @@ func Invoke(
 	}
 
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	namespaceRegistry, err := shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	ns, err := shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
+	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
