@@ -116,7 +116,6 @@ func (s *dlqSuite) SetupSuite() {
 		dynamicconfig.HistoryTaskDLQEnabled: true,
 	}
 	s.dlqTasks = make(chan tasks.Task)
-	s.deleteBlockCh = make(chan interface{})
 	s.failingWorkflowIDPrefix = "dlq-test-terminal-wfts-"
 	s.setupSuite(
 		"testdata/cluster.yaml",
@@ -177,6 +176,8 @@ func myWorkflow(workflow.Context) (string, error) {
 
 func (s *dlqSuite) SetupTest() {
 	s.setAssertions()
+	s.deleteBlockCh = make(chan interface{})
+	close(s.deleteBlockCh)
 }
 
 func (s *dlqSuite) setAssertions() {
@@ -381,6 +382,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 }
 
 func (s *dlqSuite) TestCancelRunningMerge() {
+	s.deleteBlockCh = make(chan interface{})
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
