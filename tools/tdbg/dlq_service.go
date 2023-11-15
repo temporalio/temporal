@@ -179,3 +179,11 @@ func getOutputFile(outputFile string, writer io.Writer) (io.WriteCloser, error) 
 func (n noCloseWriter) Close() error {
 	return nil
 }
+
+// GetDLQJobService returns a DLQJobService.
+func (p *DLQServiceProvider) GetDLQJobService() DLQJobService {
+	return DLQJobService{
+		clientFactory: p.clientFactory,
+		writer:        p.writer,
+	}
+}
