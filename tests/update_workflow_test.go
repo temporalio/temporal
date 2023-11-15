@@ -181,6 +181,18 @@ func (s *functionalSuite) sendUpdate(tv *testvars.TestVars, updateID string) (*w
 	})
 }
 
+func (s *functionalSuite) pollUpdate(tv *testvars.TestVars, updateID string, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+	s.T().Helper()
+	return s.engine.PollWorkflowExecutionUpdate(NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: s.namespace,
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: tv.WorkflowExecution(),
+			UpdateId:          tv.UpdateID(updateID),
+		},
+		WaitPolicy: waitPolicy,
+	})
+}
+
 func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
 		Name     string
@@ -288,6 +300,15 @@ func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_AcceptCo
 			updateResult := <-updateResultCh
 			s.EqualValues(tv.String("success-result", "1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
 			s.EqualValues(0, updateResp.ResetHistoryEventId)
+
+			// Test non-blocking poll
+			for _, waitPolicy := range []*updatepb.WaitPolicy{{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED}, nil} {
+				pollUpdateResp, err := s.pollUpdate(tv, "1", waitPolicy)
+				s.NoError(err)
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, pollUpdateResp.Stage)
+				s.EqualValues(tv.String("success-result", "1"), decodeString(s, pollUpdateResp.Outcome.GetSuccess()))
+				s.Equal(tv.RunID(), pollUpdateResp.UpdateRef.GetWorkflowExecution().RunId)
+			}
 
 			// Complete workflow.
 			completeWorkflowResp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
