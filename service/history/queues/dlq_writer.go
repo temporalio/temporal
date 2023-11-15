@@ -112,7 +112,16 @@ func (q *DLQWriter) WriteTaskToDLQ(ctx context.Context, sourceCluster, targetClu
 	q.metricsHandler.Counter(metrics.DLQWrites.GetMetricName()).Record(1)
 	ns, err := q.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
-		q.logger.Warn("Failed to get namespace name", tag.WorkflowNamespace(task.GetNamespaceID()))
+		q.logger.Warn("Failed to get namespace name while trying to write a task to DLQ",
+			tag.WorkflowNamespace(task.GetNamespaceID()),
+			tag.Error(err),
+		)
+		q.logger.Warn("Task enqueued to DLQ",
+			tag.SourceCluster(sourceCluster),
+			tag.TargetCluster(targetCluster),
+			tag.TaskType(task.GetType()),
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+		)
 		return nil
 	}
 	q.logger.Warn("Task enqueued to DLQ",
