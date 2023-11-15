@@ -1907,6 +1907,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 		OperationState:         state,
 		MaxMessageId:           queryResponse.MaxMessageIDToProcess,
 		LastProcessedMessageId: queryResponse.LastProcessedMessageID,
+		MessagesProcessed:      queryResponse.NumberOfMessagesProcessed,
 		StartTime:              execution.WorkflowExecutionInfo.StartTime,
 		EndTime:                execution.WorkflowExecutionInfo.CloseTime,
 	}, nil
