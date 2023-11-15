@@ -33,6 +33,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/tasks"
@@ -46,7 +49,9 @@ func TestDLQWriter_ErrGetClusterMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(ctrl)
 	clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{})
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata)
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry)
 	err := writer.WriteTaskToDLQ(
 		context.Background(),
 		"source-cluster",
@@ -68,7 +73,9 @@ func TestDLQWriter_Ok(t *testing.T) {
 			ShardCount: 100,
 		},
 	})
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata)
+	namespaceRegistry := namespace.NewMockRegistry(ctrl)
+	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry)
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
