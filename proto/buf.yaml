@@ -19,3 +19,4 @@ breaking:
   ignore:
     - temporal/api # from `api` root: do not lint public api
     - dependencies # from `api` root: do not lint external dependencies
+    - google # Failure: google/api/annotations.proto exists in multiple locations: api/google/api/annotations.proto google/api/annotations.proto
