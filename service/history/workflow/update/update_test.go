@@ -796,7 +796,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 			assertAccepted(ctx, t, upd, false)
 			close(done)
 		}()
-		go applyMessage(ctx, &acpt, upd) // => Accepted
+		applyMessage(ctx, &acpt, upd) // => Accepted
 		<-done
 
 		ctx = context.Background()
@@ -805,7 +805,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 			assertSuccess(ctx, t, upd, false)
 			close(done)
 		}()
-		go applyMessage(ctx, &resp, upd) // => Completed (success)
+		applyMessage(ctx, &resp, upd) // => Completed (success)
 		<-done
 	})
 
@@ -818,7 +818,7 @@ func TestWaitLifecycleStage(t *testing.T) {
 			assertFailure(ctx, t, upd, false)
 			close(done)
 		}()
-		go applyMessage(ctx, &rej, upd) // => Completed (failure)
+		applyMessage(ctx, &rej, upd) // => Completed (failure)
 		<-done
 	})
 
