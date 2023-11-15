@@ -349,6 +349,14 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
 	)
 
+	var parentExecution *commonpb.WorkflowExecution
+	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
+		parentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.ParentWorkflowId,
+			RunId:      executionInfo.ParentRunId,
+		}
+	}
+
 	// Data from mutable state used to build VisibilityRequestBase must be deep
 	// copied to ensure that the mutable state is not accessed after the workflow
 	// lock is released and that there is no data race.
@@ -368,6 +376,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		Memo:             visibilityMemo,
 		TaskQueue:        executionInfo.TaskQueue,
 		SearchAttributes: searchAttributes,
+		ParentExecution:  parentExecution,
 	}
 }
 
