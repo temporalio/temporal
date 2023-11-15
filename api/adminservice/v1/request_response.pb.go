@@ -4061,7 +4061,7 @@ type DescribeDLQJobResponse struct {
 	// For PurgeDLQTasks job, it the ID of the last message that was purged.
 	// For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
 	LastProcessedMessageId int64 `protobuf:"varint,7,opt,name=last_processed_message_id,json=lastProcessedMessageId,proto3" json:"last_processed_message_id,omitempty"`
-	// messages_processed is the total number of messages processed so far by the DLQ job.
+	// messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
 	MessagesProcessed int64 `protobuf:"varint,8,opt,name=messages_processed,json=messagesProcessed,proto3" json:"messages_processed,omitempty"`
 }
 
