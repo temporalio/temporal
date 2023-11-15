@@ -65,6 +65,7 @@ type (
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		mockExecutionManager    *persistence.MockExecutionManager
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
@@ -110,6 +111,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 		},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
 	s.taskID = rand.Int63()
 	s.task = NewExecutableWorkflowStateTask(
@@ -122,7 +124,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-			DLQWriter:               NewExecutionManagerDLQWriter(),
+			DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		},
 		s.taskID,
 		time.Unix(0, rand.Int63()),
@@ -237,14 +239,12 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
 func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
 	shardID := rand.Int31()
 	shardContext := shard.NewMockContext(s.controller)
-	executionManager := persistence.NewMockExecutionManager(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	shardContext.EXPECT().GetExecutionManager().Return(executionManager).AnyTimes()
-	executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.sourceClusterName,
 		TaskInfo: &persistencepb.ReplicationTaskInfo{

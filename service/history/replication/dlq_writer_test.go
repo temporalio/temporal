@@ -29,10 +29,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/queues"
@@ -51,13 +54,12 @@ func TestNewExecutionManagerDLQWriter(t *testing.T) {
 	t.Parallel()
 
 	executionManager := &fakeExecutionManager{}
-	writer := replication.NewExecutionManagerDLQWriter()
+	writer := replication.NewExecutionManagerDLQWriter(executionManager)
 	replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
 		TaskId: 21,
 	}
-	err := writer.WriteTaskToDLQ(context.Background(), replication.WriteRequest{
+	err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
 		ShardID:             13,
-		ExecutionManager:    executionManager,
 		SourceCluster:       "test-source-cluster",
 		ReplicationTaskInfo: replicationTaskInfo,
 	})
@@ -90,14 +92,20 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
 			queueWriter := &queuestest.FakeQueueWriter{}
 			taskSerializer := serialization.NewTaskSerializer()
+			clusterMetadata := cluster.NewMockMetadata(controller)
+			clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+				"test-source-cluster": {
+					ShardCount: 1,
+				},
+			}).AnyTimes()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter),
+				queues.NewDLQWriter(queueWriter, clusterMetadata),
 				taskSerializer,
 				"test-current-cluster",
 			)
-			executionManager := &fakeExecutionManager{}
 
 			replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
 				NamespaceId: string(tests.NamespaceID),
@@ -106,20 +114,17 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				TaskType:    tc.taskType,
 				TaskId:      21,
 			}
-			err := writer.WriteTaskToDLQ(context.Background(), replication.WriteRequest{
+			err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
 				ShardID:             13,
-				ExecutionManager:    executionManager,
 				SourceCluster:       "test-source-cluster",
 				ReplicationTaskInfo: replicationTaskInfo,
 			})
 			if tc.expectErr {
 				require.Error(t, err)
 				assert.Contains(t, strings.ToLower(err.Error()), "unknown replication task type")
-				assert.Empty(t, executionManager.requests)
 				assert.Empty(t, queueWriter.EnqueueTaskRequests)
 			} else {
 				require.NoError(t, err)
-				assert.Empty(t, executionManager.requests)
 				require.Len(t, queueWriter.EnqueueTaskRequests, 1)
 				request := queueWriter.EnqueueTaskRequests[0]
 				assert.Equal(t, string(tests.NamespaceID), request.Task.GetNamespaceID())

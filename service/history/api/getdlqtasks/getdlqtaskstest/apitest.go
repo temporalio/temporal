@@ -63,6 +63,7 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 		Task:          inTask,
+		SourceShardID: 1,
 	})
 	require.NoError(t, err)
 	res, err := getdlqtasks.Invoke(

@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -36,7 +37,8 @@ import (
 type (
 	// DLQWriter can be used to write tasks to the DLQ.
 	DLQWriter struct {
-		dlqWriter QueueWriter
+		dlqWriter       QueueWriter
+		clusterMetadata cluster.Metadata
 	}
 	// QueueWriter is a subset of persistence.HistoryTaskQueueManager.
 	QueueWriter interface {
@@ -52,14 +54,16 @@ type (
 )
 
 var (
-	ErrSendTaskToDLQ = errors.New("failed to send task to DLQ")
-	ErrCreateDLQ     = errors.New("failed to create DLQ")
+	ErrSendTaskToDLQ      = errors.New("failed to send task to DLQ")
+	ErrCreateDLQ          = errors.New("failed to create DLQ")
+	ErrGetClusterMetadata = errors.New("failed to get cluster metadata")
 )
 
 // NewDLQWriter returns a DLQ which will write to the given QueueWriter.
-func NewDLQWriter(w QueueWriter) *DLQWriter {
+func NewDLQWriter(w QueueWriter, m cluster.Metadata) *DLQWriter {
 	return &DLQWriter{
-		dlqWriter: w,
+		dlqWriter:       w,
+		clusterMetadata: m,
 	}
 }
 
@@ -79,11 +83,18 @@ func (q *DLQWriter) WriteTaskToDLQ(ctx context.Context, sourceCluster, targetClu
 			return fmt.Errorf("%w: %v", ErrCreateDLQ, err)
 		}
 	}
+	info, ok := q.clusterMetadata.GetAllClusterInfo()[queueKey.SourceCluster]
+	if !ok {
+		return fmt.Errorf("%w: %v", ErrGetClusterMetadata, queueKey.SourceCluster)
+	}
+	numShards := int(info.ShardCount)
+	shardID := tasks.GetShardIDForTask(task, numShards)
 	_, err = q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 		QueueType:     queueKey.QueueType,
 		SourceCluster: queueKey.SourceCluster,
 		TargetCluster: queueKey.TargetCluster,
 		Task:          task,
+		SourceShardID: shardID,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)

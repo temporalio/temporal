@@ -760,6 +760,10 @@ type (
 			ctx context.Context,
 			request *InternalRangeDeleteMessagesRequest,
 		) (*InternalRangeDeleteMessagesResponse, error)
+		ListQueues(
+			ctx context.Context,
+			request *InternalListQueuesRequest,
+		) (*InternalListQueuesResponse, error)
 	}
 
 	QueueV2Type int
@@ -813,5 +817,16 @@ type (
 
 	InternalRangeDeleteMessagesResponse struct {
 		MessagesDeleted int64
+	}
+
+	InternalListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalListQueuesResponse struct {
+		QueueNames    []string
+		NextPageToken []byte
 	}
 )

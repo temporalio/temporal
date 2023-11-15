@@ -241,6 +241,7 @@ func (s *purgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

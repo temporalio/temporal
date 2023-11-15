@@ -33,10 +33,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -64,13 +62,13 @@ var (
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
 	ErrEnqueueTaskRequestTaskIsNil  = errors.New("enqueue task request task is nil")
 	ErrQueueAlreadyExists           = errors.New("queue already exists")
+	ErrShardIDInvalid               = errors.New("shard ID must be greater than 0")
 )
 
-func NewHistoryTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTaskQueueManagerImpl {
+func NewHistoryTaskQueueManager(queue QueueV2) *HistoryTaskQueueManagerImpl {
 	return &HistoryTaskQueueManagerImpl{
-		queue:            queue,
-		serializer:       serialization.NewTaskSerializer(),
-		numHistoryShards: numHistoryShards,
+		queue:      queue,
+		serializer: serialization.NewTaskSerializer(),
 	}
 }
 
@@ -85,11 +83,13 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
 	}
+	if request.SourceShardID <= 0 {
+		return nil, fmt.Errorf("%w: shardID = %d", ErrShardIDInvalid, request.SourceShardID)
+	}
 
-	shardID := tasks.GetShardIDForTask(request.Task, m.numHistoryShards)
 	taskCategory := request.Task.GetCategory()
 	task := persistencespb.HistoryTask{
-		ShardId: int32(shardID),
+		ShardId: int32(request.SourceShardID),
 		Blob:    &blob,
 	}
 	taskBytes, _ := task.Marshal()

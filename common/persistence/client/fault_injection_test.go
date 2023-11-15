@@ -51,6 +51,7 @@ type (
 		readRequests        *int
 		createRequests      *int
 		rangeDeleteRequests *int
+		listQueuesRequests  *int
 	}
 )
 
@@ -83,6 +84,14 @@ func (t *testQueueV2) RangeDeleteMessages(
 	*persistence.InternalRangeDeleteMessagesRequest,
 ) (*persistence.InternalRangeDeleteMessagesResponse, error) {
 	*t.rangeDeleteRequests++
+	return nil, nil
+}
+
+func (t *testQueueV2) ListQueues(
+	context.Context,
+	*persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	*t.listQueuesRequests++
 	return nil, nil
 }
 
