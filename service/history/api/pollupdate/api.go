@@ -43,12 +43,6 @@ import (
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
-const (
-	unspecifiedStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
-	acceptedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED
-	completedStage   = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
-)
-
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
@@ -89,12 +83,12 @@ func Invoke(
 	var status update.UpdateStatus
 
 	switch waitStage {
-	case unspecifiedStage:
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED:
 		status, err = upd.Status()
 		if err != nil {
 			return nil, err
 		}
-	case acceptedStage, completedStage:
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
 		namespaceID := namespace.ID(req.GetNamespaceId())
 		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 		if err != nil {

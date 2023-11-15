@@ -102,12 +102,6 @@ type (
 	}
 )
 
-const (
-	unspecifiedStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED
-	acceptedStage    = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED
-	completedStage   = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
-)
-
 // New creates a new Update instance with the provided ID that will call the
 // onComplete callback when it completes.
 func New(id string, opts ...updateOpt) *Update {
@@ -184,13 +178,13 @@ func (u *Update) WaitLifecycleStage(
 	softTimeout time.Duration) (UpdateStatus, error) {
 
 	switch waitStage {
-	case acceptedStage:
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
 		return u.waitLifecycleStage(ctx, u.WaitAccepted, softTimeout)
-	case completedStage:
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
 		return u.waitLifecycleStage(ctx, u.WaitOutcome, softTimeout)
 	default:
 		err := serviceerror.NewUnimplemented(fmt.Sprintf("%v is not implemented", waitStage))
-		return UpdateStatus{unspecifiedStage, nil}, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 }
 
@@ -204,12 +198,12 @@ func (u *Update) waitLifecycleStage(
 	status, err := waitFn(innerCtx)
 	if ctx.Err() != nil {
 		// Handle a context deadline expiry as usual.
-		return UpdateStatus{unspecifiedStage, nil}, ctx.Err()
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, ctx.Err()
 	}
 	if innerCtx.Err() != nil {
 		// Handle the deadline expiry as a violation of a soft deadline:
 		// return non-error empty response.
-		return UpdateStatus{unspecifiedStage, nil}, nil
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, nil
 	}
 	return status, err
 }
@@ -220,14 +214,14 @@ func (u *Update) waitLifecycleStage(
 func (u *Update) Status() (UpdateStatus, error) {
 	stage, err := u.state.LifecycleStage()
 	if err != nil {
-		return UpdateStatus{unspecifiedStage, nil}, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 	var outcome *updatepb.Outcome
 	if u.outcome.Ready() {
 		outcome, err = u.outcome.Get(context.Background())
 	}
 	if err != nil {
-		return UpdateStatus{unspecifiedStage, nil}, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 	return UpdateStatus{stage, outcome}, err
 }
@@ -239,9 +233,9 @@ func (u *Update) Status() (UpdateStatus, error) {
 func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
 	outcome, err := u.outcome.Get(ctx)
 	if err != nil {
-		return UpdateStatus{unspecifiedStage, outcome}, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome}, err
 	}
-	return UpdateStatus{completedStage, outcome}, nil
+	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 }
 
 // WaitAccepted blocks on the acceptance of this update, returning nil if has
@@ -257,15 +251,15 @@ func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 	}
 	fail, err := u.accepted.Get(ctx)
 	if err != nil {
-		return UpdateStatus{unspecifiedStage, nil}, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 	if fail != nil {
 		outcome := &updatepb.Outcome{
 			Value: &updatepb.Outcome_Failure{Failure: fail},
 		}
-		return UpdateStatus{completedStage, outcome}, nil
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 	}
-	return UpdateStatus{acceptedStage, nil}, nil
+	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil}, nil
 }
 
 // OnMessage delivers a message to the Update state machine. The proto.Message
