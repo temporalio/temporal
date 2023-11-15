@@ -183,7 +183,7 @@ func (u *Update) WaitLifecycleStage(
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
 		return u.waitLifecycleStage(ctx, u.WaitOutcome, softTimeout)
 	default:
-		err := serviceerror.NewUnimplemented(fmt.Sprintf("%v is not implemented", waitStage))
+		err := serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not implemented", waitStage))
 		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 }
