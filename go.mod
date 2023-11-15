@@ -22,6 +22,7 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
+	github.com/nexus-rpc/sdk-go v0.0.2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -65,6 +66,7 @@ require (
 )
 
 require (
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 )
