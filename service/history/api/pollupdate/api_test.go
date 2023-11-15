@@ -188,6 +188,35 @@ func TestPollOutcome(t *testing.T) {
 		require.Nil(t, resp.GetResponse().Outcome)
 		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, resp.Response.GetStage())
 	})
+	t.Run("non-blocking poll with omitted/unspecified wait policy", func(t *testing.T) {
+		for _, req := range []historyservice.PollWorkflowExecutionUpdateRequest{{
+			Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
+				UpdateRef: req.Request.UpdateRef,
+			},
+		}, {
+			Request: &workflowservice.PollWorkflowExecutionUpdateRequest{
+				UpdateRef: &updatepb.UpdateRef{
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: workflowId,
+						RunId:      runId,
+					},
+					UpdateId: updateID,
+				},
+				WaitPolicy: &updatepb.WaitPolicy{
+					LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+				},
+			},
+		}} {
+			reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
+				return update.New(updateID), true
+			}
+			resp, err := pollupdate.Invoke(context.Background(), &req, shardContext, wfcc)
+			require.NoError(t, err)
+			require.True(t, len(resp.GetResponse().UpdateRef.GetWorkflowExecution().RunId) > 0)
+			require.Nil(t, resp.GetResponse().Outcome)
+			require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Response.GetStage())
+		}
+	})
 	t.Run("get an outcome", func(t *testing.T) {
 		upd := update.New(updateID)
 		reg.FindFunc = func(ctx context.Context, updateID string) (*update.Update, bool) {
