@@ -50,7 +50,7 @@ end
 
 <br>
 
-2. **The Worker dequeues and processes the Workflow Task**
+2. **A Worker dequeues and processes the Workflow Task**
    - It advances the workflow execution, and becomes blocked on the Activity call.
 
 ```mermaid
@@ -113,7 +113,7 @@ end
 
 <br>
 
-**4. The Worker dequeues the Activity task and executes the activity**
+**4. A Worker dequeues the Activity task and executes the activity**
 
 ```mermaid
 sequenceDiagram
@@ -184,12 +184,12 @@ end
 
 <br>
 
-7. **The Worker sends `RespondWorkflowTaskCompleted`**
+7. **The Worker sends `RespondWorkflowTaskCompleted`, containing a `CompleteWorkflowExecution` command**
 
 ```mermaid
 sequenceDiagram
-Worker->>Frontend: RespondWorkflowTaskCompleted
-Frontend->>History: RespondWorkflowTaskCompleted
+Worker->>Frontend: RespondWorkflowTaskCompleted<br>[CompleteWorkflowExecution]
+Frontend->>History: RespondWorkflowTaskCompleted<br>[CompleteWorkflowExecution]
 History->>Persistence: UpdateWorkflowExecution
 note over Persistence: append HistoryEvents: WorkflowTaskCompleted, WorkflowExecutionCompleted<br>update Mutable State & add tasks (visibility, tiered storage, retention etc)
 Persistence->>History: Update Succeed
