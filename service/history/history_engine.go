@@ -580,7 +580,7 @@ func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	return pollupdate.Invoke(ctx, req, e.workflowConsistencyChecker)
+	return pollupdate.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
