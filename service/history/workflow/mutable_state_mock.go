@@ -1963,7 +1963,7 @@ func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask
 }
 
 // ReplicateActivityInfo mocks base method.
-func (m *MockMutableState) ReplicateActivityInfo(arg0 *v111.SyncActivityRequest, arg1 bool) error {
+func (m *MockMutableState) ReplicateActivityInfo(arg0 *v111.ActivitySyncInfo, arg1 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateActivityInfo", arg0, arg1)
 	ret0, _ := ret[0].(error)

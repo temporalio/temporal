@@ -59,6 +59,20 @@ func (m *MockActivityStateReplicator) EXPECT() *MockActivityStateReplicatorMockR
 	return m.recorder
 }
 
+// SyncActivitiesState mocks base method.
+func (m *MockActivityStateReplicator) SyncActivitiesState(ctx context.Context, request *historyservice.SyncActivitiesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncActivitiesState", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SyncActivitiesState indicates an expected call of SyncActivitiesState.
+func (mr *MockActivityStateReplicatorMockRecorder) SyncActivitiesState(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivitiesState", reflect.TypeOf((*MockActivityStateReplicator)(nil).SyncActivitiesState), ctx, request)
+}
+
 // SyncActivityState mocks base method.
 func (m *MockActivityStateReplicator) SyncActivityState(ctx context.Context, request *historyservice.SyncActivityRequest) error {
 	m.ctrl.T.Helper()
