@@ -580,13 +580,14 @@ type (
 )
 
 const (
-	ShardStoreName     DataStoreName = "ShardStore"
-	TaskStoreName      DataStoreName = "TaskStore"
-	MetadataStoreName  DataStoreName = "MetadataStore"
-	ExecutionStoreName DataStoreName = "ExecutionStore"
-	QueueName          DataStoreName = "Queue"
-	QueueV2Name        DataStoreName = "QueueV2"
-	ClusterMDStoreName DataStoreName = "ClusterMDStore"
+	ShardStoreName        DataStoreName = "ShardStore"
+	TaskStoreName         DataStoreName = "TaskStore"
+	MetadataStoreName     DataStoreName = "MetadataStore"
+	ExecutionStoreName    DataStoreName = "ExecutionStore"
+	QueueName             DataStoreName = "Queue"
+	QueueV2Name           DataStoreName = "QueueV2"
+	ClusterMDStoreName    DataStoreName = "ClusterMDStore"
+	NexusServiceStoreName DataStoreName = "NexusServiceStore"
 )
 
 const (

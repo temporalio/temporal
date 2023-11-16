@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -120,6 +121,11 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 // error.
 func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	return NewQueueV2Store(f.session, f.logger), nil
+}
+
+// NewNexusServiceStore returns a new NexusServiceStore
+func (f *Factory) NewNexusServiceStore() (p.NexusServiceStore, error) {
+	return nil, serviceerror.NewUnimplemented("Cassandra NexusServiceStore has not been implemented")
 }
 
 // Close closes the factory

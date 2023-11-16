@@ -167,8 +167,8 @@ func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.
 	}
 }
 
-// NewNexusPersistenceMetricsClient creates a NexusServiceManager to manage nexus services
-func NewNexusPersistenceMetricsClient(persistence NexusServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusServiceManager {
+// NewNexusServicePersistenceMetricsClient creates a NexusServiceManager to manage nexus services
+func NewNexusServicePersistenceMetricsClient(persistence NexusServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusServiceManager {
 	return &nexusServicePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
