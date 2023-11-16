@@ -521,6 +521,26 @@ func (mr *MockHistoryServiceClientMockRecorder) IsWorkflowTaskValid(ctx, in inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowTaskValid", reflect.TypeOf((*MockHistoryServiceClient)(nil).IsWorkflowTaskValid), varargs...)
 }
 
+// ListQueues mocks base method.
+func (m *MockHistoryServiceClient) ListQueues(ctx context.Context, in *historyservice.ListQueuesRequest, opts ...grpc.CallOption) (*historyservice.ListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListQueues", varargs...)
+	ret0, _ := ret[0].(*historyservice.ListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockHistoryServiceClientMockRecorder) ListQueues(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockHistoryServiceClient)(nil).ListQueues), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) MergeDLQMessages(ctx context.Context, in *historyservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1724,6 +1744,21 @@ func (m *MockHistoryServiceServer) IsWorkflowTaskValid(arg0 context.Context, arg
 func (mr *MockHistoryServiceServerMockRecorder) IsWorkflowTaskValid(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowTaskValid", reflect.TypeOf((*MockHistoryServiceServer)(nil).IsWorkflowTaskValid), arg0, arg1)
+}
+
+// ListQueues mocks base method.
+func (m *MockHistoryServiceServer) ListQueues(arg0 context.Context, arg1 *historyservice.ListQueuesRequest) (*historyservice.ListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListQueues", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockHistoryServiceServerMockRecorder) ListQueues(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockHistoryServiceServer)(nil).ListQueues), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

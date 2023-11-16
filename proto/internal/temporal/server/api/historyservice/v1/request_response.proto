@@ -776,6 +776,17 @@ message DeleteDLQTasksResponse {
     int64 messages_deleted = 1;
 }
 
+message ListQueuesRequest {
+    int32 queue_type = 1;
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+    repeated string queue_names = 1;
+    bytes next_page_token = 2;
+}
+
 message AddTasksRequest {
   // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
   // not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
