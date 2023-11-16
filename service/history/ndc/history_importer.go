@@ -244,7 +244,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 		)
 	}
 	token, err := r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
-	return token, true, err
+	return token, err == nil, err
 }
 
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
