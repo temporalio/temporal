@@ -65,8 +65,8 @@ type TaskMatcher struct {
 	fwdr                   *Forwarder
 	metricsHandler         metrics.Handler // namespace metric scope
 	numPartitions          func() int      // number of task queue partitions
-	backlogTasksCreateTime map[int64]int
-	backlogTasksLock       sync.RWMutex
+	backlogTasksCreateTime map[int64]int   // counting the number of tasks for each creation time
+	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64
 }
 
@@ -145,13 +145,6 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
-	if !task.isForwarded() {
-		if err := tm.rateLimiter.Wait(ctx); err != nil {
-			tm.metricsHandler.Counter(metrics.SyncThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-			return false, err
-		}
-	}
-
 	if !tm.isBacklogNegligible() {
 		// To ensure better dispatch ordering, we block sync match when a significant backlog is present.
 		// Note that this check does not make a noticeable difference for history tasks, as they do not wait for a
@@ -159,6 +152,13 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
 		return false, nil
+	}
+
+	if !task.isForwarded() {
+		if err := tm.rateLimiter.Wait(ctx); err != nil {
+			tm.metricsHandler.Counter(metrics.SyncThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
+			return false, err
+		}
 	}
 
 	select {
@@ -257,6 +257,8 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 // MustOffer blocks until a consumer is found to handle this task
 // Returns error only when context is canceled or the ratelimit is set to zero (allow nothing)
 // The passed in context MUST NOT have a deadline associated with it
+// Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
+// backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
 func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
@@ -276,7 +278,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	default:
 	}
 
-	reconsiderFwdTimer := (*time.Timer)(nil)
+	var reconsiderFwdTimer *time.Timer
 	defer func() {
 		if reconsiderFwdTimer != nil {
 			reconsiderFwdTimer.Stop()
@@ -286,8 +288,8 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 forLoop:
 	for {
 		fwdTokenC := tm.fwdrAddReqTokenC()
-		reconsiderFwdTimer = (*time.Timer)(nil)
-		reconsiderFwdTimerC := (<-chan time.Time)(nil)
+		reconsiderFwdTimer = nil
+		var reconsiderFwdTimerC <-chan time.Time
 		if fwdTokenC != nil && !tm.isBacklogNegligible() {
 			// If there is a non-negligible backlog, we stop forwarding to make sure
 			// root and leaf partitions are treated equally and can process their
@@ -480,27 +482,30 @@ func (tm *TaskMatcher) poll(
 	default:
 	}
 
-	// 3. forwarding (and all other clauses repeated)
-	select {
-	case <-ctx.Done():
-		tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
-		return nil, false, errNoTasks
-	case task := <-taskC:
-		if task.responseC != nil {
+	if tm.isBacklogNegligible() {
+		// 3. forwarding (and all other clauses repeated)
+		// We don't forward pollers if there is a non-negligible backlog in this partition.
+		select {
+		case <-ctx.Done():
+			tm.metricsHandler.Counter(metrics.PollTimeoutPerTaskQueueCounter.GetMetricName()).Record(1)
+			return nil, false, errNoTasks
+		case task := <-taskC:
+			if task.responseC != nil {
+				tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
+			}
+			tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.GetMetricName()).Record(1)
+			return task, false, nil
+		case task := <-queryTaskC:
 			tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
-		}
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.GetMetricName()).Record(1)
-		return task, false, nil
-	case task := <-queryTaskC:
-		tm.metricsHandler.Counter(metrics.PollSuccessWithSyncPerTaskQueueCounter.GetMetricName()).Record(1)
-		tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.GetMetricName()).Record(1)
-		return task, false, nil
-	case token := <-tm.fwdrPollReqTokenC():
-		if task, err := tm.fwdr.ForwardPoll(ctx, pollMetadata); err == nil {
+			tm.metricsHandler.Counter(metrics.PollSuccessPerTaskQueueCounter.GetMetricName()).Record(1)
+			return task, false, nil
+		case token := <-tm.fwdrPollReqTokenC():
+			if task, err := tm.fwdr.ForwardPoll(ctx, pollMetadata); err == nil {
+				token.release()
+				return task, true, nil
+			}
 			token.release()
-			return task, true, nil
 		}
-		token.release()
 	}
 
 	// 4. blocking local poll
@@ -522,7 +527,7 @@ func (tm *TaskMatcher) poll(
 }
 
 func (tm *TaskMatcher) fwdrPollReqTokenC() <-chan *ForwarderReqToken {
-	if tm.fwdr == nil || !tm.isBacklogNegligible() {
+	if tm.fwdr == nil {
 		return nil
 	}
 	return tm.fwdr.PollReqTokenC()
@@ -539,8 +544,8 @@ func (tm *TaskMatcher) isForwardingAllowed() bool {
 	return tm.fwdr != nil
 }
 
-// isBacklogNegligible returns true of the age of backlog is less than the threshold. Note that this relies on incoming
-// MustOffer calls being made back-to-back. If called between two subsequent MustOffer calls, it may return false positive.
+// isBacklogNegligible returns true of the age of backlog is less than the threshold. Note that this relies on
+// MustOffer being called when there is a backlog, otherwise we'd not know.
 func (tm *TaskMatcher) isBacklogNegligible() bool {
 	return tm.getBacklogAge() < tm.config.BacklogNegligibleAge()
 }
@@ -575,8 +580,8 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 }
 
 func (tm *TaskMatcher) getBacklogAge() time.Duration {
-	tm.backlogTasksLock.RLock()
-	defer tm.backlogTasksLock.RUnlock()
+	tm.backlogTasksLock.Lock()
+	defer tm.backlogTasksLock.Unlock()
 
 	if len(tm.backlogTasksCreateTime) == 0 {
 		return emptyBacklogAge

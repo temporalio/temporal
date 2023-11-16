@@ -931,7 +931,7 @@ var (
 	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
 	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
 	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
-	PollLatencyPerTaskQueue                   = NewCounterDef("poll_latency")
+	PollLatencyPerTaskQueue                   = NewTimerDef("poll_latency")
 	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
 	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
