@@ -61,6 +61,34 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *metricClient) CreateOrUpdateNexusService(
+	ctx context.Context,
+	request *matchingservice.CreateOrUpdateNexusServiceRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CreateOrUpdateNexusServiceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCreateOrUpdateNexusService")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateOrUpdateNexusService(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteNexusService(
+	ctx context.Context,
+	request *matchingservice.DeleteNexusServiceRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DeleteNexusServiceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDeleteNexusService")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteNexusService(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
@@ -117,6 +145,20 @@ func (c *metricClient) GetBuildIdTaskQueueMapping(
 	return c.client.GetBuildIdTaskQueueMapping(ctx, request, opts...)
 }
 
+func (c *metricClient) GetNexusService(
+	ctx context.Context,
+	request *matchingservice.GetNexusServiceRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetNexusServiceResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGetNexusService")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetNexusService(ctx, request, opts...)
+}
+
 func (c *metricClient) GetTaskQueueUserData(
 	ctx context.Context,
 	request *matchingservice.GetTaskQueueUserDataRequest,
@@ -143,6 +185,20 @@ func (c *metricClient) GetWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.GetWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) ListNexusServices(
+	ctx context.Context,
+	request *matchingservice.ListNexusServicesRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ListNexusServicesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientListNexusServices")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListNexusServices(ctx, request, opts...)
 }
 
 func (c *metricClient) ListTaskQueuePartitions(

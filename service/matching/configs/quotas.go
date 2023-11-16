@@ -58,6 +58,10 @@ var (
 		"RespondNexusTaskCompleted":              1,
 		"RespondNexusTaskFailed":                 1,
 		"DispatchNexusTask":                      1,
+		"GetNexusService":                        1,
+		"CreateOrUpdateNexusService":             1,
+		"ListNexusServices":                      1,
+		"DeleteNexusService":                     1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

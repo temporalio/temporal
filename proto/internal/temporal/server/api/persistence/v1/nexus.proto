@@ -1,0 +1,66 @@
+// Copyright (c) 2019 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "temporal/server/api/clock/v1/message.proto";
+import "google/protobuf/any.proto";
+
+message NexusServiceMetadataValue {
+    enum NexusMetadataState {
+        NEXUS_METADATA_STATE_UNSPECIFIED = 0;
+        NEXUS_METADATA_STATE_PRESENT = 1;
+        NEXUS_METADATA_STATE_DELETED = 2;
+    };
+    // Arbitrary user data.
+    // (-- api-linter: core::0146::any=disabled
+    //     aip.dev/not-precedent: Meant to hold arbitrary user provided data. --)
+    google.protobuf.Any data = 1;
+    NexusMetadataState state = 2;
+    // HLC timestamp representing when this metadata state field was last updated.
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
+}
+
+message NexusIncomingService {
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ service.
+    // Updated whenever the service is directly updated due to a user action but not when applying replication events.
+    // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
+    // timestamps.
+    temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
+    // Name of this service.
+    string name = 2;
+    // UUID of the namespace to dispatch service requests to.
+    bytes namespace_id = 3;
+    // Task queue to dispatch service requests to.
+    string task_queue = 4;
+    // Arbitrary user provided data. For use in the authorizer.
+    map<string, NexusServiceMetadataValue> metadata = 5;
+}
+
+// Container for a version and a NexusIncomingService.
+message VersionedNexusIncomingService {
+    int64 version = 1;
+    NexusIncomingService service = 2;
+}
