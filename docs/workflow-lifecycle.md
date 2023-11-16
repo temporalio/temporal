@@ -142,7 +142,7 @@ Worker->>Worker: Execute activity
 
 <br>
 
-5. **The Worker sends `RespondActivityTaskCompleted`, containing the activity result**
+5. **Once the activity is completed, the Worker running the Activity sends `RespondActivityTaskCompleted`, containing the activity result**
    - A Workflow Task is added in the Matching service
 
 ```mermaid
