@@ -283,13 +283,24 @@ func (p *visibilityManagerImpl) GetWorkflowExecution(
 	return &manager.GetWorkflowExecutionResponse{Execution: execution}, err
 }
 
-func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(request *manager.VisibilityRequestBase) (*store.InternalVisibilityRequestBase, error) {
+func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
+	request *manager.VisibilityRequestBase,
+) (*store.InternalVisibilityRequestBase, error) {
 	if request == nil {
 		return nil, nil
 	}
 	memoBlob, err := p.serializeMemo(request.Memo)
 	if err != nil {
 		return nil, err
+	}
+
+	var (
+		parentWorkflowID *string
+		parentRunID      *string
+	)
+	if request.ParentExecution != nil {
+		parentWorkflowID = &request.ParentExecution.WorkflowId
+		parentRunID = &request.ParentExecution.RunId
 	}
 
 	return &store.InternalVisibilityRequestBase{
@@ -305,10 +316,14 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(request *manage
 		TaskQueue:        request.TaskQueue,
 		Memo:             memoBlob,
 		SearchAttributes: request.SearchAttributes,
+		ParentWorkflowID: parentWorkflowID,
+		ParentRunID:      parentRunID,
 	}, nil
 }
 
-func (p *visibilityManagerImpl) convertInternalListResponse(internalResponse *store.InternalListWorkflowExecutionsResponse) (*manager.ListWorkflowExecutionsResponse, error) {
+func (p *visibilityManagerImpl) convertInternalListResponse(
+	internalResponse *store.InternalListWorkflowExecutionsResponse,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if internalResponse == nil {
 		return nil, nil
 	}
@@ -327,7 +342,9 @@ func (p *visibilityManagerImpl) convertInternalListResponse(internalResponse *st
 	return resp, nil
 }
 
-func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExecution *store.InternalWorkflowExecutionInfo) (*workflowpb.WorkflowExecutionInfo, error) {
+func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
+	internalExecution *store.InternalWorkflowExecutionInfo,
+) (*workflowpb.WorkflowExecutionInfo, error) {
 	if internalExecution == nil {
 		return nil, nil
 	}
@@ -350,6 +367,13 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExe
 		SearchAttributes: internalExecution.SearchAttributes,
 		TaskQueue:        internalExecution.TaskQueue,
 		Status:           internalExecution.Status,
+	}
+
+	if internalExecution.ParentWorkflowID != "" {
+		executionInfo.ParentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: internalExecution.ParentWorkflowID,
+			RunId:      internalExecution.ParentRunID,
+		}
 	}
 
 	// for close records

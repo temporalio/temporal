@@ -41,7 +41,6 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
@@ -517,7 +516,8 @@ message GetShardResponse {
 
 message RemoveTaskRequest {
     int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
+    // The task category. See tasks.TaskCategoryRegistry for more.
+    int32 category = 2;
     int64 task_id = 3;
     google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }

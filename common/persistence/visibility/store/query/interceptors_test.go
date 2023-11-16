@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 
 	"github.com/stretchr/testify/assert"
 )
