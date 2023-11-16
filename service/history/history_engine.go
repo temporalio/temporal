@@ -368,6 +368,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
+		e.persistenceVisibilityMgr,
 		startRequest,
 	)
 	if err != nil {
