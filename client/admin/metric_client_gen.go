@@ -61,6 +61,34 @@ func (c *metricClient) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *metricClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.AddTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientAddTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) CancelDLQJob(
+	ctx context.Context,
+	request *adminservice.CancelDLQJobRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.CancelDLQJobResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientCancelDLQJob")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelDLQJob(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -101,6 +129,20 @@ func (c *metricClient) DescribeCluster(
 	}()
 
 	return c.client.DescribeCluster(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeDLQJob(
+	ctx context.Context,
+	request *adminservice.DescribeDLQJobRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DescribeDLQJobResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDescribeDLQJob")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeHistoryHost(

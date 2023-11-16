@@ -48,20 +48,27 @@ type (
 	}
 	DLQServiceProvider struct {
 		clientFactory        ClientFactory
+		taskBlobEncoder      TaskBlobEncoder
 		taskCategoryRegistry tasks.TaskCategoryRegistry
 		writer               io.Writer
 		prompterFactory      PrompterFactory
+	}
+	// noCloseWriter adapts an [io.Writer] with no cleanup logic to an [io.WriteCloser].
+	noCloseWriter struct {
+		io.Writer
 	}
 )
 
 func NewDLQServiceProvider(
 	clientFactory ClientFactory,
+	taskBlobEncoder TaskBlobEncoder,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	writer io.Writer,
 	prompterFactory PrompterFactory,
 ) *DLQServiceProvider {
 	return &DLQServiceProvider{
 		clientFactory:        clientFactory,
+		taskBlobEncoder:      taskBlobEncoder,
 		taskCategoryRegistry: taskCategoryRegistry,
 		writer:               writer,
 		prompterFactory:      prompterFactory,
@@ -75,10 +82,17 @@ func (p *DLQServiceProvider) GetDLQService(
 	prompter := p.prompterFactory(c)
 	version := c.String(FlagDLQVersion)
 	if version == "v1" {
-		return NewDLQV1Service(p.clientFactory, prompter), nil
+		return NewDLQV1Service(p.clientFactory, prompter, p.writer), nil
 	}
 	if version == "v2" {
-		return getDLQV2Service(c, p.clientFactory, p.taskCategoryRegistry, p.writer, prompter)
+		return getDLQV2Service(
+			c,
+			p.clientFactory,
+			p.taskCategoryRegistry,
+			p.writer,
+			prompter,
+			p.taskBlobEncoder,
+		)
 	}
 	return nil, fmt.Errorf("unknown DLQ version: %v", version)
 }
@@ -89,6 +103,7 @@ func getDLQV2Service(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	writer io.Writer,
 	prompter *Prompter,
+	taskBlobEncoder TaskBlobEncoder,
 ) (DLQService, error) {
 	dlqType := c.String(FlagDLQType)
 	category, ok, err := getCategoryByID(taskCategoryRegistry, dlqType)
@@ -111,7 +126,15 @@ func getDLQV2Service(
 		}
 		sourceCluster = targetCluster
 	}
-	return NewDLQV2Service(category, sourceCluster, targetCluster, clientFactory, writer, prompter), nil
+	return NewDLQV2Service(
+		category,
+		sourceCluster,
+		targetCluster,
+		clientFactory,
+		writer,
+		prompter,
+		taskBlobEncoder,
+	), nil
 }
 
 func getTargetCluster(c *cli.Context, clientFactory ClientFactory) (string, DLQService, error) {
@@ -142,13 +165,25 @@ func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
 	}
 }
 
-func getOutputFile(outputFile string) (*os.File, error) {
+func getOutputFile(outputFile string, writer io.Writer) (io.WriteCloser, error) {
 	if len(outputFile) == 0 {
-		return os.Stdout, nil
+		return noCloseWriter{writer}, nil
 	}
 	f, err := os.Create(outputFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create output file: %s", err)
 	}
 	return f, nil
+}
+
+func (n noCloseWriter) Close() error {
+	return nil
+}
+
+// GetDLQJobService returns a DLQJobService.
+func (p *DLQServiceProvider) GetDLQJobService() DLQJobService {
+	return DLQJobService{
+		clientFactory: p.clientFactory,
+		writer:        p.writer,
+	}
 }

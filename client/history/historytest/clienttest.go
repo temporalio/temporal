@@ -37,8 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
@@ -50,6 +48,7 @@ import (
 	"go.temporal.io/server/internal/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/grpc"
 )
 
 // fakeTracerProvider is needed to construct a [historyserver.Handler] object.
@@ -167,9 +166,11 @@ func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *
 
 func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) historyservice.HistoryServiceClient {
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
+	address := membership.NewHostInfoFromAddress("127.0.0.1:7104")
 	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("127.0.0.1:7104"),
+		address,
 	}).AnyTimes()
+	serviceResolver.EXPECT().Lookup(gomock.Any()).Return(address, nil).AnyTimes()
 	rpcFactory := nettest.NewRPCFactory(listener)
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),
@@ -200,6 +201,7 @@ func enqueueTasks(
 			SourceCluster: sourceCluster,
 			TargetCluster: targetCluster,
 			Task:          task,
+			SourceShardID: 1,
 		})
 		require.NoError(t, err)
 	}

@@ -667,7 +667,7 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 
 	// disable per-ns worker so that the schedule workflow never runs
 	dc := s.testCluster.host.dcClient
-	dc.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	dc.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
@@ -742,8 +742,8 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 	// waiting one minute) we have to cause the whole worker to be stopped and started. The
 	// sleeps are needed because the refresh is asynchronous, and there's no way to get access
 	// to the actual rate limiter object to refresh it directly.
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
@@ -805,7 +805,7 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 	}
 
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 	s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)

@@ -115,30 +115,31 @@ func (factory *factory) getMonitor() *monitor {
 	factory.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
 		defer cancel()
-		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 		currentClusterMetadata, err := factory.MetadataManager.GetCurrentClusterMetadata(ctx)
 		if err != nil {
 			factory.Logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
+
 		appName := "temporal"
 		if currentClusterMetadata.UseClusterIdMembership {
 			appName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		}
-		if rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
+		rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
+		if err != nil {
 			factory.Logger.Fatal("Failed to get new ringpop", tag.Error(err))
-		} else {
-			mrp := newService(rp, factory.Config.MaxJoinDuration, factory.Logger)
-
-			factory.monitor = newMonitor(
-				factory.ServiceName,
-				factory.ServicePortMap,
-				mrp,
-				factory.Logger,
-				factory.MetadataManager,
-				factory.broadcastAddressResolver,
-			)
 		}
+
+		factory.monitor = newMonitor(
+			factory.ServiceName,
+			factory.ServicePortMap,
+			rp,
+			factory.Logger,
+			factory.MetadataManager,
+			factory.broadcastAddressResolver,
+			factory.Config.MaxJoinDuration,
+		)
 	})
 
 	return factory.monitor

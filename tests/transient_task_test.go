@@ -162,7 +162,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// start with 2mb limit
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
 
 	// workflow logic
 	stage := 0
@@ -282,7 +282,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 
 	// change the dynamic config so that SuggestContinueAsNew should now be false. the current
 	// workflow task should still see true, but the next one will see false.
-	s.testCluster.host.dcClient.OverrideValue(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
+	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4
 	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)

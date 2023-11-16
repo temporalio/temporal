@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"testing"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
@@ -119,7 +120,7 @@ const (
 )
 
 // NewCluster creates and sets up the test cluster
-func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
+func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
@@ -285,7 +286,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := newTemporal(temporalParams)
+	cluster := newTemporal(t, temporalParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}

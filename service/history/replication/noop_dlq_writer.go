@@ -22,33 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package replication
 
-import (
-	"encoding/json"
-	"io"
-	"os"
+import "context"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/stretchr/testify/require"
-)
+// NoopDLQWriter is a DLQWriter that does nothing. The zero value is a valid instance.
+type NoopDLQWriter struct {
+}
 
-// ParseJSONLProtos parses protos from a JSONL file until EOF.
-// The newMessage argument should return a new instance of the type of message that is being parsed.
-func ParseJSONLProtos[T proto.Message](t *require.Assertions, file *os.File, newMessage func() T) []T {
-	decoder := json.NewDecoder(file)
-	var (
-		unmarshaler jsonpb.Unmarshaler
-		messages    []T
-	)
-	for {
-		message := newMessage()
-		err := unmarshaler.UnmarshalNext(decoder, message)
-		if err == io.EOF {
-			return messages
-		}
-		t.NoError(err)
-		messages = append(messages, message)
-	}
+var _ DLQWriter = NoopDLQWriter{}
+
+func (w NoopDLQWriter) WriteTaskToDLQ(context.Context, DLQWriteRequest) error {
+	return nil
 }

@@ -37,6 +37,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
@@ -222,9 +223,9 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 			blob, err := serialization.NewTaskSerializer().SerializeTask(task)
 			s.NoError(err)
 			shardID := tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards))
-			request := &historyservice.AddTasksRequest{
+			request := &adminservice.AddTasksRequest{
 				ShardId: int32(shardID),
-				Tasks: []*historyservice.AddTasksRequest_Task{
+				Tasks: []*adminservice.AddTasksRequest_Task{
 					{
 						CategoryId: int32(task.GetCategory().ID()),
 						Blob:       &blob,
@@ -232,7 +233,7 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 				},
 			}
 			if tc.shouldCallAddTasks {
-				_, err = s.testCluster.GetHistoryClient().AddTasks(ctx, request)
+				_, err = s.testCluster.GetAdminClient().AddTasks(ctx, request)
 				s.NoError(err)
 			}
 

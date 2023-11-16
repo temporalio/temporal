@@ -722,6 +722,11 @@ func SourceCluster(sourceCluster string) ZapTag {
 	return NewStringTag("xdc-source-cluster", sourceCluster)
 }
 
+// TargetCluster returns tag for TargetCluster
+func TargetCluster(targetCluster string) ZapTag {
+	return NewStringTag("xdc-target-cluster", targetCluster)
+}
+
 // PrevActiveCluster returns tag for PrevActiveCluster
 func PrevActiveCluster(prevActiveCluster string) ZapTag {
 	return NewStringTag("xdc-prev-active-cluster", prevActiveCluster)

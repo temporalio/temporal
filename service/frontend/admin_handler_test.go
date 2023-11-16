@@ -34,13 +34,16 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
@@ -1294,4 +1297,310 @@ func (s *adminHandlerSuite) TestPurgeDLQTasks_InvalidCategory() {
 	s.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	s.ErrorContains(err, "task category")
 	s.ErrorContains(err, "-1")
+}
+
+func (s *adminHandlerSuite) TestDescribeDLQJob() {
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+	defaultMergeQueryResponse := dlq.ProgressQueryResponse{
+		MaxMessageIDToProcess:  0,
+		LastProcessedMessageID: 0,
+		WorkflowType:           dlq.WorkflowTypeMerge,
+		DlqKey: dlq.Key{
+			TaskCategoryID: 1,
+			SourceCluster:  "test-source-cluster",
+			TargetCluster:  "test-target-cluster",
+		},
+	}
+	defaultPurgeQueryResponse := dlq.ProgressQueryResponse{
+		MaxMessageIDToProcess:  0,
+		LastProcessedMessageID: 0,
+		WorkflowType:           dlq.WorkflowTypeDelete,
+		DlqKey: dlq.Key{
+			TaskCategoryID: 1,
+			SourceCluster:  "test-source-cluster",
+			TargetCluster:  "test-target-cluster",
+		},
+	}
+	defaultWorkflowExecution := workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+	}
+	for _, tc := range []struct {
+		name                  string
+		err                   error
+		progressQueryResponse dlq.ProgressQueryResponse
+		workflowExecution     workflowservice.DescribeWorkflowExecutionResponse
+		expectedResponse      adminservice.DescribeDLQJobResponse
+	}{
+		{
+			name:                  "MergeRunning",
+			err:                   nil,
+			progressQueryResponse: defaultMergeQueryResponse,
+			workflowExecution:     defaultWorkflowExecution,
+			expectedResponse: adminservice.DescribeDLQJobResponse{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  1,
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				OperationType:          enumsspb.DLQ_OPERATION_TYPE_MERGE,
+				OperationState:         enumsspb.DLQ_OPERATION_STATE_RUNNING,
+				MaxMessageId:           0,
+				LastProcessedMessageId: 0,
+			},
+		},
+		{
+			name:                  "MergeFinished",
+			err:                   nil,
+			progressQueryResponse: defaultMergeQueryResponse,
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				},
+			},
+			expectedResponse: adminservice.DescribeDLQJobResponse{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  1,
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				OperationType:          enumsspb.DLQ_OPERATION_TYPE_MERGE,
+				OperationState:         enumsspb.DLQ_OPERATION_STATE_COMPLETED,
+				MaxMessageId:           0,
+				LastProcessedMessageId: 0,
+			},
+		},
+		{
+			name:                  "MergeFailed",
+			err:                   nil,
+			progressQueryResponse: defaultMergeQueryResponse,
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+				},
+			},
+			expectedResponse: adminservice.DescribeDLQJobResponse{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  1,
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				OperationType:          enumsspb.DLQ_OPERATION_TYPE_MERGE,
+				OperationState:         enumsspb.DLQ_OPERATION_STATE_FAILED,
+				MaxMessageId:           0,
+				LastProcessedMessageId: 0,
+			},
+		},
+		{
+			name:                  "DeleteRunning",
+			err:                   nil,
+			progressQueryResponse: defaultPurgeQueryResponse,
+			workflowExecution:     defaultWorkflowExecution,
+			expectedResponse: adminservice.DescribeDLQJobResponse{
+				DlqKey: &commonspb.HistoryDLQKey{
+					TaskCategory:  1,
+					SourceCluster: "test-source-cluster",
+					TargetCluster: "test-target-cluster",
+				},
+				OperationType:          enumsspb.DLQ_OPERATION_TYPE_PURGE,
+				OperationState:         enumsspb.DLQ_OPERATION_STATE_RUNNING,
+				MaxMessageId:           0,
+				LastProcessedMessageId: 0,
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			jobToken := adminservice.DLQJobToken{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			}
+			mockSdkClient := mocksdk.NewMockClient(s.controller)
+			s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient)
+			describeExpectation := mockSdkClient.EXPECT().DescribeWorkflowExecution(
+				gomock.Any(),
+				workflowID,
+				runID,
+			)
+			queryExpectation := mockSdkClient.EXPECT().QueryWorkflow(
+				gomock.Any(),
+				workflowID,
+				runID,
+				dlq.QueryTypeProgress,
+			)
+			mockValue := mocksdk.NewMockEncodedValue(s.controller)
+			mockValue.EXPECT().Get(gomock.Any()).Do(func(result interface{}) {
+				*(result.(*dlq.ProgressQueryResponse)) = tc.progressQueryResponse
+			})
+			queryExpectation.Return(mockValue, nil)
+			if tc.err != nil {
+				describeExpectation.Return(nil, tc.err)
+			} else {
+				describeExpectation.Return(&tc.workflowExecution, nil)
+			}
+			jobTokenBytes, _ := jobToken.Marshal()
+			response, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{
+				JobToken: string(jobTokenBytes),
+			})
+			if tc.err != nil {
+				s.ErrorIs(err, tc.err)
+				return
+			}
+			s.NoError(err)
+			s.NotNil(response)
+			s.EqualValues(tc.expectedResponse, *response)
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestDescribeDLQJob_InvalidJobToken() {
+	_, err := s.handler.DescribeDLQJob(context.Background(), &adminservice.DescribeDLQJobRequest{JobToken: "invalid_token"})
+	s.Error(err)
+	s.ErrorContains(err, "Invalid DLQ job token")
+
+}
+
+func (s *adminHandlerSuite) TestCancelDLQJob() {
+	for _, tc := range []struct {
+		name              string
+		terminateErr      error
+		describeErr       error
+		workflowExecution workflowservice.DescribeWorkflowExecutionResponse
+		terminateCalls    int
+		expectedCancelled bool
+	}{
+		{
+			name:         "SuccessForRunningWorkflow",
+			terminateErr: nil,
+			describeErr:  nil,
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+			},
+			terminateCalls:    1,
+			expectedCancelled: true,
+		},
+		{
+			name:         "SuccessForCompletedWorkflow",
+			terminateErr: nil,
+			describeErr:  nil,
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				},
+			},
+			terminateCalls:    0,
+			expectedCancelled: false,
+		},
+		{
+			name:         "TerminateWorkflowFailed",
+			terminateErr: serviceerror.NewNotFound("example sdk terminate workflow failure"),
+			describeErr:  nil,
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+			},
+			terminateCalls:    1,
+			expectedCancelled: false,
+		},
+		{
+			name:         "DescribeWorkflowFailed",
+			terminateErr: nil,
+			describeErr:  serviceerror.NewNotFound("example sdk describe workflow failure"),
+			workflowExecution: workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				},
+			},
+			terminateCalls:    0,
+			expectedCancelled: false,
+		},
+	} {
+		s.Run(tc.name, func() {
+			workflowID := "test-workflow-id"
+			runID := "test-run-id"
+			jobToken := adminservice.DLQJobToken{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			}
+			mockSdkClient := mocksdk.NewMockClient(s.controller)
+			s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient)
+			describeExpectation := mockSdkClient.EXPECT().DescribeWorkflowExecution(
+				gomock.Any(),
+				workflowID,
+				runID,
+			)
+			terminateExpectation := mockSdkClient.EXPECT().TerminateWorkflow(
+				gomock.Any(),
+				workflowID,
+				runID,
+				"test-reason",
+			)
+			terminateExpectation.Return(tc.terminateErr).Times(tc.terminateCalls)
+			if tc.describeErr != nil {
+				describeExpectation.Return(nil, tc.describeErr)
+			} else {
+				describeExpectation.Return(&tc.workflowExecution, nil)
+			}
+			jobTokenBytes, _ := jobToken.Marshal()
+			response, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{
+				JobToken: string(jobTokenBytes),
+				Reason:   "test-reason",
+			})
+			if tc.describeErr != nil {
+				s.ErrorIs(err, tc.describeErr)
+				return
+			}
+			if tc.terminateErr != nil {
+				s.ErrorIs(err, tc.terminateErr)
+				return
+			}
+			s.NoError(err)
+			s.NotNil(response)
+			s.Equal(tc.expectedCancelled, response.Canceled)
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestCancelDLQJob_InvalidJobToken() {
+	_, err := s.handler.CancelDLQJob(context.Background(), &adminservice.CancelDLQJobRequest{JobToken: "invalid_token", Reason: "test-reason"})
+	s.Error(err)
+	s.ErrorContains(err, "Invalid DLQ job token")
+}
+
+func (s *adminHandlerSuite) TestAddDLQTasks_Ok() {
+	s.mockHistoryClient.EXPECT().AddTasks(gomock.Any(), &historyservice.AddTasksRequest{
+		ShardId: 13,
+		Tasks: []*historyservice.AddTasksRequest_Task{
+			{
+				CategoryId: 21,
+				Blob: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         []byte("test-data"),
+				},
+			},
+		},
+	}).Return(nil, nil)
+	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{
+		ShardId: 13,
+		Tasks: []*adminservice.AddTasksRequest_Task{
+			{
+				CategoryId: 21,
+				Blob: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         []byte("test-data"),
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestAddDLQTasks_Err() {
+	s.mockHistoryClient.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
+	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{})
+	s.ErrorIs(err, assert.AnError)
 }

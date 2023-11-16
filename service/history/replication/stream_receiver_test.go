@@ -100,7 +100,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		TaskScheduler:   s.taskScheduler,
 		MetricsHandler:  metrics.NoopMetricsHandler,
 		Logger:          log.NewTestLogger(),
-		DLQWriter:       NewExecutionManagerDLQWriter(),
+		DLQWriter:       NoopDLQWriter{},
 	}
 	s.streamReceiver = NewStreamReceiver(
 		processToolBox,

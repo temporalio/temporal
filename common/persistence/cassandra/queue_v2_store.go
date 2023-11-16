@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -61,13 +60,8 @@ const (
 	TemplateGetQueueQuery            = `SELECT metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? AND queue_name = ?`
 	TemplateRangeDeleteMessagesQuery = `DELETE FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? AND message_id <= ?`
 	TemplateUpdateQueueMetadataQuery = `UPDATE queues SET metadata_payload = ?, metadata_encoding = ?, version = ? WHERE queue_type = ? AND queue_name = ? IF version = ?`
-
-	// pageTokenPrefixByte is the first byte of the serialized page token. It's used to ensure that the page token is
-	// not empty. Without this, if the last_read_message_id is 0, the serialized page token would be empty, and clients
-	// could erroneously assume that there are no more messages beyond the first page. This is purely used to ensure
-	// that tokens are non-empty; it is not used to verify that the token is valid like the magic byte in some other
-	// protocols.
-	pageTokenPrefixByte = 0
+	// We will have to ALLOW FILTERING for this query since partition key consists of both queue_type and queue_name.
+	templateGetQueueNamesQuery = `SELECT queue_name FROM queues WHERE queue_type =? ALLOW FILTERING`
 )
 
 var (
@@ -221,8 +215,7 @@ func (s *queueV2Store) ReadMessages(
 		return nil, gocql.ConvertError("QueueV2ReadMessages", err)
 	}
 
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
-
+	nextPageToken := persistence.GetNextPageTokenForReadMessages(messages)
 	return &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -322,7 +315,9 @@ func (s *queueV2Store) RangeDeleteMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &persistence.InternalRangeDeleteMessagesResponse{}, nil
+	return &persistence.InternalRangeDeleteMessagesResponse{
+		MessagesDeleted: deleteRange.MessagesToDelete,
+	}, nil
 }
 
 func (s *queueV2Store) updateQueue(
@@ -471,4 +466,33 @@ func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistenc
 		return 0, false, gocql.ConvertError("QueueV2GetMaxMessageID", err)
 	}
 	return maxMessageID, true, nil
+}
+
+func (s *queueV2Store) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if request.PageSize <= 0 {
+		return nil, persistence.ErrNonPositiveListQueuesPageSize
+	}
+	iter := s.session.Query(
+		templateGetQueueNamesQuery,
+		request.QueueType,
+	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
+
+	var queues []string
+	for {
+		var queue string
+		if !iter.Scan(&queue) {
+			break
+		}
+		queues = append(queues, queue)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, gocql.ConvertError("QueueV2ListQueues", err)
+	}
+	return &persistence.InternalListQueuesResponse{
+		QueueNames:    queues,
+		NextPageToken: iter.PageState(),
+	}, nil
 }

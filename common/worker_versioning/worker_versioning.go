@@ -29,7 +29,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"

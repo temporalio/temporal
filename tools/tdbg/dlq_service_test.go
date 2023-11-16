@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -128,12 +129,9 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		clientFactory:         faultyClientFactory{err: errors.New("did not expect client to be used")},
 	}
 	tc.override(&p)
-	app := tdbg.NewCliApp(func(params *tdbg.Params) {
+	app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
 		params.ClientFactory = p.clientFactory
 	})
-	app.ExitErrHandler = func(c *cli.Context, err error) {
-		return
-	}
 	runArgs := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -274,15 +272,6 @@ func TestDLQCommands(t *testing.T) {
 			},
 		},
 		{
-			name: "v2 purge client nil response",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "purge"
-				p.clientFactory = faultyClientFactory{}
-				p.expectedErrSubstrings = []string{"unable to encode PurgeDLQTasks"}
-			},
-		},
-		{
 			name: "v2 merge invalid last message ID",
 			override: func(p *dlqTestParams) {
 				p.dlqVersion = "v2"
@@ -298,15 +287,6 @@ func TestDLQCommands(t *testing.T) {
 				p.command = "merge"
 				p.clientFactory = faultyClientFactory{err: errors.New("some error")}
 				p.expectedErrSubstrings = []string{"some error", "MergeDLQTasks"}
-			},
-		},
-		{
-			name: "v2 merge client nil response",
-			override: func(p *dlqTestParams) {
-				p.dlqVersion = "v2"
-				p.command = "merge"
-				p.clientFactory = faultyClientFactory{}
-				p.expectedErrSubstrings = []string{"unable to encode MergeDLQTasks"}
 			},
 		},
 	} {
