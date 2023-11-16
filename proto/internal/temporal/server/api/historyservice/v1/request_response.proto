@@ -667,6 +667,7 @@ message ImportWorkflowExecutionRequest {
 
 message ImportWorkflowExecutionResponse {
     bytes token = 1;
+    bool events_applied = 2;
 }
 
 message DeleteWorkflowVisibilityRecordRequest {
