@@ -541,6 +541,26 @@ func (mr *MockAdminServiceClientMockRecorder) ListHistoryTasks(ctx, in interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHistoryTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListHistoryTasks), varargs...)
 }
 
+// ListQueues mocks base method.
+func (m *MockAdminServiceClient) ListQueues(ctx context.Context, in *adminservice.ListQueuesRequest, opts ...grpc.CallOption) (*adminservice.ListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListQueues", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockAdminServiceClientMockRecorder) ListQueues(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockAdminServiceClient)(nil).ListQueues), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) MergeDLQMessages(ctx context.Context, in *adminservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1299,6 +1319,21 @@ func (m *MockAdminServiceServer) ListHistoryTasks(arg0 context.Context, arg1 *ad
 func (mr *MockAdminServiceServerMockRecorder) ListHistoryTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHistoryTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListHistoryTasks), arg0, arg1)
+}
+
+// ListQueues mocks base method.
+func (m *MockAdminServiceServer) ListQueues(arg0 context.Context, arg1 *adminservice.ListQueuesRequest) (*adminservice.ListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListQueues", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockAdminServiceServerMockRecorder) ListQueues(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockAdminServiceServer)(nil).ListQueues), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

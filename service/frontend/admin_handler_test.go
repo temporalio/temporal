@@ -1604,3 +1604,24 @@ func (s *adminHandlerSuite) TestAddDLQTasks_Err() {
 	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{})
 	s.ErrorIs(err, assert.AnError)
 }
+
+func (s *adminHandlerSuite) TestListQueues_Ok() {
+	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), &historyservice.ListQueuesRequest{
+		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+		PageSize:      0,
+		NextPageToken: nil,
+	}).Return(&historyservice.ListQueuesResponse{QueueNames: []string{"testQueue"}}, nil)
+	resp, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{
+		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+		PageSize:      0,
+		NextPageToken: nil,
+	})
+	s.NoError(err)
+	s.Equal("testQueue", resp.QueueNames[0])
+}
+
+func (s *adminHandlerSuite) TestListQueues_Err() {
+	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
+	_, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{})
+	s.ErrorIs(err, assert.AnError)
+}

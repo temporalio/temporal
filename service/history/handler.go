@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
+	"go.temporal.io/server/service/history/api/listqueues"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -2168,6 +2169,13 @@ func (h *Handler) AddTasks(
 		return nil, h.convertError(err)
 	}
 	return engine.AddTasks(ctx, request)
+}
+
+func (h *Handler) ListQueues(
+	ctx context.Context,
+	request *historyservice.ListQueuesRequest,
+) (*historyservice.ListQueuesResponse, error) {
+	return listqueues.Invoke(ctx, h.taskQueueManager, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -73,6 +73,7 @@ var (
 		"GetDLQTasks":               {},
 		"DeleteDLQTasks":            {},
 		"AddTasks":                  {},
+		"ListQueues":                {},
 	}
 )
 
