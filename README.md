@@ -59,7 +59,7 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review our [contribution guide](CONTRIBUTING.md).
+We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/README.md) and our [contribution guide](CONTRIBUTING.md).
 
 If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
 
