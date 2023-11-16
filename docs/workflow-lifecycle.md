@@ -82,7 +82,7 @@ Worker->>Worker: Advance workflow
 
 <br>
 
-3. **The Worker sends a `ScheduleActivityTask` command**
+3. **The workflow launches an activity, causing the Worker to send a `ScheduleActivityTask` command back to the Frontend**
    - An Activity task is added in the Matching service.
 
 ```mermaid
