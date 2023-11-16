@@ -1055,6 +1055,30 @@ type (
 		MaxRecordsPruned int
 	}
 
+	//
+	GetNexusServiceRequest struct {
+	}
+
+	//
+	GetNexusServiceResponse struct {
+	}
+
+	//
+	ListNexusServicesRequest struct {
+	}
+
+	//
+	ListNexusServicesResponse struct {
+	}
+
+	//
+	CreateOrUpdateNexusServiceRequest struct {
+	}
+
+	//
+	DeleteNexusServiceRequest struct {
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	// TODO: allow this method to return errors
 	Closeable interface {
@@ -1202,6 +1226,16 @@ type (
 		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
+	}
+
+	//
+	NexusServiceManager interface {
+		Closeable
+		GetName() string
+		GetNexusService(ctx context.Context, request *GetNexusServiceRequest) (*GetNexusServiceResponse, error)
+		ListNexusServices(ctx context.Context, request *ListNexusServicesRequest) (*ListNexusServicesResponse, error)
+		CreateOrUpdateNexusService(ctx context.Context, request *CreateOrUpdateNexusServiceRequest) error
+		DeleteNexusService(ctx context.Context, request *DeleteNexusServiceRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
