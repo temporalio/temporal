@@ -229,12 +229,17 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		if err != nil {
 			return err
 		}
-		if applied == true {
-			anyEventApplied = true
-		}
+		anyEventApplied = anyEventApplied || applied
 	}
 	if !anyEventApplied {
 		return nil
+	}
+
+	// passive logic need to explicitly call create timer
+	if _, err := workflow.NewTimerSequence(
+		mutableState,
+	).CreateNextActivityTimer(); err != nil {
+		return err
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
@@ -308,23 +313,6 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 		return false, err
 	}
 
-	// Todo: improve efficiency by calculating once all activities are replicated in mutableState
-	// see whether we need to refresh the activity timer
-	startedTime := timestamp.TimeValue(activitySyncInfo.GetStartedTime())
-	lastHeartbeatTime := timestamp.TimeValue(activitySyncInfo.GetLastHeartbeatTime())
-	if eventTime.Before(startedTime) {
-		eventTime = startedTime
-	}
-	if eventTime.Before(lastHeartbeatTime) {
-		eventTime = lastHeartbeatTime
-	}
-
-	// passive logic need to explicitly call create timer
-	if _, err := workflow.NewTimerSequence(
-		mutableState,
-	).CreateNextActivityTimer(); err != nil {
-		return false, err
-	}
 	return true, nil
 }
 

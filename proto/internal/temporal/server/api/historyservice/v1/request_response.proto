@@ -486,7 +486,6 @@ message ActivitySyncInfo {
     temporal.api.failure.v1.Failure last_failure = 9;
     string last_worker_identity = 10;
     temporal.server.api.history.v1.VersionHistory version_history = 11;
-    temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 12;
 }
 
 message SyncActivityResponse {
