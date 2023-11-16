@@ -47,8 +47,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -3725,6 +3727,18 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		OperationInfo: operations,
 		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {

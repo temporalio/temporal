@@ -54,6 +54,10 @@ var (
 		"ForceUnloadTaskQueue":                   1,
 		"UpdateTaskQueueUserData":                1,
 		"ReplicateTaskQueueUserData":             1,
+		"PollNexusTaskQueue":                     1,
+		"RespondNexusTaskCompleted":              1,
+		"RespondNexusTaskFailed":                 1,
+		"DispatchNexusTask":                      1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

@@ -455,6 +455,21 @@ func (c *retryableClient) PollActivityTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) PollNexusTaskQueue(
+	ctx context.Context,
+	request *workflowservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	var resp *workflowservice.PollNexusTaskQueueResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollNexusTaskQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowExecutionUpdateRequest,
@@ -674,6 +689,36 @@ func (c *retryableClient) RespondActivityTaskFailedById(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RespondActivityTaskFailedById(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RespondNexusTaskCompleted(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	var resp *workflowservice.RespondNexusTaskCompletedResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RespondNexusTaskCompleted(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RespondNexusTaskFailed(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskFailedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	var resp *workflowservice.RespondNexusTaskFailedResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RespondNexusTaskFailed(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

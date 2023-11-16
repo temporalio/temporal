@@ -313,6 +313,16 @@ func (c *clientImpl) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) PollNexusTaskQueue(
+	ctx context.Context,
+	request *workflowservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowExecutionUpdateRequest,
@@ -461,6 +471,26 @@ func (c *clientImpl) RespondActivityTaskFailedById(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RespondActivityTaskFailedById(ctx, request, opts...)
+}
+
+func (c *clientImpl) RespondNexusTaskCompleted(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RespondNexusTaskCompleted(ctx, request, opts...)
+}
+
+func (c *clientImpl) RespondNexusTaskFailed(
+	ctx context.Context,
+	request *workflowservice.RespondNexusTaskFailedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondNexusTaskFailedResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RespondNexusTaskFailed(ctx, request, opts...)
 }
 
 func (c *clientImpl) RespondQueryTaskCompleted(

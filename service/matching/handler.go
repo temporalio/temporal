@@ -29,7 +29,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/status"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/codes"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -360,6 +362,23 @@ func (h *Handler) ReplicateTaskQueueUserData(
 ) (_ *matchingservice.ReplicateTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.ReplicateTaskQueueUserData(ctx, request)
+}
+
+func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+// RespondNexusTaskFailed implements matchingservice.MatchingServiceServer.
+func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+	panic("unimplemented")
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

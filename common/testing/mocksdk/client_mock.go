@@ -227,21 +227,6 @@ func (mr *MockClientMockRecorder) GetWorkerBuildIdCompatibility(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdCompatibility", reflect.TypeOf((*MockClient)(nil).GetWorkerBuildIdCompatibility), arg0, arg1)
 }
 
-// GetWorkerTaskReachability mocks base method.
-func (m *MockClient) GetWorkerTaskReachability(arg0 context.Context, arg1 *client.GetWorkerTaskReachabilityOptions) (*client.WorkerTaskReachability, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkerTaskReachability", arg0, arg1)
-	ret0, _ := ret[0].(*client.WorkerTaskReachability)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetWorkerTaskReachability indicates an expected call of GetWorkerTaskReachability.
-func (mr *MockClientMockRecorder) GetWorkerTaskReachability(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerTaskReachability", reflect.TypeOf((*MockClient)(nil).GetWorkerTaskReachability), arg0, arg1)
-}
-
 // GetWorkflow mocks base method.
 func (m *MockClient) GetWorkflow(arg0 context.Context, arg1, arg2 string) client.WorkflowRun {
 	m.ctrl.T.Helper()
