@@ -31,19 +31,17 @@ import (
 	"go.temporal.io/sdk/converter"
 )
 
-func mustToPayload(v any) *commonpb.Payload {
+func mustToPayload(t *testing.T, v any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(v)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	return payload
 }
 
 func TestNexusPayloadSerializer(t *testing.T) {
 	t.Parallel()
 
-	jsonProtoPayload := mustToPayload(commonpb.RetryPolicy{})
+	jsonProtoPayload := mustToPayload(t, commonpb.RetryPolicy{})
 	delete(jsonProtoPayload.Metadata, "messageType")
 	type testcase struct {
 		name         string
@@ -55,17 +53,17 @@ func TestNexusPayloadSerializer(t *testing.T) {
 	cases := []testcase{
 		{
 			name:         "json",
-			inputPayload: mustToPayload("foo"),
+			inputPayload: mustToPayload(t, "foo"),
 			header:       nexus.Header{"type": "application/json"},
 		},
 		{
 			name:         "bytes",
-			inputPayload: mustToPayload([]byte("foo")),
+			inputPayload: mustToPayload(t, []byte("foo")),
 			header:       nexus.Header{"type": "application/octet-stream"},
 		},
 		{
 			name:         "nil",
-			inputPayload: mustToPayload(nil),
+			inputPayload: mustToPayload(t, nil),
 			header:       nexus.Header{},
 		},
 		{
@@ -77,7 +75,7 @@ func TestNexusPayloadSerializer(t *testing.T) {
 		},
 		{
 			name:         "json proto",
-			inputPayload: mustToPayload(commonpb.RetryPolicy{}),
+			inputPayload: mustToPayload(t, commonpb.RetryPolicy{}),
 			header: nexus.Header{
 				"type": `application/json; format=protobuf; message-type="temporal.api.common.v1.RetryPolicy"`,
 			},
@@ -215,7 +213,7 @@ func TestNexusPayloadSerializer(t *testing.T) {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			s := nexusPayloadSerializer{}
+			s := payloadSerializer{}
 			content, err := s.Serialize(c.inputPayload)
 			require.NoError(t, err)
 			require.Equal(t, c.header, content.Header)

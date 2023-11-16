@@ -31,12 +31,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 )
 
-type nexusPayloadSerializer struct{}
+type payloadSerializer struct{}
 
 var errSerializer = errors.New("serializer error")
 
 // Deserialize implements nexus.Serializer.
-func (nexusPayloadSerializer) Deserialize(content *nexus.Content, v any) error {
+func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	payloadRef, ok := v.(**commonpb.Payload)
 	if !ok {
 		return fmt.Errorf("%w: cannot deserialize into %v", errSerializer, v)
@@ -92,7 +92,8 @@ func (nexusPayloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	case "application/octet-stream":
 		payload.Metadata["encoding"] = []byte("binary/plain")
 	default:
-		return fmt.Errorf("%w: standard content detection failed", errSerializer)
+		// Should be unreachable.
+		return fmt.Errorf("%w: standard content detection failed for %q", errSerializer, mediaType)
 	}
 	return nil
 }
@@ -138,7 +139,7 @@ func isStandardNexusContent(content *nexus.Content) bool {
 }
 
 // Serialize implements nexus.Serializer.
-func (nexusPayloadSerializer) Serialize(v any) (*nexus.Content, error) {
+func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 	payload, ok := v.(*commonpb.Payload)
 	if !ok {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)
@@ -187,13 +188,14 @@ func (nexusPayloadSerializer) Serialize(v any) (*nexus.Content, error) {
 	case "binary/plain":
 		content.Header["type"] = "application/octet-stream"
 	default:
-		return nil, fmt.Errorf("%w: standard payload detection failed", errSerializer)
+		// Should be unreachable.
+		return nil, fmt.Errorf("%w: standard payload detection failed for encoding: %q", errSerializer, encoding)
 	}
 
 	return &content, nil
 }
 
-var _ nexus.Serializer = nexusPayloadSerializer{}
+var _ nexus.Serializer = payloadSerializer{}
 
 func isStandardPayload(payload *commonpb.Payload) bool {
 	if payload.GetMetadata() == nil {
