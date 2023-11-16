@@ -61,7 +61,7 @@ However, there are several requirements that make the above challenging to imple
 
 The rest of this document describes the implementation, which addresses these requirements.
 
-The History Service has many other responsibilities which are not covered here, for example: Shard Membership and Ownership, Replication and conflict resolution, Visibility, Archival, Workflow Versioning, Workflow Reset, Scheduled workflows.
+The History Service has many other responsibilities which are not covered here, for example: Shard Membership and Ownership, Replication and conflict resolution, Visibility, Archival, Workflow Reset.
 
 ## Concepts
 
