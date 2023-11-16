@@ -94,6 +94,7 @@ Persistence details are abstracted away via a Go interface but in practice, when
 For every workflow execution, we maintain a collection of data structures summarizing various aspects of its current state, for example, the identities of in-progress activities, timers, and child workflows.
 Although most of this data could in principle be recomputed from Workflow History Events when handling an incoming request, this would be slow, and hence the summaries themselves are persisted.
 Mutable State for recently accessed workflow executions are cached in memory.
+While it would be natural to arrange the persisted data following a relational schema, Cassandra is our most important persistence backend and has very limited support for RDBMS features, so in practice the data is persisted in a single row, similar to its layout in the in-memory cache.
 
 <details>
 <summary><i>Code entrypoints</i></summary>
