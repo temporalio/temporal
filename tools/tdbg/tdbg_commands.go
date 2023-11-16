@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,7 +56,7 @@ func getCommands(
 			Name:        "shard",
 			Aliases:     []string{"s"},
 			Usage:       "Run admin operation on specific shard",
-			Subcommands: newAdminShardManagementCommands(clientFactory),
+			Subcommands: newAdminShardManagementCommands(clientFactory, taskCategoryRegistry),
 		},
 		{
 			Name:        "history-host",
@@ -241,7 +242,16 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 	}
 }
 
-func newAdminShardManagementCommands(clientFactory ClientFactory) []*cli.Command {
+func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
+	// There are two different flags for the task type, and they have slightly different semantics. The first is the
+	// task type for the list-tasks command, which is required and does not have a default. The second is the task type
+	// for the remove-task command, which is optional and defaults to transfer.
+	taskTypeFlag := getTaskTypeFlag(taskCategoryRegistry)
+	listTasksCategory := *taskTypeFlag
+	listTasksCategory.Required = true
+	removeTaskCategory := *taskTypeFlag
+	removeTaskCategory.Value = tasks.CategoryTransfer.Name()
+
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -275,11 +285,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory) []*cli.Command
 					Usage:    "The ID of the shard",
 					Required: true,
 				},
-				&cli.StringFlag{
-					Name:     FlagTaskType,
-					Usage:    "Task type: transfer, timer, replication, visibility",
-					Required: true,
-				},
+				&listTasksCategory,
 				&cli.Int64Flag{
 					Name:  FlagMinTaskID,
 					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
@@ -308,7 +314,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory) []*cli.Command
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminListShardTasks(c, clientFactory)
+				return AdminListShardTasks(c, clientFactory, taskCategoryRegistry)
 			},
 		},
 		{
@@ -337,21 +343,30 @@ func newAdminShardManagementCommands(clientFactory ClientFactory) []*cli.Command
 					Name:  FlagTaskID,
 					Usage: "taskId",
 				},
-				&cli.StringFlag{
-					Name:  FlagTaskType,
-					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication",
-				},
+				&removeTaskCategory,
 				&cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
 					Usage: "task visibility timestamp in nano (required for removing timer task)",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRemoveTask(c, clientFactory)
+				return AdminRemoveTask(c, clientFactory, taskCategoryRegistry)
 			},
 		},
 	}
+}
+
+func getTaskTypeFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
+	categories := taskCategoryRegistry.GetCategories()
+	options := make([]string, 0, len(categories))
+	for _, category := range categories {
+		options = append(options, category.Name())
+	}
+	flag := &cli.StringFlag{
+		Name:  FlagTaskType,
+		Usage: "Task type: " + strings.Join(options, ", "),
+	}
+	return flag
 }
 
 func newAdminMembershipCommands(clientFactory ClientFactory) []*cli.Command {
