@@ -79,6 +79,12 @@ type (
 		healthSignals HealthSignalAggregator
 		persistence   Queue
 	}
+
+	nexusServicePersistenceClient struct {
+		metricEmitter
+		healthSignals HealthSignalAggregator
+		persistence   NexusServiceManager
+	}
 )
 
 var _ ShardManager = (*shardPersistenceClient)(nil)
@@ -87,6 +93,7 @@ var _ TaskManager = (*taskPersistenceClient)(nil)
 var _ MetadataManager = (*metadataPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataPersistenceClient)(nil)
 var _ Queue = (*queuePersistenceClient)(nil)
+var _ NexusServiceManager = (*nexusServicePersistenceClient)(nil)
 
 // NewShardPersistenceMetricsClient creates a client to manage shards
 func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) ShardManager {
@@ -151,6 +158,18 @@ func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManag
 // NewQueuePersistenceMetricsClient creates a client to manage queue
 func NewQueuePersistenceMetricsClient(persistence Queue, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) Queue {
 	return &queuePersistenceClient{
+		metricEmitter: metricEmitter{
+			metricsHandler: metricsHandler,
+			logger:         logger,
+		},
+		healthSignals: healthSignals,
+		persistence:   persistence,
+	}
+}
+
+// NewNexusPersistenceMetricsClient creates a NexusServiceManager to manage nexus services
+func NewNexusPersistenceMetricsClient(persistence NexusServiceManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger) NexusServiceManager {
+	return &nexusServicePersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler: metricsHandler,
 			logger:         logger,
@@ -1249,6 +1268,66 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 		p.recordRequestMetrics(metrics.PersistenceInitializeSystemNamespaceScope, caller, time.Since(startTime), retErr)
 	}()
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
+}
+
+func (p *nexusServicePersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
+func (p *nexusServicePersistenceClient) Close() {
+	p.persistence.Close()
+}
+
+func (p *nexusServicePersistenceClient) GetNexusService(
+	ctx context.Context,
+	request *GetNexusServiceRequest,
+) (_ *GetNexusServiceResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceGetNexusServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.GetNexusService(ctx, request)
+}
+
+func (p *nexusServicePersistenceClient) ListNexusServices(
+	ctx context.Context,
+	request *ListNexusServicesRequest,
+) (_ *ListNexusServicesResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceListNexusServicesScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.ListNexusServices(ctx, request)
+}
+
+func (p *nexusServicePersistenceClient) CreateOrUpdateNexusService(
+	ctx context.Context,
+	request *CreateOrUpdateNexusServiceRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceCreateOrUpdateNexusServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.CreateOrUpdateNexusService(ctx, request)
+}
+
+func (p *nexusServicePersistenceClient) DeleteNexusService(
+	ctx context.Context,
+	request *DeleteNexusServiceRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceDeleteNexusServiceScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.DeleteNexusService(ctx, request)
 }
 
 func (p *metricEmitter) recordRequestMetrics(operation string, caller string, latency time.Duration, err error) {

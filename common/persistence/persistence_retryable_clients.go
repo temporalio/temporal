@@ -68,6 +68,12 @@ type (
 		policy      backoff.RetryPolicy
 		isRetryable backoff.IsRetryable
 	}
+
+	nexusServiceRetryablePersistenceClient struct {
+		persistence NexusServiceManager
+		policy      backoff.RetryPolicy
+		isRetryable backoff.IsRetryable
+	}
 )
 
 var _ ShardManager = (*shardRetryablePersistenceClient)(nil)
@@ -76,6 +82,7 @@ var _ TaskManager = (*taskRetryablePersistenceClient)(nil)
 var _ MetadataManager = (*metadataRetryablePersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRetryablePersistenceClient)(nil)
 var _ Queue = (*queueRetryablePersistenceClient)(nil)
+var _ NexusServiceManager = (*nexusServiceRetryablePersistenceClient)(nil)
 
 // NewShardPersistenceRetryableClient creates a client to manage shards
 func NewShardPersistenceRetryableClient(
@@ -129,7 +136,7 @@ func NewMetadataPersistenceRetryableClient(
 	}
 }
 
-// NewClusterMetadataPersistenceRetryableClient creates a MetadataManager client to manage metadata
+// NewClusterMetadataPersistenceRetryableClient creates a ClusterMetadataManager client to manage cluster metadata
 func NewClusterMetadataPersistenceRetryableClient(
 	persistence ClusterMetadataManager,
 	policy backoff.RetryPolicy,
@@ -149,6 +156,19 @@ func NewQueuePersistenceRetryableClient(
 	isRetryable backoff.IsRetryable,
 ) Queue {
 	return &queueRetryablePersistenceClient{
+		persistence: persistence,
+		policy:      policy,
+		isRetryable: isRetryable,
+	}
+}
+
+// NewNexusServicePersistenceRetryableClient creates a NexusServiceManager client to manage nexus services
+func NewNexusServicePersistenceRetryableClient(
+	persistence NexusServiceManager,
+	policy backoff.RetryPolicy,
+	isRetryable backoff.IsRetryable,
+) NexusServiceManager {
+	return &nexusServiceRetryablePersistenceClient{
 		persistence: persistence,
 		policy:      policy,
 		isRetryable: isRetryable,
@@ -1240,4 +1260,60 @@ func (p *queueRetryablePersistenceClient) DeleteMessageFromDLQ(
 
 func (p *queueRetryablePersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *nexusServiceRetryablePersistenceClient) GetName() string {
+	return p.persistence.GetName()
+}
+
+func (p *nexusServiceRetryablePersistenceClient) Close() {
+	p.persistence.Close()
+}
+
+func (p *nexusServiceRetryablePersistenceClient) GetNexusService(
+	ctx context.Context,
+	request *GetNexusServiceRequest,
+) (*GetNexusServiceResponse, error) {
+	var response *GetNexusServiceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetNexusService(ctx, request)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *nexusServiceRetryablePersistenceClient) ListNexusServices(
+	ctx context.Context,
+	request *ListNexusServicesRequest,
+) (*ListNexusServicesResponse, error) {
+	var response *ListNexusServicesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.ListNexusServices(ctx, request)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+func (p *nexusServiceRetryablePersistenceClient) CreateOrUpdateNexusService(
+	ctx context.Context,
+	request *CreateOrUpdateNexusServiceRequest,
+) error {
+	op := func(ctx context.Context) error {
+		return p.persistence.CreateOrUpdateNexusService(ctx, request)
+	}
+	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+}
+
+func (p *nexusServiceRetryablePersistenceClient) DeleteNexusService(
+	ctx context.Context,
+	request *DeleteNexusServiceRequest,
+) error {
+	op := func(ctx context.Context) error {
+		return p.persistence.DeleteNexusService(ctx, request)
+	}
+	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
