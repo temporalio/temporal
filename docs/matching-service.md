@@ -5,6 +5,6 @@
 
 Matching Service instances manage [Task Queues](https://docs.temporal.io/workers#task-queue) being polled by Temporal Worker processes. A single Task Queue holds tasks for many Workflow Executions.
 
-Long-poll requests from Temporal Workers are received by the Frontend Service, which routes them to the Matching Service instance respnsible for the requested Task Queue. The Matching Service instance responds by sending Workflow Tasks and Activity Tasks from the requested Task Queue.
+Long-poll requests from Temporal Workers are received by the Frontend Service, which routes them to the Matching Service instance responsible for the requested Task Queue. The Matching Service instance responds by sending Workflow Tasks and Activity Tasks from the requested Task Queue.
 
 Documentation of Matching Service internals is not yet available.
