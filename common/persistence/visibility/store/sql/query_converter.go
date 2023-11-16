@@ -79,6 +79,15 @@ type (
 	}
 )
 
+const (
+	// Default escape char is set explicitly to '!' for two reasons:
+	// 1. SQLite doesn't have a default escape char;
+	// 2. MySQL requires to escape the backslack char unlike SQLite and PostgreSQL.
+	// Thus, in order to avoid having specific code for each DB, it's better to
+	// set the escape char to a simpler char that doesn't require escaping.
+	defaultLikeEscapeChar = '!'
+)
+
 var (
 	// strings.Replacer takes a sequence of old to new replacements
 	escapeCharMap = []string{
@@ -100,6 +109,8 @@ var (
 		sqlparser.GreaterEqualStr,
 		sqlparser.InStr,
 		sqlparser.NotInStr,
+		sqlparser.StartsWithStr,
+		sqlparser.NotStartsWithStr,
 	}
 
 	supportedKeyworkListOperators = []string{
@@ -120,6 +131,8 @@ var (
 		enumspb.INDEXED_VALUE_TYPE_INT,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
+
+	defaultLikeEscapeExpr = newUnsafeSQLString(string(defaultLikeEscapeChar))
 )
 
 func newQueryConverterInternal(
@@ -372,6 +385,7 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 	if err != nil {
 		return err
 	}
+
 	switch saColNameExpr.valueType {
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		newExpr, err := c.convertKeywordListComparisonExpr(expr)
@@ -386,6 +400,27 @@ func (c *QueryConverter) convertComparisonExpr(exprRef *sqlparser.Expr) error {
 		}
 		*exprRef = newExpr
 	}
+
+	switch expr.Operator {
+	case sqlparser.StartsWithStr, sqlparser.NotStartsWithStr:
+		valueExpr, ok := expr.Right.(*unsafeSQLString)
+		if !ok {
+			return query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: %v)",
+				query.InvalidExpressionErrMessage,
+				expr.Operator,
+				sqlparser.String(expr.Right),
+			)
+		}
+		if expr.Operator == sqlparser.StartsWithStr {
+			expr.Operator = sqlparser.LikeStr
+		} else {
+			expr.Operator = sqlparser.NotLikeStr
+		}
+		expr.Escape = defaultLikeEscapeExpr
+		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+	}
+
 	return nil
 }
 
@@ -648,6 +683,18 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 		)
 	}
 	return nil
+}
+
+func escapeLikeValueForPrefixSearch(in string, escape byte) string {
+	sb := strings.Builder{}
+	for _, c := range in {
+		if c == '%' || c == '_' || c == rune(escape) {
+			sb.WriteByte(escape)
+		}
+		sb.WriteRune(c)
+	}
+	sb.WriteByte('%')
+	return sb.String()
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {
