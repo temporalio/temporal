@@ -1290,6 +1290,113 @@ func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, r
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), ctx, request)
 }
 
+// MockNexusServiceManager is a mock of NexusServiceManager interface.
+type MockNexusServiceManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockNexusServiceManagerMockRecorder
+}
+
+// MockNexusServiceManagerMockRecorder is the mock recorder for MockNexusServiceManager.
+type MockNexusServiceManagerMockRecorder struct {
+	mock *MockNexusServiceManager
+}
+
+// NewMockNexusServiceManager creates a new mock instance.
+func NewMockNexusServiceManager(ctrl *gomock.Controller) *MockNexusServiceManager {
+	mock := &MockNexusServiceManager{ctrl: ctrl}
+	mock.recorder = &MockNexusServiceManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNexusServiceManager) EXPECT() *MockNexusServiceManagerMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockNexusServiceManager) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockNexusServiceManagerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockNexusServiceManager)(nil).Close))
+}
+
+// CreateOrUpdateNexusService mocks base method.
+func (m *MockNexusServiceManager) CreateOrUpdateNexusService(ctx context.Context, request *CreateOrUpdateNexusServiceRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusService", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateOrUpdateNexusService indicates an expected call of CreateOrUpdateNexusService.
+func (mr *MockNexusServiceManagerMockRecorder) CreateOrUpdateNexusService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusService", reflect.TypeOf((*MockNexusServiceManager)(nil).CreateOrUpdateNexusService), ctx, request)
+}
+
+// DeleteNexusService mocks base method.
+func (m *MockNexusServiceManager) DeleteNexusService(ctx context.Context, request *DeleteNexusServiceRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNexusService", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteNexusService indicates an expected call of DeleteNexusService.
+func (mr *MockNexusServiceManagerMockRecorder) DeleteNexusService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusService", reflect.TypeOf((*MockNexusServiceManager)(nil).DeleteNexusService), ctx, request)
+}
+
+// GetName mocks base method.
+func (m *MockNexusServiceManager) GetName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetName indicates an expected call of GetName.
+func (mr *MockNexusServiceManagerMockRecorder) GetName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockNexusServiceManager)(nil).GetName))
+}
+
+// GetNexusService mocks base method.
+func (m *MockNexusServiceManager) GetNexusService(ctx context.Context, request *GetNexusServiceRequest) (*GetNexusServiceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNexusService", ctx, request)
+	ret0, _ := ret[0].(*GetNexusServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNexusService indicates an expected call of GetNexusService.
+func (mr *MockNexusServiceManagerMockRecorder) GetNexusService(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusService", reflect.TypeOf((*MockNexusServiceManager)(nil).GetNexusService), ctx, request)
+}
+
+// ListNexusServices mocks base method.
+func (m *MockNexusServiceManager) ListNexusServices(ctx context.Context, request *ListNexusServicesRequest) (*ListNexusServicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNexusServices", ctx, request)
+	ret0, _ := ret[0].(*ListNexusServicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNexusServices indicates an expected call of ListNexusServices.
+func (mr *MockNexusServiceManagerMockRecorder) ListNexusServices(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusServices", reflect.TypeOf((*MockNexusServiceManager)(nil).ListNexusServices), ctx, request)
+}
+
 // MockHistoryTaskQueueManager is a mock of HistoryTaskQueueManager interface.
 type MockHistoryTaskQueueManager struct {
 	ctrl     *gomock.Controller
