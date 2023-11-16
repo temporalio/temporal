@@ -400,6 +400,7 @@ message GetNexusServiceRequest {
 }
 
 message GetNexusServiceResponse {
+    temporal.server.api.persistence.v1.VersionedNexusIncomingService service = 1;
 }
 
 // (-- api-linter: core::0135::request-name-behavior=disabled
