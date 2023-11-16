@@ -43,14 +43,17 @@ app->>handler: StartWorkflowExecution
 note right of handler: State transition:<br>initialize Workflow Execution History<br>update Mutable State<br>create Transfer Task (Workflow Task)
 qp->>matching: enqueue Workflow Task
 
+note over worker: dequeue Workflow Task
 worker->>handler: RespondWorkflowTaskCompleted(ScheduleActivity)
 note right of handler: State transition:<br>append to Workflow Execution History<br>update Mutable State<br>create Transfer Task (Activity Task)
 qp->>matching: enqueue Activity Task
 
+note over worker: dequeue Activity Task
 worker->>handler: RespondActivityTaskCompleted
 note right of handler: State transition:<br>append to Workflow Execution History<br>update Mutable State<br>create Transfer Task (Workflow Task)
 qp->>matching: enqueue Workflow Task
 
+note over worker: dequeue Workflow Task
 worker->>handler: RespondWorkflowTaskCompleted(StartTimer)
 note right of handler: State transition:<br>append to Workflow Execution History<br>update Mutable State<br>create Timer Task
 
