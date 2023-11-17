@@ -55,5 +55,6 @@ type (
 		Logger                  log.Logger
 		EventSerializer         serialization.Serializer
 		DLQWriter               DLQWriter
+		HistoryPaginatedFetcher HistoryPaginatedFetcher
 	}
 )
