@@ -48,23 +48,31 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 	payload.Metadata = make(map[string][]byte)
 	payload.Data = content.Data
 
-	if !isStandardNexusContent(content) {
-		for k, v := range content.Header {
-			payload.Metadata[k] = []byte(v)
-		}
-		payload.Metadata["encoding"] = []byte("unknown/nexus-content")
+	h := maps.Clone(content.Header)
+	// We assume that encoding is handled by the transport layer and the content is decoded.
+	delete(h, "encoding")
+	// Length can safely be ignored.
+	delete(h, "length")
+
+	if len(h) > 1 {
+		setUnknownNexusContent(h, payload.Metadata)
 		return nil
 	}
 
-	contentType := content.Header.Get("type")
+	contentType := h.Get("type")
 	if contentType == "" {
-		payload.Metadata["encoding"] = []byte("binary/null")
+		if len(h) == 0 && len(content.Data) == 0 {
+			payload.Metadata["encoding"] = []byte("binary/null")
+		} else {
+			setUnknownNexusContent(h, payload.Metadata)
+		}
 		return nil
 	}
 
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return err
+		setUnknownNexusContent(h, payload.Metadata)
+		return nil
 	}
 
 	switch mediaType {
@@ -73,61 +81,39 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 		if err != nil {
 			return err
 		}
-		return nil
 	case "application/json":
-		if params["format"] == "protobuf" {
-			payload.Metadata["encoding"] = []byte("json/protobuf")
-			messageType := params["message-type"]
-			if messageType != "" {
-				payload.Metadata["messageType"] = []byte(messageType)
-			}
-		} else {
+		if len(params) == 0 {
 			payload.Metadata["encoding"] = []byte("json/plain")
+		} else if len(params) == 2 && params["format"] == "protobuf" && params["message-type"] != "" {
+			payload.Metadata["encoding"] = []byte("json/protobuf")
+			payload.Metadata["messageType"] = []byte(params["message-type"])
+		} else {
+			setUnknownNexusContent(h, payload.Metadata)
 		}
 	case "application/x-protobuf":
-		payload.Metadata["encoding"] = []byte("binary/protobuf")
-		messageType := params["message-type"]
-		if messageType != "" {
-			payload.Metadata["messageType"] = []byte(messageType)
+		if len(params) == 1 && params["message-type"] != "" {
+			payload.Metadata["encoding"] = []byte("binary/protobuf")
+			payload.Metadata["messageType"] = []byte(params["message-type"])
+		} else {
+			setUnknownNexusContent(h, payload.Metadata)
 		}
 	case "application/octet-stream":
-		payload.Metadata["encoding"] = []byte("binary/plain")
+		if len(params) == 0 {
+			payload.Metadata["encoding"] = []byte("binary/plain")
+		} else {
+			setUnknownNexusContent(h, payload.Metadata)
+		}
 	default:
-		// Should be unreachable.
-		return fmt.Errorf("%w: standard content detection failed for %q", errSerializer, mediaType)
+		setUnknownNexusContent(h, payload.Metadata)
 	}
 	return nil
 }
 
-func isStandardNexusContent(content *nexus.Content) bool {
-	h := maps.Clone(content.Header)
-	// We assume that encoding is handled by the transport layer and the content is decoded.
-	delete(h, "encoding")
-	// Length can safely be ignored.
-	delete(h, "length")
-
-	if len(h) > 1 {
-		return false
+func setUnknownNexusContent(nexusHeader nexus.Header, payloadMetadata map[string][]byte) {
+	for k, v := range nexusHeader {
+		payloadMetadata[k] = []byte(v)
 	}
-	contentType := h.Get("type")
-	if contentType == "" {
-		return len(h) == 0 && len(content.Data) == 0
-	}
-	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return false
-	}
-
-	switch mediaType {
-	case "application/octet-stream",
-		"application/x-temporal-payload":
-		return len(params) == 0
-	case "application/json":
-		return len(params) == 0 || (len(params) == 2 && params["format"] == "protobuf" && params["message-type"] != "")
-	case "application/x-protobuf":
-		return len(params) == 1 && params["message-type"] != ""
-	}
-	return false
+	payloadMetadata["encoding"] = []byte("unknown/nexus-content")
 }
 
 // Serialize implements nexus.Serializer.
@@ -141,15 +127,8 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		return &nexus.Content{Header: nexus.Header{}}, nil
 	}
 
-	if !isStandardPayload(payload) {
-		data, err := payload.Marshal()
-		if err != nil {
-			return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)
-		}
-		return &nexus.Content{
-			Header: nexus.Header{"type": "application/x-temporal-payload"},
-			Data:   data,
-		}, nil
+	if payload.GetMetadata() == nil {
+		return xTemporalPayload(payload)
 	}
 
 	content := nexus.Content{Header: nexus.Header{}, Data: payload.Data}
@@ -164,47 +143,43 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 			}
 		}
 	case "json/protobuf":
-		content.Header["type"] = fmt.Sprintf("application/json; format=protobuf")
-		if messageType != "" {
-			content.Header["type"] += fmt.Sprintf("; message-type=%q", messageType)
+		if len(payload.Metadata) != 2 || messageType == "" {
+			return xTemporalPayload(payload)
 		}
+		content.Header["type"] = fmt.Sprintf("application/json; format=protobuf; message-type=%q", messageType)
 	case "binary/protobuf":
-		content.Header["type"] = fmt.Sprintf("application/x-protobuf")
-		if messageType != "" {
-			content.Header["type"] += fmt.Sprintf("; message-type=%q", messageType)
+		if len(payload.Metadata) != 2 || messageType == "" {
+			return xTemporalPayload(payload)
 		}
+		content.Header["type"] = fmt.Sprintf("application/x-protobuf; message-type=%q", messageType)
 	case "json/plain":
 		content.Header["type"] = "application/json"
 	case "binary/null":
+		if len(payload.Metadata) != 1 {
+			return xTemporalPayload(payload)
+		}
 		// type is unset
 	case "binary/plain":
+		if len(payload.Metadata) != 1 {
+			return xTemporalPayload(payload)
+		}
 		content.Header["type"] = "application/octet-stream"
 	default:
-		// Should be unreachable.
-		return nil, fmt.Errorf("%w: standard payload detection failed for encoding: %q", errSerializer, encoding)
+		return xTemporalPayload(payload)
 	}
 
 	return &content, nil
 }
 
-var _ nexus.Serializer = payloadSerializer{}
-
-func isStandardPayload(payload *commonpb.Payload) bool {
-	if payload.GetMetadata() == nil {
-		return false
+func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
+	data, err := payload.Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("%w: payload marshal error: %w", errSerializer, err)
 	}
-
-	encoding := string(payload.Metadata["encoding"])
-	switch encoding {
-	case "unknown/nexus-content":
-		return true
-	case "json/protobuf",
-		"binary/protobuf":
-		return len(payload.Metadata) == 2 && len(payload.Metadata["messageType"]) > 0
-	case "json/plain",
-		"binary/null",
-		"binary/plain":
-		return len(payload.Metadata) == 1
-	}
-	return false
+	return &nexus.Content{
+		Header: nexus.Header{"type": "application/x-temporal-payload"},
+		Data:   data,
+	}, nil
 }
+
+var _ nexus.Serializer = payloadSerializer{}
