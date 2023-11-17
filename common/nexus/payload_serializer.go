@@ -124,7 +124,7 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 	}
 
 	if payload == nil {
-		return &nexus.Content{Header: nexus.Header{}}, nil
+		return &nexus.Content{}, nil
 	}
 
 	if payload.GetMetadata() == nil {

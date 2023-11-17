@@ -104,7 +104,8 @@ func TestNexusPayloadSerializer(t *testing.T) {
 					"encoding": []byte("binary/null"),
 				},
 			},
-			header: nexus.Header{},
+			// Yes this is the default value, but this test should have an explicit expectation.
+			header: nil,
 		},
 		{
 			name:         "nil metadata",
