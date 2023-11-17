@@ -1055,27 +1055,27 @@ type (
 		MaxRecordsPruned int
 	}
 
-	//
+	// TODO: document me
 	GetNexusServiceRequest struct {
 	}
 
-	//
+	// TODO: document me
 	GetNexusServiceResponse struct {
 	}
 
-	//
+	// TODO: document me
 	ListNexusServicesRequest struct {
 	}
 
-	//
+	// TODO: document me
 	ListNexusServicesResponse struct {
 	}
 
-	//
+	// TODO: document me
 	CreateOrUpdateNexusServiceRequest struct {
 	}
 
-	//
+	// TODO: document me
 	DeleteNexusServiceRequest struct {
 	}
 
@@ -1228,7 +1228,7 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	//
+	// TODO: document me
 	NexusServiceManager interface {
 		Closeable
 		GetName() string
