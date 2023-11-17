@@ -515,6 +515,9 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.NoError(t, err)
 		require.Equal(t, 0, len(response.Queues))
 		require.Empty(t, response.NextPageToken)
+		for _, queueName := range queueNames {
+			require.Contains(t, listedQueueNames, queueName)
+		}
 	})
 	t.Run("QueueSize", func(t *testing.T) {
 		queueType := persistence.QueueTypeHistoryDLQ

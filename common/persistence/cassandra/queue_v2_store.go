@@ -489,7 +489,6 @@ func (s *queueV2Store) ListQueues(
 		request.QueueType,
 	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
 
-	var queueNames []string
 	var queues []persistence.QueueInfo
 	for {
 		var (
@@ -501,7 +500,6 @@ func (s *queueV2Store) ListQueues(
 		if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
 			break
 		}
-		queueNames = append(queueNames, queueName)
 		q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
 		if err != nil {
 			return nil, err
