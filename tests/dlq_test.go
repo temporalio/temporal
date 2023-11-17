@@ -27,6 +27,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -402,6 +403,59 @@ func (s *dlqSuite) TestCancelRunningMerge() {
 	s.purgeMessages(ctx, dlqMessageID)
 }
 
+func (s *dlqSuite) TestListQueues() {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
+	defer cancel()
+	targetCluster := "active"
+	category := tasks.CategoryTransfer
+	sourceCluster := "test-source-cluster-" + s.T().Name()
+
+	queueKey1 := persistence.QueueKey{
+		QueueType:     persistence.QueueTypeHistoryDLQ,
+		Category:      category,
+		SourceCluster: sourceCluster + "_1",
+		TargetCluster: targetCluster,
+	}
+	_, err := s.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey1,
+	})
+	s.NoError(err)
+
+	queueKey2 := persistence.QueueKey{
+		QueueType:     persistence.QueueTypeHistoryDLQ,
+		Category:      category,
+		SourceCluster: sourceCluster + "_2",
+		TargetCluster: targetCluster,
+	}
+	_, err = s.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
+		QueueKey: queueKey2,
+	})
+	s.NoError(err)
+
+	// Insert a message to second queue
+	_, err = s.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		QueueType:     persistence.QueueTypeHistoryDLQ,
+		SourceCluster: sourceCluster + "_2",
+		TargetCluster: targetCluster,
+		Task:          &tasks.WorkflowTask{},
+		SourceShardID: 1,
+	})
+	s.NoError(err)
+
+	queueInfos := s.listQueues()
+	s.Equal(2, len(queueInfos))
+	s.Contains(queueInfos, adminservice.ListQueuesResponse_QueueInfo{
+		QueueName:    queueKey1.GetQueueName(),
+		MessageCount: 0,
+	})
+	s.Contains(queueInfos, adminservice.ListQueuesResponse_QueueInfo{
+		QueueName:    queueKey2.GetQueueName(),
+		MessageCount: 1,
+	})
+
+}
+
 func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
 	var result string
 	err := run.Get(ctx, &result)
@@ -547,7 +601,6 @@ func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse
 	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
-	fmt.Println(string(output))
 	s.writer.Truncate(0)
 	var response adminservice.DescribeDLQJobResponse
 	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
@@ -568,11 +621,32 @@ func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
 	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
-	fmt.Println(string(output))
 	s.writer.Truncate(0)
 	var response adminservice.CancelDLQJobResponse
 	s.NoError(jsonpb.Unmarshal(bytes.NewReader(output), &response))
 	return response
+}
+
+// List all queues
+func (s *dlqSuite) listQueues() []adminservice.ListQueuesResponse_QueueInfo {
+	file := testutils.CreateTemp(s.T(), "", "*")
+	args := []string{
+		"tdbg",
+		"dlq",
+		"--" + tdbg.FlagDLQVersion, "v2",
+		"list",
+		"--" + tdbg.FlagPrintJSON,
+		"--" + tdbg.FlagOutputFilename, file.Name(),
+	}
+
+	err := s.tdbgApp.Run(args)
+	s.NoError(err)
+	b := s.writer.Bytes()
+	s.writer.Truncate(0)
+	var arr []adminservice.ListQueuesResponse_QueueInfo
+	err = json.Unmarshal(b, &arr)
+	s.NoError(err)
+	return arr
 }
 
 // verifyNumTasks verifies that the specified file contains the expected number of DLQ tasks, and that each task has the
