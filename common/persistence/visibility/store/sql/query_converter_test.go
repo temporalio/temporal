@@ -329,6 +329,38 @@ func (s *queryConverterSuite) TestConvertComparisonExpr() {
 			err:    nil,
 		},
 		{
+			name:   "starts_with expression",
+			input:  "AliasForKeyword01 starts_with 'foo_bar%'",
+			output: `Keyword01 like 'foo!_bar!%%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "not starts_with expression",
+			input:  "AliasForKeyword01 not starts_with 'foo_bar%'",
+			output: `Keyword01 not like 'foo!_bar!%%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "starts_with expression error",
+			input:  "AliasForKeyword01 starts_with 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.StartsWithStr,
+			),
+		},
+		{
+			name:   "not starts_with expression error",
+			input:  "AliasForKeyword01 not starts_with 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.NotStartsWithStr,
+			),
+		},
+		{
 			name:   "like expression",
 			input:  "AliasForKeyword01 like 'foo%'",
 			output: "",

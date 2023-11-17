@@ -26,12 +26,16 @@ package update
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
 	"go.temporal.io/server/common"
@@ -67,14 +71,15 @@ type (
 	}
 
 	// Update is a state machine for the update protocol. It reads and writes
-	// messages from the go.temporal.io/api/update/v1 package. The update state
-	// machine is straightforward except in that it provides "provisional"
-	// in-between states where the update has received a message that has
-	// modified its internal state but those changes have not been made visible
-	// to clients yet (e.g. accepted or outcome futures have not been set yet).
-	// The observable changes are bound to the EventStore's effect.Controller
-	// and will be triggered when those effects are applied.
-	// State transitions (OnMessage calls) must be done while holding the workflow lock.
+	// messages from the go.temporal.io/api/update/v1 package. See the diagram
+	// in service/history/workflow/update/README.md. The update state machine is
+	// straightforward except in that it provides "provisional" in-between
+	// states where the update has received a message that has modified its
+	// internal state but those changes have not been made visible to clients
+	// yet (e.g. accepted or outcome futures have not been set yet). The
+	// observable changes are bound to the EventStore's effect.Controller and
+	// will be triggered when those effects are applied. State transitions
+	// (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
 		id              string
@@ -90,6 +95,11 @@ type (
 	}
 
 	updateOpt func(*Update)
+
+	UpdateStatus struct {
+		Stage   enumspb.UpdateWorkflowExecutionLifecycleStage
+		Outcome *updatepb.Outcome
+	}
 )
 
 // New creates a new Update instance with the provided ID that will call the
@@ -156,11 +166,76 @@ func newCompleted(
 	return upd
 }
 
-// WaitOutcome observes this Update's completion, returning the Outcome when it
-// is available. This call will block until the Outcome is known or the provided
-// context.Context expires. It is safe to call this method outside of workflow lock.
-func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
-	return u.outcome.Get(ctx)
+// WaitLifecycleStage waits until the Update has reached at least `waitStage` or
+// a timeout. If the Update reaches `waitStage` with no timeout, the most
+// advanced stage known to have been reached is returned, along with the outcome
+// if any. If there is a timeout due to the supplied soft timeout, then
+// unspecified stage and nil outcome are returned, without an error. If there is
+// a timeout due to context deadline expiry, then the error is returned as usual.
+func (u *Update) WaitLifecycleStage(
+	ctx context.Context,
+	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	softTimeout time.Duration) (UpdateStatus, error) {
+
+	switch waitStage {
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
+		return u.waitLifecycleStage(ctx, u.WaitAccepted, softTimeout)
+	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
+		return u.waitLifecycleStage(ctx, u.WaitOutcome, softTimeout)
+	default:
+		err := serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not implemented", waitStage))
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
+	}
+}
+
+func (u *Update) waitLifecycleStage(
+	ctx context.Context,
+	waitFn func(ctx context.Context) (UpdateStatus, error),
+	softTimeout time.Duration) (UpdateStatus, error) {
+
+	innerCtx, cancel := context.WithTimeout(context.Background(), softTimeout)
+	defer cancel()
+	status, err := waitFn(innerCtx)
+	if ctx.Err() != nil {
+		// Handle a context deadline expiry as usual.
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, ctx.Err()
+	}
+	if innerCtx.Err() != nil {
+		// Handle the deadline expiry as a violation of a soft deadline:
+		// return non-error empty response.
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, nil
+	}
+	return status, err
+}
+
+// Status returns an UpdateStatus containing the
+// enumspb.UpdateWorkflowExecutionLifecycleStage corresponding to the current
+// state of this Update, and the Outcome if it has one.
+func (u *Update) Status() (UpdateStatus, error) {
+	stage, err := u.state.LifecycleStage()
+	if err != nil {
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
+	}
+	var outcome *updatepb.Outcome
+	if u.outcome.Ready() {
+		outcome, err = u.outcome.Get(context.Background())
+	}
+	if err != nil {
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
+	}
+	return UpdateStatus{stage, outcome}, err
+}
+
+// WaitOutcome observes this Update's completion, returning when the Outcome is
+// available. This call will block until the Outcome is known or the provided
+// context.Context expires. It is safe to call this method outside of workflow
+// lock.
+func (u *Update) WaitOutcome(ctx context.Context) (UpdateStatus, error) {
+	outcome, err := u.outcome.Get(ctx)
+	if err != nil {
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, outcome}, err
+	}
+	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 }
 
 // WaitAccepted blocks on the acceptance of this update, returning nil if has
@@ -168,22 +243,23 @@ func (u *Update) WaitOutcome(ctx context.Context) (*updatepb.Outcome, error) {
 // been completed (including completed by rejection). This call will block until
 // the acceptance occurs or the provided context.Context expires.
 // It is safe to call this method outside of workflow lock.
-func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
+func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 	if u.outcome.Ready() {
-		// being complete implies being accepted, return the completed outcome
+		// Being complete implies being accepted; return the completed outcome
 		// here because we can.
-		return u.outcome.Get(ctx)
+		return u.WaitOutcome(ctx)
 	}
 	fail, err := u.accepted.Get(ctx)
 	if err != nil {
-		return nil, err
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, nil}, err
 	}
 	if fail != nil {
-		return &updatepb.Outcome{
+		outcome := &updatepb.Outcome{
 			Value: &updatepb.Outcome_Failure{Failure: fail},
-		}, nil
+		}
+		return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, outcome}, nil
 	}
-	return nil, nil
+	return UpdateStatus{enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil}, nil
 }
 
 // OnMessage delivers a message to the Update state machine. The proto.Message
@@ -192,8 +268,11 @@ func (u *Update) WaitAccepted(ctx context.Context) (*updatepb.Outcome, error) {
 // Body field contains an instance from the same list. Writes to the EventStore
 // occur synchronously but externally observable effects on this Update (e.g.
 // emitting an Outcome or an Accepted) are registered with the EventStore to be
-// applied after the durable updates are committed. If the EventStore rolls
-// back its effects, this state machine does the same.
+// applied after the durable updates are committed. If the EventStore rolls back
+// its effects, this state machine does the same.
+//
+// If you modify the state machine please update the diagram in
+// service/history/workflow/update/README.md.
 func (u *Update) OnMessage(
 	ctx context.Context,
 	msg proto.Message,

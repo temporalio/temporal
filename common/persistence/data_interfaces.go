@@ -1217,6 +1217,7 @@ type (
 		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
 		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
 		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+		ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
@@ -1291,6 +1292,17 @@ type (
 
 	DeleteTasksResponse struct {
 		MessagesDeleted int64
+	}
+
+	ListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ListQueuesResponse struct {
+		QueueNames    []string
+		NextPageToken []byte
 	}
 )
 
