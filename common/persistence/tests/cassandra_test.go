@@ -1065,7 +1065,7 @@ func testCassandraQueueV2MultiplePartitionsReadMessages(t *testing.T, cluster *c
 
 func testCassandraQueueV2MultiplePartitionsListQueues(t *testing.T, cluster *cassandra.TestCluster) {
 	// Manually insert a row into the queues table that has multiple partitions and then verify that we gracefully
-	// handle the error when we try to read messages from this queue.
+	// handle the error when we try to list queues.
 
 	session := cluster.GetSession()
 	logger := &testLogger{}

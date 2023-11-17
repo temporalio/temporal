@@ -206,15 +206,15 @@ func (l *logRecorder) Error(msg string, _ ...tag.Tag) {
 
 func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	ctx := context.Background()
-	t.Run("GetPartitionFailsForListQueues", func(t *testing.T) {
-		t.Parallel()
-		testListQueuesGetPartitionFails(ctx, t, baseDB)
-	})
 	t.Run("TestListQueueFailsToGetLastMessageID", func(t *testing.T) {
 		testListQueueFailsToGetLastMessageID(ctx, t, baseDB)
 	})
 	t.Run("TestListQueueFailsToExtractQueueMetadata", func(t *testing.T) {
 		testListQueueFailsToExtractQueueMetadata(ctx, t, baseDB)
+	})
+	t.Run("GetPartitionFailsForListQueues", func(t *testing.T) {
+		t.Parallel()
+		testListQueuesGetPartitionFails(ctx, t, baseDB)
 	})
 	t.Run("QueueInsertFails", func(t *testing.T) {
 		t.Parallel()
@@ -242,7 +242,7 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	})
 	t.Run("GetPartitionFailsForRangeDelete", func(t *testing.T) {
 		t.Parallel()
-		testGetPartitionFails(ctx, t, baseDB)
+		testGetPartitionFailsForRangeDelete(ctx, t, baseDB)
 	})
 	t.Run("GetLastMessageIDForDeleteFails", func(t *testing.T) {
 		t.Parallel()
@@ -407,15 +407,11 @@ func testInsertIntoQueueV2MetadataFails(ctx context.Context, t *testing.T, baseD
 	assert.ErrorContains(t, err, "InsertIntoQueueV2Metadata operation failed")
 }
 
-func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+func testGetPartitionFailsForRangeDelete(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	db := &faultyDB{
-		DB:                  baseDB,
-		insertMetadataError: ErrInsertMetadataFailed,
-	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger)
 	queuePB := persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},
@@ -671,12 +667,8 @@ func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, b
 func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	db := &faultyDB{
-		DB:                  baseDB,
-		insertMetadataError: ErrInsertMetadataFailed,
-	}
 	logger := &logRecorder{Logger: log.NewTestLogger()}
-	q := persistencesql.NewQueueV2(db, logger)
+	q := persistencesql.NewQueueV2(baseDB, logger)
 	queuePB := persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
 			0: {},

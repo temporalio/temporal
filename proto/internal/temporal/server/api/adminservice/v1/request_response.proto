@@ -525,17 +525,12 @@ message ListQueuesRequest {
   bytes next_page_token = 3;
 }
 
-message QueueInfo {
-  string queue_name = 1;
-  int64 message_count = 2;
-}
-
 message ListQueuesResponse {
   message QueueInfo {
     string queue_name = 1;
     int64 message_count = 2;
   }
-  repeated adminservice.v1.QueueInfo queues = 1;
+  repeated QueueInfo queues = 1;
   bytes next_page_token = 2;
 }
 

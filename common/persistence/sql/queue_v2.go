@@ -443,24 +443,24 @@ func (q *queueV2) ListQueues(
 			err),
 		)
 	}
-	var queueInfos []persistence.QueueInfo
+	var queues []persistence.QueueInfo
 	for _, row := range rows {
 		messageCount, err := q.getMessageCount(ctx, &row)
 		if err != nil {
 			return nil, err
 		}
-		queueInfos = append(queueInfos, persistence.QueueInfo{
+		queues = append(queues, persistence.QueueInfo{
 			QueueName:    row.QueueName,
 			MessageCount: messageCount,
 		})
 	}
-	lastReadQueueNumber := offset + int64(len(queueInfos))
+	lastReadQueueNumber := offset + int64(len(queues))
 	var nextPageToken []byte
-	if len(queueInfos) > 0 {
+	if len(queues) > 0 {
 		nextPageToken = persistence.GetNextPageTokenForListQueues(lastReadQueueNumber)
 	}
 	response := &persistence.InternalListQueuesResponse{
-		Queues:        queueInfos,
+		Queues:        queues,
 		NextPageToken: nextPageToken,
 	}
 	return response, nil
