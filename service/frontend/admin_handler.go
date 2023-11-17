@@ -1907,6 +1907,7 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 		OperationState:         state,
 		MaxMessageId:           queryResponse.MaxMessageIDToProcess,
 		LastProcessedMessageId: queryResponse.LastProcessedMessageID,
+		MessagesProcessed:      queryResponse.NumberOfMessagesProcessed,
 		StartTime:              execution.WorkflowExecutionInfo.StartTime,
 		EndTime:                execution.WorkflowExecutionInfo.CloseTime,
 	}, nil
@@ -1954,6 +1955,25 @@ func (adh *AdminHandler) AddTasks(
 		return nil, err
 	}
 	return &adminservice.AddTasksResponse{}, nil
+}
+
+func (adh *AdminHandler) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+) (*adminservice.ListQueuesResponse, error) {
+	historyServiceRequest := &historyservice.ListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	}
+	resp, err := adh.historyClient.ListQueues(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {

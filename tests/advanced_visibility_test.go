@@ -484,11 +484,14 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("justice for all"),
+	searchAttr, err := searchattribute.Encode(
+		map[string]any{
+			"CustomKeywordField": "justice for all",
 		},
-	}
+		&searchattribute.TestNameTypeMap,
+	)
+	s.NoError(err)
+
 	request.SearchAttributes = searchAttr
 	we1, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
@@ -540,59 +543,99 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
-	if s.isElasticsearchEnabled {
-		// LIKE is supported on Elasticsearch only.
-
-		// LIKE exact match on Keyword (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%justice for all%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE %word% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%justice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE %chars% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%ice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE NOT %chars% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField NOT LIKE "%ice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		executionCount := 0
-		for _, execution := range resp.GetExecutions() {
-			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
-			var saValue string
-			err = payload.Decode(saPayload, &saValue)
-			s.NoError(err)
-			if strings.Contains(saValue, "ice") {
-				executionCount++ // execution will be found because NOT LIKE is not supported.
-			}
-		}
-		s.Equal(executionCount, 1)
+	// Prefix search
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField STARTS_WITH "justice"`,
 	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
+	s.Equal(wt, resp.Executions[0].GetType().GetName())
+	s.Equal(searchAttr, resp.Executions[0].GetSearchAttributes())
+
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     fmt.Sprintf(`WorkflowId = %q AND CustomKeywordField NOT STARTS_WITH "justice"`, id),
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+}
+
+func (s *advancedVisibilitySuite) TestListWorkflow_LikeQuery() {
+	if !s.isElasticsearchEnabled {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
+	id := "es-functional-list-workflow-keyword-query-like-test"
+	wt := "es-functional-list-workflow-keyword-query-like-test-type"
+	tl := "es-functional-list-workflow-keyword-query-like-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("foo bar"),
+		},
+	}
+	request.SearchAttributes = searchAttr
+	_, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	time.Sleep(waitForESToSettle)
+
+	// LIKE exact match on Keyword (supported)
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%foo bar%"`,
+	}
+	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %word% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%foo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%oo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE NOT %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField NOT LIKE "%oo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	executionCount := 0
+	for _, execution := range resp.GetExecutions() {
+		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
+		var saValue string
+		err = payload.Decode(saPayload, &saValue)
+		s.NoError(err)
+		if strings.Contains(saValue, "oo") {
+			executionCount++ // execution will be found because NOT LIKE is not supported.
+		}
+	}
+	s.Equal(executionCount, 1)
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
@@ -1190,7 +1233,7 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 		}
 	}
 
-	query := `GROUP BY ExecutionStatus`
+	query := fmt.Sprintf(`WorkflowType = %q GROUP BY ExecutionStatus`, wt)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		Query:     query,
@@ -1913,6 +1956,94 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
 	s.NotNil(failedEventAttr.GetFailure())
+}
+
+func (s *advancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
+	var (
+		ctx         = NewContext()
+		id          = s.randomizeStr(s.T().Name())
+		childWfType = "child-wf-type-" + id
+		wfType      = "wf-type-" + id
+		taskQueue   = "task-queue-" + id
+	)
+
+	childWf := func(ctx workflow.Context) error {
+		return nil
+	}
+	wf := func(ctx workflow.Context) error {
+		err := workflow.ExecuteChildWorkflow(ctx, childWfType).Get(ctx, nil)
+		return err
+	}
+
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
+	w.RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
+	s.Require().NoError(w.Start())
+
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, wfType)
+	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
+	w.Stop()
+
+	// check child workflow has parent workflow
+	var childWfInfo *workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			resp, err := s.engine.ListWorkflowExecutions(
+				ctx,
+				&workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.namespace,
+					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
+					PageSize:  defaultPageSize,
+				},
+			)
+			if err != nil {
+				return false
+			}
+			if len(resp.Executions) != 1 {
+				return false
+			}
+			childWfInfo = resp.Executions[0]
+			return true
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.NotNil(childWfInfo)
+	parentExecution := childWfInfo.GetParentExecution()
+	s.NotNil(parentExecution)
+	s.Equal(id, parentExecution.GetWorkflowId())
+
+	// check main workflow doesn't have parent workflow
+	var wfInfo *workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			resp, err := s.engine.ListWorkflowExecutions(
+				ctx,
+				&workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.namespace,
+					Query:     fmt.Sprintf("WorkflowType = %q", wfType),
+					PageSize:  defaultPageSize,
+				},
+			)
+			if err != nil {
+				return false
+			}
+			if len(resp.Executions) != 1 {
+				return false
+			}
+			wfInfo = resp.Executions[0]
+			return true
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.NotNil(wfInfo)
+	s.Nil(wfInfo.GetParentExecution())
 }
 
 func (s *advancedVisibilitySuite) Test_LongWorkflowID() {

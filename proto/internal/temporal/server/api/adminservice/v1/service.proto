@@ -164,5 +164,7 @@ service AdminService {
     rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {}
 
     rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
 }
 

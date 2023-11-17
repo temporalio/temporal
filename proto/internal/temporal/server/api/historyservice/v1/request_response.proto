@@ -41,7 +41,6 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
@@ -517,7 +516,8 @@ message GetShardResponse {
 
 message RemoveTaskRequest {
     int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
+    // The task category. See tasks.TaskCategoryRegistry for more.
+    int32 category = 2;
     int64 task_id = 3;
     google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
@@ -667,6 +667,7 @@ message ImportWorkflowExecutionRequest {
 
 message ImportWorkflowExecutionResponse {
     bytes token = 1;
+    bool events_applied = 2;
 }
 
 message DeleteWorkflowVisibilityRecordRequest {
@@ -774,6 +775,17 @@ message DeleteDLQTasksRequest {
 message DeleteDLQTasksResponse {
     // messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
     int64 messages_deleted = 1;
+}
+
+message ListQueuesRequest {
+    int32 queue_type = 1;
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+    repeated string queue_names = 1;
+    bytes next_page_token = 2;
 }
 
 message AddTasksRequest {

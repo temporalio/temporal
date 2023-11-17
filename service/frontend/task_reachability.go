@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"

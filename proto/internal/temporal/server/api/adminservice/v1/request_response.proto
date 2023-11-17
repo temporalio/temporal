@@ -116,7 +116,8 @@ message GetShardResponse {
 
 message ListHistoryTasksRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   temporal.server.api.history.v1.TaskRange task_range = 3;
   int32 batch_size = 4;
   bytes next_page_token = 5;
@@ -139,7 +140,8 @@ message Task {
 
 message RemoveTaskRequest {
   int32 shard_id = 1;
-  temporal.server.api.enums.v1.TaskCategory category = 2;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
   int64 task_id = 3;
   google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
@@ -486,6 +488,8 @@ message DescribeDLQJobResponse {
   // For PurgeDLQTasks job, it the ID of the last message that was purged.
   // For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
   int64 last_processed_message_id = 7;
+  // messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
+  int64 messages_processed = 8;
 }
 
 message CancelDLQJobRequest {
@@ -514,4 +518,15 @@ message AddTasksRequest {
 }
 
 message AddTasksResponse {}
+
+message ListQueuesRequest {
+  int32 queue_type = 1;
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+  repeated string queue_names = 1;
+  bytes next_page_token = 2;
+}
 

@@ -64,6 +64,8 @@ type (
 		Encoding             string
 		TaskQueue            string
 		SearchAttributes     *VisibilitySearchAttributes
+		ParentWorkflowID     *string
+		ParentRunID          *string
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

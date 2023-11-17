@@ -26,7 +26,6 @@ package updateworkflow
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -67,28 +66,6 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
-
-	var waitLifecycleStage func(ctx context.Context, u *update.Update) (*updatepb.Outcome, error)
-	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
-	switch waitStage {
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
-		waitLifecycleStage = func(
-			ctx context.Context,
-			u *update.Update,
-		) (*updatepb.Outcome, error) {
-			return u.WaitAccepted(ctx)
-		}
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
-		waitLifecycleStage = func(
-			ctx context.Context,
-			u *update.Update,
-		) (*updatepb.Outcome, error) {
-			return u.WaitOutcome(ctx)
-		}
-	default:
-		return nil, serviceerror.NewUnimplemented(
-			fmt.Sprintf("%v is not implemented", waitStage))
-	}
 
 	wfKey := definition.NewWorkflowKey(
 		req.NamespaceId,
@@ -236,7 +213,15 @@ func Invoke(
 		}
 	}
 
-	updOutcome, err := waitLifecycleStage(ctx, upd)
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	// If the long-poll times out due to serverTimeout then return a non-error empty response.
+	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +234,8 @@ func Invoke(
 				},
 				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: updOutcome,
+			Outcome: status.Outcome,
+			Stage:   status.Stage,
 		},
 	}
 
