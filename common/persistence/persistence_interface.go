@@ -825,8 +825,13 @@ type (
 		NextPageToken []byte
 	}
 
+	QueueInfo struct {
+		QueueName    string
+		MessageCount int64
+	}
+
 	InternalListQueuesResponse struct {
-		QueueNames    []string
+		Queues        []QueueInfo
 		NextPageToken []byte
 	}
 )

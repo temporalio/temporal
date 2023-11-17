@@ -1970,8 +1970,15 @@ func (adh *AdminHandler) ListQueues(
 	if err != nil {
 		return nil, err
 	}
+	queues := make([]*adminservice.QueueInfo, len(resp.Queues))
+	for i, queue := range resp.Queues {
+		queues[i] = &adminservice.QueueInfo{
+			QueueName:    queue.QueueName,
+			MessageCount: queue.MessageCount,
+		}
+	}
 	return &adminservice.ListQueuesResponse{
-		QueueNames:    resp.QueueNames,
+		Queues:        queues,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }

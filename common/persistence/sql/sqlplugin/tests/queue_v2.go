@@ -206,7 +206,16 @@ func (l *logRecorder) Error(msg string, _ ...tag.Tag) {
 
 func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	ctx := context.Background()
-
+	t.Run("GetPartitionFailsForListQueues", func(t *testing.T) {
+		t.Parallel()
+		testListQueuesGetPartitionFails(ctx, t, baseDB)
+	})
+	t.Run("TestListQueueFailsToGetLastMessageID", func(t *testing.T) {
+		testListQueueFailsToGetLastMessageID(ctx, t, baseDB)
+	})
+	t.Run("TestListQueueFailsToExtractQueueMetadata", func(t *testing.T) {
+		testListQueueFailsToExtractQueueMetadata(ctx, t, baseDB)
+	})
 	t.Run("QueueInsertFails", func(t *testing.T) {
 		t.Parallel()
 		testQueueInsertFails(ctx, t, baseDB)
@@ -271,7 +280,6 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 		t.Parallel()
 		testSelectNameFromQueueV2NegativeToken(ctx, t, baseDB)
 	})
-
 }
 
 func testQueueInsertFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
@@ -658,4 +666,78 @@ func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, b
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, persistence.ErrNegativeListQueuesOffset)
+}
+
+func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		insertMetadataError: ErrInsertMetadataFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	queuePB := persistencespb.Queue{
+		Partitions: map[int32]*persistencespb.QueuePartition{
+			0: {},
+			1: {},
+		},
+	}
+	bytes, _ := queuePB.Marshal()
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  bytes,
+		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
+	}
+	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
+	require.NoError(t, err)
+	_, err = q.ListQueues(context.Background(), &persistence.InternalListQueuesRequest{
+		QueueType: persistence.QueueTypeHistoryNormal,
+		PageSize:  100,
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "partitions")
+}
+
+func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	db := &faultyDB{
+		DB:                  baseDB,
+		getLastMessageIdErr: ErrGetLastMessageIdFailed,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	assert.NoError(t, err)
+	_, err = q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, ErrGetLastMessageIdFailed.Error())
+}
+
+func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	q := persistencesql.NewQueueV2(baseDB, log.NewTestLogger())
+	row := sqlplugin.QueueV2MetadataRow{
+		QueueType:        queueType,
+		QueueName:        queueName,
+		MetadataPayload:  []byte("test"),
+		MetadataEncoding: "invalid_encoding",
+	}
+	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
+	assert.NoError(t, err)
+	_, err = q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
+	})
+	assert.Error(t, err)
+	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 }

@@ -783,7 +783,11 @@ message ListQueuesRequest {
 }
 
 message ListQueuesResponse {
-    repeated string queue_names = 1;
+    message QueueInfo {
+        string queue_name = 1;
+        int64 message_count = 2;
+    }
+    repeated QueueInfo queues = 1;
     bytes next_page_token = 2;
 }
 
