@@ -68,14 +68,11 @@ type sutConnector struct {
 
 func newSystemUnderTestConnector(s *functionalSuite) *sutConnector {
 	id := uuid.New()
-	taskQueue := &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id}
-
 	return &sutConnector{
 		suite:           s,
 		identity:        "worker-1",
-		taskQueue:       taskQueue,
-		stickyTaskQueue: stickyTaskQueue,
+		taskQueue:       &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		stickyTaskQueue: &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id},
 		id:              id,
 	}
 
@@ -99,7 +96,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 }
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
-	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, b.taskToken)
+	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, token)
 	_, err := b.suite.engine.RespondWorkflowTaskCompleted(NewContext(), request)
 	return err
 }
