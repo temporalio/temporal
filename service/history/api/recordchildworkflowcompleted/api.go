@@ -105,6 +105,8 @@ func Invoke(
 					return nil, consts.ErrChildExecutionNotFound
 				}
 				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+				// note values used here should not matter because the child info will be deleted
+				// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
 				_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
 					request.GetChildExecution(),
 					initiatedAttr.WorkflowType,
