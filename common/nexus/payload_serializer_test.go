@@ -41,8 +41,6 @@ func mustToPayload(t *testing.T, v any) *commonpb.Payload {
 func TestNexusPayloadSerializer(t *testing.T) {
 	t.Parallel()
 
-	jsonProtoPayload := mustToPayload(t, commonpb.RetryPolicy{})
-	delete(jsonProtoPayload.Metadata, "messageType")
 	type testcase struct {
 		name         string
 		inputPayload *commonpb.Payload
@@ -68,20 +66,13 @@ func TestNexusPayloadSerializer(t *testing.T) {
 		},
 		{
 			name:         "json proto",
-			inputPayload: jsonProtoPayload,
-			header: nexus.Header{
-				"type": "application/json; format=protobuf",
-			},
-		},
-		{
-			name:         "json proto",
 			inputPayload: mustToPayload(t, commonpb.RetryPolicy{}),
 			header: nexus.Header{
 				"type": `application/json; format=protobuf; message-type="temporal.api.common.v1.RetryPolicy"`,
 			},
 		},
 		{
-			name: "binary proto",
+			name: "binary proto with no messageType",
 			inputPayload: &commonpb.Payload{
 				Data: []byte("ignored"),
 				Metadata: map[string][]byte{
@@ -89,7 +80,7 @@ func TestNexusPayloadSerializer(t *testing.T) {
 				},
 			},
 			header: nexus.Header{
-				"type": "application/x-protobuf",
+				"type": "application/x-temporal-payload",
 			},
 		},
 		{

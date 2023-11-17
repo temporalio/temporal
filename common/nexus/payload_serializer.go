@@ -25,6 +25,7 @@ package nexus
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"mime"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -99,7 +100,7 @@ func (payloadSerializer) Deserialize(content *nexus.Content, v any) error {
 }
 
 func isStandardNexusContent(content *nexus.Content) bool {
-	h := content.Header
+	h := maps.Clone(content.Header)
 	// We assume that encoding is handled by the transport layer and the content is decoded.
 	delete(h, "encoding")
 	// Length can safely be ignored.
@@ -122,18 +123,9 @@ func isStandardNexusContent(content *nexus.Content) bool {
 		"application/x-temporal-payload":
 		return len(params) == 0
 	case "application/json":
-		if params["format"] == "protobuf" {
-			if params["message-type"] != "" {
-				return len(params) == 2
-			}
-			return len(params) == 1
-		}
-		return len(params) == 0
+		return len(params) == 0 || (len(params) == 2 && params["format"] == "protobuf" && params["message-type"] != "")
 	case "application/x-protobuf":
-		if params["message-type"] != "" {
-			return len(params) == 1
-		}
-		return len(params) == 0
+		return len(params) == 1 && params["message-type"] != ""
 	}
 	return false
 }
@@ -208,10 +200,7 @@ func isStandardPayload(payload *commonpb.Payload) bool {
 		return true
 	case "json/protobuf",
 		"binary/protobuf":
-		if _, ok := payload.Metadata["messageType"]; ok {
-			return len(payload.Metadata) == 2
-		}
-		return len(payload.Metadata) == 1
+		return len(payload.Metadata) == 2 && len(payload.Metadata["messageType"]) > 0
 	case "json/plain",
 		"binary/null",
 		"binary/plain":
