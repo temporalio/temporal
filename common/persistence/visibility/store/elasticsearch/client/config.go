@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"go.temporal.io/server/common/auth"
 )
 
 const (
@@ -51,6 +53,7 @@ type (
 		CloseIdleConnectionsInterval time.Duration             `yaml:"closeIdleConnectionsInterval"`
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
+		TLS                          *auth.TLS                 `yaml:"tls"`
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS

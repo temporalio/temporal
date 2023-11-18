@@ -27,6 +27,10 @@ package auth
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"os"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -94,4 +98,88 @@ func tlsCN(state tls.ConnectionState) string {
 		return ""
 	}
 	return state.PeerCertificates[0].Subject.CommonName
+}
+
+func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
+	if temporalTls == nil || !temporalTls.Enabled {
+		return nil, nil
+	}
+	if temporalTls.CertData != "" && temporalTls.CertFile != "" {
+		return nil, errors.New("only one of certData or certFile properties should be specified")
+	}
+
+	if temporalTls.KeyData != "" && temporalTls.KeyFile != "" {
+		return nil, errors.New("only one of keyData or keyFile properties should be specified")
+	}
+
+	if temporalTls.CaData != "" && temporalTls.CaFile != "" {
+		return nil, errors.New("only one of caData or caFile properties should be specified")
+	}
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: !temporalTls.EnableHostVerification,
+	}
+	if temporalTls.ServerName != "" {
+		tlsConfig.ServerName = temporalTls.ServerName
+	}
+
+	// Load CA cert
+	var caBytes []byte
+	var err error
+	if temporalTls.CaFile != "" {
+		caBytes, err = os.ReadFile(temporalTls.CaFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client ca file %w", err)
+		}
+	} else if temporalTls.CaData != "" {
+		caBytes, err = base64.StdEncoding.DecodeString(temporalTls.CaData)
+		if err != nil {
+			return nil, fmt.Errorf("error decoding client ca data %w", err)
+		}
+	}
+	if len(caBytes) > 0 {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caBytes) {
+			return nil, errors.New("failed to load decoded CA Cert as PEM")
+		}
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	// Load client cert
+	var certBytes []byte
+	var keyBytes []byte
+	if temporalTls.CertFile != "" {
+		certBytes, err = os.ReadFile(temporalTls.CertFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate file: %w", err)
+		}
+	} else if temporalTls.CertData != "" {
+		certBytes, err = base64.StdEncoding.DecodeString(temporalTls.CertData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
+		}
+	}
+
+	if temporalTls.KeyFile != "" {
+		keyBytes, err = os.ReadFile(temporalTls.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
+		}
+	} else if temporalTls.KeyData != "" {
+		keyBytes, err = base64.StdEncoding.DecodeString(temporalTls.KeyData)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
+		}
+	}
+
+	if len(certBytes) > 0 {
+		clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{clientCert}
+	}
+
+	return tlsConfig, nil
 }
