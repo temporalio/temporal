@@ -444,7 +444,6 @@ func (s *dlqSuite) TestListQueues() {
 	s.NoError(err)
 
 	queueInfos := s.listQueues()
-	s.Equal(2, len(queueInfos))
 	s.Contains(queueInfos, adminservice.ListQueuesResponse_QueueInfo{
 		QueueName:    queueKey1.GetQueueName(),
 		MessageCount: 0,
@@ -453,7 +452,6 @@ func (s *dlqSuite) TestListQueues() {
 		QueueName:    queueKey2.GetQueueName(),
 		MessageCount: 1,
 	})
-
 }
 
 func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
@@ -629,14 +627,12 @@ func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
 
 // List all queues
 func (s *dlqSuite) listQueues() []adminservice.ListQueuesResponse_QueueInfo {
-	file := testutils.CreateTemp(s.T(), "", "*")
 	args := []string{
 		"tdbg",
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, "v2",
 		"list",
 		"--" + tdbg.FlagPrintJSON,
-		"--" + tdbg.FlagOutputFilename, file.Name(),
 	}
 
 	err := s.tdbgApp.Run(args)

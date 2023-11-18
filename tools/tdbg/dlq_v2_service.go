@@ -397,7 +397,7 @@ func (ac *DLQV2Service) ListQueues(c *cli.Context) (err error) {
 
 	printJson := c.Bool(FlagPrintJSON)
 	if printJson {
-		err = newEncoder(ac.writer).Encode(items)
+		err = newEncoder(outputFile).Encode(items)
 	} else {
 		err = printTable(items, outputFile)
 	}
