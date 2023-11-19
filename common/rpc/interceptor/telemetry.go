@@ -66,15 +66,20 @@ var (
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 
 	grpcActions = map[string]struct{}{
-		metrics.FrontendQueryWorkflowScope:                    {},
-		metrics.FrontendRecordActivityTaskHeartbeatScope:      {},
-		metrics.FrontendRecordActivityTaskHeartbeatByIdScope:  {},
-		metrics.FrontendResetWorkflowExecutionScope:           {},
-		metrics.FrontendStartWorkflowExecutionScope:           {},
-		metrics.FrontendSignalWorkflowExecutionScope:          {},
-		metrics.FrontendSignalWithStartWorkflowExecutionScope: {},
-		metrics.FrontendRespondWorkflowTaskCompletedScope:     {},
-		metrics.FrontendPollActivityTaskQueueScope:            {},
+		"QueryWorkflow":                    {},
+		"RecordActivityTaskHeartbeat":      {},
+		"RecordActivityTaskHeartbeatById":  {},
+		"ResetWorkflowExecution":           {},
+		"StartWorkflowExecution":           {},
+		"SignalWorkflowExecution":          {},
+		"SignalWithStartWorkflowExecution": {},
+		"RespondWorkflowTaskCompleted":     {},
+		"PollActivityTaskQueue":            {},
+		"CreateSchedule":                   {},
+		"UpdateSchedule":                   {},
+		"DeleteSchedule":                   {},
+		"PatchSchedule":                    {},
+		"UpdateWorkflowExecution":          {},
 	}
 
 	commandActions = map[enums.CommandType]struct{}{
@@ -221,8 +226,10 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 				case enums.COMMAND_TYPE_RECORD_MARKER:
 					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 					hasMarker = true
-					markerName := command.GetRecordMarkerCommandAttributes().GetMarkerName()
-					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_RecordMarker_"+markerName))
+				case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+					// Each child workflow counts as 2 actions. We use separate tags to track them separately.
+					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
+					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
 				default:
 					// handle all other command action
 					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))

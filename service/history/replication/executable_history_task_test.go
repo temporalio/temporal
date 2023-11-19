@@ -73,6 +73,7 @@ type (
 		executableTask          *MockExecutableTask
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		eventSerializer         serialization.Serializer
+		mockExecutionManager    *persistence.MockExecutionManager
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
@@ -110,6 +111,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.eventSerializer = serialization.NewSerializer()
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
 	firstEventID := rand.Int63()
 	nextEventID := firstEventID + 1
@@ -151,7 +153,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		EventSerializer:         s.eventSerializer,
-		DLQWriter:               NewExecutionManagerDLQWriter(),
+		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	}
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,
@@ -293,14 +295,12 @@ func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
 
 	shardID := rand.Int31()
 	shardContext := shard.NewMockContext(s.controller)
-	executionManager := persistence.NewMockExecutionManager(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	shardContext.EXPECT().GetExecutionManager().Return(executionManager).AnyTimes()
-	executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
 		ShardID:           shardID,
 		SourceClusterName: s.sourceClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{

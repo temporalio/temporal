@@ -50,7 +50,7 @@ func Invoke(
 		return nil, serviceerror.NewInvalidArgument("must supply inclusive_max_task_metadata")
 	}
 
-	_, err = historyTaskQueueManager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
+	resp, err := historyTaskQueueManager.DeleteTasks(ctx, &persistence.DeleteTasksRequest{
 		QueueKey: persistence.QueueKey{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			Category:      category,
@@ -65,5 +65,5 @@ func Invoke(
 		return nil, err
 	}
 
-	return &historyservice.DeleteDLQTasksResponse{}, nil
+	return &historyservice.DeleteDLQTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
 }

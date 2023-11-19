@@ -9,13 +9,13 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version bins ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto install-proto-submodule buf-lint api-linter protoc fix-proto-path goimports-proto proto-mocks copyright-proto
+proto: clean-proto buf-lint api-linter protoc fix-proto-path goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
 update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
@@ -42,6 +42,9 @@ VISIBILITY_DB ?= temporal_visibility
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
 endif
+
+export TEST_TOTAL_SHARDS ?= $(BUILDKITE_PARALLEL_JOB_COUNT)
+export TEST_SHARD_INDEX ?= $(BUILDKITE_PARALLEL_JOB)
 
 ##### Variables ######
 
@@ -87,11 +90,10 @@ PINNED_DEPENDENCIES := \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
-COVER_ROOT                      := ./.coverage
-NEW_COVER_PROFILE 							= $(COVER_ROOT)/$(shell xxd -p -l 16 /dev/urandom)_coverprofile.out # generates a new filename each time it's substituted.
-SUMMARY_COVER_PROFILE           := $(COVER_ROOT)/summary.out
-REPORT_ROOT                     := ./.testreport
-NEW_REPORT 											= $(REPORT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).xml # generates a new filename each time it's substituted.
+TEST_OUTPUT_ROOT        := ./.testoutput
+NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
+SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
+NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
 
 # DB
 SQL_USER ?= temporal
@@ -102,8 +104,8 @@ SQL_PASSWORD ?= temporal
 #   Apply coverage analysis in each test to the given list of packages.
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
-INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/...,$(MODULE_ROOT)/tools/..."
-FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/...,$(MODULE_ROOT)/tools/..."
+INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/..."
+FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/..."
 
 # Only prints output if the exit code is non-zero
 define silent_exec
@@ -116,6 +118,9 @@ define silent_exec
 endef
 
 ##### Tools #####
+print-go-version:
+	@go version
+
 update-goimports:
 	@printf $(COLOR) "Install/update goimports..."
 	@go install golang.org/x/tools/cmd/goimports@latest
@@ -247,8 +252,8 @@ copyright:
 	@printf $(COLOR) "Fix license header..."
 	@go run ./cmd/tools/copyright/licensegen.go
 
-goimports: MERGE_BASE ?= $(shell git merge-base $(MAIN_BRANCH) HEAD)
-goimports: MODIFIED_FILES := $(shell git diff --name-status $(MERGE_BASE) -- | cut -f2)
+goimports: MERGE_BASE ?= $(shell test -d .git && git merge-base $(MAIN_BRANCH) HEAD)
+goimports: MODIFIED_FILES := $(shell test -d .git && git diff --name-status $(MERGE_BASE) -- | cut -f2)
 goimports:
 	@printf $(COLOR) "Run goimports for modified files..."
 	@printf "Merge base: $(MERGE_BASE)\n"
@@ -283,12 +288,8 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 clean-test-results:
-	@rm -f test.log $(COVER_ROOT)/* $(REPORT_ROOT)/*
+	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache
-	
-build-tests:
-	@printf $(COLOR) "Build tests..."
-	@go test -exec="true" -count=0 $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -319,13 +320,10 @@ functional-with-fault-injection-test: clean-test-results
 test: unit-test integration-test functional-test functional-with-fault-injection-test
 
 ##### Coverage & Reporting #####
-$(COVER_ROOT):
-	@mkdir -p $(COVER_ROOT)
+$(TEST_OUTPUT_ROOT):
+	@mkdir -p $(TEST_OUTPUT_ROOT)
 
-$(REPORT_ROOT):
-	@mkdir -p $(REPORT_ROOT)
-
-prepare-coverage-test: update-gotestsum $(COVER_ROOT) $(REPORT_ROOT)
+prepare-coverage-test: update-gotestsum $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
@@ -336,6 +334,10 @@ integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	@gotestsum --junitfile $(NEW_REPORT) -- \
 		$(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+
+# This should use the same build flags as functional-test-coverage for best build caching.
+pre-build-functional-test-coverage: prepare-coverage-test
+	@go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) -race $(TEST_TAG) $(FUNCTIONAL_TEST_COVERPKG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
@@ -353,14 +355,14 @@ functional-test-ndc-coverage: prepare-coverage-test
 		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
-$(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
+$(SUMMARY_COVER_PROFILE):
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
-	@rm -f $(SUMMARY_COVER_PROFILE)
-	@if [ -z "$(wildcard $(COVER_ROOT)/*)" ]; then \
+	@rm -f $(SUMMARY_COVER_PROFILE) $(SUMMARY_COVER_PROFILE).html
+	@if [ -z "$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)" ]; then \
 		echo "No coverage data, aborting!" && exit 1; \
 	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
-	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
+	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
 		grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
@@ -524,11 +526,16 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+	@$(MAKE) update-third-party-deps
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
+	@$(MAKE) update-third-party-deps
+
+update-third-party-deps:
+	@GOOS=linux GOARCH=amd64 go list -deps $(FUNCTIONAL_TEST_ROOT) | sort -u | grep '^[a-z]\+\.[a-z.]\+/' | grep -v go.temporal.io > develop/buildkite/third_party_deps.txt
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."

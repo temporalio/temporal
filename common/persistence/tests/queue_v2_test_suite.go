@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
@@ -55,7 +54,9 @@ func RunQueueV2TestSuite(t *testing.T, q persistence.QueueV2) {
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-
+	t.Run("TestListQueues", func(t *testing.T) {
+		testListQueues(ctx, t, q)
+	})
 	t.Run("TestHappyPath", func(t *testing.T) {
 		t.Parallel()
 
@@ -269,7 +270,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -277,6 +278,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		assert.Equal(t, int64(2), resp.MessagesDeleted)
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
@@ -300,7 +302,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 		msg, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID), msg.Metadata.ID)
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -308,6 +310,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		assert.Equal(t, int64(1), resp.MessagesDeleted)
 		msg, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		assert.Equal(t, int64(persistence.FirstQueueMessageID+1), msg.Metadata.ID, "Even though all"+
@@ -329,7 +332,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			require.NoError(t, err)
 			assert.Equal(t, int64(persistence.FirstQueueMessageID+i), msg.Metadata.ID)
 		}
-		_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
 			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
@@ -337,6 +340,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			},
 		})
 		require.NoError(t, err)
+		require.Equal(t, int64(3), resp.MessagesDeleted)
 		_, err = persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 		require.NoError(t, err)
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
@@ -364,16 +368,26 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < 2; i++ {
-			_, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
-				QueueType: queueType,
-				QueueName: queueName,
-				InclusiveMaxMessageMetadata: persistence.MessageMetadata{
-					ID: persistence.FirstQueueMessageID,
-				},
-			})
-			require.NoError(t, err)
-		}
+		resp, err := queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+				ID: persistence.FirstQueueMessageID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), resp.MessagesDeleted)
+
+		resp, err = queue.RangeDeleteMessages(ctx, &persistence.InternalRangeDeleteMessagesRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+			InclusiveMaxMessageMetadata: persistence.MessageMetadata{
+				ID: persistence.FirstQueueMessageID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(0), resp.MessagesDeleted)
+
 		response, err := queue.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 			QueueType: queueType,
 			QueueName: queueName,
@@ -397,5 +411,126 @@ func RunQueueV2TestSuiteForSQL(t *testing.T, factory *sql.Factory) {
 		db, err := factory.GetDB()
 		require.NoError(t, err)
 		tests.RunSQLQueueV2TestSuite(t, db)
+	})
+}
+
+func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2) {
+	t.Run("HappyPath", func(t *testing.T) {
+		// ListQueues when empty
+		queueType := persistence.QueueTypeHistoryDLQ
+		response, err := queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      10,
+			NextPageToken: nil,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 0, len(response.QueueNames))
+
+		// List of all created queues
+		var queueNames []string
+
+		// List one queue.
+		queueName := "test-queue-" + t.Name() + "first"
+		queueNames = append(queueNames, queueName)
+		_, err = queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      10,
+			NextPageToken: nil,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(response.QueueNames))
+		require.Equal(t, queueName, response.QueueNames[0])
+
+		// List multiple queues.
+		queueName = "test-queue-" + t.Name() + "second"
+		queueNames = append(queueNames, queueName)
+		_, err = queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+			QueueType: queueType,
+			QueueName: queueName,
+		})
+		require.NoError(t, err)
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      10,
+			NextPageToken: nil,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, len(response.QueueNames))
+		require.Contains(t, response.QueueNames, queueName)
+
+		// List multiple queues in pages.
+		for i := 0; i < 3; i++ {
+			queueNames = append(queueNames, "test-queue-"+t.Name()+strconv.Itoa(i))
+		}
+		for _, queueName := range queueNames[2:] {
+			_, err := queue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+				QueueType: queueType,
+				QueueName: queueName,
+			})
+			require.NoError(t, err)
+		}
+		var listedQueueNames []string
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      1,
+			NextPageToken: nil,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(response.QueueNames))
+		listedQueueNames = append(listedQueueNames, response.QueueNames...)
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      1,
+			NextPageToken: response.NextPageToken,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(response.QueueNames))
+		listedQueueNames = append(listedQueueNames, response.QueueNames...)
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      3,
+			NextPageToken: response.NextPageToken,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 3, len(response.QueueNames))
+		listedQueueNames = append(listedQueueNames, response.QueueNames...)
+		response, err = queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      1,
+			NextPageToken: response.NextPageToken,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 0, len(response.QueueNames))
+		require.Empty(t, response.NextPageToken)
+		for _, queueName := range queueNames {
+			require.Contains(t, listedQueueNames, queueName)
+
+		}
+	})
+	t.Run("NegativePageSize", func(t *testing.T) {
+		t.Parallel()
+		queueType := persistence.QueueTypeHistoryDLQ
+		_, err := queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      -1,
+			NextPageToken: nil,
+		})
+		require.Error(t, err)
+		require.ErrorIs(t, err, persistence.ErrNonPositiveListQueuesPageSize)
+	})
+	t.Run("InvalidPageToken", func(t *testing.T) {
+		t.Parallel()
+		queueType := persistence.QueueTypeHistoryDLQ
+		_, err := queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+			QueueType:     queueType,
+			PageSize:      1,
+			NextPageToken: []byte("some invalid token"),
+		})
+		assert.Error(t, err)
 	})
 }

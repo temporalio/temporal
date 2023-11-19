@@ -39,7 +39,6 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc/metadata"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -66,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
+	"go.temporal.io/server/service/history/api/listqueues"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -628,22 +628,9 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
 	var err error
-	var category tasks.Category
-	switch categoryID := request.GetCategory(); categoryID {
-	case enumsspb.TASK_CATEGORY_TRANSFER:
-		category = tasks.CategoryTransfer
-	case enumsspb.TASK_CATEGORY_VISIBILITY:
-		category = tasks.CategoryVisibility
-	case enumsspb.TASK_CATEGORY_TIMER:
-		category = tasks.CategoryTimer
-	case enumsspb.TASK_CATEGORY_REPLICATION:
-		category = tasks.CategoryReplication
-	default:
-		var ok bool
-		category, ok = h.taskCategoryRegistry.GetCategoryByID(int(categoryID))
-		if !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
-		}
+	category, ok := h.taskCategoryRegistry.GetCategoryByID(int(request.Category))
+	if !ok {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", request.Category))
 	}
 
 	key := tasks.NewKey(
@@ -2182,6 +2169,13 @@ func (h *Handler) AddTasks(
 		return nil, h.convertError(err)
 	}
 	return engine.AddTasks(ctx, request)
+}
+
+func (h *Handler) ListQueues(
+	ctx context.Context,
+	request *historyservice.ListQueuesRequest,
+) (*historyservice.ListQueuesResponse, error) {
+	return listqueues.Invoke(ctx, h.taskQueueManager, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

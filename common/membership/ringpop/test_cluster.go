@@ -156,15 +156,15 @@ func newTestCluster(
 			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
 		}
-		rpWrapper := newService(ringPop, time.Second*2, logger)
 		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = newMonitor(
 			serviceName,
 			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
-			rpWrapper,
+			ringPop,
 			logger,
 			mockMgr,
 			resolver,
+			2*time.Second,
 		)
 		cluster.rings[i].Start()
 	}

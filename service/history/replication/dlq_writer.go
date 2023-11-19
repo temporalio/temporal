@@ -27,13 +27,14 @@ package replication
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.uber.org/fx"
 )
 
 type (
@@ -43,12 +44,11 @@ type (
 	//
 	// We want this interface to make the migration referenced by [persistence.QueueV2] easier.
 	DLQWriter interface {
-		WriteTaskToDLQ(ctx context.Context, request WriteRequest) error
+		WriteTaskToDLQ(ctx context.Context, request DLQWriteRequest) error
 	}
-	// WriteRequest is a request to write a task to the DLQ.
-	WriteRequest struct {
+	// DLQWriteRequest is a request to write a task to the DLQ.
+	DLQWriteRequest struct {
 		ShardID             int32
-		ExecutionManager    ExecutionManager
 		SourceCluster       string
 		ReplicationTaskInfo *persistencespb.ReplicationTaskInfo
 	}
@@ -60,9 +60,10 @@ type (
 			request *persistence.PutReplicationTaskToDLQRequest,
 		) error
 	}
-	// ExecutionManagerDLQWriter is a [DLQWriter] that uses the shard's [persistence.ExecutionManager].
-	// The zero-value is a valid instance.
-	ExecutionManagerDLQWriter struct{}
+	// executionManagerDLQWriter is a [DLQWriter] that uses the shard's [persistence.ExecutionManager].
+	executionManagerDLQWriter struct {
+		executionManager ExecutionManager
+	}
 	// TaskParser is a trimmed version of [go.temporal.io/server/common/persistence/serialization.Serializer]
 	// that only provides the methods we need.
 	TaskParser interface {
@@ -77,7 +78,7 @@ type (
 	dlqWriterToggleParams struct {
 		fx.In
 		Config                    *configs.Config
-		ExecutionManagerDLQWriter *ExecutionManagerDLQWriter
+		ExecutionManagerDLQWriter *executionManagerDLQWriter
 		DLQWriterAdapter          *DLQWriterAdapter
 	}
 	dlqWriterToggle struct {
@@ -85,9 +86,11 @@ type (
 	}
 )
 
-// NewExecutionManagerDLQWriter creates a new DLQWriter.
-func NewExecutionManagerDLQWriter() *ExecutionManagerDLQWriter {
-	return &ExecutionManagerDLQWriter{}
+// NewExecutionManagerDLQWriter creates a new DLQWriter that uses the [ExecutionManager].
+func NewExecutionManagerDLQWriter(executionManager ExecutionManager) *executionManagerDLQWriter {
+	return &executionManagerDLQWriter{
+		executionManager: executionManager,
+	}
 }
 
 // NewDLQWriterAdapter creates a new DLQWriter from a QueueV2 [queues.DLQWriter].
@@ -115,7 +118,7 @@ func newDLQWriterToggle(
 // WriteTaskToDLQ implements [DLQWriter.WriteTaskToDLQ] by calling either
 // - QueueV1: [ExecutionManagerDLQWriter.WriteTaskToDLQ]
 // - QueueV2: [DLQWriterAdapter.WriteTaskToDLQ]
-func (d *dlqWriterToggle) WriteTaskToDLQ(ctx context.Context, request WriteRequest) error {
+func (d *dlqWriterToggle) WriteTaskToDLQ(ctx context.Context, request DLQWriteRequest) error {
 	if d.Config.HistoryReplicationDLQV2() {
 		return d.DLQWriterAdapter.WriteTaskToDLQ(ctx, request)
 	}
@@ -123,11 +126,11 @@ func (d *dlqWriterToggle) WriteTaskToDLQ(ctx context.Context, request WriteReque
 }
 
 // WriteTaskToDLQ implements [DLQWriter.WriteTaskToDLQ] by calling [persistence.ExecutionManager.PutReplicationTaskToDLQ].
-func (e *ExecutionManagerDLQWriter) WriteTaskToDLQ(
+func (e *executionManagerDLQWriter) WriteTaskToDLQ(
 	ctx context.Context,
-	request WriteRequest,
+	request DLQWriteRequest,
 ) error {
-	return request.ExecutionManager.PutReplicationTaskToDLQ(
+	return e.executionManager.PutReplicationTaskToDLQ(
 		ctx, &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: request.SourceCluster,
 			ShardID:           request.ShardID,
@@ -139,7 +142,7 @@ func (e *ExecutionManagerDLQWriter) WriteTaskToDLQ(
 // WriteTaskToDLQ implements [DLQWriter.WriteTaskToDLQ] by calling [queues.DLQWriter.Write].
 func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	ctx context.Context,
-	request WriteRequest,
+	request DLQWriteRequest,
 ) error {
 	task, err := d.taskParser.ParseReplicationTask(request.ReplicationTaskInfo)
 	if err != nil {
@@ -148,7 +151,7 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	return d.dlqWriter.WriteTaskToDLQ(ctx, request.SourceCluster, d.currentClusterName, task)
 }
 
-// This is a helper function to make it easier to change the WriteRequest format in the future.
+// This is a helper function to make it easier to change the DLQWriteRequest format in the future.
 func writeTaskToDLQ(
 	ctx context.Context,
 	dlqWriter DLQWriter,
@@ -156,8 +159,7 @@ func writeTaskToDLQ(
 	sourceClusterName string,
 	replicationTaskInfo *persistencespb.ReplicationTaskInfo,
 ) error {
-	return dlqWriter.WriteTaskToDLQ(ctx, WriteRequest{
-		ExecutionManager:    shardContext.GetExecutionManager(),
+	return dlqWriter.WriteTaskToDLQ(ctx, DLQWriteRequest{
 		ShardID:             shardContext.GetShardID(),
 		SourceCluster:       sourceClusterName,
 		ReplicationTaskInfo: replicationTaskInfo,

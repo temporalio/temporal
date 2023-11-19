@@ -172,16 +172,18 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		metricsHandler,
 	)
 
-	factory := f.NewExecutableFactory(
+	factory := queues.NewExecutableFactory(
 		executor,
 		shardScheduler,
 		rescheduler,
-		f.ExecutableWrapper,
-		shard.GetClusterMetadata(),
+		f.HostPriorityAssigner,
+		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
+		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
-		shard.GetTimeSource(),
+		f.DLQWriter,
+		f.Config.TaskDLQEnabled,
 	)
 	return queues.NewScheduledQueue(
 		shard,

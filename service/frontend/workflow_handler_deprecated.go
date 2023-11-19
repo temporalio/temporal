@@ -26,11 +26,7 @@ package frontend
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
-
-	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -434,66 +430,6 @@ func (wh *WorkflowHandler) getWorkflowExecutionHistoryReverse(
 		History:       history,
 		NextPageToken: nextToken,
 	}, nil
-}
-
-// DEPRECATED: TBD
-func (wh *WorkflowHandler) pollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-	callTime := time.Now().UTC()
-
-	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
-	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
-		return nil, err
-	}
-
-	if contextNearDeadline(ctx, longPollTailRoom) {
-		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-	}
-
-	pollerID := uuid.New()
-	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-		NamespaceId: namespaceID.String(),
-		PollerId:    pollerID,
-		PollRequest: request,
-	})
-	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		if contextWasCanceled {
-			// Clear error as we don't want to report context cancellation error to count against our SLA.
-			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
-			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-		}
-
-		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
-		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
-		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
-		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
-			return nil, err
-		}
-
-		// For all other errors log an error and return it back to client.
-		ctxTimeout := "not-set"
-		ctxDeadline, ok := ctx.Deadline()
-		if ok {
-			ctxTimeout = ctxDeadline.Sub(callTime).String()
-		}
-		wh.logger.Error("Unable to call matching.PollWorkflowTaskQueue.",
-			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-			tag.Timeout(ctxTimeout),
-			tag.Error(err))
-		return nil, err
-	}
-
-	resp, err := wh.createPollWorkflowTaskQueueResponse(ctx, namespaceID, matchingResp, matchingResp.GetBranchToken())
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
 }
 
 // DEPRECATED: DO NOT MODIFY UNLESS ALSO APPLIED TO WorkflowHandler.RespondWorkflowTaskCompleted() and ./service/history/workflowTaskHandlerCallbacks.go

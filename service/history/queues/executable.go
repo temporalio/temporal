@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -86,6 +87,8 @@ type (
 )
 
 var (
+	ErrTerminalTaskFailure = errors.New("original task failed and this task is now to send the original to the DLQ")
+
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
 	reschedulePolicy                           = common.CreateTaskReschedulePolicy()
@@ -127,6 +130,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		logger            log.Logger
 		metricsHandler    metrics.Handler
+		dlqWriter         *DLQWriter
 
 		readerID               int64
 		loadTime               time.Time
@@ -137,7 +141,14 @@ type (
 		lastActiveness         bool
 		resourceExhaustedCount int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		taggedMetricsHandler   metrics.Handler
+		dlqEnabled             dynamicconfig.BoolPropertyFn
+		terminalFailureCause   error
 	}
+	ExecutableParams struct {
+		DLQEnabled dynamicconfig.BoolPropertyFn
+		DLQWriter  *DLQWriter
+	}
+	ExecutableOption func(*ExecutableParams)
 )
 
 func NewExecutable(
@@ -152,7 +163,17 @@ func NewExecutable(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	opts ...ExecutableOption,
 ) Executable {
+	params := ExecutableParams{
+		DLQEnabled: func() bool {
+			return false
+		},
+		DLQWriter: nil,
+	}
+	for _, opt := range opts {
+		opt(&params)
+	}
 	executable := &executableImpl{
 		Task:              task,
 		state:             ctasks.TaskStatePending,
@@ -174,6 +195,8 @@ func NewExecutable(
 		),
 		metricsHandler:       metricsHandler,
 		taggedMetricsHandler: metricsHandler,
+		dlqWriter:            params.DLQWriter,
+		dlqEnabled:           params.DLQEnabled,
 	}
 	executable.updatePriority()
 	return executable
@@ -240,6 +263,26 @@ func (e *executableImpl) Execute() (retErr error) {
 		// if retErr is not nil, HandleErr will take care of the inMemoryNoUserLatency calculation
 		// Not doing it here as for certain errors latency for the attempt should not be counted
 	}()
+
+	if e.terminalFailureCause != nil {
+		if !e.dlqEnabled() {
+			e.logger.Warn(
+				"Dropping task with terminal failure because DLQ was disabled",
+				tag.Error(e.terminalFailureCause),
+			)
+			return nil
+		}
+		err := e.dlqWriter.WriteTaskToDLQ(
+			ctx,
+			e.clusterMetadata.GetCurrentClusterName(),
+			e.clusterMetadata.GetCurrentClusterName(),
+			e.GetTask(),
+		)
+		if err != nil {
+			e.logger.Error("Failed to write task to DLQ", tag.Error(err))
+		}
+		return err
+	}
 
 	resp := e.executor.Execute(ctx, e)
 	e.taggedMetricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
@@ -340,12 +383,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
-	var deserializationError *serialization.DeserializationError
-	var encodingTypeError *serialization.UnknownEncodingTypeError
-	if errors.As(err, &deserializationError) || errors.As(err, &encodingTypeError) {
+	// TODO: expand on the errors that should be considered terminal
+	if errors.As(err, new(*serialization.DeserializationError)) ||
+		errors.As(err, new(*serialization.UnknownEncodingTypeError)) {
 		// likely due to data corruption, emit logs, metrics & drop the task by return nil so that
-		// task will be marked as completed.
+		// task will be marked as completed, or send it to the DLQ if that is enabled.
 		e.taggedMetricsHandler.Counter(metrics.TaskCorruptionCounter.GetMetricName()).Record(1)
+		if e.dlqEnabled() {
+			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err))
+			e.terminalFailureCause = err
+			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
+		}
 		e.logger.Error("Drop task due to serialization error", tag.Error(err))
 		return nil
 	}

@@ -22,46 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues_test
+package listqueues_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/api/listqueues"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/persistence"
 )
 
-type (
-	testWrapper       struct{}
-	wrappedExecutable struct {
-		queues.Executable
-	}
-)
-
-func TestNewExecutableFactoryWrapper(t *testing.T) {
-	t.Parallel()
-
-	wrapper := testWrapper{}
-	factory := queues.NewExecutableFactory(
-		nil,
-		nil,
-		nil,
-		queues.NewNoopPriorityAssigner(),
-		clock.NewEventTimeSource(),
-		nil,
-		nil,
-		log.NewNoopLogger(),
-		nil,
-	)
-	wrappedFactory := queues.NewExecutableFactoryWrapper(factory, wrapper)
-	executable := wrappedFactory.NewExecutable(&tasks.WorkflowTask{}, 0)
-	_, ok := executable.(wrappedExecutable)
-	assert.True(t, ok, "expected executable to be wrapped")
+// failingHistoryTaskQueueManager is a [persistence.HistoryTaskQueueManager] that always fails.
+type failingHistoryTaskQueueManager struct {
+	persistence.HistoryTaskQueueManager
 }
 
-func (t testWrapper) Wrap(e queues.Executable) queues.Executable {
-	return wrappedExecutable{e}
+func TestInvoke_UnavailableError(t *testing.T) {
+	t.Parallel()
+
+	_, err := listqueues.Invoke(
+		context.Background(),
+		failingHistoryTaskQueueManager{},
+		&historyservice.ListQueuesRequest{
+			QueueType: int32(persistence.QueueTypeHistoryDLQ),
+			PageSize:  0,
+		},
+	)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	assert.ErrorContains(t, unavailableErr, "some random error")
+}
+
+func (m failingHistoryTaskQueueManager) ListQueues(
+	context.Context,
+	*persistence.ListQueuesRequest,
+) (*persistence.ListQueuesResponse, error) {
+	return nil, errors.New("some random error")
 }

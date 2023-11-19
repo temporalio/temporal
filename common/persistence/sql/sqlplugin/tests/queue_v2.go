@@ -58,22 +58,24 @@ var (
 	ErrInsertMetadataFailed   = errors.New("insertMetadataFailed")
 	ErrRangeDeleteFailed      = errors.New("rangeDeleteFailed")
 	ErrUpdateMetadataFailed   = errors.New("updateMetadataFailed")
+	ErrSelectQueueNames       = errors.New("selectQueueNamesFailed")
 )
 
 type (
 	faultyDB struct {
 		sqlplugin.DB
-		getLastMessageIdErr error
-		txBeginErr          error
-		txCommitErr         error
-		insertErr           error
-		txRollbackErr       error
-		rangeSelectError    error
-		selectMetadataError error
-		insertMetadataError error
-		rangeDeleteError    error
-		updateMetadataError error
-		commitCalls         int
+		getLastMessageIdErr   error
+		txBeginErr            error
+		txCommitErr           error
+		insertErr             error
+		txRollbackErr         error
+		rangeSelectError      error
+		selectMetadataError   error
+		insertMetadataError   error
+		rangeDeleteError      error
+		updateMetadataError   error
+		selectQueueNamesError error
+		commitCalls           int
 	}
 	faultyTx struct {
 		db *faultyDB
@@ -130,11 +132,32 @@ func (db *faultyDB) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplu
 	return db.DB.SelectFromQueueV2Metadata(ctx, filter)
 }
 
+func (db *faultyDB) SelectNameFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataTypeFilter) ([]sqlplugin.QueueV2MetadataRow, error) {
+	if db.selectQueueNamesError != nil {
+		return nil, db.selectQueueNamesError
+	}
+	return db.DB.SelectNameFromQueueV2Metadata(ctx, filter)
+}
+
+func (db *faultyDB) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, db.selectMetadataError
+	}
+	return db.DB.SelectFromQueueV2MetadataForUpdate(ctx, filter)
+}
+
 func (tx *faultyTx) SelectFromQueueV2Metadata(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
 	if tx.db.selectMetadataError != nil {
 		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
 	}
 	return tx.Tx.SelectFromQueueV2Metadata(ctx, filter)
+}
+
+func (tx *faultyTx) SelectFromQueueV2MetadataForUpdate(ctx context.Context, filter sqlplugin.QueueV2MetadataFilter) (*sqlplugin.QueueV2MetadataRow, error) {
+	if tx.db.selectMetadataError != nil {
+		return &sqlplugin.QueueV2MetadataRow{}, tx.db.selectMetadataError
+	}
+	return tx.Tx.SelectFromQueueV2MetadataForUpdate(ctx, filter)
 }
 
 func (db *faultyDB) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {
@@ -239,6 +262,14 @@ func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	t.Run("SelectMetadataFails", func(t *testing.T) {
 		t.Parallel()
 		testSelectMetadataFails(ctx, t, baseDB)
+	})
+	t.Run("SelectNameFromQueueV2MetadataFails", func(t *testing.T) {
+		t.Parallel()
+		testSelectNameFromQueueV2MetadataFails(ctx, t, baseDB)
+	})
+	t.Run("SelectNameFromQueueV2NegativeToken", func(t *testing.T) {
+		t.Parallel()
+		testSelectNameFromQueueV2NegativeToken(ctx, t, baseDB)
 	})
 
 }
@@ -389,7 +420,6 @@ func testGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.D
 		QueueName:        queueName,
 		MetadataPayload:  bytes,
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -512,7 +542,6 @@ func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplu
 		QueueName:        queueName,
 		MetadataPayload:  []byte("invalid_payload"),
 		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -536,7 +565,6 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 		QueueName:        queueName,
 		MetadataPayload:  []byte("test"),
 		MetadataEncoding: "invalid_encoding",
-		Version:          0,
 	}
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
@@ -572,12 +600,13 @@ func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplu
 		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
 		require.NoError(t, err)
 	}
-	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
+	resp, err := q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
 		QueueType:                   queueType,
 		QueueName:                   queueKey.GetQueueName(),
 		InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: persistence.FirstQueueMessageID + 2},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, int64(3), resp.MessagesDeleted)
 	result, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
 		QueueName: queueKey.GetQueueName(),
@@ -599,4 +628,34 @@ func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplu
 	response, err := persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
 	require.NoError(t, err)
 	assert.Equal(t, int64(persistence.FirstQueueMessageID+3), response.Metadata.ID)
+}
+
+func testSelectNameFromQueueV2MetadataFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryDLQ
+	db := &faultyDB{
+		DB:                    baseDB,
+		selectQueueNamesError: ErrSelectQueueNames,
+	}
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(db, logger)
+	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType:     queueType,
+		PageSize:      10,
+		NextPageToken: nil,
+	})
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "SelectNameFromQueueV2Metadata operation failed")
+}
+
+func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
+	queueType := persistence.QueueTypeHistoryDLQ
+	logger := &logRecorder{Logger: log.NewTestLogger()}
+	q := persistencesql.NewQueueV2(baseDB, logger)
+	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType:     queueType,
+		PageSize:      1,
+		NextPageToken: persistence.GetNextPageTokenForListQueues(-1),
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, persistence.ErrNegativeListQueuesOffset)
 }

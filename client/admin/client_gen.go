@@ -53,6 +53,26 @@ func (c *clientImpl) AddSearchAttributes(
 	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
+func (c *clientImpl) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.AddTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) CancelDLQJob(
+	ctx context.Context,
+	request *adminservice.CancelDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CancelDLQJobResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CancelDLQJob(ctx, request, opts...)
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -81,6 +101,16 @@ func (c *clientImpl) DescribeCluster(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeDLQJob(
+	ctx context.Context,
+	request *adminservice.DescribeDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDLQJobResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -243,6 +273,16 @@ func (c *clientImpl) ListHistoryTasks(
 	return c.client.ListHistoryTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListQueuesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListQueues(ctx, request, opts...)
+}
+
 func (c *clientImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,
@@ -251,6 +291,16 @@ func (c *clientImpl) MergeDLQMessages(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.MergeDLQMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MergeDLQTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(

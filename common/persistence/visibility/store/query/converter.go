@@ -34,7 +34,7 @@ import (
 	"strings"
 
 	"github.com/olivere/elastic/v7"
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 )
 
 type (
@@ -479,29 +479,43 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 
 	var query elastic.Query
 	switch comparisonExpr.Operator {
-	case ">=":
+	case sqlparser.GreaterEqualStr:
 		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
-	case "<=":
+	case sqlparser.LessEqualStr:
 		query = elastic.NewRangeQuery(colName).Lte(colValues[0])
-	case ">":
+	case sqlparser.GreaterThanStr:
 		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
-	case "<":
+	case sqlparser.LessThanStr:
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
-	case "=", "like": // The only difference is that "%" is removed for LIKE queries.
+	case sqlparser.EqualStr, sqlparser.LikeStr: // The only difference is that "%" is removed for LIKE queries.
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
 		query = elastic.NewMatchQuery(colName, colValues[0])
-	case "!=", "not like":
+	case sqlparser.NotEqualStr, sqlparser.NotLikeStr:
 		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
 		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
-	case "in":
+	case sqlparser.InStr:
 		query = elastic.NewTermsQuery(colName, colValues...)
-	case "not in":
+	case sqlparser.NotInStr:
 		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, colValues...))
+	case sqlparser.StartsWithStr:
+		v, ok := colValues[0].(string)
+		if !ok {
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
+		}
+		query = elastic.NewPrefixQuery(colName, v)
+	case sqlparser.NotStartsWithStr:
+		v, ok := colValues[0].(string)
+		if !ok {
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
+		}
+		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
 	}
 
 	return query, nil
 }
 
+// convertComparisonExprValue returns a string, int64, float64, bool or
+// a slice with each value of one of those types.
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
@@ -551,6 +565,7 @@ func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query,
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 }
 
+// ParseSqlValue returns a string, int64 or float64 if the parsing succeeds.
 func ParseSqlValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil

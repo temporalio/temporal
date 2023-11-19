@@ -34,6 +34,7 @@ import (
 	"time"
 
 	replicationpb "go.temporal.io/api/replication/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -934,7 +936,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
+	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag))) {
 		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
 			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
 				NamespaceId: request.NamespaceId,
@@ -1585,7 +1587,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if adh.config.accessHistory(adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
+	if dynamicconfig.AccessHistory(adh.config.AccessHistoryFraction, adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag))) {
 		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 			&historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: namespaceID.String(),
@@ -1788,48 +1790,214 @@ func (adh *AdminHandler) PurgeDLQTasks(
 	ctx context.Context,
 	request *adminservice.PurgeDLQTasksRequest,
 ) (*adminservice.PurgeDLQTasksResponse, error) {
-	category, err := api.GetTaskCategory(int(request.DlqKey.TaskCategory), adh.taskCategoryRegistry)
+	key, err := adh.parseDLQKey(request.DlqKey)
 	if err != nil {
 		return nil, err
 	}
-	sourceCluster := request.DlqKey.SourceCluster
-	if len(sourceCluster) == 0 {
-		return nil, errSourceClusterNotSet
-	}
-	targetCluster := request.DlqKey.TargetCluster
-	if len(targetCluster) == 0 {
-		return nil, errTargetClusterNotSet
-	}
-	key := persistence.QueueKey{
-		QueueType:     persistence.QueueTypeHistoryDLQ,
-		Category:      category,
-		SourceCluster: sourceCluster,
-		TargetCluster: request.DlqKey.TargetCluster,
-	}
-	workflowID := fmt.Sprintf("delete-dlq-tasks-%s", key.GetQueueName())
+	workflowID := adh.getDLQWorkflowID(key)
 	client := adh.sdkClientFactory.GetSystemClient()
-	future, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: primitives.DefaultWorkerTaskQueue,
 	}, dlq.WorkflowName, dlq.WorkflowParams{
 		WorkflowType: dlq.WorkflowTypeDelete,
 		DeleteParams: dlq.DeleteParams{
-			TaskCategory:  int(category.ID()),
-			SourceCluster: sourceCluster,
-			TargetCluster: targetCluster,
-			MaxMessageID:  request.InclusiveMaxTaskMetadata.MessageId,
+			Key: dlq.Key{
+				TaskCategoryID: key.Category.ID(),
+				SourceCluster:  key.SourceCluster,
+				TargetCluster:  key.TargetCluster,
+			},
+			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+	runID := run.GetRunID()
 	jobToken := adminservice.DLQJobToken{
 		WorkflowId: workflowID,
-		RunId:      future.GetRunID(),
+		RunId:      runID,
 	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
+	}, nil
+}
+
+func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservice.MergeDLQTasksRequest) (*adminservice.MergeDLQTasksResponse, error) {
+	key, err := adh.parseDLQKey(request.DlqKey)
+	if err != nil {
+		return nil, err
+	}
+	workflowID := adh.getDLQWorkflowID(key)
+	client := adh.sdkClientFactory.GetSystemClient()
+	run, err := client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: primitives.DefaultWorkerTaskQueue,
+	}, dlq.WorkflowName, dlq.WorkflowParams{
+		WorkflowType: dlq.WorkflowTypeMerge,
+		MergeParams: dlq.MergeParams{
+			Key: dlq.Key{
+				TaskCategoryID: key.Category.ID(),
+				SourceCluster:  key.SourceCluster,
+				TargetCluster:  key.TargetCluster,
+			},
+			MaxMessageID: request.InclusiveMaxTaskMetadata.MessageId,
+			BatchSize:    int(request.BatchSize), // Let the workflow code validate and set the default value if needed.
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	runID := run.GetRunID()
+	jobToken := adminservice.DLQJobToken{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	}
+	jobTokenBytes, _ := jobToken.Marshal()
+	return &adminservice.MergeDLQTasksResponse{
+		JobToken: jobTokenBytes,
+	}, nil
+}
+
+func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
+	jt := adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.JobToken))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
+	}
+	client := adh.sdkClientFactory.GetSystemClient()
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	if err != nil {
+		return nil, err
+	}
+	response, err := client.QueryWorkflow(ctx, jt.WorkflowId, jt.RunId, dlq.QueryTypeProgress)
+	if err != nil {
+		return nil, err
+	}
+	var queryResponse dlq.ProgressQueryResponse
+	if err = response.Get(&queryResponse); err != nil {
+		return nil, err
+	}
+	var state enumsspb.DLQOperationState
+	switch execution.WorkflowExecutionInfo.Status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		state = enumsspb.DLQ_OPERATION_STATE_RUNNING
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		state = enumsspb.DLQ_OPERATION_STATE_COMPLETED
+	default:
+		state = enumsspb.DLQ_OPERATION_STATE_FAILED
+	}
+	var opType enumsspb.DLQOperationType
+	switch queryResponse.WorkflowType {
+	case dlq.WorkflowTypeDelete:
+		opType = enumsspb.DLQ_OPERATION_TYPE_PURGE
+	case dlq.WorkflowTypeMerge:
+		opType = enumsspb.DLQ_OPERATION_TYPE_MERGE
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid DLQ workflow type: %v", opType))
+	}
+	return &adminservice.DescribeDLQJobResponse{
+		DlqKey: &commonspb.HistoryDLQKey{
+			TaskCategory:  int32(queryResponse.DlqKey.TaskCategoryID),
+			SourceCluster: queryResponse.DlqKey.SourceCluster,
+			TargetCluster: queryResponse.DlqKey.TargetCluster,
+		},
+		OperationType:          opType,
+		OperationState:         state,
+		MaxMessageId:           queryResponse.MaxMessageIDToProcess,
+		LastProcessedMessageId: queryResponse.LastProcessedMessageID,
+		MessagesProcessed:      queryResponse.NumberOfMessagesProcessed,
+		StartTime:              execution.WorkflowExecutionInfo.StartTime,
+		EndTime:                execution.WorkflowExecutionInfo.CloseTime,
+	}, nil
+}
+
+func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
+	jt := adminservice.DLQJobToken{}
+	err := jt.Unmarshal([]byte(request.JobToken))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
+	}
+	client := adh.sdkClientFactory.GetSystemClient()
+	execution, err := client.DescribeWorkflowExecution(ctx, jt.WorkflowId, jt.RunId)
+	if err != nil {
+		return nil, err
+	}
+	if execution.WorkflowExecutionInfo.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return &adminservice.CancelDLQJobResponse{Canceled: false}, nil
+	}
+	err = client.TerminateWorkflow(ctx, jt.WorkflowId, jt.RunId, request.Reason)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.CancelDLQJobResponse{Canceled: true}, nil
+}
+
+// AddTasks just translates the admin service's request proto into a history service request proto and then sends it.
+func (adh *AdminHandler) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+) (*adminservice.AddTasksResponse, error) {
+	historyTasks := make([]*historyservice.AddTasksRequest_Task, len(request.Tasks))
+	for i, task := range request.Tasks {
+		historyTasks[i] = &historyservice.AddTasksRequest_Task{
+			CategoryId: task.CategoryId,
+			Blob:       task.Blob,
+		}
+	}
+	historyServiceRequest := &historyservice.AddTasksRequest{
+		ShardId: request.ShardId,
+		Tasks:   historyTasks,
+	}
+	_, err := adh.historyClient.AddTasks(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.AddTasksResponse{}, nil
+}
+
+func (adh *AdminHandler) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+) (*adminservice.ListQueuesResponse, error) {
+	historyServiceRequest := &historyservice.ListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	}
+	resp, err := adh.historyClient.ListQueues(ctx, historyServiceRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (adh *AdminHandler) getDLQWorkflowID(key *persistence.QueueKey) string {
+	return fmt.Sprintf("manage-dlq-tasks-%s", key.GetQueueName())
+}
+
+func (adh *AdminHandler) parseDLQKey(key *commonspb.HistoryDLQKey) (*persistence.QueueKey, error) {
+	category, err := api.GetTaskCategory(int(key.TaskCategory), adh.taskCategoryRegistry)
+	if err != nil {
+		return nil, err
+	}
+	sourceCluster := key.SourceCluster
+	if len(sourceCluster) == 0 {
+		return nil, errSourceClusterNotSet
+	}
+	targetCluster := key.TargetCluster
+	if len(targetCluster) == 0 {
+		return nil, errTargetClusterNotSet
+	}
+	return &persistence.QueueKey{
+		QueueType:     persistence.QueueTypeHistoryDLQ,
+		Category:      category,
+		SourceCluster: sourceCluster,
+		TargetCluster: key.TargetCluster,
 	}, nil
 }
 

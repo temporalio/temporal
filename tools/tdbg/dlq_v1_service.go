@@ -26,6 +26,7 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -38,11 +39,15 @@ import (
 
 type DLQV1Service struct {
 	clientFactory ClientFactory
+	prompter      *Prompter
+	writer        io.Writer
 }
 
-func NewDLQV1Service(clientFactory ClientFactory) *DLQV1Service {
+func NewDLQV1Service(clientFactory ClientFactory, prompter *Prompter, writer io.Writer) *DLQV1Service {
 	return &DLQV1Service{
 		clientFactory: clientFactory,
+		prompter:      prompter,
+		writer:        writer,
 	}
 }
 
@@ -54,7 +59,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	dlqType := c.String(FlagDLQType)
 	sourceCluster := c.String(FlagCluster)
 	shardID := c.Int(FlagShardID)
-	outputFile, err := getOutputFile(c.String(FlagOutputFilename))
+	outputFile, err := getOutputFile(c.String(FlagOutputFilename), ac.writer)
 	if err != nil {
 		return err
 	}
@@ -70,6 +75,9 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 	var lastMessageID int64
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
+	} else {
+		ac.prompter.Prompt("Are you sure to read all DLQ messages without a upper boundary?")
+		lastMessageID = common.EndMessageID
 	}
 
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
@@ -112,7 +120,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 
 		lastReadMessageID = int(task.SourceTaskId)
 		remainingMessageCount--
-		_, err = outputFile.WriteString(fmt.Sprintf("%v\n", string(taskStr)))
+		_, err = outputFile.Write([]byte(fmt.Sprintf("%v\n", string(taskStr))))
 		if err != nil {
 			return fmt.Errorf("fail to print dlq messages.: %s", err)
 		}
@@ -132,7 +140,7 @@ func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		prompt("Are you sure to purge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
+		ac.prompter.Prompt("Are you sure to purge all DLQ messages without a upper boundary?")
 	}
 
 	adminClient := ac.clientFactory.AdminClient(c)
@@ -164,7 +172,7 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		prompt("Are you sure to merge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
+		ac.prompter.Prompt("Are you sure to merge all DLQ messages without a upper boundary?")
 	}
 
 	adminClient := ac.clientFactory.AdminClient(c)

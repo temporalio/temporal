@@ -65,6 +65,36 @@ func (c *retryableClient) AddSearchAttributes(
 	return resp, err
 }
 
+func (c *retryableClient) AddTasks(
+	ctx context.Context,
+	request *adminservice.AddTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddTasksResponse, error) {
+	var resp *adminservice.AddTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AddTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CancelDLQJob(
+	ctx context.Context,
+	request *adminservice.CancelDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CancelDLQJobResponse, error) {
+	var resp *adminservice.CancelDLQJobResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelDLQJob(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *adminservice.CloseShardRequest,
@@ -104,6 +134,21 @@ func (c *retryableClient) DescribeCluster(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeDLQJob(
+	ctx context.Context,
+	request *adminservice.DescribeDLQJobRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDLQJobResponse, error) {
+	var resp *adminservice.DescribeDLQJobResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeDLQJob(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -350,6 +395,21 @@ func (c *retryableClient) ListHistoryTasks(
 	return resp, err
 }
 
+func (c *retryableClient) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListQueuesResponse, error) {
+	var resp *adminservice.ListQueuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListQueues(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,
@@ -359,6 +419,21 @@ func (c *retryableClient) MergeDLQMessages(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.MergeDLQMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) MergeDLQTasks(
+	ctx context.Context,
+	request *adminservice.MergeDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQTasksResponse, error) {
+	var resp *adminservice.MergeDLQTasksResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.MergeDLQTasks(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

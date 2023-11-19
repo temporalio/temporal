@@ -83,6 +83,7 @@ type (
 		Memo             *commonpb.Memo
 		TaskQueue        string
 		SearchAttributes *commonpb.SearchAttributes
+		ParentExecution  *commonpb.WorkflowExecution
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution

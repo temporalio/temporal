@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package queues_test
 
 import (
 	"context"
@@ -34,9 +34,12 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/queues/queuestest"
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -58,14 +61,21 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockExecutor          *MockExecutor
-		mockScheduler         *MockScheduler
-		mockRescheduler       *MockRescheduler
+		mockExecutor          *queues.MockExecutor
+		mockScheduler         *queues.MockScheduler
+		mockRescheduler       *queues.MockRescheduler
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockClusterMetadata   *cluster.MockMetadata
+		metricsHandler        *metricstest.CaptureHandler
 
 		timeSource *clock.EventTimeSource
 	}
+	params struct {
+		dlqWriter        *queues.DLQWriter
+		dlqEnabled       dynamicconfig.BoolPropertyFn
+		priorityAssigner queues.PriorityAssigner
+	}
+	option func(*params)
 )
 
 func TestExecutableSuite(t *testing.T) {
@@ -77,15 +87,21 @@ func (s *executableSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockExecutor = NewMockExecutor(s.controller)
-	s.mockScheduler = NewMockScheduler(s.controller)
-	s.mockRescheduler = NewMockRescheduler(s.controller)
+	s.mockExecutor = queues.NewMockExecutor(s.controller)
+	s.mockScheduler = queues.NewMockScheduler(s.controller)
+	s.mockRescheduler = queues.NewMockRescheduler(s.controller)
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.metricsHandler = metricstest.NewCaptureHandler()
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		cluster.TestCurrentClusterName: {
+			ShardCount: 1,
+		},
+	}).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 }
@@ -97,14 +113,14 @@ func (s *executableSuite) TearDownSuite() {
 func (s *executableSuite) TestExecute_TaskExecuted() {
 	executable := s.newTestExecutable()
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    true,
 		ExecutionErr:        errors.New("some random error"),
 	})
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    true,
 		ExecutionErr:        nil,
@@ -119,30 +135,35 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 	attemptNoUserLatency := scheduleLatency + attemptLatency - userLatency
 
 	testCases := []struct {
+		name                         string
 		taskErr                      error
 		expectError                  bool
 		expectedAttemptNoUserLatency time.Duration
 		expectBackoff                bool
 	}{
 		{
+			name:                         "NoError",
 			taskErr:                      nil,
 			expectError:                  false,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                false,
 		},
 		{
+			name:                         "UnavailableError",
 			taskErr:                      serviceerror.NewUnavailable("some random error"),
 			expectError:                  true,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                true,
 		},
 		{
+			name:                         "NotFoundError",
 			taskErr:                      serviceerror.NewNotFound("not found error"),
 			expectError:                  false,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                false,
 		},
 		{
+			name:                         "ResourceExhaustedError",
 			taskErr:                      consts.ErrResourceExhaustedBusyWorkflow,
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
@@ -151,51 +172,59 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 	}
 
 	for _, tc := range testCases {
-		executable := s.newTestExecutable()
+		s.Run(tc.name, func() {
 
-		now := time.Now()
-		s.timeSource.Update(now)
-		executable.SetScheduledTime(now)
+			executable := s.newTestExecutable()
 
-		now = now.Add(scheduleLatency)
-		s.timeSource.Update(now)
-
-		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
-			metrics.ContextCounterAdd(
-				ctx,
-				metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
-				int64(userLatency),
-			)
-
-			now = now.Add(attemptLatency)
+			now := time.Now()
 			s.timeSource.Update(now)
-		}).Return(ExecuteResponse{
-			ExecutionMetricTags: nil,
-			ExecutedAsActive:    true,
-			ExecutionErr:        tc.taskErr,
+			executable.SetScheduledTime(now)
+
+			now = now.Add(scheduleLatency)
+			s.timeSource.Update(now)
+
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+				metrics.ContextCounterAdd(
+					ctx,
+					metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(),
+					int64(userLatency),
+				)
+
+				now = now.Add(attemptLatency)
+				s.timeSource.Update(now)
+			}).Return(queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        tc.taskErr,
+			})
+
+			err := executable.Execute()
+			if err != nil {
+				err = executable.HandleErr(err)
+			}
+
+			if tc.expectError {
+				s.Error(err)
+				s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+				s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
+				executable.Nack(err)
+			} else {
+				s.NoError(err)
+				capture := s.metricsHandler.StartCapture()
+				executable.Ack()
+				snapshot := capture.Snapshot()
+				recordings := snapshot[metrics.TaskLatency.GetMetricName()]
+				s.Len(recordings, 1)
+				actualAttemptNoUserLatency, ok := recordings[0].Value.(time.Duration)
+				s.True(ok)
+				if tc.expectBackoff {
+					// the backoff duration is random, so we can't compare the exact value
+					s.Less(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
+				} else {
+					s.Equal(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
+				}
+			}
 		})
-
-		err := executable.Execute()
-		if err != nil {
-			err = executable.HandleErr(err)
-		}
-
-		if tc.expectError {
-			s.Error(err)
-			s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
-			s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
-			executable.Nack(err)
-		} else {
-			s.NoError(err)
-		}
-
-		actualAttemptNoUserLatency := executable.(*executableImpl).inMemoryNoUserLatency
-		if tc.expectBackoff {
-			// the backoff duration is random, so we can't compare the exact value
-			s.Less(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
-		} else {
-			s.Equal(tc.expectedAttemptNoUserLatency, actualAttemptNoUserLatency)
-		}
 	}
 }
 
@@ -211,6 +240,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 	}
 	expectedInMemoryNoUserLatency := scheduleLatencies[0] + attemptLatencies[0] - userLatencies[0] +
 		scheduleLatencies[2] + attemptLatencies[2] - userLatencies[2]
+	_ = expectedInMemoryNoUserLatency
 
 	executable := s.newTestExecutable()
 
@@ -231,7 +261,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 
 			now = now.Add(attemptLatencies[i])
 			s.timeSource.Update(now)
-		}).Return(ExecuteResponse{
+		}).Return(queues.ExecuteResponse{
 			ExecutionMetricTags: nil,
 			ExecutedAsActive:    true,
 			ExecutionErr:        taskErrors[i],
@@ -248,17 +278,23 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 			executable.Nack(err)
 		} else {
 			s.NoError(err)
+			capture := s.metricsHandler.StartCapture()
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			recordings := snapshot[metrics.TaskLatency.GetMetricName()]
+			s.Len(recordings, 1)
+			actualInMemoryNoUserLatency, ok := recordings[0].Value.(time.Duration)
+			s.True(ok)
+			s.Equal(expectedInMemoryNoUserLatency, actualInMemoryNoUserLatency)
 		}
 	}
-
-	s.Equal(expectedInMemoryNoUserLatency, executable.(*executableImpl).inMemoryNoUserLatency)
 }
 
 func (s *executableSuite) TestExecute_CapturePanic() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ExecuteResponse {
+		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
 			panic("test panic during execution")
 		},
 	)
@@ -269,9 +305,9 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	executable := s.newTestExecutable()
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ExecuteResponse {
+		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
 			s.Equal(headers.CallerTypeBackground, headers.GetCallerInfo(ctx).CallerType)
-			return ExecuteResponse{
+			return queues.ExecuteResponse{
 				ExecutionMetricTags: nil,
 				ExecutedAsActive:    true,
 				ExecutionErr:        nil,
@@ -280,12 +316,13 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	)
 	s.NoError(executable.Execute())
 
-	// force set to low priority
-	executable.(*executableImpl).priority = ctasks.PriorityLow
+	executable = s.newTestExecutable(func(p *params) {
+		p.priorityAssigner = queues.NewStaticPriorityAssigner(ctasks.PriorityLow)
+	})
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(ctx context.Context, _ Executable) ExecuteResponse {
+		func(ctx context.Context, _ queues.Executable) queues.ExecuteResponse {
 			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
-			return ExecuteResponse{
+			return queues.ExecuteResponse{
 				ExecutionMetricTags: nil,
 				ExecutedAsActive:    true,
 				ExecutionErr:        nil,
@@ -297,7 +334,7 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 
 func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	executable := s.newTestExecutable()
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    true,
 		ExecutionErr:        errors.New("some random error"),
@@ -308,7 +345,7 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 	s.Equal(2, executable.Attempt())
 
 	// isActive changed to false, should reset attempt
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
 		ExecutionErr:        nil,
@@ -318,16 +355,93 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 }
 
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
-	executable := s.newTestExecutable()
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return false
+		}
+	})
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
-		func(_ context.Context, _ Executable) ExecuteResponse {
+		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
+			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+		},
+	).Times(2)
+	err := executable.Execute()
+	s.Error(err)
+	s.NoError(executable.HandleErr(err))
+	s.Error(executable.Execute())
+}
+
+func (s *executableSuite) TestExecute_DLQ() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
 			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)
 	err := executable.Execute()
 	s.Error(err)
-	s.NoError(executable.HandleErr(err))
+	s.Error(executable.HandleErr(err))
+	s.NoError(executable.Execute())
+	s.Len(queueWriter.EnqueueTaskRequests, 1)
+}
+
+func (s *executableSuite) TestExecute_DLQThenDisable() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	dlqEnabled := true
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return dlqEnabled
+		}
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
+			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+		},
+	)
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+	dlqEnabled = false
+	s.NoError(executable.Execute())
+	s.Empty(queueWriter.EnqueueTaskRequests)
+}
+
+func (s *executableSuite) TestExecute_DLQFailThenRetry() {
+	queueWriter := &queuestest.FakeQueueWriter{}
+	executable := s.newTestExecutable(func(p *params) {
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqEnabled = func() bool {
+			return true
+		}
+	})
+
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
+		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
+			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+		},
+	)
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+	queueWriter.EnqueueTaskErr = errors.New("some random error")
+	err = executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+	queueWriter.EnqueueTaskErr = nil
+	err = executable.Execute()
+	s.NoError(err)
 }
 
 func (s *executableSuite) TestHandleErr_EntityNotExists() {
@@ -384,7 +498,7 @@ func (s *executableSuite) TestTaskAck() {
 func (s *executableSuite) TestTaskNack_Resubmit_Success() {
 	executable := s.newTestExecutable()
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).DoAndReturn(func(_ Executable) bool {
+	s.mockScheduler.EXPECT().TrySubmit(executable).DoAndReturn(func(_ queues.Executable) bool {
 		s.Equal(ctasks.TaskStatePending, executable.State())
 
 		go func() {
@@ -402,7 +516,7 @@ func (s *executableSuite) TestTaskNack_Resubmit_Fail() {
 	executable := s.newTestExecutable()
 
 	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ queues.Executable, _ time.Time) {
 		s.Equal(ctasks.TaskStatePending, executable.State())
 
 		go func() {
@@ -435,7 +549,7 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		s.Run(tc.name, func() {
 			executable := s.newTestExecutable()
 
-			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ Executable, _ time.Time) {
+			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ queues.Executable, _ time.Time) {
 				s.Equal(ctasks.TaskStatePending, executable.State())
 
 				go func() {
@@ -486,9 +600,19 @@ func (s *executableSuite) TestTaskCancellation() {
 	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
-func (s *executableSuite) newTestExecutable() Executable {
-	return NewExecutable(
-		DefaultReaderId,
+func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
+	p := params{
+		dlqWriter: nil,
+		dlqEnabled: func() bool {
+			return false
+		},
+		priorityAssigner: queues.NewNoopPriorityAssigner(),
+	}
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
 		tasks.NewFakeTask(
 			definition.NewWorkflowKey(
 				tests.NamespaceID.String(),
@@ -501,15 +625,19 @@ func (s *executableSuite) newTestExecutable() Executable {
 		s.mockExecutor,
 		s.mockScheduler,
 		s.mockRescheduler,
-		NewNoopPriorityAssigner(),
+		p.priorityAssigner,
 		s.timeSource,
 		s.mockNamespaceRegistry,
 		s.mockClusterMetadata,
 		log.NewTestLogger(),
-		metrics.NoopMetricsHandler,
+		s.metricsHandler,
+		func(params *queues.ExecutableParams) {
+			params.DLQEnabled = p.dlqEnabled
+			params.DLQWriter = p.dlqWriter
+		},
 	)
 }
 
-func (s *executableSuite) accessInternalState(executable Executable) {
+func (s *executableSuite) accessInternalState(executable queues.Executable) {
 	_ = fmt.Sprintf("%v", executable)
 }

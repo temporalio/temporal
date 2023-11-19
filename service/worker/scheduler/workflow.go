@@ -78,9 +78,10 @@ const (
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
-	SignalNameUpdate  = "update"
-	SignalNamePatch   = "patch"
-	SignalNameRefresh = "refresh"
+	SignalNameUpdate   = "update"
+	SignalNamePatch    = "patch"
+	SignalNameRefresh  = "refresh"
+	SignalNameForceCAN = "force-continue-as-new"
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
@@ -123,6 +124,7 @@ type (
 		// Signal requests
 		pendingPatch  *schedpb.SchedulePatch
 		pendingUpdate *schedspb.FullUpdateRequest
+		forceCAN      bool
 
 		uuidBatch []string
 
@@ -142,8 +144,8 @@ type (
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
-		IterationsBeforeContinueAsNew     int
-		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
+		IterationsBeforeContinueAsNew     int           // Number of iterations per run, or 0 to use server-suggested
+		SleepWhilePaused                  bool          // If true, don't set timers while paused/out of actions
 		// MaxBufferSize limits the number of buffered starts. This also limits the number of
 		// workflows that can be backfilled at once (since they all have to fit in the buffer).
 		MaxBufferSize       int
@@ -191,7 +193,7 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		IterationsBeforeContinueAsNew:     500,
+		IterationsBeforeContinueAsNew:     0,
 		SleepWhilePaused:                  true,
 		MaxBufferSize:                     1000,
 		AllowZeroSleep:                    true,
@@ -253,12 +255,17 @@ func (s *scheduler) run() error {
 
 	iters := s.tweakables.IterationsBeforeContinueAsNew
 	for {
-		// TODO: use the real GetContinueAsNewSuggested
-		continueAsNewSuggested := iters <= 0 || workflow.GetInfo(s.ctx).GetCurrentHistoryLength() >= impossibleHistorySize
-		if continueAsNewSuggested && s.pendingUpdate == nil && s.pendingPatch == nil {
+		info := workflow.GetInfo(s.ctx)
+		suggestContinueAsNew := info.GetCurrentHistoryLength() >= impossibleHistorySize
+		if s.tweakables.IterationsBeforeContinueAsNew > 0 {
+			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
+			iters--
+		} else {
+			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested() || s.forceCAN
+		}
+		if suggestContinueAsNew && s.pendingUpdate == nil && s.pendingPatch == nil {
 			break
 		}
-		iters--
 
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
@@ -585,6 +592,9 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
+	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
+	sel.AddReceive(forceCAN, s.handleForceCANSignal)
+
 	// if we're paused or out of actions, we don't need to wake up until we get an update
 	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
 		nextWakeup = time.Time{}
@@ -717,6 +727,12 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
 	s.State.NeedRefresh = true
+}
+
+func (s *scheduler) handleForceCANSignal(ch workflow.ReceiveChannel, _ bool) {
+	ch.Receive(s.ctx, nil)
+	s.logger.Debug("got force-continue-as-new signal")
+	s.forceCAN = true
 }
 
 func (s *scheduler) processSignals() bool {

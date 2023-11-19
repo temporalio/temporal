@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/primitives"
@@ -107,10 +106,6 @@ func (s *purgeDLQTasksSuite) SetupTest() {
 }
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
-	if TestFlags.PersistenceType != config.StoreTypeNoSQL {
-		t.Skip("skipping dlq tests for non-cassandra persistence")
-	}
-
 	suite.Run(t, new(purgeDLQTasksSuite))
 }
 
@@ -246,6 +241,7 @@ func (s *purgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

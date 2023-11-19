@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -135,8 +136,6 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()
-	serviceResolver := membership.NewMockServiceResolver(controller)
-	serviceResolver.EXPECT().MemberCount().Return(1).AnyTimes()
 	lazyLoadedOwnershipBasedQuotaScaler := shard.LazyLoadedOwnershipBasedQuotaScaler{
 		Value: &atomic.Value{},
 	}
@@ -145,22 +144,22 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		registry.AddCategory(tasks.CategoryArchival)
 	}
 	return fx.Supply(
-		compileTimeDependencies{},
+		unusedDependencies{},
 		cfg,
 		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
-		fx.Annotate(serviceResolver, fx.As(new(membership.ServiceResolver))),
-		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
 		lazyLoadedOwnershipBasedQuotaScaler,
 	)
 }
 
-// compileTimeDependencies is a struct that provides nil implementations of all the dependencies needed for the queue
-// module that are not required for the test at runtime.
-type compileTimeDependencies struct {
+// This is a struct that provides nil implementations of all the dependencies needed for the queue module that are not
+// actually used.
+type unusedDependencies struct {
 	fx.Out
 
+	clock.TimeSource
+	membership.ServiceResolver
 	namespace.Registry
 	log.SnTaggedLogger
 	client.Bean
@@ -170,4 +169,5 @@ type compileTimeDependencies struct {
 	manager.VisibilityManager
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher
+	persistence.HistoryTaskQueueManager
 }

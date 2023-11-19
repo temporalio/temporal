@@ -41,7 +41,6 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
@@ -180,6 +179,8 @@ message RecordWorkflowTaskStartedResponse {
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
     int64 version = 17;
+    temporal.api.history.v1.History history = 18;
+    bytes next_page_token = 19;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -515,7 +516,8 @@ message GetShardResponse {
 
 message RemoveTaskRequest {
     int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
+    // The task category. See tasks.TaskCategoryRegistry for more.
+    int32 category = 2;
     int64 task_id = 3;
     google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
 }
@@ -665,6 +667,7 @@ message ImportWorkflowExecutionRequest {
 
 message ImportWorkflowExecutionResponse {
     bytes token = 1;
+    bool events_applied = 2;
 }
 
 message DeleteWorkflowVisibilityRecordRequest {
@@ -769,7 +772,21 @@ message DeleteDLQTasksRequest {
     temporal.server.api.common.v1.HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
 }
 
-message DeleteDLQTasksResponse {}
+message DeleteDLQTasksResponse {
+    // messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
+    int64 messages_deleted = 1;
+}
+
+message ListQueuesRequest {
+    int32 queue_type = 1;
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+    repeated string queue_names = 1;
+    bytes next_page_token = 2;
+}
 
 message AddTasksRequest {
   // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
@@ -786,6 +803,7 @@ message AddTasksRequest {
     temporal.api.common.v1.DataBlob blob = 2;
   }
 
+  // A list of tasks to enqueue or re-enqueue.
   repeated Task tasks = 2;
 }
 

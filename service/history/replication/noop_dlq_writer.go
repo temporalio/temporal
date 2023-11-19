@@ -22,35 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queuestest
+package replication
 
-import (
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
-)
+import "context"
 
-// FakeExecutable is a fake queues.Executable that returns the given task and error upon GetTask and Execute,
-// respectively, and it also records the number of calls.
-type FakeExecutable struct {
-	queues.Executable
-	err   error
-	task  tasks.Task
-	calls int
+// NoopDLQWriter is a DLQWriter that does nothing. The zero value is a valid instance.
+type NoopDLQWriter struct {
 }
 
-func NewFakeExecutable(task tasks.Task, err error) *FakeExecutable {
-	return &FakeExecutable{task: task, err: err}
-}
+var _ DLQWriter = NoopDLQWriter{}
 
-func (e *FakeExecutable) Execute() error {
-	e.calls++
-	return e.err
-}
-
-func (e *FakeExecutable) GetTask() tasks.Task {
-	return e.task
-}
-
-func (e *FakeExecutable) GetCalls() int {
-	return e.calls
+func (w NoopDLQWriter) WriteTaskToDLQ(context.Context, DLQWriteRequest) error {
+	return nil
 }

@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -177,22 +178,25 @@ func TestFindOrCreate(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, completedUpdateID)
 		require.NoError(t, err)
 		require.True(t, found)
-		acptOutcome, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err, "completed update should also be accepted")
-		require.Equal(t, completedOutcome, acptOutcome,
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.Equal(t, completedOutcome, status.Outcome,
 			"completed update should have an outcome")
-		got, err := upd.WaitOutcome(ctx)
+		status, err = upd.WaitOutcome(ctx)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.NoError(t, err, "completed update should have an outcome")
-		require.Equal(t, completedOutcome, got,
+		require.Equal(t, completedOutcome, status.Outcome,
 			"completed update should have an outcome")
 	})
 	t.Run("find stored accepted", func(t *testing.T) {
 		upd, found, err := reg.FindOrCreate(ctx, acceptedUpdateID)
 		require.NoError(t, err)
 		require.True(t, found)
-		acptOutcome, err := upd.WaitAccepted(ctx)
+		status, err := upd.WaitAccepted(ctx)
 		require.NoError(t, err)
-		require.Nil(t, acptOutcome)
+		require.Equal(t, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome)
 	})
 }
 

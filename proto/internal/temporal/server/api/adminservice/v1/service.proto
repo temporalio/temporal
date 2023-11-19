@@ -156,5 +156,15 @@ service AdminService {
     // (-- api-linter: core::0165::response-message-name=disabled
     //     aip.dev/not-precedent:  --)
     rpc PurgeDLQTasks (PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {}
+
+    rpc MergeDLQTasks (MergeDLQTasksRequest) returns (MergeDLQTasksResponse) {}
+
+    rpc DescribeDLQJob (DescribeDLQJobRequest) returns (DescribeDLQJobResponse) {}
+
+    rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {}
+
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
 }
 

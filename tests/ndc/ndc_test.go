@@ -155,7 +155,7 @@ func (s *nDCFunctionalTestSuite) SetupSuite() {
 	}
 	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
-	cluster, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
+	cluster, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.cluster = cluster
 
@@ -2220,17 +2220,17 @@ func (s *nDCFunctionalTestSuite) importEvents(
 		resp, err := historyClient.ImportWorkflowExecution(s.newContext(), req)
 		s.NoError(err, "Failed to import history event")
 		token = resp.Token
+	}
 
-		if verifyWorkflowNotExists {
-			_, err := historyClient.GetMutableState(s.newContext(), &historyservice.GetMutableStateRequest{
-				NamespaceId: s.namespaceID.String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-			})
-			s.IsType(&serviceerror.NotFound{}, err)
-		}
+	if verifyWorkflowNotExists {
+		_, err := historyClient.GetMutableState(s.newContext(), &historyservice.GetMutableStateRequest{
+			NamespaceId: s.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			},
+		})
+		s.IsType(&serviceerror.NotFound{}, err)
 	}
 
 	req := &historyservice.ImportWorkflowExecutionRequest{

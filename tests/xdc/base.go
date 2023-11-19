@@ -107,11 +107,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 	}
 
-	c, err := tests.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	c, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	c, err = tests.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 

@@ -428,6 +428,8 @@ const (
 	MatchingLongPollExpirationInterval = "matching.longPollExpirationInterval"
 	// MatchingSyncMatchWaitDuration is to wait time for sync match
 	MatchingSyncMatchWaitDuration = "matching.syncMatchWaitDuration"
+	// MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests
+	MatchingHistoryMaxPageSize = "matching.historyMaxPageSize"
 	// MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
 	// that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
 	// be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
@@ -539,6 +541,14 @@ const (
 	// persistence layers that are missing AssertShardOwnership support.
 	// If set to zero, shards will not delay closing.
 	ShardLingerTimeLimit = "history.shardLingerTimeLimit"
+	// ShardOwnershipAssertionEnabled configures if the shard ownership is asserted
+	// for API requests when a NotFound or NamespaceNotFound error is returned from
+	// persistence.
+	// NOTE: Shard ownership assertion is not implemented by any persistence implementation
+	// in this codebase, because assertion is not needed for persistence implementation
+	// that guarantees read after write consistency. As a result, even if this config is
+	// enabled, it's a no-op.
+	ShardOwnershipAssertionEnabled = "history.shardOwnershipAssertionEnabled"
 	// HistoryClientOwnershipCachingEnabled configures if history clients try to cache
 	// shard ownership information, instead of checking membership for each request.
 	// Only inspected when an instance first creates a history client, so changes
@@ -934,4 +944,7 @@ const (
 	WorkerStickyCacheSize = "worker.stickyCacheSize"
 	// SchedulerNamespaceStartWorkflowRPS is the per-namespace limit for starting workflows by schedules
 	SchedulerNamespaceStartWorkflowRPS = "worker.schedulerNamespaceStartWorkflowRPS"
+	// WorkerDeleteNamespaceActivityLimitsConfig is a map that contains a copy of relevant sdkworker.Options
+	// settings for controlling remote activity concurrency for delete namespace workflows.
+	WorkerDeleteNamespaceActivityLimitsConfig = "worker.deleteNamespaceActivityLimitsConfig"
 )

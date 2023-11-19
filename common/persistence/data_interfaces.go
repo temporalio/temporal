@@ -37,11 +37,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/common/persistence/serialization"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -1219,12 +1217,12 @@ type (
 		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
 		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
 		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+		ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
-		queue            QueueV2
-		serializer       *serialization.TaskSerializer
-		numHistoryShards int
+		queue      QueueV2
+		serializer *serialization.TaskSerializer
 	}
 
 	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.
@@ -1243,6 +1241,9 @@ type (
 		SourceCluster string
 		TargetCluster string
 		Task          tasks.Task
+		// SourceShardID of the task in its original cluster. Note that tasks may move between clusters, so this shard
+		// id may not be the same as the shard id of the task in the current cluster.
+		SourceShardID int
 	}
 
 	EnqueueTaskResponse struct {
@@ -1269,7 +1270,7 @@ type (
 
 	RawHistoryTask struct {
 		MessageMetadata MessageMetadata
-		Task            *persistencespb.HistoryTask
+		Payload         *persistencespb.HistoryTask
 	}
 
 	ReadRawTasksResponse struct {
@@ -1290,7 +1291,18 @@ type (
 	}
 
 	DeleteTasksResponse struct {
-		// empty
+		MessagesDeleted int64
+	}
+
+	ListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ListQueuesResponse struct {
+		QueueNames    []string
+		NextPageToken []byte
 	}
 )
 

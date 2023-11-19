@@ -33,10 +33,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -64,13 +62,13 @@ var (
 	ErrHistoryTaskBlobIsNil         = errors.New("history task from queue has nil blob")
 	ErrEnqueueTaskRequestTaskIsNil  = errors.New("enqueue task request task is nil")
 	ErrQueueAlreadyExists           = errors.New("queue already exists")
+	ErrShardIDInvalid               = errors.New("shard ID must be greater than 0")
 )
 
-func NewHistoryTaskQueueManager(queue QueueV2, numHistoryShards int) *HistoryTaskQueueManagerImpl {
+func NewHistoryTaskQueueManager(queue QueueV2) *HistoryTaskQueueManagerImpl {
 	return &HistoryTaskQueueManagerImpl{
-		queue:            queue,
-		serializer:       serialization.NewTaskSerializer(),
-		numHistoryShards: numHistoryShards,
+		queue:      queue,
+		serializer: serialization.NewTaskSerializer(),
 	}
 }
 
@@ -85,11 +83,13 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	if err != nil {
 		return nil, fmt.Errorf("%v: %w", ErrMsgSerializeTaskToEnqueue, err)
 	}
+	if request.SourceShardID <= 0 {
+		return nil, fmt.Errorf("%w: shardID = %d", ErrShardIDInvalid, request.SourceShardID)
+	}
 
-	shardID := tasks.GetShardIDForTask(request.Task, m.numHistoryShards)
 	taskCategory := request.Task.GetCategory()
 	task := persistencespb.HistoryTask{
-		ShardId: int32(shardID),
+		ShardId: int32(request.SourceShardID),
 		Blob:    &blob,
 	}
 	taskBytes, _ := task.Marshal()
@@ -151,7 +151,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadRawTasks(
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeRawHistoryTask, err)
 		}
 		responseTasks[i].MessageMetadata = message.MetaData
-		responseTasks[i].Task = &task
+		responseTasks[i].Payload = &task
 	}
 
 	return &ReadRawTasksResponse{
@@ -170,7 +170,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 	resTasks := make([]HistoryTask, len(response.Tasks))
 
 	for i, rawTask := range response.Tasks {
-		blob := rawTask.Task.Blob
+		blob := rawTask.Payload.Blob
 		if blob == nil {
 			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}
@@ -210,7 +210,7 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	ctx context.Context,
 	request *DeleteTasksRequest,
 ) (*DeleteTasksResponse, error) {
-	_, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
+	resp, err := m.queue.RangeDeleteMessages(ctx, &InternalRangeDeleteMessagesRequest{
 		QueueType:                   request.QueueKey.QueueType,
 		QueueName:                   request.QueueKey.GetQueueName(),
 		InclusiveMaxMessageMetadata: request.InclusiveMaxMessageMetadata,
@@ -218,7 +218,25 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 	if err != nil {
 		return nil, err
 	}
-	return &DeleteTasksResponse{}, nil
+	return &DeleteTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
+}
+
+func (m HistoryTaskQueueManagerImpl) ListQueues(
+	ctx context.Context,
+	request *ListQueuesRequest,
+) (*ListQueuesResponse, error) {
+	resp, err := m.queue.ListQueues(ctx, &InternalListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ListQueuesResponse{
+		QueueNames:    resp.QueueNames,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

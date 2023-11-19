@@ -99,7 +99,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
 
-	cluster, err := NewCluster(s.clusterConfig, s.logger)
+	cluster, err := NewCluster(s.T(), s.clusterConfig, s.logger)
 	s.Require().NoError(err)
 	s.cluster = cluster
 	s.frontendClient = s.cluster.GetFrontendClient()

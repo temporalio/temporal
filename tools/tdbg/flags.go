@@ -66,6 +66,8 @@ var (
 	FlagTLSDisableHostVerification = "tls-disable-host-verification"
 	FlagTLSServerName              = "tls-server-name"
 	FlagLastMessageID              = "last-message-id"
+	FlagJobToken                   = "job-token"
+	FlagReason                     = "reason"
 	FlagYes                        = "yes"
 	FlagMore                       = "more"
 	FlagMinEventVersion            = "min-event-version"
@@ -81,4 +83,6 @@ var (
 	FlagBinaryFile                 = "binary-file"
 	FlagBase64Data                 = "base64-data"
 	FlagBase64File                 = "base64-file"
+	FlagTaskCategoryID             = "task-category-id"
+	FlagEncoding                   = "encoding"
 )

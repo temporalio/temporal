@@ -43,11 +43,20 @@ var (
 	ErrInvalidReadQueueMessagesNextPageToken = &InvalidPersistenceRequestError{
 		Msg: "invalid next-page token for reading queue messages",
 	}
+	ErrInvalidListQueuesNextPageToken = &InvalidPersistenceRequestError{
+		Msg: "invalid next-page token for listing queues",
+	}
 	ErrNonPositiveReadQueueMessagesPageSize = &InvalidPersistenceRequestError{
 		Msg: "non-positive page size for reading queue messages",
 	}
 	ErrInvalidQueueRangeDeleteMaxMessageID = &InvalidPersistenceRequestError{
 		Msg: "max message id for queue range delete is invalid",
+	}
+	ErrNonPositiveListQueuesPageSize = &InvalidPersistenceRequestError{
+		Msg: "non-positive page size for listing queues",
+	}
+	ErrNegativeListQueuesOffset = &InvalidPersistenceRequestError{
+		Msg: "negative offset for listing queues",
 	}
 )
 

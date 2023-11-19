@@ -83,12 +83,13 @@ type Config struct {
 	EventsCacheTTL          dynamicconfig.DurationPropertyFn
 
 	// ShardController settings
-	RangeSizeBits                uint
-	AcquireShardInterval         dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
-	ShardIOConcurrency           dynamicconfig.IntPropertyFn
-	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
-	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
+	RangeSizeBits                  uint
+	AcquireShardInterval           dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency        dynamicconfig.IntPropertyFn
+	ShardIOConcurrency             dynamicconfig.IntPropertyFn
+	ShardLingerOwnershipCheckQPS   dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit           dynamicconfig.DurationPropertyFn
+	ShardOwnershipAssertionEnabled dynamicconfig.BoolPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -318,6 +319,9 @@ type Config struct {
 	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// FrontendAccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
+	FrontendAccessHistoryFraction dynamicconfig.FloatPropertyFn
 }
 
 const (
@@ -372,12 +376,13 @@ func NewConfig(
 		EventsCacheMaxSizeBytes: dc.GetIntProperty(dynamicconfig.EventsCacheMaxSizeBytes, 512*1024), // 512KB
 		EventsCacheTTL:          dc.GetDurationProperty(dynamicconfig.EventsCacheTTL, time.Hour),
 
-		RangeSizeBits:                20, // 20 bits for sequencer, 2^20 sequence number for any range
-		AcquireShardInterval:         dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
-		AcquireShardConcurrency:      dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
-		ShardIOConcurrency:           dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
-		ShardLingerOwnershipCheckQPS: dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
-		ShardLingerTimeLimit:         dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
+		RangeSizeBits:                  20, // 20 bits for sequencer, 2^20 sequence number for any range
+		AcquireShardInterval:           dc.GetDurationProperty(dynamicconfig.AcquireShardInterval, time.Minute),
+		AcquireShardConcurrency:        dc.GetIntProperty(dynamicconfig.AcquireShardConcurrency, 10),
+		ShardIOConcurrency:             dc.GetIntProperty(dynamicconfig.ShardIOConcurrency, 1),
+		ShardLingerOwnershipCheckQPS:   dc.GetIntProperty(dynamicconfig.ShardLingerOwnershipCheckQPS, 4),
+		ShardLingerTimeLimit:           dc.GetDurationProperty(dynamicconfig.ShardLingerTimeLimit, 0),
+		ShardOwnershipAssertionEnabled: dc.GetBoolProperty(dynamicconfig.ShardOwnershipAssertionEnabled, true),
 
 		HistoryClientOwnershipCachingEnabled: dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false),
 
@@ -391,7 +396,7 @@ func NewConfig(
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
-		TaskDLQEnabled: dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, false),
+		TaskDLQEnabled: dc.GetBoolProperty(dynamicconfig.HistoryTaskDLQEnabled, true),
 
 		TaskSchedulerEnableRateLimiter:           dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
 		TaskSchedulerEnableRateLimiterShadowMode: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode, true),
@@ -578,6 +583,8 @@ func NewConfig(
 		WorkflowExecutionMaxTotalUpdates:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 2000),
 
 		SendRawWorkflowHistory: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
+
+		FrontendAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
 	}
 
 	return cfg
