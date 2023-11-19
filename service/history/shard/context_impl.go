@@ -1490,9 +1490,9 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 ) (retErr error) {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	handler.Counter(metrics.SemaphoreRequests.GetMetricName()).Record(1)
-	startTIme := time.Now().UTC()
+	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.SemaphoreLatency.GetMetricName()).Record(time.Since(startTIme))
+		handler.Timer(metrics.SemaphoreLatency.GetMetricName()).Record(time.Since(startTime))
 		if retErr != nil {
 			handler.Counter(metrics.SemaphoreFailures.GetMetricName()).Record(1)
 		}
