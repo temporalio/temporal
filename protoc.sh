@@ -7,10 +7,10 @@ PROTO_OPTS="paths=source_relative:${PROTO_OUT}"
 
 case $(uname -s) in
     Darwin*)
-        SED=(sed -i '')
+        SED="sed -i ''"
         ;;
     *)
-        SED=(sed -i)
+        SED="sed -i"
         ;;
 esac
 
