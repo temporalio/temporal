@@ -688,7 +688,7 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 	_, err := baseDB.InsertIntoQueueV2Metadata(ctx, &row)
 	require.NoError(t, err)
 	_, err = q.ListQueues(context.Background(), &persistence.InternalListQueuesRequest{
-		QueueType: persistence.QueueTypeHistoryNormal,
+		QueueType: queueType,
 		PageSize:  100,
 	})
 	assert.Error(t, err)
