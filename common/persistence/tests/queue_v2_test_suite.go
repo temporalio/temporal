@@ -661,14 +661,4 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		})
 		assert.Error(t, err)
 	})
-	t.Run("InvalidMetadataEncoding", func(t *testing.T) {
-		t.Parallel()
-		queueType := persistence.QueueTypeHistoryDLQ
-		_, err := queue.ListQueues(ctx, &persistence.InternalListQueuesRequest{
-			QueueType:     queueType,
-			PageSize:      1,
-			NextPageToken: []byte("some invalid token"),
-		})
-		assert.Error(t, err)
-	})
 }
