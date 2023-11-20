@@ -234,7 +234,7 @@ func (m HistoryTaskQueueManagerImpl) ListQueues(
 		return nil, err
 	}
 	return &ListQueuesResponse{
-		QueueNames:    resp.QueueNames,
+		Queues:        resp.Queues,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }
