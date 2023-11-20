@@ -47,12 +47,6 @@ endif
 export TEST_TOTAL_SHARDS ?= $(BUILDKITE_PARALLEL_JOB_COUNT)
 export TEST_SHARD_INDEX ?= $(BUILDKITE_PARALLEL_JOB)
 
-SEDOPTION = -i
-ifeq ($(shell uname -s),Darwin)
-# MacOS uses BSD sed
-SEDOPTION = -i ''
-endif
-
 ##### Variables ######
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)

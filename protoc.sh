@@ -6,8 +6,8 @@ PROTO_OUT=api
 PROTO_OPTS="paths=source_relative:${PROTO_OUT}"
 
 SED='sed -i'
-case $(uname -s) in
-    Darwin*)
+case $(go env GOOS) in
+    darwin*)
         SED="sed -i ''"
         ;;
 esac
