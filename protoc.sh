@@ -15,7 +15,7 @@ case $(uname -s) in
 esac
 
 # Compile protos
-find "${PROTO_ROOT}/internal" -name "*.proto" | sort | xargs dirname | uniq | while read -r dir; do
+find "${PROTO_ROOT}/internal" -name "*.proto" | sort | xargs -I{} dirname {} | uniq | while read -r dir; do
     protoc --fatal_warnings \
         -I="${PROTO_ROOT}/internal" \
         -I="${PROTO_ROOT}/api" \
