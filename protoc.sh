@@ -5,12 +5,10 @@ PROTO_ROOT=${PROTO_ROOT:-proto}
 PROTO_OUT=api
 PROTO_OPTS="paths=source_relative:${PROTO_OUT}"
 
+SED='sed -i'
 case $(uname -s) in
     Darwin*)
         SED="sed -i ''"
-        ;;
-    *)
-        SED="sed -i"
         ;;
 esac
 
@@ -25,7 +23,7 @@ find "${PROTO_ROOT}/internal" -name "*.proto" | sort | xargs -I{} dirname {} | u
         --go-helpers_out="${PROTO_OPTS}" \
         "${dir}"/*
 done
-grep -ERl "^//\s+(- )?protoc[ -]" ${PROTO_OUT} | xargs "${SED[@]}" -E -e '\@//[[:space:]]*(- )?protoc@d'
+grep -ERl "^//\s+(- )?protoc[ -]" ${PROTO_OUT} | xargs -I{} sh -c "${SED} -E -e '\@//[[:space:]]*(- )?protoc@d' {}"
 mv -f "${PROTO_OUT}/temporal/server/api/"* "${PROTO_OUT}" && rm -rf "${PROTO_OUT}"/temporal
 
 # The generated enums in go are just plain terrible, so we fix them
@@ -37,10 +35,9 @@ set +e
 grep -R '^enum ' "${PROTO_ROOT}" | cut -d ' ' -f2 | while read -r enum; do
     grep -Rl "${enum}" "${PROTO_OUT}" \
         | grep -E "\.go" \
-        | xargs "${SED[@]}" -e "s/${enum}_\(.*\) ${enum}/\1 ${enum}/g" \
-                            -e "s/\.${enum}_\(.*\)/.\1/g"
+        | xargs -I {} sh -c "${SED} -e 's/${enum}_\(.*\) ${enum}/\1 ${enum}/g' -e 's/\.${enum}_\(.*\)/.\1/g' {}"
 done
-"${SED[@]}" -e "s/BuildId_\(.*\) BuildId_State/\1 BuildId_State/g;s/return BuildId_\(.*\)/return \1/g" "${PROTO_OUT}/persistence/v1/task_queues.pb.go"
+sh -c "${SED} -e 's/BuildId_\(.*\) BuildId_State/\1 BuildId_State/g;s/return BuildId_\(.*\)/return \1/g' ${PROTO_OUT}/persistence/v1/task_queues.pb.go"
 set -e
 # We rely on the old temporal CamelCase JSON enums for presentation, so we rewrite the String method
 # on all generated enums
