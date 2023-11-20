@@ -319,6 +319,10 @@ func testCassandraQueueV2DataCorruption(t *testing.T, cluster *cassandra.TestClu
 }
 
 func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
+	t.Run("DataCorruption", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2DataCorruption(t, cluster)
+	})
 	t.Run("QueryErrors", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2QueryErrors(t, cluster)
@@ -340,9 +344,6 @@ func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
 	})
 	t.Run("MultiplePartitions", func(t *testing.T) {
 		testCassandraQueueV2MultiplePartitions(t, cluster)
-	})
-	t.Run("DataCorruption", func(t *testing.T) {
-		testCassandraQueueV2DataCorruption(t, cluster)
 	})
 }
 
@@ -712,7 +713,8 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
-	queueType := persistence.QueueTypeHistoryNormal
+	// Using a different QueueType so that ListQueue tests are not failing because of corrupt queue metadata.
+	queueType := persistence.QueueV2Type(3)
 	queueName := "test-queue-" + t.Name()
 	err := session.Query(
 		cassandra.TemplateCreateQueueQuery,

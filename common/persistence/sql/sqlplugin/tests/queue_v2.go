@@ -207,9 +207,11 @@ func (l *logRecorder) Error(msg string, _ ...tag.Tag) {
 func RunSQLQueueV2TestSuite(t *testing.T, baseDB sqlplugin.DB) {
 	ctx := context.Background()
 	t.Run("TestListQueueFailsToGetLastMessageID", func(t *testing.T) {
+		t.Parallel()
 		testListQueueFailsToGetLastMessageID(ctx, t, baseDB)
 	})
 	t.Run("TestListQueueFailsToExtractQueueMetadata", func(t *testing.T) {
+		t.Parallel()
 		testListQueueFailsToExtractQueueMetadata(ctx, t, baseDB)
 	})
 	t.Run("GetPartitionFailsForListQueues", func(t *testing.T) {
@@ -693,7 +695,7 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 }
 
 func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueTypeHistoryNormal
+	queueType := persistence.QueueV2Type(4)
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:                  baseDB,
@@ -715,7 +717,7 @@ func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, bas
 }
 
 func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueTypeHistoryNormal
+	queueType := persistence.QueueV2Type(5)
 	queueName := "test-queue-" + t.Name()
 	q := persistencesql.NewQueueV2(baseDB, log.NewTestLogger())
 	row := sqlplugin.QueueV2MetadataRow{
