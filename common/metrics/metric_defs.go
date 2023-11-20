@@ -40,6 +40,8 @@ const (
 	visibilityPluginNameTagName = "visibility_plugin_name"
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
+	nexusMethodTagName          = "method"
+	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 )
@@ -653,6 +655,14 @@ var (
 	HTTPServiceRequests                      = NewCounterDef(
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
+	)
+	NexusRequests = NewCounterDef(
+		"nexus_requests",
+		WithDescription("The number of Nexus requests received by the service."),
+	)
+	NexusLatencyHistogram = NewCounterDef(
+		"nexus_latency",
+		WithDescription("Latency histogram of Nexus requests."),
 	)
 
 	// History

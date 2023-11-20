@@ -90,6 +90,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(AuthorizationPolicyProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
@@ -142,6 +143,24 @@ type GrpcServerOptions struct {
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
+func AuthorizationPolicyProvider(
+	cfg *config.Config,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
+) *authorization.Policy {
+	return authorization.NewPolicy(
+		claimMapper,
+		authorizer,
+		logger,
+		metricsHandler,
+		cfg.Global.Authorization.AuthHeaderName,
+		cfg.Global.Authorization.AuthExtraHeaderName,
+	)
+}
+
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	cfg *config.Config,
@@ -159,8 +178,7 @@ func GrpcServerOptionsProvider(
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
+	authPolicy *authorization.Policy,
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
@@ -198,15 +216,7 @@ func GrpcServerOptionsProvider(
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
-		authorization.NewAuthorizationInterceptor(
-			claimMapper,
-			authorizer,
-			metricsHandler,
-			logger,
-			audienceGetter,
-			cfg.Global.Authorization.AuthHeaderName,
-			cfg.Global.Authorization.AuthExtraHeaderName,
-		),
+		authorization.NewAuthorizationInterceptor(authPolicy, audienceGetter),
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -633,8 +643,10 @@ func HTTPAPIServerProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
 	grpcServerOptions GrpcServerOptions,
+	authPolicy *authorization.Policy,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	matchingClient resource.MatchingClient,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
@@ -655,6 +667,8 @@ func HTTPAPIServerProvider(
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
 		namespaceRegistry,
+		matchingClient,
+		authPolicy,
 		logger,
 	)
 }
