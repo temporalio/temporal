@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -134,6 +135,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsConfig              *esclient.Config
 		EsClient              esclient.Client
+		ClientHeadersProvider rpc.ClientHeadersProvider
 		MetricsHandler        metrics.Handler
 	}
 )
@@ -295,6 +297,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsConfig:              esConfig,
 		EsClient:              esClient,
+		ClientHeadersProvider: so.clientHeadersProvider,
 		MetricsHandler:        metricHandler,
 	}, nil
 }
@@ -340,6 +343,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
+		ClientHeadersProvider      rpc.ClientHeadersProvider
 		MetricsHandler             metrics.Handler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
@@ -414,6 +418,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() log.Logger {
 				return params.Logger
 			},
+			func() rpc.ClientHeadersProvider { return params.ClientHeadersProvider },
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},

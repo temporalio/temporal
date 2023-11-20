@@ -359,6 +359,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 func SdkClientFactoryProvider(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	clientHeadersProvider rpc.ClientHeadersProvider,
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
@@ -371,6 +372,7 @@ func SdkClientFactoryProvider(
 	return sdk.NewClientFactory(
 		frontendURL,
 		frontendTLSConfig,
+		clientHeadersProvider,
 		metricsHandler,
 		logger,
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),
@@ -386,6 +388,7 @@ func RPCFactoryProvider(
 	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	clientHeadersProvider rpc.ClientHeadersProvider,
 	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 ) (common.RPCFactory, error) {
@@ -394,6 +397,10 @@ func RPCFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
+	interceptors := []grpc.UnaryClientInterceptor{grpc.UnaryClientInterceptor(traceInterceptor)}
+	if clientHeadersProvider != nil {
+		interceptors = append(interceptors, rpc.ClientHeadersProviderInterceptor(clientHeadersProvider))
+	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		svcName,
@@ -401,9 +408,7 @@ func RPCFactoryProvider(
 		tlsConfigProvider,
 		frontendURL,
 		frontendTLSConfig,
-		[]grpc.UnaryClientInterceptor{
-			grpc.UnaryClientInterceptor(traceInterceptor),
-		},
+		interceptors,
 	), nil
 }
 

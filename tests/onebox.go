@@ -432,6 +432,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
+		fx.Provide(c.GetClientHeadersProvider),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return c }),
@@ -514,6 +515,7 @@ func (c *temporalImpl) startHistory(
 				persistenceConfig,
 				serviceName,
 			),
+			fx.Provide(c.GetClientHeadersProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
@@ -613,6 +615,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 			persistenceConfig,
 			serviceName,
 		),
+		fx.Provide(c.GetClientHeadersProvider),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() log.ThrottledLogger { return c.logger }),
@@ -708,6 +711,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 			persistenceConfig,
 			serviceName,
 		),
+		fx.Provide(c.GetClientHeadersProvider),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
@@ -786,6 +790,10 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *temporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
+}
+
+func (c *temporalImpl) GetClientHeadersProvider() rpc.ClientHeadersProvider {
+	return nil
 }
 
 func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
@@ -942,6 +950,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 
 func sdkClientFactoryProvider(
 	resolver membership.GRPCResolver,
+	clientHeadersProvider rpc.ClientHeadersProvider,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
@@ -957,6 +966,7 @@ func sdkClientFactoryProvider(
 	return sdk.NewClientFactory(
 		resolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
+		clientHeadersProvider,
 		metricsHandler,
 		logger,
 		dc.GetIntProperty(dynamicconfig.WorkerStickyCacheSize, 0),

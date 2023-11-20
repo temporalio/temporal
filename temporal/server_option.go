@@ -38,6 +38,7 @@ import (
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -179,6 +180,13 @@ func WithChainedFrontendGrpcInterceptors(
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customInterceptors = interceptors
+	})
+}
+
+// WithClientHeadersProvider adds headers to every outgoing request
+func WithClientHeadersProvider(h rpc.ClientHeadersProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.clientHeadersProvider = h
 	})
 }
 
