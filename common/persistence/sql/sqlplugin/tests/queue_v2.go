@@ -667,7 +667,8 @@ func testSelectNameFromQueueV2NegativeToken(ctx context.Context, t *testing.T, b
 }
 
 func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueTypeHistoryNormal
+	// Using a different QueueType to prevent this test from failing because of queues created in previous tests.
+	queueType := persistence.QueueV2Type(4)
 	queueName := "test-queue-" + t.Name()
 	logger := &logRecorder{Logger: log.NewTestLogger()}
 	q := persistencesql.NewQueueV2(baseDB, logger)
@@ -695,7 +696,8 @@ func testListQueuesGetPartitionFails(ctx context.Context, t *testing.T, baseDB s
 }
 
 func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueV2Type(4)
+	// Using a different QueueType to prevent this test from failing because of queues created in previous tests.
+	queueType := persistence.QueueV2Type(5)
 	queueName := "test-queue-" + t.Name()
 	db := &faultyDB{
 		DB:                  baseDB,
@@ -717,7 +719,8 @@ func testListQueueFailsToGetLastMessageID(ctx context.Context, t *testing.T, bas
 }
 
 func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
-	queueType := persistence.QueueV2Type(5)
+	// Using a different QueueType to prevent this test from failing because of queues created in previous tests.
+	queueType := persistence.QueueV2Type(6)
 	queueName := "test-queue-" + t.Name()
 	q := persistencesql.NewQueueV2(baseDB, log.NewTestLogger())
 	row := sqlplugin.QueueV2MetadataRow{
