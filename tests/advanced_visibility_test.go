@@ -66,6 +66,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
@@ -80,6 +81,7 @@ type advancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	protorequire.ProtoAssertions
 	FunctionalTestBase
 	isElasticsearchEnabled bool
 
@@ -148,6 +150,7 @@ func (s *advancedVisibilitySuite) TearDownSuite() {
 func (s *advancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -555,7 +558,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 1)
 	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
 	s.Equal(wt, resp.Executions[0].GetType().GetName())
-	s.Equal(searchAttr, resp.Executions[0].GetSearchAttributes())
+	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -1260,14 +1263,14 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{runningStatusPayload},
 			Count:       int64(numWorkflows - numClosedWorkflows),
 		},
 		resp.Groups[0],
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{terminatedStatusPayload},
 			Count:       int64(numClosedWorkflows),
@@ -1817,7 +1820,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
-	s.True(proto.Equal(expectedMemo, descResp.WorkflowExecutionInfo.Memo))
+	s.ProtoEqual(expectedMemo, descResp.WorkflowExecutionInfo.Memo)
 }
 
 func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
@@ -2618,7 +2621,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+	protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 		BuildId:               buildId,
 		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
 	}}, reachabilityResponse.BuildIdReachability)
@@ -2637,7 +2640,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 			TaskQueues: []string{tq},
 		})
 		s.Require().NoError(err)
-		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 			BuildId:               v01,
 			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)}},
 		}}, reachabilityResponse.BuildIdReachability)
