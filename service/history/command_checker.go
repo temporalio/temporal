@@ -367,7 +367,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on command.")
 	}
 	// ensure activity timeout never larger than workflow timeout
-	if runTimeout != nil {
+	if runTimeout.AsDuration() > 0 {
 		runTimeoutDur := runTimeout.AsDuration()
 		if attributes.GetScheduleToCloseTimeout().AsDuration() > runTimeoutDur {
 			attributes.ScheduleToCloseTimeout = runTimeout
