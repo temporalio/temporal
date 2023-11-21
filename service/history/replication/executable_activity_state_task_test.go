@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -50,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
@@ -111,10 +111,10 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		RunId:              uuid.NewString(),
 		Version:            rand.Int63(),
 		ScheduledEventId:   rand.Int63(),
-		ScheduledTime:      timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		ScheduledTime:      timestamppb.New(time.Unix(0, rand.Int63())),
 		StartedEventId:     rand.Int63(),
-		StartedTime:        timestamp.TimePtr(time.Unix(0, rand.Int63())),
-		LastHeartbeatTime:  timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		StartedTime:        timestamppb.New(time.Unix(0, rand.Int63())),
+		LastHeartbeatTime:  timestamppb.New(time.Unix(0, rand.Int63())),
 		Details:            &commonpb.Payloads{},
 		Attempt:            rand.Int31(),
 		LastFailure:        &failurepb.Failure{},

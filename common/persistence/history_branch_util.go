@@ -42,9 +42,9 @@ type (
 			treeID string,
 			branchID *string,
 			ancestors []*persistencespb.HistoryBranchRange,
-			runTimeout *time.Duration,
-			executionTimeout *time.Duration,
-			retentionDuration *time.Duration,
+			runTimeout time.Duration,
+			executionTimeout time.Duration,
+			retentionDuration time.Duration,
 		) ([]byte, error)
 		// ParseHistoryBranchInfo parses the history branch for branch information
 		ParseHistoryBranchInfo(branchToken []byte) (*persistencespb.HistoryBranch, error)
@@ -84,9 +84,9 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 	treeID string,
 	branchID *string,
 	ancestors []*persistencespb.HistoryBranchRange,
-	runTimeout *time.Duration,
-	executionTimeout *time.Duration,
-	retentionDuration *time.Duration,
+	runTimeout time.Duration,
+	executionTimeout time.Duration,
+	retentionDuration time.Duration,
 ) ([]byte, error) {
 	return NewHistoryBranch(treeID, branchID, ancestors)
 }

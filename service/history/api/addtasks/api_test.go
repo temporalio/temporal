@@ -69,7 +69,7 @@ type (
 
 func (d faultyDeserializer) DeserializeTask(
 	tasks.Category,
-	commonpb.DataBlob,
+	*commonpb.DataBlob,
 ) (tasks.Task, error) {
 	return nil, d.err
 }
@@ -128,7 +128,7 @@ func TestInvoke(t *testing.T) {
 						require.NoError(t, err)
 						params.req.Tasks = append(params.req.Tasks, &historyservice.AddTasksRequest_Task{
 							CategoryId: int32(task.GetCategory().ID()),
-							Blob:       &blob,
+							Blob:       blob,
 						})
 					}
 				}
@@ -278,7 +278,7 @@ func getDefaultTestParams(t *testing.T) *testParams {
 			Tasks: []*historyservice.AddTasksRequest_Task{
 				{
 					CategoryId: int32(tasks.CategoryTransfer.ID()),
-					Blob:       &blob,
+					Blob:       blob,
 				},
 			},
 		},

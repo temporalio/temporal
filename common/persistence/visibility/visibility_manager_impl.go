@@ -29,11 +29,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -361,8 +362,8 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 		Type: &commonpb.WorkflowType{
 			Name: internalExecution.TypeName,
 		},
-		StartTime:        &internalExecution.StartTime,
-		ExecutionTime:    &internalExecution.ExecutionTime,
+		StartTime:        timestamppb.New(internalExecution.StartTime),
+		ExecutionTime:    timestamppb.New(internalExecution.ExecutionTime),
 		Memo:             memo,
 		SearchAttributes: internalExecution.SearchAttributes,
 		TaskQueue:        internalExecution.TaskQueue,
@@ -378,7 +379,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 
 	// for close records
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		executionInfo.CloseTime = &internalExecution.CloseTime
+		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
 		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
 		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
@@ -388,7 +389,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
-	if !executionInfo.ExecutionTime.After(time.Unix(0, 0)) {
+	if !executionInfo.ExecutionTime.AsTime().After(time.Unix(0, 0)) {
 		executionInfo.ExecutionTime = executionInfo.StartTime
 	}
 

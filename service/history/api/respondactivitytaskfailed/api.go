@@ -132,7 +132,7 @@ func Invoke(
 				postActions.CreateWorkflowTask = true
 			}
 
-			activityStartedTime = *ai.StartedTime
+			activityStartedTime = ai.StartedTime.AsTime()
 			taskQueue = ai.TaskQueue
 			return postActions, nil
 		},

@@ -77,6 +77,8 @@ type (
 
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
+		historyservice.UnsafeHistoryServiceServer
+
 		status int32
 
 		tokenSerializer              common.TaskTokenSerializer
@@ -694,7 +696,7 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 		return nil, h.convertError(err)
 	}
 
-	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution{
+	if err := engine.RebuildMutableState(ctx, namespaceID, &commonpb.WorkflowExecution{
 		WorkflowId: workflowExecution.WorkflowId,
 		RunId:      workflowExecution.RunId,
 	}); err != nil {
@@ -1789,7 +1791,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	err = engine.RefreshWorkflowTasks(
 		ctx,
 		namespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,
 			RunId:      execution.RunId,
 		},
@@ -1905,8 +1907,8 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		WorkflowID:  request.Execution.GetWorkflowId(),
 		RunID:       request.Execution.GetRunId(),
 		TaskID:      math.MaxInt64,
-		StartTime:   request.GetWorkflowStartTime(),
-		CloseTime:   request.GetWorkflowCloseTime(),
+		StartTime:   request.GetWorkflowStartTime().AsTime(),
+		CloseTime:   request.GetWorkflowCloseTime().AsTime(),
 	})
 	if err != nil {
 		return nil, h.convertError(err)

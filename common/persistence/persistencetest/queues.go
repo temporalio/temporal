@@ -95,7 +95,7 @@ func EnqueueMessage(
 	return queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: common.DataBlob{
+		Blob: &common.DataBlob{
 			EncodingType: enums.EncodingType(params.EncodingType),
 			Data:         params.Data,
 		},

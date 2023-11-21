@@ -35,6 +35,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -50,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -96,7 +96,7 @@ type (
 		sync.Mutex
 		// largest replication task ID generated
 		maxTaskID                  *int64
-		maxTaskVisibilityTimestamp *time.Time
+		maxTaskVisibilityTimestamp time.Time
 		sanityCheckTime            time.Time
 		registeredQueueReaders     map[int64]struct{}
 
@@ -175,8 +175,8 @@ func (p *ackMgrImpl) NotifyNewTasks(
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
 	}
-	if p.maxTaskVisibilityTimestamp == nil || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
-		p.maxTaskVisibilityTimestamp = timestamp.TimePtr(maxVisibilityTimestamp)
+	if p.maxTaskVisibilityTimestamp.IsZero() || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
+		p.maxTaskVisibilityTimestamp = maxVisibilityTimestamp
 	}
 }
 
@@ -194,11 +194,11 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 		maxTaskID = &taskID
 	}
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
-	if maxVisibilityTimestamp == nil {
-		maxVisibilityTimestamp = timestamp.TimePtr(p.shardContext.GetTimeSource().Now())
+	if maxVisibilityTimestamp.IsZero() {
+		maxVisibilityTimestamp = p.shardContext.GetTimeSource().Now()
 	}
 
-	return *maxTaskID, timestamp.TimeValue(maxVisibilityTimestamp)
+	return *maxTaskID, maxVisibilityTimestamp
 }
 
 func (p *ackMgrImpl) GetTask(
@@ -275,7 +275,7 @@ func (p *ackMgrImpl) GetTasks(
 	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
 		Record(int64(len(replicationTasks)))
 
-	replicationEventTime := timestamp.TimePtr(p.shardContext.GetTimeSource().Now())
+	replicationEventTime := timestamppb.New(p.shardContext.GetTimeSource().Now())
 	if len(replicationTasks) > 0 {
 		replicationEventTime = replicationTasks[len(replicationTasks)-1].GetVisibilityTime()
 	}

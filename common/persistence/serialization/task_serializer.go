@@ -31,11 +31,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -50,7 +50,7 @@ func NewTaskSerializer() *TaskSerializer {
 
 func (s *TaskSerializer) SerializeTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	category := task.GetCategory()
 	switch category.ID() {
 	case tasks.CategoryIDTransfer:
@@ -64,13 +64,13 @@ func (s *TaskSerializer) SerializeTask(
 	case tasks.CategoryIDArchival:
 		return s.serializeArchivalTask(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
 }
 
 func (s *TaskSerializer) DeserializeTask(
 	category tasks.Category,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	switch category.ID() {
 	case tasks.CategoryIDTransfer:
@@ -90,7 +90,7 @@ func (s *TaskSerializer) DeserializeTask(
 
 func (s *TaskSerializer) serializeTransferTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	var transferTask *persistencespb.TransferTaskInfo
 	switch task := task.(type) {
 	case *tasks.WorkflowTask:
@@ -110,18 +110,14 @@ func (s *TaskSerializer) serializeTransferTask(
 	case *tasks.DeleteExecutionTask:
 		transferTask = s.transferDeleteExecutionTaskToProto(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
 	}
 
-	blob, err := TransferTaskInfoToBlob(transferTask)
-	if err != nil {
-		return commonpb.DataBlob{}, err
-	}
-	return blob, nil
+	return TransferTaskInfoToBlob(transferTask)
 }
 
 func (s *TaskSerializer) deserializeTransferTasks(
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	transferTask, err := TransferTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	if err != nil {
@@ -154,7 +150,7 @@ func (s *TaskSerializer) deserializeTransferTasks(
 
 func (s *TaskSerializer) serializeTimerTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	var timerTask *persistencespb.TimerTaskInfo
 	switch task := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
@@ -172,18 +168,14 @@ func (s *TaskSerializer) serializeTimerTask(
 	case *tasks.DeleteHistoryEventTask:
 		timerTask = s.timerWorkflowCleanupTaskToProto(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
 	}
 
-	blob, err := TimerTaskInfoToBlob(timerTask)
-	if err != nil {
-		return commonpb.DataBlob{}, err
-	}
-	return blob, nil
+	return TimerTaskInfoToBlob(timerTask)
 }
 
 func (s *TaskSerializer) deserializeTimerTasks(
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	timerTask, err := TimerTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	if err != nil {
@@ -214,7 +206,7 @@ func (s *TaskSerializer) deserializeTimerTasks(
 
 func (s *TaskSerializer) serializeVisibilityTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	var visibilityTask *persistencespb.VisibilityTaskInfo
 	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
@@ -226,18 +218,14 @@ func (s *TaskSerializer) serializeVisibilityTask(
 	case *tasks.DeleteExecutionVisibilityTask:
 		visibilityTask = s.visibilityDeleteTaskToProto(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", task))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", task))
 	}
 
-	blob, err := VisibilityTaskInfoToBlob(visibilityTask)
-	if err != nil {
-		return commonpb.DataBlob{}, err
-	}
-	return blob, nil
+	return VisibilityTaskInfoToBlob(visibilityTask)
 }
 
 func (s *TaskSerializer) deserializeVisibilityTasks(
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	visibilityTask, err := VisibilityTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	if err != nil {
@@ -262,7 +250,7 @@ func (s *TaskSerializer) deserializeVisibilityTasks(
 
 func (s *TaskSerializer) serializeReplicationTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	var replicationTask *persistencespb.ReplicationTaskInfo
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
@@ -272,18 +260,14 @@ func (s *TaskSerializer) serializeReplicationTask(
 	case *tasks.SyncWorkflowStateTask:
 		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
 
-	blob, err := ReplicationTaskInfoToBlob(replicationTask)
-	if err != nil {
-		return commonpb.DataBlob{}, err
-	}
-	return blob, nil
+	return ReplicationTaskInfoToBlob(replicationTask)
 }
 
 func (s *TaskSerializer) deserializeReplicationTasks(
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	replicationTask, err := ReplicationTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	if err != nil {
@@ -307,25 +291,21 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 
 func (s *TaskSerializer) serializeArchivalTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	var archivalTaskInfo *persistencespb.ArchivalTaskInfo
 	switch task := task.(type) {
 	case *tasks.ArchiveExecutionTask:
 		archivalTaskInfo = s.archiveExecutionTaskToProto(task)
 	default:
-		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf(
+		return nil, serviceerror.NewInternal(fmt.Sprintf(
 			"Unknown archival task type while serializing: %v", task))
 	}
 
-	blob, err := ArchivalTaskInfoToBlob(archivalTaskInfo)
-	if err != nil {
-		return commonpb.DataBlob{}, err
-	}
-	return blob, nil
+	return ArchivalTaskInfoToBlob(archivalTaskInfo)
 }
 
 func (s *TaskSerializer) deserializeArchivalTasks(
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	archivalTask, err := ArchivalTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
 	if err != nil {
@@ -357,7 +337,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		ScheduledEventId:        activityTask.ScheduledEventID,
 		Version:                 activityTask.Version,
 		TaskId:                  activityTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(activityTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
 	}
 }
 
@@ -370,7 +350,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 			activityTask.WorkflowId,
 			activityTask.RunId,
 		),
-		VisibilityTimestamp: *activityTask.VisibilityTime,
+		VisibilityTimestamp: activityTask.VisibilityTime.AsTime(),
 		TaskID:              activityTask.TaskId,
 		TaskQueue:           activityTask.TaskQueue,
 		ScheduledEventID:    activityTask.ScheduledEventId,
@@ -394,7 +374,7 @@ func (s *TaskSerializer) transferWorkflowTaskToProto(
 		ScheduledEventId:        workflowTask.ScheduledEventID,
 		Version:                 workflowTask.Version,
 		TaskId:                  workflowTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(workflowTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(workflowTask.VisibilityTimestamp),
 	}
 }
 
@@ -407,7 +387,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 			workflowTask.WorkflowId,
 			workflowTask.RunId,
 		),
-		VisibilityTimestamp: *workflowTask.VisibilityTime,
+		VisibilityTimestamp: workflowTask.VisibilityTime.AsTime(),
 		TaskID:              workflowTask.TaskId,
 		TaskQueue:           workflowTask.TaskQueue,
 		ScheduledEventID:    workflowTask.ScheduledEventId,
@@ -431,7 +411,7 @@ func (s *TaskSerializer) transferRequestCancelTaskToProto(
 		ScheduledEventId:        requestCancelTask.InitiatedEventID,
 		Version:                 requestCancelTask.Version,
 		TaskId:                  requestCancelTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(requestCancelTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(requestCancelTask.VisibilityTimestamp),
 	}
 }
 
@@ -444,7 +424,7 @@ func (s *TaskSerializer) transferRequestCancelTaskFromProto(
 			requestCancelTask.WorkflowId,
 			requestCancelTask.RunId,
 		),
-		VisibilityTimestamp:     *requestCancelTask.VisibilityTime,
+		VisibilityTimestamp:     requestCancelTask.VisibilityTime.AsTime(),
 		TaskID:                  requestCancelTask.TaskId,
 		TargetNamespaceID:       requestCancelTask.TargetNamespaceId,
 		TargetWorkflowID:        requestCancelTask.TargetWorkflowId,
@@ -471,7 +451,7 @@ func (s *TaskSerializer) transferSignalTaskToProto(
 		ScheduledEventId:        signalTask.InitiatedEventID,
 		Version:                 signalTask.Version,
 		TaskId:                  signalTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(signalTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(signalTask.VisibilityTimestamp),
 	}
 }
 
@@ -484,7 +464,7 @@ func (s *TaskSerializer) transferSignalTaskFromProto(
 			signalTask.WorkflowId,
 			signalTask.RunId,
 		),
-		VisibilityTimestamp:     *signalTask.VisibilityTime,
+		VisibilityTimestamp:     signalTask.VisibilityTime.AsTime(),
 		TaskID:                  signalTask.TaskId,
 		TargetNamespaceID:       signalTask.TargetNamespaceId,
 		TargetWorkflowID:        signalTask.TargetWorkflowId,
@@ -511,7 +491,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskToProto(
 		ScheduledEventId:        childWorkflowTask.InitiatedEventID,
 		Version:                 childWorkflowTask.Version,
 		TaskId:                  childWorkflowTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(childWorkflowTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(childWorkflowTask.VisibilityTimestamp),
 	}
 }
 
@@ -524,7 +504,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskFromProto(
 			signalTask.WorkflowId,
 			signalTask.RunId,
 		),
-		VisibilityTimestamp: *signalTask.VisibilityTime,
+		VisibilityTimestamp: signalTask.VisibilityTime.AsTime(),
 		TaskID:              signalTask.TaskId,
 		TargetNamespaceID:   signalTask.TargetNamespaceId,
 		TargetWorkflowID:    signalTask.TargetWorkflowId,
@@ -549,7 +529,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		ScheduledEventId:        0,
 		Version:                 closeTask.Version,
 		TaskId:                  closeTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(closeTask.VisibilityTimestamp),
 		DeleteAfterClose:        closeTask.DeleteAfterClose,
 		TaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails_{
 			CloseExecutionTaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails{
@@ -570,7 +550,7 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: *closeTask.VisibilityTime,
+		VisibilityTimestamp: closeTask.VisibilityTime.AsTime(),
 		TaskID:              closeTask.TaskId,
 		Version:             closeTask.Version,
 		DeleteAfterClose:    closeTask.DeleteAfterClose,
@@ -595,7 +575,7 @@ func (s *TaskSerializer) transferResetTaskToProto(
 		ScheduledEventId:        0,
 		Version:                 resetTask.Version,
 		TaskId:                  resetTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(resetTask.VisibilityTimestamp),
+		VisibilityTime:          timestamppb.New(resetTask.VisibilityTimestamp),
 	}
 }
 
@@ -608,7 +588,7 @@ func (s *TaskSerializer) transferResetTaskFromProto(
 			resetTask.WorkflowId,
 			resetTask.RunId,
 		),
-		VisibilityTimestamp: *resetTask.VisibilityTime,
+		VisibilityTimestamp: resetTask.VisibilityTime.AsTime(),
 		TaskID:              resetTask.TaskId,
 		Version:             resetTask.Version,
 	}
@@ -624,7 +604,7 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		Version:        deleteExecutionTask.Version,
 		TaskId:         deleteExecutionTask.TaskID,
-		VisibilityTime: timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
+		VisibilityTime: timestamppb.New(deleteExecutionTask.VisibilityTimestamp),
 	}
 }
 
@@ -637,7 +617,7 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 			deleteExecutionTask.WorkflowId,
 			deleteExecutionTask.RunId,
 		),
-		VisibilityTimestamp: *deleteExecutionTask.VisibilityTime,
+		VisibilityTimestamp: deleteExecutionTask.VisibilityTime.AsTime(),
 		TaskID:              deleteExecutionTask.TaskId,
 		Version:             deleteExecutionTask.Version,
 		// Delete workflow task process stage is not persisted. It is only for in memory retries.
@@ -659,7 +639,7 @@ func (s *TaskSerializer) timerWorkflowTaskToProto(
 		ScheduleAttempt:     workflowTimer.ScheduleAttempt,
 		EventId:             workflowTimer.EventID,
 		TaskId:              workflowTimer.TaskID,
-		VisibilityTime:      &workflowTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
 	}
 }
 
@@ -672,7 +652,7 @@ func (s *TaskSerializer) timerWorkflowTaskFromProto(
 			workflowTimer.WorkflowId,
 			workflowTimer.RunId,
 		),
-		VisibilityTimestamp: *workflowTimer.VisibilityTime,
+		VisibilityTimestamp: workflowTimer.VisibilityTime.AsTime(),
 		TaskID:              workflowTimer.TaskId,
 		EventID:             workflowTimer.EventId,
 		ScheduleAttempt:     workflowTimer.ScheduleAttempt,
@@ -695,7 +675,7 @@ func (s *TaskSerializer) timerWorkflowDelayTaskToProto(
 		ScheduleAttempt:     0,
 		EventId:             0,
 		TaskId:              workflowDelayTimer.TaskID,
-		VisibilityTime:      &workflowDelayTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(workflowDelayTimer.VisibilityTimestamp),
 	}
 }
 
@@ -708,7 +688,7 @@ func (s *TaskSerializer) timerWorkflowDelayTaskFromProto(
 			workflowDelayTimer.WorkflowId,
 			workflowDelayTimer.RunId,
 		),
-		VisibilityTimestamp: *workflowDelayTimer.VisibilityTime,
+		VisibilityTimestamp: workflowDelayTimer.VisibilityTime.AsTime(),
 		TaskID:              workflowDelayTimer.TaskId,
 		Version:             workflowDelayTimer.Version,
 		WorkflowBackoffType: workflowDelayTimer.WorkflowBackoffType,
@@ -729,7 +709,7 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 		ScheduleAttempt:     activityTimer.Attempt,
 		EventId:             activityTimer.EventID,
 		TaskId:              activityTimer.TaskID,
-		VisibilityTime:      &activityTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(activityTimer.VisibilityTimestamp),
 	}
 }
 
@@ -742,7 +722,7 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 			activityTimer.WorkflowId,
 			activityTimer.RunId,
 		),
-		VisibilityTimestamp: *activityTimer.VisibilityTime,
+		VisibilityTimestamp: activityTimer.VisibilityTime.AsTime(),
 		TaskID:              activityTimer.TaskId,
 		EventID:             activityTimer.EventId,
 		Attempt:             activityTimer.ScheduleAttempt,
@@ -765,7 +745,7 @@ func (s *TaskSerializer) timerActivityRetryTaskToProto(
 		ScheduleAttempt:     activityRetryTimer.Attempt,
 		EventId:             activityRetryTimer.EventID,
 		TaskId:              activityRetryTimer.TaskID,
-		VisibilityTime:      &activityRetryTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(activityRetryTimer.VisibilityTimestamp),
 	}
 }
 
@@ -778,7 +758,7 @@ func (s *TaskSerializer) timerActivityRetryTaskFromProto(
 			activityRetryTimer.WorkflowId,
 			activityRetryTimer.RunId,
 		),
-		VisibilityTimestamp: *activityRetryTimer.VisibilityTime,
+		VisibilityTimestamp: activityRetryTimer.VisibilityTime.AsTime(),
 		TaskID:              activityRetryTimer.TaskId,
 		EventID:             activityRetryTimer.EventId,
 		Version:             activityRetryTimer.Version,
@@ -800,7 +780,7 @@ func (s *TaskSerializer) timerUserTaskToProto(
 		ScheduleAttempt:     0,
 		EventId:             userTimer.EventID,
 		TaskId:              userTimer.TaskID,
-		VisibilityTime:      &userTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(userTimer.VisibilityTimestamp),
 	}
 }
 
@@ -813,7 +793,7 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 			userTimer.WorkflowId,
 			userTimer.RunId,
 		),
-		VisibilityTimestamp: *userTimer.VisibilityTime,
+		VisibilityTimestamp: userTimer.VisibilityTime.AsTime(),
 		TaskID:              userTimer.TaskId,
 		EventID:             userTimer.EventId,
 		Version:             userTimer.Version,
@@ -834,7 +814,7 @@ func (s *TaskSerializer) timerWorkflowRunToProto(
 		ScheduleAttempt:     0,
 		EventId:             0,
 		TaskId:              workflowTimer.TaskID,
-		VisibilityTime:      &workflowTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(workflowTimer.VisibilityTimestamp),
 	}
 }
 
@@ -847,7 +827,7 @@ func (s *TaskSerializer) timerWorkflowRunFromProto(
 			workflowTimer.WorkflowId,
 			workflowTimer.RunId,
 		),
-		VisibilityTimestamp: *workflowTimer.VisibilityTime,
+		VisibilityTimestamp: workflowTimer.VisibilityTime.AsTime(),
 		TaskID:              workflowTimer.TaskId,
 		Version:             workflowTimer.Version,
 	}
@@ -867,7 +847,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 		ScheduleAttempt:     0,
 		EventId:             0,
 		TaskId:              workflowCleanupTimer.TaskID,
-		VisibilityTime:      &workflowCleanupTimer.VisibilityTimestamp,
+		VisibilityTime:      timestamppb.New(workflowCleanupTimer.VisibilityTimestamp),
 		BranchToken:         workflowCleanupTimer.BranchToken,
 		// We set this to true even though it's no longer checked in case someone downgrades to a version that still
 		// checks this field.
@@ -884,7 +864,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 			workflowCleanupTimer.WorkflowId,
 			workflowCleanupTimer.RunId,
 		),
-		VisibilityTimestamp: *workflowCleanupTimer.VisibilityTime,
+		VisibilityTimestamp: workflowCleanupTimer.VisibilityTime.AsTime(),
 		TaskID:              workflowCleanupTimer.TaskId,
 		Version:             workflowCleanupTimer.Version,
 		BranchToken:         workflowCleanupTimer.BranchToken,
@@ -903,7 +883,7 @@ func (s *TaskSerializer) visibilityStartTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
 		Version:        startVisibilityTask.Version,
 		TaskId:         startVisibilityTask.TaskID,
-		VisibilityTime: &startVisibilityTask.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(startVisibilityTask.VisibilityTimestamp),
 	}
 }
 
@@ -916,7 +896,7 @@ func (s *TaskSerializer) visibilityStartTaskFromProto(
 			startVisibilityTask.WorkflowId,
 			startVisibilityTask.RunId,
 		),
-		VisibilityTimestamp: *startVisibilityTask.VisibilityTime,
+		VisibilityTimestamp: startVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:              startVisibilityTask.TaskId,
 		Version:             startVisibilityTask.Version,
 	}
@@ -932,7 +912,7 @@ func (s *TaskSerializer) visibilityUpsertTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
 		Version:        upsertVisibilityTask.Version,
 		TaskId:         upsertVisibilityTask.TaskID,
-		VisibilityTime: &upsertVisibilityTask.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(upsertVisibilityTask.VisibilityTimestamp),
 	}
 }
 
@@ -945,7 +925,7 @@ func (s *TaskSerializer) visibilityUpsertTaskFromProto(
 			upsertVisibilityTask.WorkflowId,
 			upsertVisibilityTask.RunId,
 		),
-		VisibilityTimestamp: *upsertVisibilityTask.VisibilityTime,
+		VisibilityTimestamp: upsertVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:              upsertVisibilityTask.TaskId,
 		Version:             upsertVisibilityTask.Version,
 	}
@@ -961,7 +941,7 @@ func (s *TaskSerializer) visibilityCloseTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION,
 		Version:        closetVisibilityTask.Version,
 		TaskId:         closetVisibilityTask.TaskID,
-		VisibilityTime: &closetVisibilityTask.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(closetVisibilityTask.VisibilityTimestamp),
 	}
 }
 
@@ -974,7 +954,7 @@ func (s *TaskSerializer) visibilityCloseTaskFromProto(
 			closeVisibilityTask.WorkflowId,
 			closeVisibilityTask.RunId,
 		),
-		VisibilityTimestamp: *closeVisibilityTask.VisibilityTime,
+		VisibilityTimestamp: closeVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:              closeVisibilityTask.TaskId,
 		Version:             closeVisibilityTask.Version,
 	}
@@ -990,9 +970,9 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		TaskType:              enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
 		Version:               deleteVisibilityTask.Version,
 		TaskId:                deleteVisibilityTask.TaskID,
-		VisibilityTime:        &deleteVisibilityTask.VisibilityTimestamp,
-		StartTime:             deleteVisibilityTask.StartTime,
-		CloseTime:             deleteVisibilityTask.CloseTime,
+		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
+		StartTime:             timestamppb.New(deleteVisibilityTask.StartTime),
+		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
 	}
 }
@@ -1006,11 +986,11 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 			deleteVisibilityTask.WorkflowId,
 			deleteVisibilityTask.RunId,
 		),
-		VisibilityTimestamp:            *deleteVisibilityTask.VisibilityTime,
+		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
 		Version:                        deleteVisibilityTask.Version,
-		StartTime:                      deleteVisibilityTask.StartTime,
-		CloseTime:                      deleteVisibilityTask.CloseTime,
+		StartTime:                      deleteVisibilityTask.StartTime.AsTime(),
+		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 	}
 }
@@ -1030,7 +1010,7 @@ func (s *TaskSerializer) replicationActivityTaskToProto(
 		NextEventId:       0,
 		BranchToken:       nil,
 		NewRunBranchToken: nil,
-		VisibilityTime:    &activityTask.VisibilityTimestamp,
+		VisibilityTime:    timestamppb.New(activityTask.VisibilityTimestamp),
 	}
 }
 
@@ -1039,7 +1019,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 ) *tasks.SyncActivityTask {
 	visibilityTimestamp := time.Unix(0, 0)
 	if activityTask.VisibilityTime != nil {
-		visibilityTimestamp = *activityTask.VisibilityTime
+		visibilityTimestamp = activityTask.VisibilityTime.AsTime()
 	}
 	return &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1070,7 +1050,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 		BranchToken:       historyTask.BranchToken,
 		NewRunBranchToken: historyTask.NewRunBranchToken,
 		NewRunId:          historyTask.NewRunID,
-		VisibilityTime:    &historyTask.VisibilityTimestamp,
+		VisibilityTime:    timestamppb.New(historyTask.VisibilityTimestamp),
 	}
 }
 
@@ -1079,7 +1059,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 ) *tasks.HistoryReplicationTask {
 	visibilityTimestamp := time.Unix(0, 0)
 	if historyTask.VisibilityTime != nil {
-		visibilityTimestamp = *historyTask.VisibilityTime
+		visibilityTimestamp = historyTask.VisibilityTime.AsTime()
 	}
 	return &tasks.HistoryReplicationTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1108,7 +1088,7 @@ func (s *TaskSerializer) archiveExecutionTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
 		TaskId:         archiveExecutionTask.TaskID,
 		Version:        archiveExecutionTask.Version,
-		VisibilityTime: &archiveExecutionTask.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(archiveExecutionTask.VisibilityTimestamp),
 	}
 }
 
@@ -1117,7 +1097,7 @@ func (s *TaskSerializer) archiveExecutionTaskFromProto(
 ) *tasks.ArchiveExecutionTask {
 	visibilityTimestamp := time.Unix(0, 0)
 	if archivalTaskInfo.VisibilityTime != nil {
-		visibilityTimestamp = *archivalTaskInfo.VisibilityTime
+		visibilityTimestamp = archivalTaskInfo.VisibilityTime.AsTime()
 	}
 	return &tasks.ArchiveExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1141,7 +1121,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 		TaskId:         syncWorkflowStateTask.TaskID,
 		Version:        syncWorkflowStateTask.Version,
-		VisibilityTime: &syncWorkflowStateTask.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(syncWorkflowStateTask.VisibilityTimestamp),
 	}
 }
 
@@ -1150,7 +1130,7 @@ func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
 ) *tasks.SyncWorkflowStateTask {
 	visibilityTimestamp := time.Unix(0, 0)
 	if syncWorkflowStateTask.VisibilityTime != nil {
-		visibilityTimestamp = *syncWorkflowStateTask.VisibilityTime
+		visibilityTimestamp = syncWorkflowStateTask.VisibilityTime.AsTime()
 	}
 	return &tasks.SyncWorkflowStateTask{
 		WorkflowKey: definition.NewWorkflowKey(

@@ -44,6 +44,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -147,7 +149,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplica
 	newWorkflowTaskCompletedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   newWorkflowTaskStartedEvent.GetEventId() + 1,
-		EventTime: timestamp.TimePtr(time.Now().UTC()),
+		EventTime: timestamppb.New(time.Now().UTC()),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
 			ScheduledEventId: newWorkflowTaskScheduleEvent.GetEventId(),
@@ -296,7 +298,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
-				return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
+				return float64((s.mutableState.executionInfo.LastUpdateTime.AsTime().UnixNano() / int64(time.Second)) + 1)
 			}
 			s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
@@ -329,11 +331,11 @@ func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
 	s.False(s.mutableState.shouldInvalidateCheckum())
 	s.mutableState.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
-		return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
+		return float64((s.mutableState.executionInfo.LastUpdateTime.AsTime().UnixNano() / int64(time.Second)) + 1)
 	}
 	s.True(s.mutableState.shouldInvalidateCheckum())
 	s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
-		return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) - 1)
+		return float64((s.mutableState.executionInfo.LastUpdateTime.AsTime().UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.mutableState.shouldInvalidateCheckum())
 }
@@ -345,45 +347,45 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	}
 
 	// with no backoff, verify min backoff is in [3s, 5s]
-	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil)
-	s.NotNil(minBackoff)
-	s.True(*minBackoff >= 3*time.Second)
-	s.True(*minBackoff <= 5*time.Second)
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.NotZero(minBackoff)
+	s.True(minBackoff >= 3*time.Second)
+	s.True(minBackoff <= 5*time.Second)
 
 	// with 2s backoff, verify min backoff is in [3s, 5s]
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(timestamp.DurationPtr(time.Second * 2))
-	s.NotNil(minBackoff)
-	s.True(*minBackoff >= 3*time.Second)
-	s.True(*minBackoff <= 5*time.Second)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(time.Second * 2)).AsDuration()
+	s.NotZero(minBackoff)
+	s.True(minBackoff >= 3*time.Second)
+	s.True(minBackoff <= 5*time.Second)
 
 	// with 6s backoff, verify min backoff unchanged
-	backoff := timestamp.DurationPtr(time.Second * 6)
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
-	s.NotNil(minBackoff)
+	backoff := time.Second * 6
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
+	s.NotZero(minBackoff)
 	s.True(minBackoff == backoff)
 
 	// set start time to be 3s ago
-	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 3))
+	s.mutableState.executionInfo.StartTime = timestamppb.New(time.Now().Add(-time.Second * 3))
 	// with no backoff, verify min backoff is in [0, 2s]
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.NotNil(minBackoff)
-	s.True(*minBackoff >= 0)
-	s.True(*minBackoff <= 2*time.Second, "%v\n", *minBackoff)
+	s.True(minBackoff >= 0)
+	s.True(minBackoff <= 2*time.Second, "%v\n", minBackoff)
 
 	// with 2s backoff, verify min backoff not changed
-	backoff = timestamp.DurationPtr(time.Second * 2)
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	backoff = time.Second * 2
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
 	s.True(minBackoff == backoff)
 
 	// set start time to be 5s ago
-	s.mutableState.executionInfo.StartTime = timestamp.TimePtr(time.Now().Add(-time.Second * 5))
+	s.mutableState.executionInfo.StartTime = timestamppb.New(time.Now().Add(-time.Second * 5))
 	// with no backoff, verify backoff unchanged (no backoff needed)
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil)
-	s.Nil(minBackoff)
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.Zero(minBackoff)
 
 	// with 2s backoff, verify backoff unchanged
-	backoff = timestamp.DurationPtr(time.Second * 2)
-	minBackoff = s.mutableState.ContinueAsNewMinBackoff(backoff)
+	backoff = time.Second * 2
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
 	s.True(minBackoff == backoff)
 }
 
@@ -518,7 +520,7 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
 	namespaceID := tests.NamespaceID
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      runID,
 	}
@@ -535,15 +537,15 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowStartEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
 			Input:                    nil,
-			WorkflowExecutionTimeout: &workflowTimeout,
-			WorkflowRunTimeout:       &runTimeout,
-			WorkflowTaskTimeout:      &workflowTaskTimeout,
+			WorkflowExecutionTimeout: durationpb.New(workflowTimeout),
+			WorkflowRunTimeout:       durationpb.New(runTimeout),
+			WorkflowTaskTimeout:      durationpb.New(workflowTaskTimeout),
 		}},
 	}
 	eventID++
@@ -551,11 +553,11 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTaskScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
-			StartToCloseTimeout: &workflowTaskTimeout,
+			StartToCloseTimeout: durationpb.New(workflowTaskTimeout),
 			Attempt:             workflowTaskAttempt,
 		}},
 	}
@@ -564,7 +566,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	workflowTaskStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -576,7 +578,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	_ = &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -636,11 +638,11 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	newWorkflowTaskScheduleEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
-			StartToCloseTimeout: &workflowTaskTimeout,
+			StartToCloseTimeout: durationpb.New(workflowTaskTimeout),
 			Attempt:             workflowTaskAttempt,
 		}},
 	}
@@ -649,7 +651,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	newWorkflowTaskStartedEvent := &historypb.HistoryEvent{
 		Version:   version,
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 			ScheduledEventId: workflowTaskScheduleEvent.GetEventId(),
@@ -705,14 +707,14 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.Namespace {
 
 func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {
 	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	failoverVersion := int64(300)
 
-	startTime := timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
+	startTime := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                    namespaceID.String(),
 		WorkflowId:                     we.GetWorkflowId(),
@@ -752,9 +754,9 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		5: {
 			Version:                failoverVersion,
 			ScheduledEventId:       int64(90),
-			ScheduledTime:          timestamp.TimePtr(time.Now().UTC()),
+			ScheduledTime:          timestamppb.New(time.Now().UTC()),
 			StartedEventId:         common.EmptyEventID,
-			StartedTime:            timestamp.TimePtr(time.Now().UTC()),
+			StartedTime:            timestamppb.New(time.Now().UTC()),
 			ActivityId:             "activityID_5",
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
@@ -911,7 +913,7 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	}
 	s.Nil(ai.LastHeartbeatDetails)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	version := int64(101)
 	requestID := "102"
 	eventID := int64(104)
@@ -921,7 +923,7 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	}
 	err = s.mutableState.ReplicateActivityTaskStartedEvent(&historypb.HistoryEvent{
 		EventId:   eventID,
-		EventTime: &now,
+		EventTime: timestamppb.New(now),
 		Version:   version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 			ActivityTaskStartedEventAttributes: attributes,
@@ -931,7 +933,7 @@ func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
 	s.Assert().Equal(version, ai.Version)
 	s.Assert().Equal(eventID, ai.StartedEventId)
 	s.NotNil(ai.StartedTime)
-	s.Assert().Equal(now, *ai.StartedTime)
+	s.Assert().Equal(now, ai.StartedTime.AsTime())
 	s.Assert().Equal(requestID, ai.RequestId)
 	s.Assert().Nil(ai.LastHeartbeatDetails)
 }

@@ -70,7 +70,7 @@ import (
 type (
 	// TestCluster is a base struct for functional tests
 	TestCluster struct {
-		testBase     persistencetests.TestBase
+		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
 		host         *temporalImpl
 	}
@@ -216,7 +216,7 @@ func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*T
 		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
 				ClusterId:                uuid.New(),

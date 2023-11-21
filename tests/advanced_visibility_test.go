@@ -35,7 +35,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -52,6 +51,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -63,8 +65,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
@@ -79,6 +81,7 @@ type advancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	protorequire.ProtoAssertions
 	FunctionalTestBase
 	isElasticsearchEnabled bool
 
@@ -147,6 +150,7 @@ func (s *advancedVisibilitySuite) TearDownSuite() {
 func (s *advancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -175,10 +179,10 @@ func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startTime
+	startFilter.EarliestTime = timestamppb.New(startTime)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultPageSize,
@@ -424,7 +428,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -516,7 +520,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -554,7 +558,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 1)
 	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
 	s.Equal(wt, resp.Executions[0].GetType().GetName())
-	s.Equal(searchAttr, resp.Executions[0].GetSearchAttributes())
+	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -673,7 +677,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -1071,7 +1075,7 @@ func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -1101,8 +1105,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1155,8 +1159,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1259,14 +1263,14 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{runningStatusPayload},
 			Count:       int64(numWorkflows - numClosedWorkflows),
 		},
 		resp.Groups[0],
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{terminatedStatusPayload},
 			Count:       int64(numClosedWorkflows),
@@ -1298,8 +1302,8 @@ func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	return request
@@ -1322,8 +1326,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1620,8 +1624,8 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1816,7 +1820,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
-	s.True(proto.Equal(expectedMemo, descResp.WorkflowExecutionInfo.Memo))
+	s.ProtoEqual(expectedMemo, descResp.WorkflowExecutionInfo.Memo)
 }
 
 func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
@@ -1897,8 +1901,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -2617,7 +2621,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+	protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 		BuildId:               buildId,
 		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
 	}}, reachabilityResponse.BuildIdReachability)
@@ -2636,7 +2640,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 			TaskQueues: []string{tq},
 		})
 		s.Require().NoError(err)
-		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 			BuildId:               v01,
 			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)}},
 		}}, reachabilityResponse.BuildIdReachability)

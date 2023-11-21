@@ -108,8 +108,8 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
 
-	schedToStart := int32(request.GetScheduleToStartTimeout().Seconds())
-	rewritten := convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds())
+	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
+	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
 	t.EqualValues(schedToStart, rewritten)
 	t.Equal(t.taskQueue.FullName(), request.GetForwardedSource())
 }
@@ -134,8 +134,8 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(*taskInfo.Data.ExpiryTime).Seconds()),
-		int32(request.GetScheduleToStartTimeout().Seconds()))
+	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.taskQueue.FullName(), request.GetForwardedSource())
 }
 

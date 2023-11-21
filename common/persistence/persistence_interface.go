@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -172,13 +173,13 @@ type (
 	Queue interface {
 		Closeable
 		Init(ctx context.Context, blob *commonpb.DataBlob) error
-		EnqueueMessage(ctx context.Context, blob commonpb.DataBlob) error
+		EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) error
 		ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(ctx context.Context, messageID int64) error
 		UpdateAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 
-		EnqueueMessageToDLQ(ctx context.Context, blob commonpb.DataBlob) (int64, error)
+		EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
@@ -230,7 +231,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 	}
 
 	InternalGetTaskQueueRequest struct {
@@ -257,7 +258,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 
 		PrevRangeID int64
 	}
@@ -294,7 +295,7 @@ type (
 
 	InternalCreateTask struct {
 		TaskId     int64
-		ExpiryTime *time.Time
+		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
 	}
 
@@ -391,7 +392,7 @@ type (
 
 	InternalHistoryTask struct {
 		Key  tasks.Key
-		Blob commonpb.DataBlob
+		Blob *commonpb.DataBlob
 	}
 
 	// InternalAddHistoryTasksRequest is used to write new tasks
@@ -774,13 +775,13 @@ type (
 
 	QueueV2Message struct {
 		MetaData MessageMetadata
-		Data     commonpb.DataBlob
+		Data     *commonpb.DataBlob
 	}
 
 	InternalEnqueueMessageRequest struct {
 		QueueType QueueV2Type
 		QueueName string
-		Blob      commonpb.DataBlob
+		Blob      *commonpb.DataBlob
 	}
 
 	InternalEnqueueMessageResponse struct {

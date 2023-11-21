@@ -150,7 +150,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		// send all tasks
 		for _, wf := range executions {
 			taskCh <- taskDetail{
-				execution: *wf,
+				execution: wf,
 				attempts:  1,
 				hbd:       hbd,
 			}

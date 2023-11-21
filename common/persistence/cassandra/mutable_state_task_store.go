@@ -354,7 +354,7 @@ func (d *MutableStateTaskStore) getTransferTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -436,7 +436,7 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(timestamp, taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		timestamp = time.Time{}
@@ -690,7 +690,7 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -759,7 +759,7 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -819,7 +819,7 @@ func (d *MutableStateTaskStore) getHistoryImmedidateTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -867,7 +867,7 @@ func (d *MutableStateTaskStore) getHistoryScheduledTasks(
 	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(timestamp, taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		timestamp = time.Time{}

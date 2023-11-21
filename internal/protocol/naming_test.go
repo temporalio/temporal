@@ -27,10 +27,11 @@ package protocol_test
 import (
 	"testing"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/server/internal/protocol"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestNilSafety(t *testing.T) {
@@ -52,10 +53,11 @@ func TestNilSafety(t *testing.T) {
 func TestWithValidMessage(t *testing.T) {
 	t.Parallel()
 
-	body, err := types.MarshalAny(&types.Empty{})
-	require.NoError(t, err)
+	var empty emptypb.Empty
+	var body anypb.Any
+	require.NoError(t, body.MarshalFrom(&empty))
 
-	msg := protocolpb.Message{Body: body}
+	msg := protocolpb.Message{Body: &body}
 
 	pt, mt := protocol.IdentifyOrUnknown(&msg)
 
@@ -66,12 +68,13 @@ func TestWithValidMessage(t *testing.T) {
 func TestWithInvalidBody(t *testing.T) {
 	t.Parallel()
 
-	body, err := types.MarshalAny(&types.Empty{})
-	require.NoError(t, err)
+	var empty emptypb.Empty
+	var body anypb.Any
+	require.NoError(t, body.MarshalFrom(&empty))
 
-	msg := protocolpb.Message{Body: body}
+	msg := protocolpb.Message{Body: &body}
 	msg.Body.TypeUrl = "this isn't valid"
 
-	_, _, err = protocol.Identify(&msg)
+	_, _, err := protocol.Identify(&msg)
 	require.Error(t, err)
 }
