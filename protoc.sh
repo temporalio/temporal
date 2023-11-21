@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-set -euo pipefail
+set -eu
 PROTO_OUT=api
 PROTO_ROOT=${PROTO_ROOT:-proto}
 PROTO_OUT=api
@@ -41,4 +41,4 @@ sh -c "${SED} -e 's/BuildId_\(.*\) BuildId_State/\1 BuildId_State/g;s/return Bui
 set -e
 # We rely on the old temporal CamelCase JSON enums for presentation, so we rewrite the String method
 # on all generated enums
-find . -name "*.pb.go" | xargs enumrewriter
+find . -name "*.pb.go" -print0 | xargs -0 enumrewriter
