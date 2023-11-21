@@ -113,7 +113,7 @@ Workflow Execution History is a linear sequence of History Events (unless the wo
 Some events have associated data, for example containing the payload that was submitted in the request that generated the event.
 
 History Events are a publicly-exposed part of Temporal's internal event-sourcing implementation, and have the property that the sequence of History Events alone, for some Workflow Execution, is sufficient to recover all other relevant information about the workflow execution's state (i.e. the Mutable State and the tasks relating to that workflow execution).
-The set of event types are defined here, with some explanation of each: [`enum EventType`](https://github.com/temporalio/api/blob/ef49189005b5323c532264287af6c08a447aab8a/temporal/api/enums/v1/event_type.proto#L35).
+The set of event types are defined here, with some explanation of each: [`enum EventType`](https://github.com/temporalio/api/blob/66df148533a971f58fc0fec79bf25ab175ec1b78/temporal/api/enums/v1/event_type.proto#L35).
 
 In general, Temporal uses the term "event" to mean Workflow History Event.
 Note that this does not have the same meaning as in "event-driven architecture".
@@ -123,7 +123,7 @@ In contrast, a Workflow History Event is something that the Temporal Server comp
 <details>
 <summary><i>Code entrypoints</i></summary>
 
-- [`enum EventType`](https://github.com/temporalio/api/blob/ef49189005b5323c532264287af6c08a447aab8a/temporal/api/enums/v1/event_type.proto#L35)
+- [`enum EventType`](https://github.com/temporalio/api/blob/66df148533a971f58fc0fec79bf25ab175ec1b78/temporal/api/enums/v1/event_type.proto#L35)
 - [`history_node`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/schema/cassandra/temporal/schema.cql#L56) and [`history_tree`](https://github.com/temporalio/temporal/blob/ef49189005b5323c532264287af6c08a447aab8a/schema/cassandra/temporal/schema.cql#L70) table schemas in Cassandra.
 
 </details>
@@ -155,7 +155,7 @@ The History Service handles two types of gRPC requests relating to an individual
 
     - `RespondWorkflowTaskCompleted`<br>
       These requests contain a sequence of [Commands](https://docs.temporal.io/references/commands), for example [`StartTimer`](https://docs.temporal.io/references/commands#starttimer), [`ScheduleActivityTask`](https://docs.temporal.io/references/commands#scheduleactivitytask), [`StartChildWorkflowExecution`](https://docs.temporal.io/references/commands#startchildworkflowexecution).<br>
-      See [`enum CommandType`](https://github.com/temporalio/api/blob/ef49189005b5323c532264287af6c08a447aab8a/temporal/api/enums/v1/command_type.proto#L35) for the complete list of commands.
+      See [`enum CommandType`](https://github.com/temporalio/api/blob/66df148533a971f58fc0fec79bf25ab175ec1b78/temporal/api/enums/v1/command_type.proto#L35) for the complete list of commands.
 
     - `RespondActivityTaskCompleted`<br>
       These requests contain the result of the activity.
