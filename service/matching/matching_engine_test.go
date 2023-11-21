@@ -1799,6 +1799,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 	task2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
+	s.NotNil(task2)
 
 	s.NotEqual(task.event.GetTaskId(), task2.event.GetTaskId())
 	s.Equal(task.event.Data.GetWorkflowId(), task2.event.Data.GetWorkflowId())

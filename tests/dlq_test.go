@@ -446,14 +446,22 @@ func (s *dlqSuite) TestListQueues() {
 	s.NoError(err)
 
 	queueInfos := s.listQueues()
-	s.Contains(queueInfos, adminservice.ListQueuesResponse_QueueInfo{
+	qi0 := adminservice.ListQueuesResponse_QueueInfo{
 		QueueName:    queueKey1.GetQueueName(),
 		MessageCount: 0,
-	})
-	s.Contains(queueInfos, adminservice.ListQueuesResponse_QueueInfo{
+	}
+	qi1 := adminservice.ListQueuesResponse_QueueInfo{
 		QueueName:    queueKey2.GetQueueName(),
 		MessageCount: 1,
-	})
+	}
+	var found0, found1 bool
+	for _, qi := range queueInfos {
+		found0 = found0 || proto.Equal(qi, &qi0)
+		found1 = found1 || proto.Equal(qi, &qi1)
+
+	}
+	s.True(found0, "unable to find %v in %v", &qi0, queueInfos)
+	s.True(found1, "unable to find %v in %v", &qi1, queueInfos)
 }
 
 func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
