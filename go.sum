@@ -318,10 +318,6 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
-github.com/tdeebswihart/temporal-api-go v0.0.0-20231121192838-2507a2402391 h1:6D0620C9m0pwPM+G5mM6BGEnA+F3pq2nUs0rhny+sqo=
-github.com/tdeebswihart/temporal-api-go v0.0.0-20231121192838-2507a2402391/go.mod h1:WZzeAGohIjHCVGJA9fs8enVpR3nRzpSZIitqEnbdc/E=
-github.com/tdeebswihart/temporal-sdk-go v0.0.0-20231121192952-07a2c7ef5054 h1:bUqUagKcLUaThd0sPCmUEOxIU1PwsypRVYkbxWmXXkk=
-github.com/tdeebswihart/temporal-sdk-go v0.0.0-20231121192952-07a2c7ef5054/go.mod h1:Wyy3P8IxRPt8xYZS5eM6HGefdYcPSiuXtIRmUUWQH0w=
 github.com/temporalio/ringpop-go v0.0.0-20230606200434-b5c079f412d3 h1:V1U9fvhusDJ1pyAvQWg0+u6mQ+o5WtRfMbnnTIZe0Fo=
 github.com/temporalio/ringpop-go v0.0.0-20230606200434-b5c079f412d3/go.mod h1:LA2yFb94r5XoEnuMVHkCC/P5174whMy2Dd+cu+AEcQA=
 github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb h1:YzHH/U/dN7vMP+glybzcXRTczTrgfdRisNTzAj7La04=
@@ -379,6 +375,10 @@ go.opentelemetry.io/otel/trace v1.19.0 h1:DFVQmlVbfVeOuBRrwdtaehRrWiL1JoVs9CPIQ1
 go.opentelemetry.io/otel/trace v1.19.0/go.mod h1:mfaSyvGyEJEI0nyV2I4qhNQnbBOUUmYZpYojqMnX2vo=
 go.opentelemetry.io/proto/otlp v1.0.0 h1:T0TX0tmXU8a3CbNXzEKGeU5mIVOdf0oykP+u2lIVU/I=
 go.opentelemetry.io/proto/otlp v1.0.0/go.mod h1:Sy6pihPLfYHkr3NkUbEhGHFhINUSI/v80hjKIs5JXpM=
+go.temporal.io/api v1.26.1-0.20231121220434-5a4d95cc60c0 h1:NtVNuZcm3YWZ4jXYFH+qDMTeqHAKDItpl1dg0OnckxE=
+go.temporal.io/api v1.26.1-0.20231121220434-5a4d95cc60c0/go.mod h1:WZzeAGohIjHCVGJA9fs8enVpR3nRzpSZIitqEnbdc/E=
+go.temporal.io/sdk v1.25.2-0.20231121222453-f9d73bfdf7c8 h1:AF9VK7zLlDL4juMkdzulKOtKwmnApSo3kr2sO0o1VXo=
+go.temporal.io/sdk v1.25.2-0.20231121222453-f9d73bfdf7c8/go.mod h1:NSUr2Xb/SK+Zkp0s6ochJYPFeXZye6vhAKebGNELX2E=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
 go.temporal.io/version v0.3.0/go.mod h1:UA9S8/1LaKYae6TyD9NaPMJTZb911JcbqghI2CBSP78=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=

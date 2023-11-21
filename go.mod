@@ -2,11 +2,6 @@ module go.temporal.io/server
 
 go 1.21
 
-replace (
-	go.temporal.io/api => github.com/tdeebswihart/temporal-api-go v0.0.0-20231121192838-2507a2402391
-	go.temporal.io/sdk => github.com/tdeebswihart/temporal-sdk-go v0.0.0-20231121192952-07a2c7ef5054
-)
-
 require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/aws/aws-sdk-go v1.44.289
@@ -46,8 +41,8 @@ require (
 	go.opentelemetry.io/otel/metric v1.19.0
 	go.opentelemetry.io/otel/sdk v1.19.0
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
-	go.temporal.io/api v1.26.1-0.20231120192951-436d5b28ca85
-	go.temporal.io/sdk v1.25.1
+	go.temporal.io/api v1.26.1-0.20231121220434-5a4d95cc60c0
+	go.temporal.io/sdk v1.25.2-0.20231121222453-f9d73bfdf7c8
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.2

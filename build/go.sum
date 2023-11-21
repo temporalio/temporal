@@ -1,10 +1,8 @@
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
 github.com/google/go-cmp v0.5.5 h1:Khx7svrCpmxxtHBq5j2mp/xVjsi8hQMfNLvJFAlrGgU=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
-github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
-github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
-github.com/tdeebswihart/temporal-api-go v0.0.0-20231020155344-f1f14322de41 h1:KJ16xqw6rSSUeZ9Vo3l2XbYvAKGdw8WO4TmW6QjhdGs=
-github.com/tdeebswihart/temporal-api-go v0.0.0-20231020155344-f1f14322de41/go.mod h1:ZMitJTNmbXZkOJENNfv6wSysT4UenqGL918N5N6SH4I=
+go.temporal.io/api v1.26.1-0.20231121220434-5a4d95cc60c0 h1:NtVNuZcm3YWZ4jXYFH+qDMTeqHAKDItpl1dg0OnckxE=
+go.temporal.io/api v1.26.1-0.20231121220434-5a4d95cc60c0/go.mod h1:WZzeAGohIjHCVGJA9fs8enVpR3nRzpSZIitqEnbdc/E=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0 h1:rNBFJjBCOgVr9pWD7rs/knKL4FRTKgpZmsRfV214zcA=
