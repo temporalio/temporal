@@ -35,9 +35,11 @@ jobs:
       version-is-repo-ref: true
       docker-image-artifact-name: temporal-server-docker
       # TODO: remove these after they've hit the main branch
+      go-repo-path: tdeebswihart/temporal-sdk-go
+      sdk-repo-url: http://github.com/tdeebswihart/temporal-sdk-go
+      sdk-repo-ref: replace-gogo-protobuf
       features-repo-path: "tdeebswihart/temporal-features"
       features-repo-ref: "nomo-gogo"
-      go-repo-path: tdeebswihart/temporal-sdk-go
 
   feature-tests-python:
     needs: build-docker-image
