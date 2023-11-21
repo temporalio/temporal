@@ -578,6 +578,33 @@ func newAdminDLQCommands(
 			},
 		},
 		{
+			Name:    "list",
+			Aliases: []string{"l"},
+			Usage:   "List all DLQs, only for v2",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagOutputFilename,
+					Usage: "Output file to write to, if not provided output is written to stdout",
+				},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Usage: "Page size to use when listing queues from the DB",
+					Value: defaultPageSize,
+				},
+				&cli.BoolFlag{
+					Name:  FlagPrintJSON,
+					Usage: "Print in raw json format",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				ac, err := dlqServiceProvider.GetDLQService(c)
+				if err != nil {
+					return err
+				}
+				return ac.ListQueues(c)
+			},
+		},
+		{
 			Name:        "job",
 			Usage:       "Run admin operation on DLQ Job",
 			Subcommands: newAdminDLQJobCommands(dlqServiceProvider),

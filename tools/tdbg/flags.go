@@ -75,6 +75,7 @@ var (
 	FlagMinTaskID                  = "min-task-id"
 	FlagMaxTaskID                  = "max-task-id"
 	FlagDLQType                    = "dlq-type"
+	FlagQueueType                  = "queue-type"
 	FlagDLQVersion                 = "dlq-version"
 	FlagMaxMessageCount            = "max-message-count"
 	FlagProtoType                  = "type"
