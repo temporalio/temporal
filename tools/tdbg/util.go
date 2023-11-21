@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"regexp"
@@ -230,7 +231,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				if err := printTable(pageItems); err != nil {
+				if err := printTable(pageItems, os.Stdout); err != nil {
 					return err
 				}
 			} else {
@@ -247,7 +248,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 	return nil
 }
 
-func printTable(items []interface{}) error {
+func printTable(items []interface{}, writer io.Writer) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -263,7 +264,7 @@ func printTable(items []interface{}) error {
 		fields = append(fields, t.Field(i).Name)
 	}
 
-	table := tablewriter.NewWriter(os.Stdout)
+	table := tablewriter.NewWriter(writer)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)

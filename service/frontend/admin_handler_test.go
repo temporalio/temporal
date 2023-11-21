@@ -1610,14 +1610,23 @@ func (s *adminHandlerSuite) TestListQueues_Ok() {
 		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
 		PageSize:      0,
 		NextPageToken: nil,
-	}).Return(&historyservice.ListQueuesResponse{QueueNames: []string{"testQueue"}}, nil)
+	}).Return(&historyservice.ListQueuesResponse{
+		Queues: []*historyservice.ListQueuesResponse_QueueInfo{
+			{
+				QueueName:    "testQueue",
+				MessageCount: 100,
+			},
+		},
+	}, nil)
 	resp, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{
 		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
 		PageSize:      0,
 		NextPageToken: nil,
 	})
 	s.NoError(err)
-	s.Equal("testQueue", resp.QueueNames[0])
+	s.Equal("testQueue", resp.Queues[0].QueueName)
+	s.Equal(int64(100), resp.Queues[0].MessageCount)
+
 }
 
 func (s *adminHandlerSuite) TestListQueues_Err() {

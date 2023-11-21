@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -318,9 +319,13 @@ func getCategoriesList(taskCategoryRegistry tasks.TaskCategoryRegistry) string {
 }
 
 func getCategoryByID(
+	c *cli.Context,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	categoryIDString string,
 ) (tasks.Category, bool, error) {
+	if c.Command.Name == "list" {
+		return tasks.Category{}, true, nil
+	}
 	if categoryIDString == "" {
 		return tasks.Category{}, false, fmt.Errorf("--%s is required", FlagDLQType)
 	}
@@ -336,4 +341,68 @@ func getCategoryByID(
 		}
 	}
 	return tasks.Category{}, false, nil
+}
+
+func (ac *DLQV2Service) ListQueues(c *cli.Context) (err error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	outputFile, err := getOutputFile(c.String(FlagOutputFilename), ac.writer)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err = multierr.Append(err, outputFile.Close())
+	}()
+
+	adminClient := ac.clientFactory.AdminClient(c)
+	pageSize := c.Int(FlagPageSize)
+	iterator := collection.NewPagingIterator[*adminservice.ListQueuesResponse_QueueInfo](
+		func(paginationToken []byte) ([]*adminservice.ListQueuesResponse_QueueInfo, []byte, error) {
+			request := &adminservice.ListQueuesRequest{
+				QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+				PageSize:      int32(pageSize),
+				NextPageToken: paginationToken,
+			}
+			res, err := adminClient.ListQueues(ctx, request)
+			if err != nil {
+				return nil, nil, fmt.Errorf("call to ListQueues failed: %w", err)
+			}
+			return res.Queues, res.NextPageToken, nil
+		},
+	)
+
+	var queues []adminservice.ListQueuesResponse_QueueInfo
+	for iterator.HasNext() {
+		queue, err := iterator.Next()
+		if err != nil {
+			return fmt.Errorf("ListQueues task iterator returned error: %w", err)
+		}
+		queues = append(queues, *queue)
+	}
+
+	// Sort the list of queues in decreasing order of MessageCount.
+	sort.Slice(queues, func(i, j int) bool {
+		return queues[i].MessageCount > queues[j].MessageCount
+	})
+
+	items := make([]interface{}, len(queues))
+	for i, queue := range queues {
+		items[i] = queue
+	}
+
+	printJson := c.Bool(FlagPrintJSON)
+	if printJson {
+		err = newEncoder(outputFile).Encode(items)
+	} else {
+		err = printTable(items, outputFile)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to print dlq messages: %w", err)
+	}
+	return nil
 }

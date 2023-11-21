@@ -1301,7 +1301,7 @@ type (
 	}
 
 	ListQueuesResponse struct {
-		QueueNames    []string
+		Queues        []QueueInfo
 		NextPageToken []byte
 	}
 )
