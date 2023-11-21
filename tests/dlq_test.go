@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -589,7 +589,7 @@ func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.Transfer
 }
 
 // Calls describe dlq job and verify the output
-func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse {
+func (s *dlqSuite) describeJob(token []byte) *adminservice.DescribeDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -601,14 +601,15 @@ func (s *dlqSuite) describeJob(token []byte) adminservice.DescribeDLQJobResponse
 	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
+	s.T().Log(string(output))
 	s.writer.Truncate(0)
 	var response adminservice.DescribeDLQJobResponse
 	s.NoError(protojson.Unmarshal(output, &response))
-	return response
+	return &response
 }
 
 // Calls delete dlq job and verify the output
-func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
+func (s *dlqSuite) cancelJob(token []byte) *adminservice.CancelDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -621,14 +622,15 @@ func (s *dlqSuite) cancelJob(token []byte) adminservice.CancelDLQJobResponse {
 	err := s.tdbgApp.Run(args)
 	s.NoError(err)
 	output := s.writer.Bytes()
+	s.T().Log(string(output))
 	s.writer.Truncate(0)
 	var response adminservice.CancelDLQJobResponse
 	s.NoError(protojson.Unmarshal(output, &response))
-	return response
+	return &response
 }
 
 // List all queues
-func (s *dlqSuite) listQueues() []adminservice.ListQueuesResponse_QueueInfo {
+func (s *dlqSuite) listQueues() []*adminservice.ListQueuesResponse_QueueInfo {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -641,8 +643,13 @@ func (s *dlqSuite) listQueues() []adminservice.ListQueuesResponse_QueueInfo {
 	s.NoError(err)
 	b := s.writer.Bytes()
 	s.writer.Truncate(0)
-	var arr []adminservice.ListQueuesResponse_QueueInfo
-	err = json.Unmarshal(b, &arr)
+	var arr []*adminservice.ListQueuesResponse_QueueInfo
+	jsonpb := codec.NewJSONPBEncoder()
+	err = jsonpb.DecodeSlice(b, func() proto.Message {
+		resp := &adminservice.ListQueuesResponse_QueueInfo{}
+		arr = append(arr, resp)
+		return resp
+	})
 	s.NoError(err)
 	return arr
 }

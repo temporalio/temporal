@@ -37,6 +37,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -125,10 +127,32 @@ func NewDLQV2Service(
 	}
 }
 
-func newEncoder(writer io.Writer) *json.Encoder {
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-	return encoder
+type jsonEncoder struct {
+	writer    io.Writer
+	protojson protojson.MarshalOptions
+	encoder   *json.Encoder
+}
+
+func (j jsonEncoder) Encode(v any) error {
+	if pb, ok := v.(proto.Message); ok {
+		bs, err := j.protojson.Marshal(pb)
+		if err != nil {
+			return err
+		}
+		_, err = j.writer.Write(bs)
+		return err
+	}
+	return j.encoder.Encode(v)
+}
+
+func newEncoder(writer io.Writer) jsonEncoder {
+	enc := jsonEncoder{
+		writer:    writer,
+		protojson: protojson.MarshalOptions{Indent: "  "},
+		encoder:   json.NewEncoder(writer),
+	}
+	enc.encoder.SetIndent("", "  ")
+	return enc
 }
 
 func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {

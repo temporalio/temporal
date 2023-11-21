@@ -85,7 +85,7 @@ func (e *JSONPBEncoder) EncodeHistories(histories []*historypb.History) ([]byte,
 // Decode HistoryEvent slice from bytes.
 func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*historypb.HistoryEvent, error) {
 	var historyEvents []*historypb.HistoryEvent
-	err := e.decodeSlice(
+	err := e.DecodeSlice(
 		data,
 		func() proto.Message {
 			historyEvent := &historypb.HistoryEvent{}
@@ -98,7 +98,7 @@ func (e *JSONPBEncoder) DecodeHistoryEvents(data []byte) ([]*historypb.HistoryEv
 // Decode History slice from bytes.
 func (e *JSONPBEncoder) DecodeHistories(data []byte) ([]*historypb.History, error) {
 	var histories []*historypb.History
-	err := e.decodeSlice(
+	err := e.DecodeSlice(
 		data,
 		func() proto.Message {
 			history := &historypb.History{}
@@ -135,7 +135,7 @@ func (e *JSONPBEncoder) encodeSlice(
 }
 
 // constructor callback must create empty object, add it to result slice, and return it.
-func (e *JSONPBEncoder) decodeSlice(
+func (e *JSONPBEncoder) DecodeSlice(
 	data []byte,
 	constructor func() proto.Message) error {
 
