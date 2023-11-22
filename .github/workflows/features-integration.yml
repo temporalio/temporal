@@ -24,22 +24,14 @@ jobs:
       version: 1.5.2
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-path: "tdeebswihart/temporal-features"
-      features-repo-ref: "nomo-gogo"
 
   feature-tests-go:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: replace-gogo-protobuf
+      version: f9d73bfdf7c8d3ec0311306140fbfafa7fb6f9cf
       version-is-repo-ref: true
       docker-image-artifact-name: temporal-server-docker
-      # TODO: remove these after they've hit the main branch
-      go-repo-path: tdeebswihart/temporal-sdk-go
-      sdk-repo-url: http://github.com/tdeebswihart/temporal-sdk-go
-      sdk-repo-ref: replace-gogo-protobuf
-      features-repo-path: "tdeebswihart/temporal-features"
-      features-repo-ref: "nomo-gogo"
 
   feature-tests-python:
     needs: build-docker-image
@@ -48,8 +40,6 @@ jobs:
       version: 0.1b4
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-path: "tdeebswihart/temporal-features"
-      features-repo-ref: "nomo-gogo"
 
   feature-tests-java:
     needs: build-docker-image
@@ -58,5 +48,3 @@ jobs:
       version: v1.17.0
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
-      features-repo-path: "tdeebswihart/temporal-features"
-      features-repo-ref: "nomo-gogo"
