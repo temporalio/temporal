@@ -8,7 +8,6 @@
 # See https://github.com/github-linguist/linguist/blob/master/docs/overrides.md#summary
 # for more info.
 api/ linguist-generated
-common/persistence/mock/ linguist-generated
 *.pb.go linguist-generated
 *.mock.go linguist-generated
 *_mock.go linguist-generated
