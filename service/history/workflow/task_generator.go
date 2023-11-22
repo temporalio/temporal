@@ -338,7 +338,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			// there is no good way to handle the error.
 			// In this case WT will be timed out (as if it was on sticky task queue),
 			// and new normal WT will be created.
-			// Note: this timeout will also fire if workflow received an update,
+			// Note: this timer will also fire if workflow received an update,
 			// but there is no workers available. Speculative WT will time out, and normal WT will be created.
 			scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
 		}
