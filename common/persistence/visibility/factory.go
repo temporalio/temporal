@@ -304,8 +304,6 @@ func newVisibilityStoreFromDataStoreConfig(
 			logger,
 			metricsHandler,
 		)
-	} else {
-		return nil, nil
 	}
 	return visStore, err
 }
