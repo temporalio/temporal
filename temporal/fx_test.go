@@ -95,6 +95,7 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 		context.TODO(),
 		mockClusterMetadataManager,
 		cfg,
+		nil,
 		updateRecord,
 	)
 	require.NoError(t, err)

@@ -619,17 +619,12 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	var sqlIndexNames []string
 	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
-		indexName := ds.GetIndexName()
-		sqlIndexNames = append(sqlIndexNames, indexName)
-		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
-		indexName := ds.GetIndexName()
-		sqlIndexNames = append(sqlIndexNames, indexName)
-		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
 	clusterMetadata := svc.ClusterMetadata
@@ -656,6 +651,7 @@ func ApplyClusterMetadataConfigProvider(
 			ctx,
 			clusterMetadataManager,
 			svc,
+			initialIndexSearchAttributes,
 			resp,
 		); updateErr != nil {
 			return svc.ClusterMetadata, svc.Persistence, updateErr
@@ -792,6 +788,7 @@ func updateCurrentClusterMetadataRecord(
 	ctx context.Context,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	svc *config.Config,
+	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
 	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
 ) error {
 	updateDBRecord := false
@@ -812,6 +809,20 @@ func updateCurrentClusterMetadataRecord(
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
 		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
 		updateDBRecord = true
+	}
+
+	if len(initialIndexSearchAttributes) > 0 {
+		if currentClusterDBRecord.IndexSearchAttributes == nil {
+			currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
+			updateDBRecord = true
+		} else {
+			for indexName, initialValue := range initialIndexSearchAttributes {
+				if _, ok := currentClusterDBRecord.IndexSearchAttributes[indexName]; !ok {
+					currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
+					updateDBRecord = true
+				}
+			}
+		}
 	}
 
 	if !updateDBRecord {
