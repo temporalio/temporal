@@ -120,12 +120,13 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		ForkBranchInfo: forkBranch,
-		TreeInfo:       treeInfoBlob,
-		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    newBranchInfo.BranchId,
-		Info:           request.Info,
-		ShardID:        request.ShardID,
+		ForkBranchToken: request.ForkBranchToken,
+		ForkBranchInfo:  forkBranch,
+		TreeInfo:        treeInfoBlob,
+		ForkNodeID:      request.ForkNodeID,
+		NewBranchID:     newBranchInfo.BranchId,
+		Info:            request.Info,
+		ShardID:         request.ShardID,
 	}
 
 	err = m.persistence.ForkHistoryBranch(ctx, req)
