@@ -41,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
+	"go.uber.org/atomic"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -71,14 +72,15 @@ type (
 	dlqSuite struct {
 		FunctionalTestBase
 		*require.Assertions
-		dlq                     persistence.HistoryTaskQueueManager
-		failingWorkflowIDPrefix string
-		dlqTasks                chan tasks.Task
-		writer                  bytes.Buffer
-		sdkClientFactory        sdk.ClientFactory
-		tdbgApp                 *cli.App
-		worker                  sdkworker.Worker
-		deleteBlockCh           chan interface{}
+		dlq              persistence.HistoryTaskQueueManager
+		dlqTasks         chan tasks.Task
+		writer           bytes.Buffer
+		sdkClientFactory sdk.ClientFactory
+		tdbgApp          *cli.App
+		worker           sdkworker.Worker
+		deleteBlockCh    chan interface{}
+
+		failingWorkflowIDPrefix atomic.String
 	}
 	dlqTestCase struct {
 		name string
@@ -119,7 +121,7 @@ func (s *dlqSuite) SetupSuite() {
 		dynamicconfig.HistoryTaskDLQEnabled: true,
 	}
 	s.dlqTasks = make(chan tasks.Task)
-	s.failingWorkflowIDPrefix = "dlq-test-terminal-wfts-"
+	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
 	s.setupSuite(
 		"testdata/cluster.yaml",
 		WithFxOptionsForService(primitives.HistoryService,
@@ -360,7 +362,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	}
 
 	// Re-enqueue the workflow tasks from the DLQ, but don't fail its WFTs this time.
-	s.failingWorkflowIDPrefix = "some-workflow-id-that-wont-exist"
+	s.failingWorkflowIDPrefix.Store("some-workflow-id-that-wont-exist")
 	token := s.mergeMessages(ctx, dlqMessageID)
 
 	// Verify that the workflow task was deleted from the DLQ after merging.
@@ -476,7 +478,7 @@ func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
 	// Execute a workflow.
 	// Use a random workflow ID to ensure that we don't have any collisions with other runs.
-	run := s.executeWorkflow(ctx, s.failingWorkflowIDPrefix+uuid.New())
+	run := s.executeWorkflow(ctx, s.failingWorkflowIDPrefix.Load()+uuid.New())
 
 	// Wait for the workflow task to be added to the DLQ.
 	select {
@@ -715,7 +717,7 @@ func (t testExecutorWrapper) Wrap(delegate queues.Executor) queues.Executor {
 // Execute is used to wrap the executor so that we can intercept the workflow task and ensure it fails with a terminal
 // error.
 func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.ExecuteResponse {
-	if strings.HasPrefix(e.GetWorkflowID(), t.suite.failingWorkflowIDPrefix) && e.GetCategory() == tasks.CategoryTransfer {
+	if strings.HasPrefix(e.GetWorkflowID(), t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
 		// Return a terminal error that will cause this task to be added to the DLQ.
 		return queues.ExecuteResponse{
 			ExecutionErr: serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error")),
@@ -725,7 +727,10 @@ func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.E
 }
 
 // ReadTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.
-func (m *testTaskQueueManager) DeleteTasks(ctx context.Context, request *persistence.DeleteTasksRequest) (*persistence.DeleteTasksResponse, error) {
+func (m *testTaskQueueManager) DeleteTasks(
+	ctx context.Context,
+	request *persistence.DeleteTasksRequest,
+) (*persistence.DeleteTasksResponse, error) {
 	<-m.suite.deleteBlockCh
 	return m.HistoryTaskQueueManager.DeleteTasks(ctx, request)
 }
