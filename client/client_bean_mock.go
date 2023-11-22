@@ -139,7 +139,6 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(arg0 interface{}) *gomoc
 // SetRemoteAdminClient mocks base method.
 func (m *MockBean) SetRemoteAdminClient(arg0 string, arg1 v10.AdminServiceClient) {
 	m.ctrl.T.Helper()
-
 	m.ctrl.Call(m, "SetRemoteAdminClient", arg0, arg1)
 }
 
