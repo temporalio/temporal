@@ -79,7 +79,7 @@ func Invoke(
 
 	var warnings []string
 	var branchTokens [][]byte
-	var startTime, closeTime *time.Time
+	var startTime, closeTime time.Time
 	cassVisBackend := persistenceVisibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
@@ -108,23 +108,27 @@ func Invoke(
 
 		if cassVisBackend {
 			if resp.State.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				startTime = executionInfo.GetStartTime()
+				if executionInfo.StartTime != nil {
+					startTime = executionInfo.StartTime.AsTime()
+				}
 			} else if executionInfo.GetCloseTime() != nil {
-				closeTime = executionInfo.GetCloseTime()
+				if executionInfo.CloseTime != nil {
+					closeTime = executionInfo.CloseTime.AsTime()
+				}
 			} else {
 				completionEvent, err := getWorkflowCompletionEvent(ctx, shardID, resp.State, persistenceExecutionMgr)
 				if err != nil {
 					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
 					logger.Warn(warnMsg, tag.Error(err))
 					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
-				} else {
-					closeTime = completionEvent.GetEventTime()
+				} else if completionEvent.EventTime != nil {
+					closeTime = completionEvent.EventTime.AsTime()
 				}
 			}
 		}
 	}
 
-	if !cassVisBackend || (startTime != nil || closeTime != nil) {
+	if !cassVisBackend || (!startTime.IsZero() || !closeTime.IsZero()) {
 		// if using cass visibility, then either start or close time should be non-nil
 		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
 		// we can't guarantee there's no update or record close request for this workflow since

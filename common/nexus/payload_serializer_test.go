@@ -215,7 +215,7 @@ func TestNexusPayloadSerializer(t *testing.T) {
 			if expectedPayload == nil {
 				expectedPayload = c.inputPayload
 			}
-			require.Equal(t, expectedPayload, outputPayload)
+			require.True(t, expectedPayload.Equal(outputPayload))
 		})
 	}
 }

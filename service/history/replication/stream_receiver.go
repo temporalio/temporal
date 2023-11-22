@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -180,7 +181,7 @@ func (r *StreamReceiverImpl) ackMessage(
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
 				InclusiveLowWatermark:     watermarkInfo.Watermark,
-				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
 			},
 		},
 	}); err != nil {

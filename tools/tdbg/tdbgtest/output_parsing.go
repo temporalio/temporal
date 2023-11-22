@@ -25,13 +25,12 @@
 package tdbgtest
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
+	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/tools/tdbg"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -53,7 +52,7 @@ func ParseDLQMessages[T proto.Message](file io.Reader, newMessage func() T) ([]D
 		}
 		protoMessage := newMessage()
 		b := dlqMessage.Payload.Bytes()
-		err = jsonpb.Unmarshal(bytes.NewReader(b), protoMessage)
+		err = temporalproto.UnmarshalJSON(b, protoMessage)
 		if err != nil {
 			return DLQMessage[T]{}, err
 		}

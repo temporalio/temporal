@@ -580,7 +580,7 @@ func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
-	return pollupdate.Invoke(ctx, req, e.workflowConsistencyChecker)
+	return pollupdate.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -684,7 +684,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	token, err := e.nDCHistoryImporter.ImportWorkflow(
+	token, eventsApplied, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
@@ -699,7 +699,8 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 		return nil, err
 	}
 	return &historyservice.ImportWorkflowExecutionResponse{
-		Token: token,
+		Token:         token,
+		EventsApplied: eventsApplied,
 	}, nil
 }
 
@@ -836,7 +837,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 func (e *historyEngineImpl) RebuildMutableState(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) error {
 	return e.workflowRebuilder.rebuild(
 		ctx,
@@ -851,7 +852,7 @@ func (e *historyEngineImpl) RebuildMutableState(
 func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,

@@ -46,6 +46,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -57,8 +59,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
@@ -68,6 +70,7 @@ type advVisCrossDCTestSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	protorequire.ProtoAssertions
 	suite.Suite
 	cluster1               *tests.TestCluster
 	cluster2               *tests.TestCluster
@@ -155,6 +158,7 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 func (s *advVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *advVisCrossDCTestSuite) TearDownSuite() {
@@ -170,7 +174,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 		Clusters:                         clusterReplicationConfigAdvVis,
 		ActiveClusterName:                clusterNameAdvVis[0],
 		IsGlobalNamespace:                true,
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -229,8 +233,8 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		SearchAttributes:    searchAttr,
 	}
@@ -242,7 +246,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 	s.logger.Info("StartWorkflowExecution \n", tag.WorkflowRunID(we.GetRunId()))
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startTime
+	startFilter.EarliestTime = timestamppb.New(startTime)
 	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
 		PageSize:  5,
@@ -252,7 +256,7 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult := func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
-			startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
@@ -401,7 +405,7 @@ GetHistoryLoop:
 
 		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.Equal(terminateDetails, terminateEventAttributes.Details)
+		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
 		s.Equal(identity, terminateEventAttributes.Identity)
 		executionTerminated = true
 		break GetHistoryLoop
@@ -420,7 +424,7 @@ GetHistoryLoop2:
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				s.Equal(terminateReason, terminateEventAttributes.Reason)
-				s.Equal(terminateDetails, terminateEventAttributes.Details)
+				s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
 				s.Equal(identity, terminateEventAttributes.Identity)
 				eventsReplicated = true
 				break GetHistoryLoop2

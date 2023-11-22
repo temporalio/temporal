@@ -73,7 +73,7 @@ func TestParseDLQMessages(t *testing.T) {
 					},
 					Payload: &commonspb.HistoryTask{
 						ShardId: 34,
-						Blob:    &blob,
+						Blob:    blob,
 					},
 				},
 				},

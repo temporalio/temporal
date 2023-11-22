@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +27,6 @@ package temporal.server.api.token.v1;
 option go_package = "go.temporal.io/server/api/token/v1;token";
 
 import "google/protobuf/timestamp.proto";
-import "dependencies/gogoproto/gogo.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 
@@ -66,7 +67,7 @@ message Task {
     temporal.server.api.clock.v1.VectorClock clock = 9;
     int64 started_event_id = 10;
     int64 version = 11;
-    google.protobuf.Timestamp started_time = 12 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 12;
 }
 
 message QueryTask {

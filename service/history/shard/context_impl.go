@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"golang.org/x/exp/maps"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -874,7 +875,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 	ctx context.Context,
 	request *persistence.AppendHistoryNodesRequest,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) (int, error) {
 	if err := s.errorByState(); err != nil {
 		return 0, err
@@ -911,8 +912,8 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	branchToken []byte,
-	startTime *time.Time,
-	closeTime *time.Time,
+	startTime time.Time,
+	closeTime time.Time,
 	closeVisibilityTaskId int64,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
@@ -1764,12 +1765,12 @@ func (s *ContextImpl) GetReplicationStatus(clusterNames []string) (map[string]*h
 			if record, ok := remoteClusters[clusterName]; !ok {
 				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
 					AckedTaskId:             ackTaskID,
-					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+					AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 				}
 			} else if record.AckedTaskId > ackTaskID {
 				remoteClusters[clusterName] = &historyservice.ShardReplicationStatusPerCluster{
 					AckedTaskId:             ackTaskID,
-					AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+					AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 				}
 			}
 		}

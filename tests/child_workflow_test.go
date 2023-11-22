@@ -39,11 +39,12 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestChildWorkflowExecution() {
@@ -77,8 +78,8 @@ func (s *functionalSuite) TestChildWorkflowExecution() {
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
 		Header:              header,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -122,8 +123,8 @@ func (s *functionalSuite) TestChildWorkflowExecution() {
 						TaskQueue:           taskQueueChild,
 						Input:               payloads.EncodeString("child-workflow-input"),
 						Header:              header,
-						WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-						WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 						Control:             "",
 						Memo:                memo,
 						SearchAttributes:    searchAttr,
@@ -213,13 +214,13 @@ func (s *functionalSuite) TestChildWorkflowExecution() {
 	s.Equal(we.GetRunId(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetRunId())
 	s.Equal(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().GetInitiatedEventId(),
 		childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentInitiatedEventId())
-	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
-	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
-	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
+	s.ProtoEqual(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
+	s.ProtoEqual(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.ProtoEqual(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
 	s.Equal(searchAttr.GetIndexedFields()[saName].GetData(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetData())
 	s.Equal("Keyword", string(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
-	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
-	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
+	s.Equal(time.Duration(0), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout().AsDuration())
+	s.Equal(200*time.Second, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout().AsDuration())
 
 	// Process ChildExecution completed event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask()
@@ -260,8 +261,8 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -297,8 +298,8 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 					WorkflowType:        childWorkflowType,
 					TaskQueue:           taskQueueChild,
 					Input:               nil,
-					WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 					Control:             "",
 					CronSchedule:        cronSchedule,
 				}},
@@ -388,8 +389,8 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startParentWorkflowTS
-	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
+	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -406,7 +407,7 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 	}
 	s.NotNil(closedExecutions)
 	sort.Slice(closedExecutions, func(i, j int) bool {
-		return closedExecutions[i].GetStartTime().Before(timestamp.TimeValue(closedExecutions[j].GetStartTime()))
+		return closedExecutions[i].GetStartTime().AsTime().Before(closedExecutions[j].GetStartTime().AsTime())
 	})
 	// Execution 0 is the parent, 1, 2, 3 are the child (cron) that completed, 4 is the child that was
 	// terminated. Even though it was terminated, ExecutionTime will be set correctly (in the future).
@@ -414,12 +415,12 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 	for i := 2; i < 5; i++ {
 		executionInfo := closedExecutions[i]
 		// Round up the time precision to seconds
-		expectedBackoff := executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(lastExecution.GetExecutionTime()))
+		expectedBackoff := executionInfo.GetExecutionTime().AsTime().Sub(lastExecution.GetExecutionTime().AsTime())
 		// The execution time calculated based on last execution close time.
 		// However, the current execution time is based on the current start time.
 		// This code is to remove the diff between current start time and last execution close time.
 		// TODO: Remove this line once we unify the time source.
-		executionTimeDiff := executionInfo.GetStartTime().Sub(timestamp.TimeValue(lastExecution.GetCloseTime()))
+		executionTimeDiff := executionInfo.GetStartTime().AsTime().Sub(lastExecution.GetCloseTime().AsTime())
 		// The backoff between any two executions should be a multiplier of the target backoff duration which is 3 in this test
 		s.Equal(0, int(expectedBackoff.Seconds()-executionTimeDiff.Seconds())%int(targetBackoffDuration.Seconds()))
 		lastExecution = executionInfo
@@ -447,8 +448,8 @@ func (s *functionalSuite) TestRetryChildWorkflowExecution() {
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -478,11 +479,11 @@ func (s *functionalSuite) TestRetryChildWorkflowExecution() {
 					WorkflowType:        childWorkflowType,
 					TaskQueue:           taskQueueChild,
 					Input:               payloads.EncodeString("child-workflow-input"),
-					WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 					Control:             "",
 					RetryPolicy: &commonpb.RetryPolicy{
-						InitialInterval:    timestamp.DurationPtr(1 * time.Millisecond),
+						InitialInterval:    durationpb.New(1 * time.Millisecond),
 						BackoffCoefficient: 2.0,
 					},
 				}},
@@ -620,8 +621,8 @@ func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -650,11 +651,11 @@ func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
 					WorkflowType:        childWorkflowType,
 					TaskQueue:           taskQueueChild,
 					Input:               payloads.EncodeString("child-workflow-input"),
-					WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 					Control:             "",
 					RetryPolicy: &commonpb.RetryPolicy{
-						InitialInterval:    timestamp.DurationPtr(1 * time.Millisecond),
+						InitialInterval:    durationpb.New(1 * time.Millisecond),
 						BackoffCoefficient: 2.0,
 						MaximumAttempts:    3,
 					},

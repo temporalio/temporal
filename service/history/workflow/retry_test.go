@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -167,16 +169,16 @@ func Test_NextRetry(t *testing.T) {
 		StartedIdentity:             identity,
 		Attempt:                     1,
 		RetryMaximumAttempts:        2,
-		RetryExpirationTime:         timestamp.TimePtr(now.Add(100 * time.Second)),
-		RetryInitialInterval:        timestamp.DurationPtr(time.Duration(0)),
-		RetryMaximumInterval:        timestamp.DurationPtr(time.Duration(0)),
+		RetryExpirationTime:         timestamppb.New(now.Add(100 * time.Second)),
+		RetryInitialInterval:        durationpb.New(time.Duration(0)),
+		RetryMaximumInterval:        durationpb.New(time.Duration(0)),
 		RetryBackoffCoefficient:     2,
 	}
 
 	// retry if both MaximumAttempts and WorkflowExpirationTime are not set
 	//  above means no limitation on attempts and expiration
 	ai.RetryMaximumAttempts = 0
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
+	ai.RetryExpirationTime = nil
 	ai.RetryInitialInterval = timestamp.DurationFromSeconds(1)
 	ai.CancelRequested = false
 	interval, retryState := getBackoffInterval(
@@ -195,7 +197,7 @@ func Test_NextRetry(t *testing.T) {
 
 	// no retry if MaximumAttempts is 1 (for initial Attempt)
 	ai.RetryMaximumAttempts = 1
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
+	ai.RetryExpirationTime = nil
 	ai.RetryInitialInterval = timestamp.DurationFromSeconds(1)
 	interval, retryState = getBackoffInterval(
 		clock.NewRealTimeSource().Now(),
@@ -214,8 +216,8 @@ func Test_NextRetry(t *testing.T) {
 	// backoff retry, intervals: 1ms, 2ms, 4ms, 8ms.
 	ai.RetryMaximumAttempts = 5
 	ai.RetryBackoffCoefficient = 2
-	ai.RetryExpirationTime = timestamp.TimePtr(time.Time{})
-	ai.RetryInitialInterval = timestamp.DurationPtr(1 * time.Millisecond)
+	ai.RetryExpirationTime = nil
+	ai.RetryInitialInterval = durationpb.New(1 * time.Millisecond)
 	interval, retryState = getBackoffInterval(
 		now,
 		ai.Attempt,
@@ -312,7 +314,7 @@ func Test_NextRetry(t *testing.T) {
 
 	// increase max attempts, with max interval cap at 10s
 	ai.RetryMaximumAttempts = 6
-	ai.RetryMaximumInterval = timestamp.DurationPtr(10 * time.Millisecond)
+	ai.RetryMaximumInterval = durationpb.New(10 * time.Millisecond)
 	interval, retryState = getBackoffInterval(
 		now,
 		ai.Attempt,
@@ -330,7 +332,7 @@ func Test_NextRetry(t *testing.T) {
 
 	// no retry because expiration time before next interval
 	ai.RetryMaximumAttempts = 8
-	ai.RetryExpirationTime = timestamp.TimePtr(now.Add(time.Millisecond * 5))
+	ai.RetryExpirationTime = timestamppb.New(now.Add(time.Millisecond * 5))
 	interval, retryState = getBackoffInterval(
 		now,
 		ai.Attempt,
@@ -346,7 +348,7 @@ func Test_NextRetry(t *testing.T) {
 	a.Equal(enumspb.RETRY_STATE_TIMEOUT, retryState)
 
 	// extend expiration, next interval should be 10s
-	ai.RetryExpirationTime = timestamp.TimePtr(now.Add(time.Minute))
+	ai.RetryExpirationTime = timestamppb.New(now.Add(time.Minute))
 	interval, retryState = getBackoffInterval(
 		now,
 		ai.Attempt,

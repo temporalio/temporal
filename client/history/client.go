@@ -287,6 +287,18 @@ func (c *clientImpl) DeleteDLQTasks(
 	return historyClient.DeleteDLQTasks(ctx, in, opts...)
 }
 
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	in *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListQueuesResponse, error) {
+	historyClient, err := c.getAnyClient("ListQueues")
+	if err != nil {
+		return nil, err
+	}
+	return historyClient.ListQueues(ctx, in, opts...)
+}
+
 // getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
 // for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
 func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {

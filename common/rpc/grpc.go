@@ -29,12 +29,12 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/gogo/status"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"

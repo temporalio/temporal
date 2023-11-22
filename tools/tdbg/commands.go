@@ -28,14 +28,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 
-	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/temporalio/tctl-kit/pkg/color"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -47,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -267,7 +272,7 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			if err != nil {
 				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
 			} else {
-				prettyPrintJSONObject(currentBranchToken)
+				prettyPrintJSONObject(&currentBranchToken)
 			}
 		}
 
@@ -371,21 +376,24 @@ func AdminGetShardID(c *cli.Context) error {
 	return nil
 }
 
+// getCategory first searches the registry for the category by the [tasks.Category.Name].
+func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Category, error) {
+	key = strings.ToLower(key)
+	for _, category := range registry.GetCategories() {
+		if category.Name() == key {
+			return category, nil
+		}
+	}
+	return tasks.Category{}, fmt.Errorf("unknown task category %q", key)
+}
+
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
-func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory) error {
+func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry tasks.TaskCategoryRegistry) error {
 	sid := int32(c.Int(FlagShardID))
 	categoryStr := c.String(FlagTaskType)
-	categoryValue, err := StringToEnum(categoryStr, enumsspb.TaskCategory_value)
+	category, err := getCategory(registry, categoryStr)
 	if err != nil {
-		categoryInt, err := strconv.Atoi(categoryStr)
-		if err != nil {
-			return fmt.Errorf("unable to parse Task type: %s", err)
-		}
-		categoryValue = int32(categoryInt)
-	}
-	category := enumsspb.TaskCategory(categoryValue)
-	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("missing required parameter Task type: %s", err)
+		return err
 	}
 
 	client := clientFactory.AdminClient(c)
@@ -404,14 +412,14 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory) error {
 	}
 	req := &adminservice.ListHistoryTasksRequest{
 		ShardId:  sid,
-		Category: category,
+		Category: int32(category.ID()),
 		TaskRange: &history.TaskRange{
 			InclusiveMinTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(minFireTime),
+				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
 			},
 			ExclusiveMaxTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(maxFireTime),
+				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
 			},
 		},
@@ -441,20 +449,20 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory) error {
 }
 
 // AdminRemoveTask describes history host
-func AdminRemoveTask(c *cli.Context, clientFactory ClientFactory) error {
+func AdminRemoveTask(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+) error {
 	adminClient := clientFactory.AdminClient(c)
 	shardID := c.Int(FlagShardID)
 	taskID := c.Int64(FlagTaskID)
-	categoryInt, err := StringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	category, err := getCategory(taskCategoryRegistry, c.String(FlagTaskType))
 	if err != nil {
-		return fmt.Errorf("unable to parse Task Type: %s", err)
-	}
-	category := enumsspb.TaskCategory(categoryInt)
-	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("task type %s is currently not supported", category)
+		return err
 	}
 	var visibilityTimestamp int64
-	if category == enumsspb.TASK_CATEGORY_TIMER {
+	if category.Type() == tasks.CategoryTypeScheduled {
 		visibilityTimestamp = c.Int64(FlagTaskVisibilityTimestamp)
 	}
 
@@ -463,9 +471,9 @@ func AdminRemoveTask(c *cli.Context, clientFactory ClientFactory) error {
 
 	req := &adminservice.RemoveTaskRequest{
 		ShardId:        int32(shardID),
-		Category:       category,
+		Category:       int32(category.ID()),
 		TaskId:         taskID,
-		VisibilityTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(visibilityTimestamp)),
+		VisibilityTime: timestamppb.New(timestamp.UnixOrZeroTime(visibilityTimestamp)),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
@@ -553,7 +561,7 @@ func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error 
 
 	req := &adminservice.ListClusterMembersRequest{
 		Role:                enumsspb.ClusterMemberRole(role),
-		LastHeartbeatWithin: &heartbeat,
+		LastHeartbeatWithin: durationpb.New(heartbeat),
 	}
 
 	resp, err := adminClient.ListClusterMembers(ctx, req)

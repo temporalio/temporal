@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -107,7 +107,7 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 			Messages: &repicationpb.WorkflowReplicationMessages{
 				ReplicationTasks:           []*repicationpb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
-				ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, 100)),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},
 		},
 	}, nil).AnyTimes()

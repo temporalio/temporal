@@ -60,7 +60,7 @@ func (m *MockHistoryBranchUtil) EXPECT() *MockHistoryBranchUtilMockRecorder {
 }
 
 // NewHistoryBranch mocks base method.
-func (m *MockHistoryBranchUtil) NewHistoryBranch(namespaceID, treeID string, branchID *string, ancestors []*persistence.HistoryBranchRange, runTimeout, executionTimeout, retentionDuration *time.Duration) ([]byte, error) {
+func (m *MockHistoryBranchUtil) NewHistoryBranch(namespaceID, treeID string, branchID *string, ancestors []*persistence.HistoryBranchRange, runTimeout, executionTimeout, retentionDuration time.Duration) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewHistoryBranch", namespaceID, treeID, branchID, ancestors, runTimeout, executionTimeout, retentionDuration)
 	ret0, _ := ret[0].([]byte)

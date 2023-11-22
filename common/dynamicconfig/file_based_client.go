@@ -366,28 +366,36 @@ func convertYamlConstraints(m map[string]any) (Constraints, error) {
 		case "tasktype":
 			switch v := v.(type) {
 			case string:
-				if i, ok := enumspb.TaskQueueType_value[v]; ok && i > 0 {
-					cs.TaskQueueType = enumspb.TaskQueueType(i)
+				i, err := enumspb.TaskQueueTypeFromString(v)
+				if err != nil {
+					return cs, fmt.Errorf("invalid value for taskType: %w", err)
+				} else if i <= enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+				}
+				cs.TaskQueueType = i
+			case int:
+				if v > int(enumspb.TASK_QUEUE_TYPE_UNSPECIFIED) {
+					cs.TaskQueueType = enumspb.TaskQueueType(v)
 				} else {
 					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
 				}
-			case int:
-				cs.TaskQueueType = enumspb.TaskQueueType(v)
 			default:
 				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
 			}
 		case "historytasktype":
 			switch v := v.(type) {
 			case string:
-				if i, ok := enumsspb.TaskType_value[v]; ok && i > 0 {
-					cs.TaskType = enumsspb.TaskType(i)
-				} else {
-					return cs, fmt.Errorf("taskType %s constraint is not supported", v)
+				tt, err := enumsspb.TaskTypeFromString(v)
+				if err != nil {
+					return cs, fmt.Errorf("invalid value for historytasktype constraint: %w", err)
+				} else if tt <= enumsspb.TASK_TYPE_UNSPECIFIED {
+					return cs, fmt.Errorf("historytasktype %s constraint is not supported", v)
 				}
+				cs.TaskType = tt
 			case int:
 				cs.TaskType = enumsspb.TaskType(v)
 			default:
-				return cs, fmt.Errorf("taskType %T constraint is not supported", v)
+				return cs, fmt.Errorf("historytasktype %T constraint is not supported", v)
 			}
 		case "shardid":
 			if v, ok := v.(int); ok {

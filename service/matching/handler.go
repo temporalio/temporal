@@ -48,6 +48,8 @@ import (
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
+		matchingservice.UnsafeMatchingServiceServer
+
 		engine            Engine
 		config            *Config
 		metricsHandler    metrics.Handler
