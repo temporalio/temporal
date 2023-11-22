@@ -10,10 +10,9 @@ To effectively manage these DLQ messages, follow these steps:
     2. timer: 2
     3. replication: 3
     4. visibility: 4
-5. Search `Marking task as terminally failed, will send to DLQ` in logs and find the terminal error that caused the task to be enqueued to the DLQ.
-   Get the message_id
-6. You can list the DLQ messages using
+5. You can list the DLQ messages using the command
    `tdbg dlq --dlq-version v2 read --dlq-type {type}`. Substitute `{type}` with the integer value from step 4.
+6. Search `Marking task as terminally failed, will send to DLQ` in logs and find the terminal error that caused the task to be enqueued to the DLQ.
 
 If you couldn't find the logs, you can list all DLQs using the command `tdbg dlq --dlq-version v2 list` and find non-empty queues.
 This command will list all queues in the decreasing order of message count.
@@ -22,15 +21,15 @@ Now these DLQ tasks can either be purged(remove from DLQ), or merged(Re-enqueue 
 
 To purge a message, execute command `tdbg dlq --dlq-version v2 purge --dlq-type {type} --last_message_id {message_id}`. 
 Note that this command will purge all messages with an ID less than or equal to the specified `message_id`. 
-The output of this command will have a JobToken which can be used to manage the purge job.
-You can list the messages in the queue using the command mentioned in step 6 above to make sure more messages are not purged by mistake.
+The output of this command will have a job token which can be used to manage the purge job.
+Before executing this command, you can list the messages in the queue using the command mentioned in step 6 above to make sure more messages are not purged by mistake.
 
 To merge a message, execute command `tdbg dlq --dlq-version v2 merge --dlq-type {type} --last_message_id {message_id}`.
 This command will merge all messages with an ID less than or equal to `message_id` back into the original queue for reprocessing.
-The output of this command will have a JobToken which can be used to manage the merge job.
+The output of this command will have a job token which can be used to manage the merge job.
 
 Once merge or purge command is executed, it will create a dlq job which will process the DLQ messages. You can get the status of this job using the command
-`tdbg dlq --dlq-version v2 job describe --job-token {job-token}`. The value of job-token will be printed in the output or merge and purge commands.
-The output of this command will have details like last processed message id, number of messages processed etc.
+`tdbg dlq --dlq-version v2 job describe --job-token {job-token}`. The value of job-token will be printed in the output of merge and purge commands.
+The output of describe command will have details like last processed message id, number of messages processed etc.
 
 If you want to cancel a specific dlq job, you can execute the command `tdbg dlq --dlq-version v2 job cancel --job-token {job-token} --reason {reason}`.
