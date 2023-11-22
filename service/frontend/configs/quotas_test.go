@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/temporalapi"
 	"golang.org/x/exp/slices"
 )
 
@@ -249,11 +250,10 @@ func (s *quotasSuite) TestOtherAPIs() {
 
 func (s *quotasSuite) TestAllAPIs() {
 	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	expectedAPIs := make(map[string]struct{}, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		expectedAPIs[t.Method(i).Name] = struct{}{}
-	}
+	expectedAPIs := make(map[string]struct{})
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		expectedAPIs[m.Name] = struct{}{}
+	})
 
 	actualAPIs := make(map[string]struct{})
 	for api := range ExecutionAPIToPriority {

@@ -36,18 +36,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -57,7 +58,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests"
@@ -255,7 +255,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		// Needed so that the namespace is replicated.
 		IsGlobalNamespace: true,
 		// This is a required parameter.
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
 	})
 	s.NoError(err)
 
@@ -487,7 +487,11 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 			buffer,
 			func(decoder *json.Decoder) (*replicationspb.ReplicationTask, error) {
 				task := &replicationspb.ReplicationTask{}
-				return task, jsonpb.UnmarshalNext(decoder, task)
+				var obj json.RawMessage
+				if err := decoder.Decode(&obj); err != nil {
+					return nil, err
+				}
+				return task, temporalproto.UnmarshalJSON(obj, task)
 			},
 		)
 		s.NoError(err)

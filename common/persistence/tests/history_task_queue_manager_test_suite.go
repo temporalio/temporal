@@ -305,7 +305,7 @@ func enqueueAndDeserializeBlob(
 	_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: commonpb.DataBlob{
+		Blob: &commonpb.DataBlob{
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
 			Data:         historyTaskBytes,
 		},

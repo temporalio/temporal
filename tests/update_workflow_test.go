@@ -41,11 +41,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/tests/testvars"
 )
 
@@ -683,6 +683,7 @@ func (s *functionalSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptC
 				case 1:
 					return nil, nil
 				case 2:
+					s.Require().True(len(task.Messages) > 0, "Task has no messages", task)
 					updRequestMsg := task.Messages[0]
 					updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
 
@@ -2685,7 +2686,7 @@ func (s *functionalSuite) TestUpdateWorkflow_StartToCloseTimeoutSpeculativeWorkf
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
 		TaskQueue:           tv.TaskQueue(),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second), // Important!
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second), // Important!
 	}
 
 	startResp, err := s.engine.StartWorkflowExecution(NewContext(), request)

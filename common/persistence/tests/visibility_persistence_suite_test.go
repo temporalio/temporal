@@ -63,7 +63,7 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		persistencetests.TestBase
+		*persistencetests.TestBase
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -463,7 +463,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(s.ctx, &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution1,
+			Execution:        &workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -478,7 +478,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(s.ctx, &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution2,
+			Execution:        &workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -490,7 +490,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(s.ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution1,
+			Execution:        &workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -502,7 +502,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	closeReq := &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution2,
+			Execution:        &workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
 			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -544,17 +544,17 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 	testNamespaceUUID := namespace.ID(uuid.New())
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-5 * time.Second)
-	var pendingExecutions []commonpb.WorkflowExecution
+	var pendingExecutions []*commonpb.WorkflowExecution
 	for i := 0; i < openRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		}
-		pendingExecutions = append(pendingExecutions, workflowExecution)
+		pendingExecutions = append(pendingExecutions, &workflowExecution)
 		err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(s.ctx, &manager.RecordWorkflowExecutionStartedRequest{
 			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID:      testNamespaceUUID,
-				Execution:        workflowExecution,
+				Execution:        &workflowExecution,
 				WorkflowTypeName: "visibility-workflow",
 				StartTime:        startTime,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -594,7 +594,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			NamespaceID: testNamespaceUUID,
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
-			CloseTime:   &closeTime,
+			CloseTime:   closeTime,
 		})
 		s.Nil(err4)
 	}
@@ -621,7 +621,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			NamespaceID: testNamespaceUUID,
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
-			StartTime:   &startTime,
+			StartTime:   startTime,
 		})
 		s.Nil(err7)
 	}
@@ -647,7 +647,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				VisibilityRequestBase: &manager.VisibilityRequestBase{
 					NamespaceID:      "",
 					Namespace:        "",
-					Execution:        commonpb.WorkflowExecution{},
+					Execution:        &commonpb.WorkflowExecution{},
 					WorkflowTypeName: "",
 					StartTime:        time.Time{},
 					ExecutionTime:    time.Time{},
@@ -668,7 +668,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 				VisibilityRequestBase: &manager.VisibilityRequestBase{
 					NamespaceID:      "",
 					Namespace:        "",
-					Execution:        commonpb.WorkflowExecution{},
+					Execution:        &commonpb.WorkflowExecution{},
 					WorkflowTypeName: "",
 					StartTime:        time.Time{},
 					ExecutionTime:    time.Time{},
@@ -715,7 +715,7 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
 				RunID:       req.Execution.RunId,
-				StartTime:   &startTime,
+				StartTime:   startTime,
 			},
 		)
 		s.NoError(err)
@@ -732,7 +732,7 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
 				RunID:       req.Execution.RunId,
-				CloseTime:   &closeTime,
+				CloseTime:   closeTime,
 			},
 		)
 		s.NoError(err)
@@ -934,7 +934,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 	startReq := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID:      namespaceID,
-			Execution:        workflowExecution,
+			Execution:        &workflowExecution,
 			WorkflowTypeName: workflowType,
 			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,

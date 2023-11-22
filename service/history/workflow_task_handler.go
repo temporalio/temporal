@@ -37,6 +37,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
 
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
@@ -55,7 +56,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -283,7 +283,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		// TODO (alex-update): Should use MessageTypeTag here but then it needs to be another metric name too.
 		metrics.CommandTypeTag(msgType.String()),
-		message.Body.Size(),
+		proto.Size(message.Body),
 		fmt.Sprintf("Message type %v exceeds size limit.", msgType),
 	); err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
@@ -325,7 +325,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 			return handler.attrValidator.validateProtocolMessageAttributes(
 				namespaceID,
 				attr,
-				timestamp.DurationValue(executionInfo.WorkflowRunTimeout),
+				executionInfo.WorkflowRunTimeout,
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -356,7 +356,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			return handler.attrValidator.validateActivityScheduleAttributes(
 				namespaceID,
 				attr,
-				timestamp.DurationValue(executionInfo.WorkflowRunTimeout),
+				executionInfo.WorkflowRunTimeout,
 			)
 		},
 	); err != nil || handler.stopProcessing {
@@ -869,11 +869,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
-		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
-		newAttr := *attr
+		newAttr := common.CloneProto(attr)
 		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
+		attr = newAttr
 	}
 
 	if err := handler.validateCommandAttr(
@@ -987,11 +987,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
-		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
-		newAttr := *attr
+		newAttr := common.CloneProto(attr)
 		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
+		attr = newAttr
 	}
 
 	if err := handler.validateCommandAttr(
@@ -1138,11 +1138,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 	if unaliasedSas != nil {
-		// Create a shallow copy of the `attr` to avoid modification of original `attr`,
+		// Create a copy of the `attr` to avoid modification of original `attr`,
 		// which can be needed again in case of retry.
-		newAttr := *attr
+		newAttr := common.CloneProto(attr)
 		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
+		attr = newAttr
 	}
 
 	// valid search attributes for upsert

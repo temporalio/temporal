@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func emitShardInfoMetricsLogsLocked(
@@ -122,7 +123,7 @@ func ConvertToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
 	return &persistencespb.TaskKey{
-		FireTime: timestamp.TimePtr(key.FireTime),
+		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
 	}
 }

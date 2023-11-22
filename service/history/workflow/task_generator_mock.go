@@ -288,7 +288,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 }
 
 // GenerateWorkflowCloseTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime *time.Time, deleteAfterClose bool) error {
+func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime time.Time, deleteAfterClose bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closedTime, deleteAfterClose)
 	ret0, _ := ret[0].(error)

@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *functionalSuite) defaultWorkflowID() string {
@@ -48,7 +48,7 @@ func (s *functionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *functionalSuite) startEagerWorkflow(baseOptions workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
+func (s *functionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
 	options := baseOptions
 	options.RequestEagerExecution = true
 
@@ -71,7 +71,7 @@ func (s *functionalSuite) startEagerWorkflow(baseOptions workflowservice.StartWo
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.engine.StartWorkflowExecution(NewContext(), &options)
+	response, err := s.engine.StartWorkflowExecution(NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
@@ -121,7 +121,7 @@ func (s *functionalSuite) getWorkflowStringResult(workflowID, runID string) stri
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_StartNew() {
-	response := s.startEagerWorkflow(workflowservice.StartWorkflowExecutionRequest{})
+	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 	s.respondWorkflowTaskCompleted(task, "ok")
@@ -131,9 +131,9 @@ func (s *functionalSuite) TestEagerWorkflowStart_StartNew() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
-	response := s.startEagerWorkflow(workflowservice.StartWorkflowExecutionRequest{
+	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 	})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
@@ -146,9 +146,9 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
-	request := workflowservice.StartWorkflowExecutionRequest{
+	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		RequestId:           uuid.New(),
 	}
 	response := s.startEagerWorkflow(request)
@@ -156,7 +156,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 
 	// Let it timeout
-	time.Sleep(*request.WorkflowTaskTimeout)
+	time.Sleep(request.WorkflowTaskTimeout.AsDuration())
 	response = s.startEagerWorkflow(request)
 	task = response.GetEagerWorkflowTask()
 	s.Require().Nil(task, "StartWorkflowExecution response contained a workflow task")
@@ -169,7 +169,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	request := workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
+	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
@@ -184,7 +184,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
-	request := workflowservice.StartWorkflowExecutionRequest{
+	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 	s.startEagerWorkflow(request)

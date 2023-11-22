@@ -162,14 +162,14 @@ func (q *queueV2) ReadMessages(
 	}
 	var messages []persistence.QueueV2Message
 	for _, row := range rows {
-		encoding, ok := enums.EncodingType_value[row.MessageEncoding]
-		if !ok {
+		encoding, err := enums.EncodingTypeFromString(row.MessageEncoding)
+		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(row.MessageEncoding)
 		}
 		encodingType := enums.EncodingType(encoding)
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: row.MessageID},
-			Data: commonpb.DataBlob{
+			Data: &commonpb.DataBlob{
 				EncodingType: encodingType,
 				Data:         row.MessagePayload,
 			},
@@ -188,7 +188,7 @@ func newQueueV2Row(
 	queueType persistence.QueueV2Type,
 	queueName string,
 	messageID int64,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) sqlplugin.QueueV2MessageRow {
 
 	return sqlplugin.QueueV2MessageRow{

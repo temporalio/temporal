@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -124,7 +125,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
@@ -175,7 +176,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
@@ -226,7 +227,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_san_diego",
 		Description:                      "Namespace to delete",
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
@@ -253,7 +254,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_seattle",
 		Description:                      "Namespace to delete",
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
@@ -336,7 +337,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "ns_name_los_angeles",
 		Description:                      "Namespace to delete",
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})

@@ -28,11 +28,11 @@ import (
 	"fmt"
 
 	"golang.org/x/exp/maps"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -114,7 +114,7 @@ func ToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
 	return &persistencespb.TaskKey{
-		FireTime: timestamp.TimePtr(key.FireTime),
+		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
 	}
 }
@@ -122,7 +122,7 @@ func ToPersistenceTaskKey(
 func FromPersistenceTaskKey(
 	key *persistencespb.TaskKey,
 ) tasks.Key {
-	return tasks.NewKey(timestamp.TimeValue(key.FireTime), key.TaskId)
+	return tasks.NewKey(key.FireTime.AsTime(), key.TaskId)
 }
 
 func ToPersistencePredicate(

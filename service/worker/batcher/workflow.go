@@ -151,7 +151,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution commonpb.WorkflowExecution
+		execution *commonpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails

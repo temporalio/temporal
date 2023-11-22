@@ -140,7 +140,7 @@ func (f corruptQueue) ReadMessages(
 	return &persistence.InternalReadMessagesResponse{
 		Messages: []persistence.QueueV2Message{
 			{
-				Data: commonpb.DataBlob{
+				Data: &commonpb.DataBlob{
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 					Data:         []byte("some bytes that cannot be deserialized into a task"),
 				},

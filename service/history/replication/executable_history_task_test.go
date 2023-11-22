@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/testing/protorequire"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -476,7 +477,7 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	s.Equal(sourceTaskId, resultHistoryTask.TaskID())
 	s.Equal(incomingVersionHistoryItems, resultHistoryTask.versionHistoryItems)
 	expectedBatchedEvents := append(currentEvent, incomingEvent...)
-	s.Equal(expectedBatchedEvents, resultHistoryTask.eventsDesResponse.events)
+	protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents, resultHistoryTask.eventsDesResponse.events)
 	s.Nil(resultHistoryTask.eventsDesResponse.newRunEvents)
 	return currentTask, incomingTask
 }

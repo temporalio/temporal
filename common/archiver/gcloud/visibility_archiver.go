@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -135,13 +134,13 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime))
+	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTime.AsTime())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
 	}
 
-	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, timestamp.TimeValue(request.StartTime))
+	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTime.AsTime())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable

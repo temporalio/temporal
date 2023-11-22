@@ -54,6 +54,8 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	tasks "go.temporal.io/server/service/history/tasks"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // MockMutableState is a mock of MutableState interface.
@@ -637,7 +639,7 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionSignaled(signalName,
 }
 
 // AddWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionStartedEvent(arg0 v10.WorkflowExecution, arg1 *v111.StartWorkflowExecutionRequest) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionStartedEvent(arg0 *v10.WorkflowExecution, arg1 *v111.StartWorkflowExecutionRequest) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowExecutionStartedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
@@ -652,7 +654,7 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionStartedEvent(arg0, a
 }
 
 // AddWorkflowExecutionStartedEventWithOptions mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionStartedEventWithOptions(arg0 v10.WorkflowExecution, arg1 *v111.StartWorkflowExecutionRequest, arg2 *v16.ResetPoints, arg3, arg4 string) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionStartedEventWithOptions(arg0 *v10.WorkflowExecution, arg1 *v111.StartWorkflowExecutionRequest, arg2 *v16.ResetPoints, arg3, arg4 string) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowExecutionStartedEventWithOptions", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
@@ -787,7 +789,7 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskScheduledEvent(bypassTask
 }
 
 // AddWorkflowTaskScheduledEventAsHeartbeat mocks base method.
-func (m *MockMutableState) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time, workflowTaskType v19.WorkflowTaskType) (*WorkflowTaskInfo, error) {
+func (m *MockMutableState) AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType v19.WorkflowTaskType) (*WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTaskScheduledEventAsHeartbeat", bypassTaskGeneration, originalScheduledTimestamp, workflowTaskType)
 	ret0, _ := ret[0].(*WorkflowTaskInfo)
@@ -933,10 +935,10 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(transactionPo
 }
 
 // ContinueAsNewMinBackoff mocks base method.
-func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration {
+func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ContinueAsNewMinBackoff", backoffDuration)
-	ret0, _ := ret[0].(*time.Duration)
+	ret0, _ := ret[0].(*durationpb.Duration)
 	return ret0
 }
 
@@ -1627,10 +1629,10 @@ func (mr *MockMutableStateMockRecorder) GetWorkerVersionStamp() *gomock.Call {
 }
 
 // GetWorkflowCloseTime mocks base method.
-func (m *MockMutableState) GetWorkflowCloseTime(ctx context.Context) (*time.Time, error) {
+func (m *MockMutableState) GetWorkflowCloseTime(ctx context.Context) (time.Time, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowCloseTime", ctx)
-	ret0, _ := ret[0].(*time.Time)
+	ret0, _ := ret[0].(time.Time)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2429,7 +2431,7 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionSignaled(arg0 
 }
 
 // ReplicateWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowExecutionStartedEvent(arg0 *v18.VectorClock, arg1 v10.WorkflowExecution, arg2 string, arg3 *v13.HistoryEvent) error {
+func (m *MockMutableState) ReplicateWorkflowExecutionStartedEvent(arg0 *v18.VectorClock, arg1 *v10.WorkflowExecution, arg2 string, arg3 *v13.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionStartedEvent", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -2539,7 +2541,7 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowTaskFailedEvent() *gomo
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *v14.TaskQueue, arg3 *time.Duration, arg4 int32, arg5, arg6 *time.Time, arg7 v19.WorkflowTaskType) (*WorkflowTaskInfo, error) {
+func (m *MockMutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *v14.TaskQueue, arg3 *durationpb.Duration, arg4 int32, arg5, arg6 *timestamppb.Timestamp, arg7 v19.WorkflowTaskType) (*WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 	ret0, _ := ret[0].(*WorkflowTaskInfo)
@@ -2636,7 +2638,7 @@ func (mr *MockMutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockMutableState) SetHistoryTree(ctx context.Context, executionTimeout, runTimeout *time.Duration, treeID string) error {
+func (m *MockMutableState) SetHistoryTree(ctx context.Context, executionTimeout, runTimeout *durationpb.Duration, treeID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetHistoryTree", ctx, executionTimeout, runTimeout, treeID)
 	ret0, _ := ret[0].(error)
@@ -2664,7 +2666,7 @@ func (mr *MockMutableStateMockRecorder) SetSpeculativeWorkflowTaskTimeoutTask(ta
 }
 
 // SetStickyTaskQueue mocks base method.
-func (m *MockMutableState) SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration) {
+func (m *MockMutableState) SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetStickyTaskQueue", name, scheduleToStartTimeout)
 }
@@ -2703,11 +2705,11 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 }
 
 // TaskQueueScheduleToStartTimeout mocks base method.
-func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*v14.TaskQueue, *time.Duration) {
+func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*v14.TaskQueue, *durationpb.Duration) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TaskQueueScheduleToStartTimeout", name)
 	ret0, _ := ret[0].(*v14.TaskQueue)
-	ret1, _ := ret[1].(*time.Duration)
+	ret1, _ := ret[1].(*durationpb.Duration)
 	return ret0, ret1
 }
 

@@ -1146,7 +1146,11 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 		case searchattribute.TaskQueue:
 			record.TaskQueue = fieldValueParsed.(string)
 		case searchattribute.ExecutionStatus:
-			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[fieldValueParsed.(string)])
+			status, err := enumspb.WorkflowExecutionStatusFromString(fieldValueParsed.(string))
+			if err != nil {
+				return nil, logParseError(fieldName, fieldValueParsed.(string), err, docID)
+			}
+			record.Status = status
 		case searchattribute.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
 		case searchattribute.StateTransitionCount:

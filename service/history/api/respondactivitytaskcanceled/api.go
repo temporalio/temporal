@@ -119,7 +119,7 @@ func Invoke(
 				return nil, err
 			}
 
-			activityStartedTime = *ai.StartedTime
+			activityStartedTime = ai.StartedTime.AsTime()
 			taskQueue = ai.TaskQueue
 			return &api.UpdateWorkflowAction{
 				Noop:               false,

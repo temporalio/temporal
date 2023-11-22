@@ -228,7 +228,7 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 				Tasks: []*adminservice.AddTasksRequest_Task{
 					{
 						CategoryId: int32(task.GetCategory().ID()),
-						Blob:       &blob,
+						Blob:       blob,
 					},
 				},
 			}

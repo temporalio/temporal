@@ -31,11 +31,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/temporalio/tctl-kit/pkg/color"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -268,7 +272,7 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			if err != nil {
 				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
 			} else {
-				prettyPrintJSONObject(currentBranchToken)
+				prettyPrintJSONObject(&currentBranchToken)
 			}
 		}
 
@@ -411,11 +415,11 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 		Category: int32(category.ID()),
 		TaskRange: &history.TaskRange{
 			InclusiveMinTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(minFireTime),
+				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
 			},
 			ExclusiveMaxTaskKey: &history.TaskKey{
-				FireTime: timestamp.TimePtr(maxFireTime),
+				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
 			},
 		},
@@ -469,7 +473,7 @@ func AdminRemoveTask(
 		ShardId:        int32(shardID),
 		Category:       int32(category.ID()),
 		TaskId:         taskID,
-		VisibilityTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(visibilityTimestamp)),
+		VisibilityTime: timestamppb.New(timestamp.UnixOrZeroTime(visibilityTimestamp)),
 	}
 
 	_, err = adminClient.RemoveTask(ctx, req)
@@ -557,7 +561,7 @@ func AdminListClusterMembers(c *cli.Context, clientFactory ClientFactory) error 
 
 	req := &adminservice.ListClusterMembersRequest{
 		Role:                enumsspb.ClusterMemberRole(role),
-		LastHeartbeatWithin: &heartbeat,
+		LastHeartbeatWithin: durationpb.New(heartbeat),
 	}
 
 	resp, err := adminClient.ListClusterMembers(ctx, req)

@@ -750,7 +750,7 @@ func initCurrentClusterMetadataRecord(
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		ctx,
 		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        svc.Persistence.NumHistoryShards,
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,

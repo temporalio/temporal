@@ -53,7 +53,7 @@ type (
 			ctx context.Context,
 			namespaceID namespace.ID,
 			requestID string,
-			execution commonpb.WorkflowExecution,
+			execution *commonpb.WorkflowExecution,
 			history [][]*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
 		) (MutableState, error)
@@ -95,7 +95,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	requestID string,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	history [][]*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 ) (MutableState, error) {
@@ -125,7 +125,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	requestID string,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 ) (MutableState, error) {
@@ -560,7 +560,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -575,7 +575,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -590,7 +590,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -605,7 +605,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -620,7 +620,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err
@@ -649,7 +649,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 					ctx,
 					namespaceID,
 					uuid.New(),
-					newExecution,
+					&newExecution,
 					[][]*historypb.HistoryEvent{newRunHistory},
 					nil,
 				)
@@ -667,7 +667,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				event.GetEventTime(),
+				event.GetEventTime().AsTime(),
 				false,
 			); err != nil {
 				return nil, err

@@ -28,10 +28,10 @@ package replication
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -150,7 +150,7 @@ func convertActivityStateReplicationTask(
 			}
 
 			// The activity may be in a scheduled state
-			var startedTime *time.Time
+			var startedTime *timestamppb.Timestamp
 			if activityInfo.StartedEventId != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime
 			}
@@ -183,7 +183,7 @@ func convertActivityStateReplicationTask(
 						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
+				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
 			}, nil
 		},
 	)
@@ -213,7 +213,7 @@ func convertWorkflowStateReplicationTask(
 						WorkflowState: mutableState.CloneToProto(),
 					},
 				},
-				VisibilityTime: &taskInfo.VisibilityTimestamp,
+				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
 			}, nil
 		},
 	)
@@ -285,7 +285,7 @@ func convertHistoryReplicationTask(
 				NewRunEvents:        newEvents,
 			},
 		},
-		VisibilityTime: &taskInfo.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
 	}, nil
 }
 
@@ -300,7 +300,7 @@ func generateStateReplicationTask(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
@@ -378,7 +378,7 @@ func getBranchToken(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
