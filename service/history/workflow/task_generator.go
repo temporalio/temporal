@@ -65,7 +65,6 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
-			generateTimeoutTaskOnly bool,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -320,9 +319,6 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduledEventID int64,
-	// For non-speculative WT, generate a SCHEDULE_TO_START timeout timer task
-	// only; do not generate a transfer task to push the WT to matching.
-	generateTimeoutTaskOnly bool,
 ) error {
 
 	workflowTask := r.mutableState.GetWorkflowTaskByID(
@@ -332,8 +328,19 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+	scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		if !r.mutableState.IsStickyTaskQueueSet() {
+			// Speculative WT has ScheduleToStart timeout even on normal task queue.
+			// This timeout is internal and not visible to the user.
+			// Normally WT should be added to matching right after being created
+			// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
+			// there is no good way to handle the error.
+			// In this case ScheduleToStart timeout will fire, convert speculative WT to normal,
+			// and create transfer task to add this WT to matching.
+			scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
+		}
 
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
@@ -345,15 +352,22 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			Version:             workflowTask.Version,
 		}
 
-		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
-		}
-
-		r.mutableState.AddTasks(wttt)
+		// Create task in in-memory task queue if WT is speculative.
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
 	}
 
-	if generateTimeoutTaskOnly {
-		return nil
+	// Normal WT.
+	if r.mutableState.IsStickyTaskQueueSet() {
+		wttt := &tasks.WorkflowTaskTimeoutTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
+			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			EventID:             workflowTask.ScheduledEventID,
+			ScheduleAttempt:     workflowTask.Attempt,
+			Version:             workflowTask.Version,
+		}
+		r.mutableState.AddTasks(wttt)
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{

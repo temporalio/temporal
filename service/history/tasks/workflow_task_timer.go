@@ -35,6 +35,10 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
+const (
+	SpeculativeWorkflowTaskScheduleToStartTimeout = 10 * time.Second
+)
+
 var _ Task = (*WorkflowTaskTimeoutTask)(nil)
 
 type (

@@ -211,7 +211,14 @@ func Invoke(
 		}
 
 		if err != nil {
-			return nil, err
+			// Intentionally ignore error here.
+			// If adding speculative WT to matching failed with error,
+			// this error can't be handled outside of WF lock and can't be returned to the client (because it is not a client error).
+			// This speculative WT will be eventually converted to normal WT and corresponding transfer task
+			// will be created to add it to the matching. Default timeout is controlled by tasks.SpeculativeWorkflowTaskScheduleToStartTimeout (10 seconds).
+			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
+			err = nil
+			// TODO: emit metric, write warn log?
 		}
 	}
 

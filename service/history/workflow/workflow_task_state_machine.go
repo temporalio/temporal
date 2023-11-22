@@ -357,14 +357,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// TODO merge active & passive task generation
 	// Always bypass task generation for speculative workflow task.
 	if !bypassTaskGeneration {
-		generateTimeoutTaskOnly := false
-		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			generateTimeoutTaskOnly = true
-		}
-
 		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 			scheduledEventID,
-			generateTimeoutTaskOnly,
 		); err != nil {
 			return nil, err
 		}
@@ -1036,7 +1030,6 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	} else {
 		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
 			scheduledEvent.EventId,
-			true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
 		); err != nil {
 			return err
 		}
