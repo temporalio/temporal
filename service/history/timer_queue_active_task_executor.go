@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -498,7 +499,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		},
 		TaskQueue:              taskQueue,
 		ScheduledEventId:       task.EventID,
-		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
+		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 	})
@@ -541,8 +542,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
-	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
-	if wfExpTime.IsZero() || wfExpTime.After(t.shardContext.GetTimeSource().Now()) {
+	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.shardContext.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.

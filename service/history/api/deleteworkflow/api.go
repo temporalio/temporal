@@ -110,7 +110,7 @@ func Invoke(
 	if err := workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},

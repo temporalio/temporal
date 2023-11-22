@@ -224,7 +224,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	return s.shardContext.UpdateRemoteReaderInfo(
 		readerID,
 		inclusiveLowWatermark-1,
-		*inclusiveLowWatermarkTime,
+		inclusiveLowWatermarkTime.AsTime(),
 	)
 }
 

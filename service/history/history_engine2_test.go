@@ -42,9 +42,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -82,6 +85,7 @@ type (
 	engine2Suite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller               *gomock.Controller
 		mockShard                *shard.ContextTest
@@ -119,6 +123,7 @@ func (s *engine2Suite) TearDownSuite() {
 
 func (s *engine2Suite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
@@ -264,7 +269,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -290,7 +295,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &we,
+		WorkflowExecution: we,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -309,7 +314,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	}
 	expectedResponse.Version = tests.GlobalNamespaceEntry.FailoverVersion()
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
-	expectedResponse.ScheduledTime = wt.ScheduledTime
+	expectedResponse.ScheduledTime = timestamppb.New(wt.ScheduledTime)
 	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = ms.GetNextEventID() + 1
@@ -327,7 +332,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
 	s.Nil(err)
 	s.NotNil(response)
-	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
+	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
 	s.Equal(&expectedResponse, response)
 }
@@ -363,7 +368,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -392,7 +397,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  wt.ScheduledEventID,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -440,7 +445,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -455,7 +460,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -473,7 +478,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -491,7 +496,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -509,7 +514,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -526,7 +531,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -579,7 +584,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -614,7 +619,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -675,7 +680,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -711,7 +716,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
+		WorkflowExecution: workflowExecution,
 		ScheduledEventId:  5,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -728,7 +733,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -761,7 +766,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -791,7 +796,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -814,7 +819,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -858,7 +863,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
 
 func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -904,11 +909,11 @@ func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 	s.Equal(consts.ErrWorkflowParent, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedState(we *commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
 	return s.createExecutionStartedStateWithParent(we, tl, nil, identity, scheduleWorkflowTask, startWorkflowTask)
 }
 
-func (s *engine2Suite) createExecutionStartedStateWithParent(we commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEventWithParent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
@@ -933,7 +938,7 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(we commonpb.Workflo
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -990,7 +995,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttributes() {
 	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -1037,7 +1042,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		s.Equal(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, eventsToSave[1].GetEventType())
 		startChildEventAttributes := eventsToSave[1].GetStartChildWorkflowExecutionInitiatedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
-		s.Equal(
+		s.ProtoEqual(
 			payload.EncodeString("search attribute value"),
 			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomTextField"])
 		return tests.UpdateWorkflowExecutionResponse, nil
@@ -1064,7 +1069,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	identity := "testIdentity"
 	workflowType := "testWorkflowType"
 
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
@@ -1166,9 +1171,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(20 * time.Second),
-			WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(20 * time.Second),
+			WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 		},
@@ -1190,7 +1195,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, eventsToSave[0].GetEventType())
 		startEventAttributes := eventsToSave[0].GetWorkflowExecutionStartedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
-		s.Equal(
+		s.ProtoEqual(
 			payload.EncodeString("test"),
 			startEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomKeywordField"])
 		return tests.CreateWorkflowExecutionResponse, nil
@@ -1205,9 +1210,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(20 * time.Second),
-			WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(20 * time.Second),
+			WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
@@ -1245,8 +1250,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 		},
@@ -1281,8 +1286,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                "newRequestID",
 		},
@@ -1344,8 +1349,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 				WorkflowId:               workflowID,
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+				WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 				Identity:                 identity,
 				RequestId:                "newRequestID",
 				WorkflowIdReusePolicy:    option,
@@ -1425,8 +1430,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 					WorkflowId:               workflowID,
 					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-					WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-					WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+					WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+					WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 					Identity:                 identity,
 					RequestId:                "newRequestID",
 					WorkflowIdReusePolicy:    option,
@@ -1476,7 +1481,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
@@ -1515,8 +1520,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			SignalName:               signalName,
 			Input:                    input,
@@ -1535,7 +1540,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -1562,8 +1567,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                    input,
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
@@ -1606,7 +1611,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	requestID := "testRequestID"
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -1619,8 +1624,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                    input,
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
@@ -1681,7 +1686,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	requestID := "testRequestID"
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -1694,8 +1699,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                    input,
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
@@ -1763,7 +1768,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -1825,7 +1830,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -1892,7 +1897,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -1928,7 +1933,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -1959,7 +1964,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -2001,7 +2006,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	childTaskQueueName := "some random child task queue"
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", taskQueueName, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -2067,7 +2072,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 }
 
 func (s *engine2Suite) TestRefreshWorkflowTasks() {
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
@@ -2115,7 +2120,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.NoError(err)
 }
 
-func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.WorkflowExecution) workflow.MutableState {
 	weContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
 		s.mockShard,

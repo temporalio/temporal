@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -148,13 +149,13 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		{
 			EventId:   2,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		},
 		{
 			EventId:   3,
 			Version:   123,
-			EventTime: timestamp.TimePtr(time.Now().UTC()),
+			EventTime: timestamppb.New(time.Now().UTC()),
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}

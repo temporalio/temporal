@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -38,9 +36,12 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -130,7 +131,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 		acpt       = updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208}
 		resp       = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
 
-		completedEventData updatepb.Response
+		completedEventData *updatepb.Response
 		acceptedEventData  = struct {
 			updateID                         string
 			acceptedRequestMessageId         string
@@ -155,7 +156,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 				acceptedEventID int64,
 				res *updatepb.Response,
 			) (*historypb.HistoryEvent, error) {
-				completedEventData = *res
+				completedEventData = res
 				return &historypb.HistoryEvent{}, nil
 			},
 		}
@@ -233,7 +234,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 
 	require.Equal(t, meta.UpdateId, acceptedEventData.updateID)
 	require.Equal(t, acpt.AcceptedRequestSequencingEventId, acceptedEventData.acceptedRequestSequencingEventId)
-	require.Equal(t, resp, completedEventData)
+	protorequire.ProtoEqual(t, &resp, completedEventData)
 }
 
 func TestRequestReject(t *testing.T) {
@@ -320,7 +321,7 @@ func TestWithProtocolMessage(t *testing.T) {
 	})
 	t.Run("junk message", func(t *testing.T) {
 		protocolMsg := &protocolpb.Message{
-			Body: &types.Any{
+			Body: &anypb.Any{
 				TypeUrl: "nonsense",
 				Value:   []byte("even more nonsense"),
 			},
@@ -842,9 +843,9 @@ func TestWaitLifecycleStage(t *testing.T) {
 	})
 }
 
-func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {
+func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	t.Helper()
-	a, err := types.MarshalAny(pb)
-	require.NoError(t, err)
-	return a
+	var a anypb.Any
+	require.NoError(t, a.MarshalFrom(pb))
+	return &a
 }

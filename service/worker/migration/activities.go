@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -72,14 +74,14 @@ type (
 	}
 
 	SkippedWorkflowExecution struct {
-		WorkflowExecution commonpb.WorkflowExecution
+		WorkflowExecution *commonpb.WorkflowExecution
 		Reason            string
 	}
 
 	replicationTasksHeartbeatDetails struct {
 		NextIndex                        int
 		CheckPoint                       time.Time
-		LastNotVerifiedWorkflowExecution commonpb.WorkflowExecution
+		LastNotVerifiedWorkflowExecution *commonpb.WorkflowExecution
 	}
 
 	verifyStatus int
@@ -178,6 +180,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 
 	for _, shard := range resp.Shards {
 		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		actualLag := shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())
 		if hasClusterInfo {
 			// WE are all caught up
 			if shard.MaxReplicationTaskId == clusterInfo.AckedTaskId {
@@ -188,7 +191,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			// Caught up to the last checked IDs, and within allowed lagging range
 			if clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 				(shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
-					shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
+					actualLag <= waitRequest.AllowedLagging) {
 				readyShardCount++
 				continue
 			}
@@ -208,10 +211,10 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewDurationTag("ActualLagging", actualLag),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", *shard.MaxReplicationTaskVisibilityTime),
-				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
+				tag.NewTimePtrTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime),
+				tag.NewTimePtrTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime),
 				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
@@ -402,21 +405,21 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	if err != nil {
 		return nil, err
 	}
-	var lastCloseTime, lastStartTime time.Time
+	var lastCloseTime, lastStartTime *timestamppb.Timestamp
 
-	executions := make([]commonpb.WorkflowExecution, len(resp.Executions))
+	executions := make([]*commonpb.WorkflowExecution, len(resp.Executions))
 	for i, e := range resp.Executions {
-		executions[i] = *e.Execution
+		executions[i] = e.Execution
 
 		if e.CloseTime != nil {
-			lastCloseTime = *e.CloseTime
+			lastCloseTime = e.CloseTime
 		}
 
 		if e.StartTime != nil {
-			lastStartTime = *e.StartTime
+			lastStartTime = e.StartTime
 		}
 	}
-	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken, LastCloseTime: lastCloseTime, LastStartTime: lastStartTime}, nil
+	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken, LastCloseTime: lastCloseTime.AsTime(), LastStartTime: lastStartTime.AsTime()}, nil
 }
 
 func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
@@ -604,7 +607,7 @@ func (a *activities) checkSkipWorkflowExecution(
 
 	// Skip verifying workflow which has already passed retention time.
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
-		deleteTime := closeTime.Add(ns.Retention())
+		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
 			a.forceReplicationMetricsHandler.Counter(metrics.EncounterPassRetentionWorkflowCount.GetMetricName()).Record(1)
 			return verifyResult{
@@ -684,7 +687,7 @@ func (a *activities) verifyReplicationTasks(
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
 		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, &we)
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteClient, ns, we)
 		if err != nil {
 			return false, err
 		}

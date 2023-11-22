@@ -859,7 +859,7 @@ func (s *clientFunctionalSuite) TestStickyAutoReset() {
 	s.NotNil(resp)
 	for _, p := range resp.Pollers {
 		s.NotNil(p.LastAccessTime)
-		s.Greater(time.Now().Sub(*p.LastAccessTime), time.Second*10)
+		s.Greater(time.Now().Sub(p.LastAccessTime.AsTime()), time.Second*10)
 	}
 
 	startTime := time.Now()

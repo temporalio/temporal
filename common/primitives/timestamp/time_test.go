@@ -28,12 +28,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 // Timestamp suite tests time
 type TimestampSuite struct {
+	protorequire.ProtoAssertions
+	*require.Assertions
 	suite.Suite
 }
 
@@ -41,37 +47,40 @@ func TestTimestampSuite(t *testing.T) {
 	suite.Run(t, new(TimestampSuite))
 }
 
+func (s *TimestampSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+}
+
 func (s *TimestampSuite) TestCreateTimestampFromGoToProto() {
 	t := time.Now().UTC()
 	ts := TimestampFromTimePtr(&t)
 	tp := ts.ToProto()
-	t2, err := types.TimestampFromProto(tp)
-	s.NoError(err)
+	t2 := tp.AsTime()
 	s.EqualValues(t.UTC(), t2)
 }
 
 func (s *TimestampSuite) TestCreateTimestampFromProtoToGo() {
-	t := types.TimestampNow()
+	t := timestamppb.New(time.Now())
 	ts := TimestampFromProto(t)
 	tt := ts.ToTime()
-	t2, err := types.TimestampProto(*tt)
-	s.NoError(err)
-	s.EqualValues(t, t2)
+	t2 := timestamppb.New(tt)
+	s.ProtoEqual(t, t2)
 }
 
 func (s *TimestampSuite) TestTimestampBeforeAfterProtoProto() {
-	t := types.TimestampNow()
-	a := *t
+	t := timestamppb.New(time.Now())
+	a := proto.Clone(t).(*timestamppb.Timestamp)
 	a.Nanos += 1
-	s.NotEqual(*t, a)
+	s.NotProtoEqual(t, a)
 
 	before := TimestampFromProto(t)
-	after := TimestampFromProto(&a)
+	after := TimestampFromProto(a)
 	s.beforeAfterValidation(before, after)
 }
 
 func (s *TimestampSuite) TestTimestampBeforeAfterProtoGo() {
-	t := types.TimestampNow()
+	t := timestamppb.New(time.Now())
 	a := time.Now().UTC().Add(time.Nanosecond)
 
 	before := TimestampFromProto(t)
@@ -81,7 +90,7 @@ func (s *TimestampSuite) TestTimestampBeforeAfterProtoGo() {
 
 func (s *TimestampSuite) TestTimestampBeforeAfterGoProto() {
 	t := time.Now().UTC()
-	a := types.TimestampNow()
+	a := timestamppb.New(time.Now())
 	a.Nanos += 1
 
 	before := TimestampFromTimePtr(&t)
@@ -89,7 +98,7 @@ func (s *TimestampSuite) TestTimestampBeforeAfterGoProto() {
 	s.beforeAfterValidation(before, after)
 }
 
-func (s *TimestampSuite) TestTimestampBeforeAfterGoGo() {
+func (s *TimestampSuite) TestTimestampBeforeAfterProto() {
 	t := time.Now().UTC()
 	a := t.Add(time.Nanosecond)
 	s.NotEqual(t.UnixNano(), a.UnixNano())

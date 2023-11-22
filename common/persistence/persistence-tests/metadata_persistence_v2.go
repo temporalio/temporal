@@ -27,7 +27,6 @@ package persistencetests
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -46,15 +46,17 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	// MetadataPersistenceSuiteV2 is test of the V2 version of metadata persistence
 	MetadataPersistenceSuiteV2 struct {
-		TestBase
+		*TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -69,6 +71,7 @@ func (m *MetadataPersistenceSuiteV2) SetupSuite() {
 func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	m.Assertions = require.New(m.T())
+	m.ProtoAssertions = protorequire.New(m.T())
 	m.ctx, m.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	// cleanup the namespace created
@@ -183,7 +186,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
@@ -262,7 +265,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
@@ -344,7 +347,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	isGlobalNamespace := false
 	configVersion := int64(0)
 	failoverVersion := int64(0)
@@ -386,7 +389,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 	m.Equal(description, resp1.Namespace.Info.Description)
 	m.Equal(owner, resp1.Namespace.Info.Owner)
 	m.Equal(data, resp1.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp1.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp1.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp1.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp1.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp1.Namespace.Config.VisibilityArchivalState)
@@ -456,7 +459,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 			"abc": {
 				Reason:     "test-reason",
 				Operator:   "test-operator",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -499,12 +502,12 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(description, resp2.Namespace.Info.Description)
 	m.Equal(owner, resp2.Namespace.Info.Owner)
 	m.Equal(data, resp2.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp2.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp2.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp2.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp2.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp2.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp2.Namespace.Config.VisibilityArchivalUri)
-	m.True(reflect.DeepEqual(testBinaries, resp2.Namespace.Config.BadBinaries))
+	m.ProtoEqual(testBinaries, resp2.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp2.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp2.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -524,7 +527,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 	m.Equal(data, resp3.Namespace.Info.Data)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp3.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
@@ -575,7 +578,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 			"abc": {
 				Reason:     "test-reason",
 				Operator:   "test-operator",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -627,12 +630,12 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 	m.Equal(state, resp.Namespace.Info.State)
 	m.Equal(description, resp.Namespace.Info.Description)
 	m.Equal(owner, resp.Namespace.Info.Owner)
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp.Namespace.Config.VisibilityArchivalUri)
-	m.True(reflect.DeepEqual(testBinaries, resp.Namespace.Config.BadBinaries))
+	m.ProtoEqual(testBinaries, resp.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -663,7 +666,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	historyArchivalURI := "test://history/uri"
 	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
 	visibilityArchivalURI := "test://visibility/uri"
-	badBinaries := &namespacepb.BadBinaries{map[string]*namespacepb.BadBinaryInfo{}}
+	badBinaries := &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 
 	clusterActive := "some random active cluster name"
 	clusterStandby := "some random standby cluster name"
@@ -712,7 +715,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 			"abc": {
 				Reason:     "test-reason",
 				Operator:   "test-operator",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -747,7 +750,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 				resp2.Namespace.ConfigVersion,
 				resp2.Namespace.FailoverVersion,
 				resp2.Namespace.FailoverNotificationVersion,
-				&time.Time{},
+				time.Time{},
 				notificationVersion,
 				isGlobalNamespace,
 			)
@@ -770,12 +773,12 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	m.Equal(description, resp3.Namespace.Info.Description)
 	m.Equal(owner, resp3.Namespace.Info.Owner)
 
-	m.EqualValues(time.Duration(retention)*time.Hour*24, *resp3.Namespace.Config.Retention)
+	m.EqualValues(time.Duration(retention)*time.Hour*24, resp3.Namespace.Config.Retention.AsDuration())
 	m.Equal(historyArchivalState, resp3.Namespace.Config.HistoryArchivalState)
 	m.Equal(historyArchivalURI, resp3.Namespace.Config.HistoryArchivalUri)
 	m.Equal(visibilityArchivalState, resp3.Namespace.Config.VisibilityArchivalState)
 	m.Equal(visibilityArchivalURI, resp3.Namespace.Config.VisibilityArchivalUri)
-	m.True(reflect.DeepEqual(testBinaries, resp3.Namespace.Config.BadBinaries))
+	m.ProtoEqual(testBinaries, resp3.Namespace.Config.BadBinaries)
 	m.Equal(clusterActive, resp3.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(clusters), len(resp3.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -871,7 +874,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 			"abc": {
 				Reason:     "test-reason",
 				Operator:   "test-operator",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -900,7 +903,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
-		&failoverEndTime,
+		failoverEndTime,
 		notificationVersion,
 		isGlobalNamespace,
 	)
@@ -916,12 +919,12 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp4.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp4.Namespace.Info.Owner)
 	m.Equal(updatedData, resp4.Namespace.Info.Data)
-	m.EqualValues(*updatedRetention, *resp4.Namespace.Config.Retention)
+	m.ProtoEqual(updatedRetention, resp4.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp4.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp4.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp4.Namespace.Config.VisibilityArchivalState)
 	m.Equal(updatedVisibilityArchivalURI, resp4.Namespace.Config.VisibilityArchivalUri)
-	m.True(reflect.DeepEqual(testBinaries, resp4.Namespace.Config.BadBinaries))
+	m.ProtoEqual(testBinaries, resp4.Namespace.Config.BadBinaries)
 	m.Equal(updateClusterActive, resp4.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp4.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -931,7 +934,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp4.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp4.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp4.NotificationVersion)
-	m.EqualTimes(failoverEndTime, *resp4.Namespace.FailoverEndTime)
+	m.EqualTimes(failoverEndTime, resp4.Namespace.FailoverEndTime.AsTime())
 
 	resp5, err5 := m.GetNamespace(id, "")
 	m.NoError(err5)
@@ -943,7 +946,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp5.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp5.Namespace.Info.Owner)
 	m.Equal(updatedData, resp5.Namespace.Info.Data)
-	m.EqualValues(*updatedRetention, *resp5.Namespace.Config.Retention)
+	m.ProtoEqual(updatedRetention, resp5.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp5.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp5.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp5.Namespace.Config.VisibilityArchivalState)
@@ -957,7 +960,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp5.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp5.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp5.NotificationVersion)
-	m.EqualTimes(failoverEndTime, *resp4.Namespace.FailoverEndTime)
+	m.EqualTimes(failoverEndTime, resp4.Namespace.FailoverEndTime.AsTime())
 
 	notificationVersion++
 	err6 := m.UpdateNamespace(
@@ -984,7 +987,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateConfigVersion,
 		updateFailoverVersion,
 		updateFailoverNotificationVersion,
-		&time.Time{},
+		time.Time{},
 		notificationVersion,
 		isGlobalNamespace,
 	)
@@ -1000,12 +1003,12 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updatedDescription, resp6.Namespace.Info.Description)
 	m.Equal(updatedOwner, resp6.Namespace.Info.Owner)
 	m.Equal(updatedData, resp6.Namespace.Info.Data)
-	m.EqualValues(*updatedRetention, *resp6.Namespace.Config.Retention)
+	m.ProtoEqual(updatedRetention, resp6.Namespace.Config.Retention)
 	m.Equal(updatedHistoryArchivalState, resp6.Namespace.Config.HistoryArchivalState)
 	m.Equal(updatedHistoryArchivalURI, resp6.Namespace.Config.HistoryArchivalUri)
 	m.Equal(updatedVisibilityArchivalState, resp6.Namespace.Config.VisibilityArchivalState)
 	m.Equal(updatedVisibilityArchivalURI, resp6.Namespace.Config.VisibilityArchivalUri)
-	m.True(reflect.DeepEqual(testBinaries, resp6.Namespace.Config.BadBinaries))
+	m.ProtoEqual(testBinaries, resp6.Namespace.Config.BadBinaries)
 	m.Equal(updateClusterActive, resp6.Namespace.ReplicationConfig.ActiveClusterName)
 	m.Equal(len(updateClusters), len(resp6.Namespace.ReplicationConfig.Clusters))
 	for index := range clusters {
@@ -1015,7 +1018,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverVersion, resp6.Namespace.FailoverVersion)
 	m.Equal(updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp6.NotificationVersion)
-	m.EqualTimes(time.Unix(0, 0).UTC(), *resp6.Namespace.FailoverEndTime)
+	m.EqualTimes(time.Unix(0, 0).UTC(), resp6.Namespace.FailoverEndTime.AsTime())
 }
 
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
@@ -1235,7 +1238,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			"abc": {
 				Reason:     "test-reason1",
 				Operator:   "test-operator1",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -1244,7 +1247,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			"efg": {
 				Reason:     "test-reason2",
 				Operator:   "test-operator2",
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+				CreateTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 	}
@@ -1342,7 +1345,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	m.Equal(pageCount, 3)
 	m.Equal(len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
-		m.Equal(namespace, outputNamespaces[namespace.Namespace.Info.Id])
+		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
 	}
 }
 
@@ -1478,7 +1481,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 	configVersion int64,
 	failoverVersion int64,
 	failoverNotificationVersion int64,
-	failoverEndTime *time.Time,
+	failoverEndTime time.Time,
 	notificationVersion int64,
 	isGlobalNamespace bool,
 ) error {
@@ -1489,7 +1492,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 			ReplicationConfig:           replicationConfig,
 			ConfigVersion:               configVersion,
 			FailoverVersion:             failoverVersion,
-			FailoverEndTime:             failoverEndTime,
+			FailoverEndTime:             timestamppb.New(failoverEndTime),
 			FailoverNotificationVersion: failoverNotificationVersion,
 		},
 		NotificationVersion: notificationVersion,

@@ -37,6 +37,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -437,7 +438,8 @@ func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned
 	s.NoError(err)
 
 	// Wait for first WFT and stop the worker
-	<-ch
+	s.waitForChan(ctx, ch)
+	time.Sleep(100 * time.Millisecond) // wait for worker to complete task
 	w1.Stop()
 
 	// Generate a second workflow task with a "compatible" directive, it should be spooled in the versioned task queue.
@@ -834,7 +836,7 @@ func (s *versioningIntegSuite) TestDispatchActivityEager() {
 						TaskQueue: &taskqueuepb.TaskQueue{
 							Name: tq,
 						},
-						StartToCloseTimeout: &startToCloseTimeout,
+						StartToCloseTimeout: durationpb.New(startToCloseTimeout),
 						ActivityType: &commonpb.ActivityType{
 							Name: "ignore",
 						},
@@ -851,7 +853,7 @@ func (s *versioningIntegSuite) TestDispatchActivityEager() {
 						TaskQueue: &taskqueuepb.TaskQueue{
 							Name: tq,
 						},
-						StartToCloseTimeout: &startToCloseTimeout,
+						StartToCloseTimeout: durationpb.New(startToCloseTimeout),
 						ActivityType: &commonpb.ActivityType{
 							Name: "ignore",
 						},

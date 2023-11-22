@@ -109,7 +109,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		execution1,
+		&execution1,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -119,7 +119,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		execution1,
+		&execution1,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -134,7 +134,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		execution2,
+		&execution2,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -157,7 +157,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		execution1,
+		&execution1,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -169,7 +169,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 				context.Background(),
 				s.mockShard,
 				namespaceID,
-				execution1,
+				&execution1,
 				workflow.LockPriorityHigh,
 			)
 			s.NoError(err)
@@ -195,7 +195,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we,
+		&we,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -210,7 +210,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we2,
+		&we2,
 		workflow.LockPriorityHigh,
 	)
 	s.Error(err2)
@@ -222,7 +222,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we2,
+		&we2,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err3)
@@ -233,7 +233,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we,
+		&we,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err4)
@@ -254,7 +254,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we,
+		&we,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -272,7 +272,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we,
+		&we,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -287,7 +287,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		we,
+		&we,
 		workflow.LockPriorityHigh,
 	)
 	s.NoError(err)
@@ -320,7 +320,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			context.Background(),
 			s.mockShard,
 			namespaceID,
-			commonpb.WorkflowExecution{
+			&commonpb.WorkflowExecution{
 				WorkflowId: workflowId,
 				RunId:      runID,
 			},
@@ -346,7 +346,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		context.Background(),
 		s.mockShard,
 		namespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
@@ -394,7 +394,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 				context.Background(),
 				s.mockShard,
 				namespaceID,
-				commonpb.WorkflowExecution{
+				&commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
@@ -443,7 +443,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
 		ctx,
 		s.mockShard,
 		tests.NamespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},

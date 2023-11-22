@@ -38,11 +38,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestContinueAsNewWorkflow() {
@@ -80,8 +80,8 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 		Header:              header,
 		Memo:                memo,
 		SearchAttributes:    searchAttr,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -112,8 +112,8 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 					Header:              header,
 					Memo:                memo,
 					SearchAttributes:    searchAttr,
-					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 				}},
 			}}, nil
 		}
@@ -149,8 +149,8 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
-	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
-	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
+	s.ProtoEqual(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.ProtoEqual(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
 	s.Equal(searchAttr.GetIndexedFields()[saName].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetData())
 	s.Equal("Keyword", string(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 }
@@ -172,8 +172,8 @@ func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -198,8 +198,8 @@ func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
 					WorkflowType:        workflowType,
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
-					WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set timeout to 1
-					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(1 * time.Second), // set timeout to 1
+					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -273,8 +273,8 @@ func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -299,8 +299,8 @@ func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
 					WorkflowType:        workflowType,
 					TaskQueue:           taskQueue,
 					Input:               nil,
-					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -485,8 +485,8 @@ func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
 		WorkflowType:        definition.parentWorkflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -568,8 +568,8 @@ func (s *functionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 		WorkflowType:        definition.parentWorkflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 

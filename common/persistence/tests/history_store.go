@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -44,7 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 // TODO add UT for the following
@@ -63,6 +64,7 @@ type (
 	HistoryEventsSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		store      p.ExecutionManager
 		serializer serialization.Serializer
@@ -80,7 +82,8 @@ func NewHistoryEventsSuite(
 ) *HistoryEventsSuite {
 	eventSerializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
-		Assertions: require.New(t),
+		Assertions:      require.New(t),
+		ProtoAssertions: protorequire.New(t),
 		store: p.NewExecutionManager(
 			store,
 			eventSerializer,
@@ -103,6 +106,7 @@ func (s *HistoryEventsSuite) TearDownSuite() {
 
 func (s *HistoryEventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 }
 
@@ -116,12 +120,14 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 
@@ -132,8 +138,8 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 	)
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket)
 
-	s.Equal(eventsPacket.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket.events, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket.events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
@@ -142,12 +148,14 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
@@ -168,9 +176,9 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket1)
 	events = append(events, eventsPacket1.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
-	s.Equal(events, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
@@ -179,12 +187,14 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
@@ -207,7 +217,7 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket10)
 	events0 = append(events0, eventsPacket10.events...)
 
-	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), events0, s.listAllHistoryEvents(shardID, branchToken))
 
 	eventsPacket11 := s.newHistoryEvents(
 		[]int64{4, 5},
@@ -217,9 +227,9 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket11)
 	events1 = append(events1, eventsPacket11.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket11.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
-	s.Equal(events1, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket11.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(shardID, branchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
@@ -228,12 +238,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
@@ -265,12 +277,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket11)
 	events1 = append(events1, eventsPacket11.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket10.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
-	s.Equal(eventsPacket11.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
-	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
-	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket10.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket11.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), events0, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
@@ -279,12 +291,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
@@ -331,14 +345,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket21)
 	events1 = append(events1, eventsPacket21.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
-	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
-	s.Equal(eventsPacket20.events, s.listHistoryEvents(shardID, branchToken, 6, 7))
-	s.Equal(eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 6, 7))
-	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
-	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket1.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket20.events, s.listHistoryEvents(shardID, branchToken, 6, 7))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 6, 7))
+	protorequire.ProtoSliceEqual(s.T(), events0, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
@@ -347,12 +361,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
@@ -382,9 +398,9 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket20)
 	events0 = append(events0, eventsPacket20.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket20.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
-	s.Equal(events0, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket20.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), events0, s.listAllHistoryEvents(shardID, newBranchToken))
 
 	eventsPacket21 := s.newHistoryEvents(
 		[]int64{4, 5},
@@ -394,9 +410,9 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket21)
 	events1 = append(events1, eventsPacket21.events...)
 
-	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
-	s.Equal(eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
-	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
+	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendSelectTrim() {
@@ -405,12 +421,14 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
@@ -439,7 +457,7 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 
 	s.trimHistoryBranch(shardID, branchToken, eventsPacket1.nodeID, eventsPacket1.transactionID)
 
-	s.Equal(events, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
@@ -448,12 +466,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events0 []*historypb.HistoryEvent
@@ -506,8 +526,8 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 		s.trimHistoryBranch(shardID, newBranchToken, eventsPacket21.nodeID, eventsPacket21.transactionID)
 	}
 
-	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
-	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), events0, s.listAllHistoryEvents(shardID, branchToken))
+	protorequire.ProtoSliceEqual(s.T(), events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
@@ -516,12 +536,14 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 	var events []*historypb.HistoryEvent
@@ -557,7 +579,7 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 
 	s.trimHistoryBranch(shardID, newBranchToken, eventsPacket1.nodeID, eventsPacket1.transactionID)
 
-	s.Equal(events, s.listAllHistoryEvents(shardID, newBranchToken))
+	protorequire.ProtoSliceEqual(s.T(), events, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
 func (s *HistoryEventsSuite) TestAppendBatches() {
@@ -566,12 +588,14 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 	branchID := uuid.New()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 
@@ -594,10 +618,10 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket1)
 	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket2)
 	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket3)
-	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
 	expectedEvents := append(eventsPacket1.events, append(eventsPacket2.events, eventsPacket3.events...)...)
 	events := s.listAllHistoryEvents(shardID, branchToken)
-	s.Equal(expectedEvents, events)
+	protorequire.ProtoSliceEqual(s.T(), expectedEvents, events)
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
@@ -606,12 +630,14 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	branchID := uuid.New()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 
@@ -639,9 +665,9 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	// delete branch1, should only delete branch1:[4,5], keep branch1:[1,2,3] as it is used as ancestor by branch2
 	s.deleteHistoryBranch(shardID, br1Token)
 	// verify branch1:[1,2,3] still remains
-	s.Equal(eventsPacket0.events, s.listAllHistoryEvents(shardID, br1Token))
+	protorequire.ProtoSliceEqual(s.T(), eventsPacket0.events, s.listAllHistoryEvents(shardID, br1Token))
 	// verify branch2 is not affected
-	s.Equal(append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br2Token))
+	protorequire.ProtoSliceEqual(s.T(), append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br2Token))
 
 	// delete branch2, should delete branch2:[4,5], and also should delete ancestor branch1:[1,2,3] as it is no longer
 	// used by anyone
@@ -673,12 +699,14 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	branchID := uuid.New()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	s.NoError(err)
 
@@ -706,7 +734,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	// delete branch2, should only delete branch2:[4,5], keep branch1:[1,2,3] [4,5] as it is by branch1
 	s.deleteHistoryBranch(shardID, br2Token)
 	// verify branch1 is not affected
-	s.Equal(append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br1Token))
+	protorequire.ProtoSliceEqual(s.T(), append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br1Token))
 
 	// branch2:[4,5] should be deleted
 	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
@@ -867,7 +895,7 @@ func (s *HistoryEventsSuite) newHistoryEvents(
 	for index, eventID := range eventIDs {
 		events[index] = &historypb.HistoryEvent{
 			EventId:   eventID,
-			EventTime: timestamp.TimePtr(time.Unix(0, rand.Int63()).UTC()),
+			EventTime: timestamppb.New(time.Unix(0, rand.Int63()).UTC()),
 		}
 	}
 

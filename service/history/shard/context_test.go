@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -220,8 +221,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -246,8 +247,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -261,8 +262,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -275,8 +276,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -300,8 +301,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -314,8 +315,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -328,8 +329,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -341,8 +342,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -365,8 +366,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -381,8 +382,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -532,7 +533,7 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_8_4() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -569,7 +570,7 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_4_8() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -610,7 +611,7 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_8_4() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -670,7 +671,7 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_4_8() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }

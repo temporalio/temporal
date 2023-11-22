@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -63,7 +64,7 @@ func (s *functionalSuite) TestStartWorkflowExecution() {
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
-		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
 		Identity:           identity,
 	}
 
@@ -94,8 +95,8 @@ func (s *functionalSuite) TestStartWorkflowExecution() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
@@ -117,7 +118,7 @@ func (s *functionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
-		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
 		Identity:           identity,
 	}
 
@@ -167,9 +168,9 @@ func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
-		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
 		Identity:           identity,
-		WorkflowStartDelay: &startDelay,
+		WorkflowStartDelay: durationpb.New(startDelay),
 	}
 
 	reqStartTime := time.Now()
@@ -228,8 +229,8 @@ func (s *functionalSuite) TestTerminateWorkflow() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -254,10 +255,10 @@ func (s *functionalSuite) TestTerminateWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -327,7 +328,7 @@ GetHistoryLoop:
 
 		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.Equal(terminateDetails, terminateEventAttributes.Details)
+		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
 		s.Equal(identity, terminateEventAttributes.Identity)
 		executionTerminated = true
 		break GetHistoryLoop
@@ -345,8 +346,8 @@ StartNewExecutionLoop:
 			WorkflowType:        &commonpb.WorkflowType{Name: wt},
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Input:               nil,
-			WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-			WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			Identity:            identity,
 		}
 
@@ -380,8 +381,8 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -407,10 +408,10 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -480,8 +481,8 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -551,8 +552,8 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -579,10 +580,10 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(1 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+					StartToCloseTimeout:    durationpb.New(1 * time.Second),
+					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -670,13 +671,13 @@ func (s *functionalSuite) TestWorkflowRetry() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			// Intentionally test server-initialization of Initial Interval value (which should be 1 second)
 			MaximumAttempts:        int32(maximumAttempts),
-			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     backoffCoefficient,
 		},
@@ -751,7 +752,7 @@ func (s *functionalSuite) TestWorkflowRetry() {
 				backoff = time.Second
 			}
 		}
-		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().Add(backoff)
+		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
 	}
 
@@ -848,13 +849,13 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
-			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
 		},
@@ -903,13 +904,13 @@ func (s *functionalSuite) TestWorkflowRetryFailures() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
-			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
 		},

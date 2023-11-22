@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -55,7 +57,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
@@ -272,7 +273,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				updateAction.Noop = true
 			}
 
-			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
+			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
 			metrics.GetPerTaskQueueScope(
@@ -348,7 +349,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			if workflowTask == nil ||
 				workflowTask.StartedEventID == common.EmptyEventID ||
 				(token.StartedEventId != common.EmptyEventID && token.StartedEventId != workflowTask.StartedEventID) ||
-				(token.StartedTime != nil && workflowTask.StartedTime != nil && !token.StartedTime.Equal(*workflowTask.StartedTime)) ||
+				(token.StartedTime != nil && !workflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(workflowTask.StartedTime)) ||
 				workflowTask.Attempt != token.Attempt ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
@@ -427,7 +428,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		currentWorkflowTask == nil ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID ||
 		(token.StartedEventId != common.EmptyEventID && token.StartedEventId != currentWorkflowTask.StartedEventID) ||
-		(token.StartedTime != nil && currentWorkflowTask.StartedTime != nil && !token.StartedTime.Equal(*currentWorkflowTask.StartedTime)) ||
+		(token.StartedTime != nil && !currentWorkflowTask.StartedTime.IsZero() && !token.StartedTime.AsTime().Equal(currentWorkflowTask.StartedTime)) ||
 		currentWorkflowTask.Attempt != token.Attempt ||
 		(token.Version != common.EmptyVersion && token.Version != currentWorkflowTask.Version) {
 		// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
@@ -477,7 +478,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if workflowTaskHeartbeating {
 		namespace := namespaceEntry.Name()
 		timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
-		origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
+		origSchedTime := currentWorkflowTask.OriginalScheduledTime
 		if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
 			workflowTaskHeartbeatTimeout = true
 
@@ -670,7 +671,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 			newWorkflowTask, newWTErr = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
 				bypassTaskGeneration,
-				currentWorkflowTask.OriginalScheduledTime,
+				timestamppb.New(currentWorkflowTask.OriginalScheduledTime),
 				enumsspb.WORKFLOW_TASK_TYPE_NORMAL, // Heartbeat workflow task is always of Normal type.
 			)
 		} else {
@@ -890,8 +891,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	response.ScheduledTime = workflowTask.ScheduledTime
-	response.StartedTime = workflowTask.StartedTime
+	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
+	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
 	response.Version = workflowTask.Version
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
@@ -960,7 +961,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) setHistoryForRecordWfTaskStarte
 		ctx,
 		handler.shardContext,
 		namespace.ID(workflowKey.GetNamespaceID()),
-		commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+		&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
 		firstEventID,
 		nextEventID,
 		maximumPageSize,
@@ -1052,7 +1053,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createPollWorkflowTaskQueueResp
 			ctx,
 			handler.shardContext,
 			namespaceID,
-			*matchingResp.GetWorkflowExecution(),
+			matchingResp.GetWorkflowExecution(),
 			firstEventID,
 			nextEventID,
 			maximumPageSize,

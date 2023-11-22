@@ -28,9 +28,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -117,7 +117,7 @@ func MakeDirectiveForWorkflowTask(
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
 		// first workflow task
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}}
 	}
 	// else: unversioned queue
 	return &directive
@@ -129,7 +129,7 @@ func MakeDirectiveForActivityTask(
 ) *taskqueuespb.TaskVersionDirective {
 	var directive taskqueuespb.TaskVersionDirective
 	if !useCompatibleVersion {
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}}
 	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
 		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
 	}

@@ -168,7 +168,7 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {
@@ -280,7 +280,7 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 	for _, row := range rows {
 		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -377,7 +377,7 @@ func (m *sqlExecutionStore) getTransferTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {
@@ -444,7 +444,7 @@ func (m *sqlExecutionStore) getTimerTasks(
 	for _, row := range rows {
 		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -557,7 +557,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	for i, row := range rows {
 		replicationTasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	var nextPageToken []byte
@@ -586,7 +586,7 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	for i, row := range rows {
 		dlqTasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	var nextPageToken []byte
@@ -764,7 +764,7 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(row.TaskID),
-			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+			Blob: p.NewDataBlob(row.Data, row.DataEncoding),
 		}
 	}
 	if len(rows) == request.BatchSize {

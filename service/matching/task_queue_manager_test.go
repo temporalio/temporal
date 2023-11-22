@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +41,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -176,7 +176,7 @@ func TestDeliverBufferTasks_DisableUserData_SendsDefaultToUnversioned(t *testing
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
 			VersionDirective: &taskqueue.TaskVersionDirective{
-				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+				Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
 			},
 		},
 	}

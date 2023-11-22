@@ -107,7 +107,7 @@ func (mr *MockContextMockRecorder) AddTasks(ctx, request interface{}) *gomock.Ca
 }
 
 // AppendHistoryEvents mocks base method.
-func (m *MockContext) AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution v1.WorkflowExecution) (int, error) {
+func (m *MockContext) AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *v1.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendHistoryEvents", ctx, request, namespaceID, execution)
 	ret0, _ := ret[0].(int)
@@ -180,7 +180,7 @@ func (mr *MockContextMockRecorder) CurrentVectorClock() *gomock.Call {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID, stage)
 	ret0, _ := ret[0].(error)
@@ -795,7 +795,7 @@ func (mr *MockControllableContextMockRecorder) AddTasks(ctx, request interface{}
 }
 
 // AppendHistoryEvents mocks base method.
-func (m *MockControllableContext) AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution v1.WorkflowExecution) (int, error) {
+func (m *MockControllableContext) AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *v1.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendHistoryEvents", ctx, request, namespaceID, execution)
 	ret0, _ := ret[0].(int)
@@ -868,7 +868,7 @@ func (mr *MockControllableContextMockRecorder) CurrentVectorClock() *gomock.Call
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID, stage)
 	ret0, _ := ret[0].(error)

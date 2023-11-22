@@ -232,7 +232,7 @@ func (r *StateRebuilderImpl) applyEvents(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		requestID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
