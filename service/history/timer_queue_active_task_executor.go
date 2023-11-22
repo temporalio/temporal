@@ -370,11 +370,22 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil
 		}
 
+		// ScheduleToStart timeout timer task is created only for sticky task queue.
+		// But after task was created and this timeout task is fired, sticky task queue may be cleared.
+		// Therefore, workflowTask.TaskQueue.Kind can be Normal or Sticky.
+
+		// if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// 	if task.VisibilityTimestamp != workflowTask.ScheduledTime.Add(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout) {
+		// 		return nil
+		// 	}
+		// 	break
+		// }
+
 		// Only speculative WT has ScheduleToStart timeout on normal task queue.
 		if workflowTask.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL {
 			// But it speculative WT is converted to normal WT every time when
 			// mutable state is persisted to the database during lifetime of speculative WT (i.e. signal comes in).
-			// Nothing needs to be done here is WT is not speculative anymore.
+			// Nothing needs to be done here if WT is not speculative anymore.
 			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				return nil
 			}
