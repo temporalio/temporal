@@ -158,7 +158,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		}
 
 		if activityInfo.StartedEventId == common.EmptyEventID {
-			return newActivityTaskPostActionInfo(mutableState, *activityInfo.ScheduleToStartTimeout, activityInfo.UseCompatibleVersion)
+			return newActivityTaskPostActionInfo(mutableState, activityInfo.ScheduleToStartTimeout.AsDuration(), activityInfo.UseCompatibleVersion)
 		}
 
 		return nil, nil
@@ -209,8 +209,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		if wtInfo.StartedEventID == common.EmptyEventID {
 			return newWorkflowTaskPostActionInfo(
 				mutableState,
-				scheduleToStartTimeout,
-				*taskQueue,
+				scheduleToStartTimeout.AsDuration(),
+				taskQueue,
 			)
 		}
 
@@ -540,7 +540,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
 		task.(*tasks.ActivityTask),
-		&timeout,
+		timeout,
 		pushActivityInfo.versionDirective,
 	)
 }
@@ -559,7 +559,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		ctx,
 		task.(*tasks.WorkflowTask),
-		&pushwtInfo.taskqueue,
+		pushwtInfo.taskqueue,
 		pushwtInfo.workflowTaskScheduleToStartTimeout,
 		pushwtInfo.versionDirective,
 	)

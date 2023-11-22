@@ -66,15 +66,20 @@ var (
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 
 	grpcActions = map[string]struct{}{
-		metrics.FrontendQueryWorkflowScope:                    {},
-		metrics.FrontendRecordActivityTaskHeartbeatScope:      {},
-		metrics.FrontendRecordActivityTaskHeartbeatByIdScope:  {},
-		metrics.FrontendResetWorkflowExecutionScope:           {},
-		metrics.FrontendStartWorkflowExecutionScope:           {},
-		metrics.FrontendSignalWorkflowExecutionScope:          {},
-		metrics.FrontendSignalWithStartWorkflowExecutionScope: {},
-		metrics.FrontendRespondWorkflowTaskCompletedScope:     {},
-		metrics.FrontendPollActivityTaskQueueScope:            {},
+		"QueryWorkflow":                    {},
+		"RecordActivityTaskHeartbeat":      {},
+		"RecordActivityTaskHeartbeatById":  {},
+		"ResetWorkflowExecution":           {},
+		"StartWorkflowExecution":           {},
+		"SignalWorkflowExecution":          {},
+		"SignalWithStartWorkflowExecution": {},
+		"RespondWorkflowTaskCompleted":     {},
+		"PollActivityTaskQueue":            {},
+		"CreateSchedule":                   {},
+		"UpdateSchedule":                   {},
+		"DeleteSchedule":                   {},
+		"PatchSchedule":                    {},
+		"UpdateWorkflowExecution":          {},
 	}
 
 	commandActions = map[enums.CommandType]struct{}{

@@ -33,9 +33,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	"go.temporal.io/server/api/persistence/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -46,7 +50,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	cpersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/queues"
@@ -311,13 +314,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				tests.WorkflowID,
 				tests.RunID,
 			)
-			p.StartTime = time.Unix(0, 0)
-			p.ExecutionTime = time.Unix(0, 0)
-			p.CloseTime = time.Unix(0, 0).Add(time.Minute * 2)
-			p.Retention = timestamp.DurationPtr(time.Hour)
+			p.StartTime = time.Unix(0, 0).UTC()
+			p.ExecutionTime = time.Unix(0, 0).UTC()
+			p.CloseTime = time.Unix(0, 0).UTC().Add(time.Minute * 2)
+			p.Retention = durationpb.New(time.Hour)
 			// delete time = close time + retention
 			// delete time = 2 minutes + 1 hour = 1 hour 2 minutes
-			p.ExpectedDeleteTime = time.Unix(0, 0).Add(time.Minute * 2).Add(time.Hour)
+			p.ExpectedDeleteTime = time.Unix(0, 0).UTC().Add(time.Minute * 2).Add(time.Hour)
 			p.LastWriteVersionBeforeArchival = 1
 			p.LastWriteVersionAfterArchival = 1
 			p.Task = &tasks.ArchiveExecutionTask{
@@ -409,14 +412,14 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.GetLastWriteVersionAfterArchivalError,
 				).MaxTimes(1)
 				mutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(
-					&p.CloseTime,
+					p.CloseTime,
 					p.GetWorkflowCloseTimeError,
 				).AnyTimes()
 				executionInfo := &persistence.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
-					StartTime:                    &p.StartTime,
-					ExecutionTime:                &p.ExecutionTime,
-					CloseTime:                    &p.CloseTime,
+					StartTime:                    timestamppb.New(p.StartTime),
+					ExecutionTime:                timestamppb.New(p.ExecutionTime),
+					CloseTime:                    timestamppb.New(p.CloseTime),
 					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
@@ -480,9 +483,9 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			if p.ExpectArchive {
 				a.EXPECT().Archive(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context,
 					request *archival.Request) (*archival.Response, error) {
-					assert.Equal(t, p.StartTime, *request.StartTime)
-					assert.Equal(t, p.ExecutionTime, *request.ExecutionTime)
-					assert.Equal(t, p.CloseTime, *request.CloseTime)
+					assert.Equal(t, p.StartTime, request.StartTime.AsTime())
+					assert.Equal(t, p.ExecutionTime, request.ExecutionTime.AsTime())
+					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
 
 					return &archival.Response{}, p.ArchiveError
@@ -518,7 +521,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				timeSource,
 				namespaceRegistry,
 				mockMetadata,
-				nil,
+				logger,
 				metrics.NoopMetricsHandler,
 			)
 			err := executable.Execute()
@@ -546,7 +549,7 @@ type testCase struct {
 type params struct {
 	Controller                             *gomock.Controller
 	IsWorkflowExecutionRunning             bool
-	Retention                              *time.Duration
+	Retention                              *durationpb.Duration
 	Task                                   tasks.Task
 	ExpectedDeleteTime                     time.Time
 	ExpectedErrorSubstrings                []string

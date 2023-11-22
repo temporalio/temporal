@@ -36,11 +36,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
@@ -57,8 +57,8 @@ func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		Identity:            identity,
 	}
 
@@ -147,8 +147,8 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		Identity:            identity,
 	}
 
@@ -339,8 +339,8 @@ func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(20 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(20 * time.Second),
 		Identity:            identity,
 	}
 
@@ -376,8 +376,8 @@ func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 					WorkflowType:        workflowType,
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               nil,
-					WorkflowRunTimeout:  timestamp.DurationPtr(1000 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(100 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(1000 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(100 * time.Second),
 				}},
 			}}, nil
 		}

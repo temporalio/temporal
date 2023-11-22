@@ -37,8 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
@@ -49,7 +48,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
 
 	const numExecutions = 5
 
-	var wes []commonpb.WorkflowExecution
+	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		wid := id + strconv.Itoa(i)
@@ -61,12 +60,12 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
 			WorkflowType:          &commonpb.WorkflowType{Name: wt},
 			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Input:                 nil,
-			WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-			WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 			Identity:              identity,
 		})
 		s.NoError(err)
-		wes = append(wes, commonpb.WorkflowExecution{
+		wes = append(wes, &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      we.RunId,
 		})
@@ -135,7 +134,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
 			// Check execution is deleted.
 			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
@@ -149,7 +148,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
 			// Check history is deleted.
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			var invalidArgumentErr *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgumentErr)
@@ -185,7 +184,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
 
 	const numExecutions = 5
 
-	var wes []commonpb.WorkflowExecution
+	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		wid := id + strconv.Itoa(i)
@@ -197,12 +196,12 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
 			WorkflowType:          &commonpb.WorkflowType{Name: wt},
 			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Input:                 nil,
-			WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-			WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 			Identity:              identity,
 		})
 		s.NoError(err)
-		wes = append(wes, commonpb.WorkflowExecution{
+		wes = append(wes, &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      we.RunId,
 		})
@@ -247,7 +246,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
 			// Check execution is deleted.
 			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
@@ -261,7 +260,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
 			// Check history is deleted.
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			var invalidArgumentErr *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgumentErr)
@@ -297,7 +296,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 
 	const numExecutions = 3
 
-	var wes []commonpb.WorkflowExecution
+	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := 0; i < numExecutions; i++ {
 		wid := id + strconv.Itoa(i)
@@ -309,12 +308,12 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			WorkflowType:          &commonpb.WorkflowType{Name: wt},
 			TaskQueue:             &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Input:                 nil,
-			WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-			WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 			Identity:              identity,
 		})
 		s.NoError(err)
-		wes = append(wes, commonpb.WorkflowExecution{
+		wes = append(wes, &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      we.RunId,
 		})
@@ -367,7 +366,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			// Check execution is deleted.
 			describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
@@ -381,7 +380,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			// Check history is deleted.
 			historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace,
-				Execution: &we,
+				Execution: we,
 			})
 			var invalidArgumentErr *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgumentErr)

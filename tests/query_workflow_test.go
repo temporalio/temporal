@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,8 +146,9 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 }
 
 func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
+	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
-		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
 			return "should-reach-here", nil
 		})
 		return "", temporal.NewApplicationError("retry-me", "test-error")
@@ -183,7 +185,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		startEvent := historyEvents[0]
 		startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 		s.NotNil(startAttributes)
-		if startAttributes.FirstWorkflowTaskBackoff != nil && *startAttributes.FirstWorkflowTaskBackoff > 0 {
+		if startAttributes.FirstWorkflowTaskBackoff != nil && startAttributes.FirstWorkflowTaskBackoff.AsDuration() > 0 {
 			findBackoffWorkflow = true
 			break
 		}
@@ -192,7 +194,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	}
 	s.True(findBackoffWorkflow)
 
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
 }
@@ -260,15 +262,17 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 }
 
 func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
-
+	testname := s.T().Name()
+	var failures int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
-		err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		err := workflow.SetQueryHandler(ctx, testname, func() (string, error) {
 			return "", nil
 		})
 
 		if err != nil {
 			s.T().Fatalf("SetQueryHandler failed: %s", err.Error())
 		}
+		atomic.AddInt32(&failures, 1)
 		// force workflow task to fail
 		panic("Workflow failed")
 	}
@@ -292,17 +296,21 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	// wait for workflow task to fail 3 times
-	time.Sleep(time.Second * 3) // 1st_attempt, 0_delay, 2nd_attempt, 1s_delay, 3rd_attempt
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	s.Eventually(func() bool {
+		// wait for workflow task to fail 3 times
+		return atomic.LoadInt32(&failures) >= 3
+	}, 10*time.Second, 50*time.Millisecond)
+
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 }
 
 func (s *clientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
-		return "", nil
+		return "", errors.New("workflow should never execute")
 	}
 	id := "test-query-after-terminate"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -321,7 +329,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStart
 	err = s.sdkClient.TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
 	s.NoError(err)
 
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
 }

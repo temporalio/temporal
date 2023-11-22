@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -48,6 +50,10 @@ message QueueSliceRange {
 
 message ReadQueueMessagesNextPageToken {
     int64 last_read_message_id = 1;
+}
+
+message ListQueuesNextPageToken {
+    int64 last_read_queue_number = 1;
 }
 
 // HistoryTask represents an internal history service task for a particular shard. We use a blob because there is no

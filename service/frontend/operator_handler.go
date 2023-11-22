@@ -70,6 +70,8 @@ var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
 type (
 	// OperatorHandlerImpl - gRPC handler interface for operator service
 	OperatorHandlerImpl struct {
+		operatorservice.UnsafeOperatorServiceServer
+
 		status int32
 
 		logger                 log.Logger
@@ -315,7 +317,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		}
 		if targetFieldName == "" {
 			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
+				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType),
 			)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
@@ -640,7 +642,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),

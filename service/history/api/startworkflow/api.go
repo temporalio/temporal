@@ -33,6 +33,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 
@@ -130,7 +131,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 			s.recordEagerDenied(eagerStartDeniedReasonDynamicConfigDisabled)
 			request.RequestEagerExecution = false
 		}
-		if s.request.FirstWorkflowTaskBackoff != nil && *s.request.FirstWorkflowTaskBackoff > 0 {
+		if s.request.FirstWorkflowTaskBackoff != nil && s.request.FirstWorkflowTaskBackoff.AsDuration() > 0 {
 			s.recordEagerDenied(eagerStartDeniedReasonFirstWorkflowTaskBackoff)
 			request.RequestEagerExecution = false
 		}
@@ -445,7 +446,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (*mutab
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
-		commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
+		&commonpb.WorkflowExecution{WorkflowId: s.request.StartRequest.WorkflowId, RunId: runID},
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -552,7 +553,7 @@ func (s *Starter) generateResponse(
 		runID,
 		workflowTaskInfo.ScheduledEventID,
 		workflowTaskInfo.StartedEventID,
-		workflowTaskInfo.StartedTime,
+		timestamppb.New(workflowTaskInfo.StartedTime),
 		workflowTaskInfo.Attempt,
 		clock,
 		workflowTaskInfo.Version,
@@ -576,8 +577,8 @@ func (s *Starter) generateResponse(
 			History:                    &historypb.History{Events: historyEvents},
 			NextPageToken:              nil,
 			WorkflowExecutionTaskQueue: workflowTaskInfo.TaskQueue,
-			ScheduledTime:              workflowTaskInfo.ScheduledTime,
-			StartedTime:                workflowTaskInfo.StartedTime,
+			ScheduledTime:              timestamppb.New(workflowTaskInfo.ScheduledTime),
+			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
 		},
 	}, nil
 }

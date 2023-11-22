@@ -35,19 +35,21 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	TaskQueueSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		stickyTTL     time.Duration
 		namespaceID   string
@@ -68,7 +70,8 @@ func NewTaskQueueSuite(
 	logger log.Logger,
 ) *TaskQueueSuite {
 	return &TaskQueueSuite{
-		Assertions: require.New(t),
+		Assertions:      require.New(t),
+		ProtoAssertions: protorequire.New(t),
 		taskManager: p.NewTaskManager(
 			taskManager,
 			serialization.NewSerializer(),
@@ -91,7 +94,7 @@ func (s *TaskQueueSuite) SetupTest() {
 	s.namespaceID = uuid.New().String()
 	s.taskQueueName = uuid.New().String()
 	s.taskQueueType = enumspb.TaskQueueType(rand.Int31n(
-		int32(len(enumspb.TaskQueueType_name)) + 1),
+		int32(len(enumspb.TaskQueueType_value)) + 1),
 	)
 }
 
@@ -210,7 +213,7 @@ func (s *TaskQueueSuite) TestDelete() {
 	taskQueue := s.createTaskQueue(
 		rangeID,
 		enumspb.TaskQueueKind(rand.Int31n(
-			int32(len(enumspb.TaskQueueKind_name))+1),
+			int32(len(enumspb.TaskQueueKind_value))+1),
 		),
 	)
 
@@ -232,7 +235,7 @@ func (s *TaskQueueSuite) TestDelete_Conflict() {
 	taskQueue := s.createTaskQueue(
 		rangeID,
 		enumspb.TaskQueueKind(rand.Int31n(
-			int32(len(enumspb.TaskQueueKind_name))+1),
+			int32(len(enumspb.TaskQueueKind_value))+1),
 		),
 	)
 
@@ -269,10 +272,10 @@ func (s *TaskQueueSuite) createTaskQueue(
 func (s *TaskQueueSuite) randomTaskQueueInfo(
 	taskQueueKind enumspb.TaskQueueKind,
 ) *persistencespb.TaskQueueInfo {
-	now := timestamp.TimePtr(time.Now().UTC())
-	var expiryTime *time.Time
+	now := time.Now().UTC()
+	var expiryTime *timestamppb.Timestamp
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		expiryTime = timestamp.TimePtr(now.Add(s.stickyTTL))
+		expiryTime = timestamppb.New(now.Add(s.stickyTTL))
 	}
 
 	return &persistencespb.TaskQueueInfo{
@@ -282,7 +285,7 @@ func (s *TaskQueueSuite) randomTaskQueueInfo(
 		Kind:           taskQueueKind,
 		AckLevel:       rand.Int63(),
 		ExpiryTime:     expiryTime,
-		LastUpdateTime: now,
+		LastUpdateTime: timestamppb.New(now),
 	}
 }
 
@@ -311,5 +314,5 @@ func (s *TaskQueueSuite) assertEqualWithDB(
 	s.NoError(err)
 
 	s.Equal(rangeID, resp.RangeID)
-	s.Equal(taskQueueInfo, resp.TaskQueueInfo)
+	s.ProtoEqual(taskQueueInfo, resp.TaskQueueInfo)
 }

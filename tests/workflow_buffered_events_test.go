@@ -38,10 +38,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestRateLimitBufferedEvents() {
@@ -58,8 +58,8 @@ func (s *functionalSuite) TestRateLimitBufferedEvents() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -157,8 +157,8 @@ func (s *functionalSuite) TestBufferedEvents() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -195,10 +195,10 @@ func (s *functionalSuite) TestBufferedEvents() {
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("test-input"),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 && signalEvent == nil {
@@ -273,8 +273,8 @@ func (s *functionalSuite) TestBufferedEventsOutOfOrder() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(20 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(20 * time.Second),
 		Identity:            identity,
 	}
 
@@ -312,10 +312,10 @@ func (s *functionalSuite) TestBufferedEventsOutOfOrder() {
 					ActivityType:           &commonpb.ActivityType{Name: "ActivityType"},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeString("some random activity input"),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(100 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(100 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(100 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(100 * time.Second),
+					StartToCloseTimeout:    durationpb.New(100 * time.Second),
+					HeartbeatTimeout:       durationpb.New(100 * time.Second),
 				}},
 			}}, nil
 		}

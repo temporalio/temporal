@@ -29,11 +29,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"go.temporal.io/server/common/codec"
 )
@@ -83,13 +84,13 @@ func AdminDecodeProto(c *cli.Context) error {
 		return fmt.Errorf("missing required parameter data flag")
 	}
 
-	messageType := proto.MessageType(protoType)
-	if messageType == nil {
-		return fmt.Errorf("unable to find %s type", protoType)
-	}
-	message := reflect.New(messageType.Elem()).Interface().(proto.Message)
-	err = proto.Unmarshal(protoData, message)
+	messageType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(protoType))
 	if err != nil {
+		return fmt.Errorf("unable to find %s type: %w", protoType, err)
+	}
+
+	message := messageType.New().Interface()
+	if err = proto.Unmarshal(protoData, message); err != nil {
 		return fmt.Errorf("unable to unmarshal to %s", protoType)
 	}
 

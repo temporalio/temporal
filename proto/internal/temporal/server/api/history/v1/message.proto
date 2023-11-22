@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,8 +27,6 @@ package temporal.server.api.history.v1;
 option go_package = "go.temporal.io/server/api/history/v1;history";
 
 import "google/protobuf/timestamp.proto";
-
-import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/history/v1/message.proto";
 
@@ -58,7 +58,7 @@ message VersionHistories {
 
 message TaskKey {
     int64 task_id = 1;
-    google.protobuf.Timestamp fire_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp fire_time = 2;
 }
 
 message TaskRange {

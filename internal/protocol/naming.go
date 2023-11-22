@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	protocolpb "go.temporal.io/api/protocol/v1"
 )
 
@@ -50,6 +49,7 @@ const (
 	errNilMsg   = constErr("nil message")
 	errNilBody  = constErr("nil message body")
 	errProtoFmt = constErr("failed to extract protocol type")
+	errNoName   = constErr("no message name specified")
 )
 
 // String transforms a MessageType into a string
@@ -68,16 +68,16 @@ func (pt Type) String() string {
 func Identify(msg *protocolpb.Message) (Type, MessageType, error) {
 	if msg == nil {
 		return TypeUnknown, MessageTypeUnknown, errNilMsg
-	}
-	if msg.Body == nil {
+	} else if msg.Body == nil {
 		return TypeUnknown, MessageTypeUnknown, errNilBody
 	}
-	bodyTypeName, err := types.AnyMessageName(msg.Body)
-	if err != nil {
-		return TypeUnknown, MessageTypeUnknown, err
-	}
-	msgType := MessageType(bodyTypeName)
 
+	bodyTypeName := string(msg.Body.MessageName())
+	if bodyTypeName == "" {
+		return TypeUnknown, MessageTypeUnknown, errNoName
+	}
+
+	msgType := MessageType(bodyTypeName)
 	lastDot := strings.LastIndex(bodyTypeName, ".")
 	if lastDot < 0 {
 		err := fmt.Errorf("%w: no . found in %q", errProtoFmt, bodyTypeName)

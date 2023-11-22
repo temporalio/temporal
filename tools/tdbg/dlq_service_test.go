@@ -156,6 +156,7 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 		close(firstAppRun)
 	}
 	if len(p.expectedErrSubstrings) > 0 {
+		assert.Error(t, err, "Expected error to contain %v", p.expectedErrSubstrings)
 		for _, s := range p.expectedErrSubstrings {
 			assert.ErrorContains(t, err, s)
 		}

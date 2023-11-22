@@ -30,17 +30,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
@@ -48,6 +49,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		FunctionalTestBase
 	}
 )
@@ -67,6 +69,7 @@ func (s *functionalSuite) TearDownSuite() {
 func (s *functionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func TestFunctionalSuite(t *testing.T) {
@@ -101,20 +104,20 @@ func (s *functionalSuite) closeShard(wid string) {
 	s.NoError(err)
 }
 
-func unmarshalAny[T proto.Message](s *functionalSuite, a *types.Any) T {
+func unmarshalAny[T proto.Message](s *functionalSuite, a *anypb.Any) T {
 	s.T().Helper()
 	pb := new(T)
 	ppb := reflect.ValueOf(pb).Elem()
 	pbNew := reflect.New(reflect.TypeOf(pb).Elem().Elem())
 	ppb.Set(pbNew)
-	err := types.UnmarshalAny(a, *pb)
-	s.NoError(err)
+
+	s.NoError(a.UnmarshalTo(*pb))
 	return *pb
 }
 
-func marshalAny(s *functionalSuite, pb proto.Message) *types.Any {
+func marshalAny(s *functionalSuite, pb proto.Message) *anypb.Any {
 	s.T().Helper()
-	a, err := types.MarshalAny(pb)
+	a, err := anypb.New(pb)
 	s.NoError(err)
 	return a
 }

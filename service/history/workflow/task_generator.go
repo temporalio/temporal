@@ -50,7 +50,7 @@ type (
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-			closedTime *time.Time,
+			closedTime time.Time,
 			deleteAfterClose bool,
 		) error
 		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
@@ -148,7 +148,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
-	closedTime *time.Time,
+	closedTime time.Time,
 	deleteAfterClose bool,
 ) error {
 
@@ -200,7 +200,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				delay = retention
 			}
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
-			archiveTime := timestamp.TimeValue(closedTime).Add(delay)
+			archiveTime := closedTime.Add(delay)
 
 			task := &tasks.ArchiveExecutionTask{
 				// TaskID is set by the shard
@@ -209,11 +209,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				Version:             currentVersion,
 			}
 			closeTasks = append(closeTasks, task)
-		} else {
-			closeTime := timestamp.TimeValue(closedTime)
-			if err := r.GenerateDeleteHistoryEventTask(closeTime); err != nil {
-				return err
-			}
+		} else if err := r.GenerateDeleteHistoryEventTask(closedTime); err != nil {
+			return err
 		}
 	}
 
@@ -336,13 +333,12 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	}
 
 	if r.mutableState.IsStickyTaskQueueSet() {
-		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
+			VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
@@ -387,13 +383,10 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
-	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
-
 	wttt := &tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
+		VisibilityTimestamp: workflowTask.StartedTime.Add(workflowTask.WorkflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
@@ -442,7 +435,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		Version:             ai.Version,
-		VisibilityTimestamp: *ai.ScheduledTime,
+		VisibilityTimestamp: ai.ScheduledTime.AsTime(),
 		EventID:             ai.ScheduledEventId,
 		Attempt:             ai.Attempt,
 	})

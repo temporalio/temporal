@@ -35,10 +35,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
@@ -59,8 +59,8 @@ func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -230,8 +230,8 @@ func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
