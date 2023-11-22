@@ -333,12 +333,13 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		if !r.mutableState.IsStickyTaskQueueSet() {
 			// Speculative WT has ScheduleToStart timeout even on normal task queue.
-			// This timeout is internal and not visible to the user.
 			// Normally WT should be added to matching right after being created
 			// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
 			// there is no good way to handle the error.
-			// In this case ScheduleToStart timeout will fire, convert speculative WT to normal,
-			// and create transfer task to add this WT to matching.
+			// In this case WT will be timed out (as if it was on sticky task queue),
+			// and new normal WT will be created.
+			// Note: this timeout will also fire if workflow received an update,
+			// but there is no workers available. Speculative WT will time out, and normal WT will be created.
 			scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
 		}
 

@@ -370,40 +370,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil
 		}
 
-		// ScheduleToStart timeout timer task is created only for sticky task queue.
-		// But after task was created and this timeout task is fired, sticky task queue may be cleared.
-		// Therefore, workflowTask.TaskQueue.Kind can be Normal or Sticky.
-
-		// if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		// 	if task.VisibilityTimestamp != workflowTask.ScheduledTime.Add(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout) {
-		// 		return nil
-		// 	}
-		// 	break
-		// }
-
-		// Only speculative WT has ScheduleToStart timeout on normal task queue.
-		if workflowTask.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL {
-			// But it speculative WT is converted to normal WT every time when
-			// mutable state is persisted to the database during lifetime of speculative WT (i.e. signal comes in).
-			// Nothing needs to be done here if WT is not speculative anymore.
-			if workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				return nil
-			}
-
-			// If current WT in mutable state is different from WT for which this timer task was created,
-			// then just ignore this task. There will be another one which will fire at the right moment.
-			if task.VisibilityTimestamp != workflowTask.ScheduledTime.Add(tasks.SpeculativeWorkflowTaskScheduleToStartTimeout) {
-				return nil
-			}
-
-			// If speculative WT is still not started after tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
-			// then there is a chance that it wasn't added to matching after creation
-			// (i.e. from UpdateWorkflowExecution API handler) because of transient failure.
-			// It needs to be converted to normal WT and transfer task queue processor will add it to matching.
-			// No events will be added to the history because this timeout is internal and not visible to the user.
-			break
-		}
-
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
