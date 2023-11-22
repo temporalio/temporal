@@ -328,7 +328,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		dlqVersion = "v2"
 		dlqType = strconv.Itoa(tasks.CategoryReplication.ID())
 	}
-	s.testReadTasks(app, &cliOutputBuffer, dlqVersion, dlqType, run, lastMessageID)
+	s.testReadTasks(ctx, app, &cliOutputBuffer, dlqVersion, dlqType, run, lastMessageID)
 
 	// Stop failing the replication tasks for this workflow.
 	s.replicationTaskExecutors.workflowIDToFail = "something-else"
@@ -346,7 +346,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		"--" + tdbg.FlagDLQType, dlqType,
 	}
 	cliOutputBuffer.Truncate(0)
-	s.runTDBGCommand(app, &cliOutputBuffer, cmd)
+	s.runTDBGCommand(ctx, app, &cliOutputBuffer, cmd)
 
 	if s.enableQueueV2 {
 		// DLQ v2 merges tasks asynchronously, so we need to wait for it to finish. In v1, the merge is synchronous.
@@ -446,6 +446,7 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 
 // This method calls `tdbg dlq read`, verifying that it contains the correct replication tasks.
 func (s *historyReplicationDLQSuite) testReadTasks(
+	ctx context.Context,
 	app *cli.App,
 	buffer *bytes.Buffer,
 	dlqVersion string,
@@ -464,7 +465,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		"--" + tdbg.FlagLastMessageID, lastMessageID,
 		"--" + tdbg.FlagDLQType, dlqType,
 	}
-	s.runTDBGCommand(app, buffer, cmd)
+	s.runTDBGCommand(ctx, app, buffer, cmd)
 
 	// Parse the output into replication task protos.
 	// Verify that the replication task contains the correct information (operators will want to know which workflow
@@ -507,13 +508,14 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 // runTDBGCommand is useful for manually testing the TDBG CLI because, in addition to automated checks that we can run
 // on the parsed output, we also just want to know that it looks good to a human.
 func (s *historyReplicationDLQSuite) runTDBGCommand(
+	ctx context.Context,
 	app *cli.App,
 	buffer *bytes.Buffer,
 	cmd []string,
 ) {
 	cmdString := strings.Join(cmd, " ")
 	s.T().Log("TDBG command:", cmdString)
-	err := app.Run(cmd)
+	err := app.RunContext(ctx, cmd)
 	s.NoError(err)
 	s.T().Log("TDBG output:")
 	s.T().Log("========================================")

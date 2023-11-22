@@ -289,7 +289,7 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 			}
 			cmdString := strings.Join(args, " ")
 			s.T().Log("TDBG command:", cmdString)
-			err = s.tdbgApp.Run(args)
+			err = s.tdbgApp.RunContext(ctx, args)
 			s.NoError(err)
 
 			s.T().Log("TDBG output:")
@@ -321,11 +321,11 @@ func (s *dlqSuite) TestPurgeRealWorkflow() {
 	token := s.purgeMessages(ctx, dlqMessageID)
 
 	// Verify that the workflow task is no longer in the DLQ.
-	dlqTasks := s.readDLQTasks()
+	dlqTasks := s.readDLQTasks(ctx)
 	s.Empty(dlqTasks, "expected DLQ to be empty after purge")
 
 	// Run DescribeJob and validate
-	response := s.describeJob(token)
+	response := s.describeJob(ctx, token)
 	s.Equal(enums.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
 	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
@@ -333,7 +333,7 @@ func (s *dlqSuite) TestPurgeRealWorkflow() {
 	s.Equal(int64(1), response.MessagesProcessed)
 
 	// Try to cancel completed workflow
-	cancelResponse := s.cancelJob(token)
+	cancelResponse := s.cancelJob(ctx, token)
 	s.Equal(false, cancelResponse.Canceled)
 }
 
@@ -364,7 +364,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	token := s.mergeMessages(ctx, dlqMessageID)
 
 	// Verify that the workflow task was deleted from the DLQ after merging.
-	dlqTasks := s.readDLQTasks()
+	dlqTasks := s.readDLQTasks(ctx)
 	s.Empty(dlqTasks)
 
 	// Verify that the workflows now eventually complete successfully.
@@ -373,7 +373,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	}
 
 	// Run DescribeJob and validate
-	response := s.describeJob(token)
+	response := s.describeJob(ctx, token)
 	s.Equal(enums.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
 	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
@@ -381,7 +381,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	s.Equal(int64(numWorkflows), response.MessagesProcessed)
 
 	// Try to cancel completed workflow
-	cancelResponse := s.cancelJob(token)
+	cancelResponse := s.cancelJob(ctx, token)
 	s.Equal(false, cancelResponse.Canceled)
 }
 
@@ -397,7 +397,7 @@ func (s *dlqSuite) TestCancelRunningMerge() {
 	token := s.mergeMessagesWithoutBlocking(ctx, dlqMessageID)
 
 	// Try to cancel running workflow
-	cancelResponse := s.cancelJob(token)
+	cancelResponse := s.cancelJob(ctx, token)
 	s.Equal(true, cancelResponse.Canceled)
 	// Unblock waiting tests on Delete
 	close(s.deleteBlockCh)
@@ -445,7 +445,7 @@ func (s *dlqSuite) TestListQueues() {
 	})
 	s.NoError(err)
 
-	queueInfos := s.listQueues()
+	queueInfos := s.listQueues(ctx)
 	qi0 := adminservice.ListQueuesResponse_QueueInfo{
 		QueueName:    queueKey1.GetQueueName(),
 		MessageCount: 0,
@@ -487,13 +487,16 @@ func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.Workflo
 	}
 
 	// Verify that the workflow task is in the DLQ.
-	task := s.verifyRunIsInDLQ(run)
+	task := s.verifyRunIsInDLQ(ctx, run)
 	dlqMessageID := task.MessageID
 	return run, dlqMessageID
 }
 
-func (s *dlqSuite) verifyRunIsInDLQ(run sdkclient.WorkflowRun) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
-	dlqTasks := s.readDLQTasks()
+func (s *dlqSuite) verifyRunIsInDLQ(
+	ctx context.Context,
+	run sdkclient.WorkflowRun,
+) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
+	dlqTasks := s.readDLQTasks(ctx)
 	for _, task := range dlqTasks {
 		if task.Payload.RunId == run.GetRunID() {
 			return task
@@ -530,7 +533,7 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageIDToDelete, 10),
 	}
-	err := s.tdbgApp.Run(args)
+	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
@@ -570,7 +573,7 @@ func (s *dlqSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageID, 10),
 		"--" + tdbg.FlagPageSize, "1", // to ensure that we test pagination
 	}
-	err := s.tdbgApp.Run(args)
+	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.writer.Truncate(0)
@@ -580,7 +583,7 @@ func (s *dlqSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 }
 
 // readDLQTasks from the transfer task DLQ for this cluster and return them.
-func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
+func (s *dlqSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	file := testutils.CreateTemp(s.T(), "", "*")
 	args := []string{
 		"tdbg",
@@ -591,13 +594,13 @@ func (s *dlqSuite) readDLQTasks() []tdbgtest.DLQMessage[*persistencespb.Transfer
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagOutputFilename, file.Name(),
 	}
-	s.NoError(s.tdbgApp.Run(args))
+	s.NoError(s.tdbgApp.RunContext(ctx, args))
 	dlqTasks := s.readTransferTasks(file)
 	return dlqTasks
 }
 
 // Calls describe dlq job and verify the output
-func (s *dlqSuite) describeJob(token []byte) *adminservice.DescribeDLQJobResponse {
+func (s *dlqSuite) describeJob(ctx context.Context, token []byte) *adminservice.DescribeDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -606,7 +609,7 @@ func (s *dlqSuite) describeJob(token []byte) *adminservice.DescribeDLQJobRespons
 		"describe",
 		"--" + tdbg.FlagJobToken, string(token),
 	}
-	err := s.tdbgApp.Run(args)
+	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.T().Log(string(output))
@@ -617,7 +620,7 @@ func (s *dlqSuite) describeJob(token []byte) *adminservice.DescribeDLQJobRespons
 }
 
 // Calls delete dlq job and verify the output
-func (s *dlqSuite) cancelJob(token []byte) *adminservice.CancelDLQJobResponse {
+func (s *dlqSuite) cancelJob(ctx context.Context, token []byte) *adminservice.CancelDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -627,7 +630,7 @@ func (s *dlqSuite) cancelJob(token []byte) *adminservice.CancelDLQJobResponse {
 		"--" + tdbg.FlagJobToken, string(token),
 		"--" + tdbg.FlagReason, "testing cancel",
 	}
-	err := s.tdbgApp.Run(args)
+	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
 	output := s.writer.Bytes()
 	s.T().Log(string(output))
@@ -638,7 +641,7 @@ func (s *dlqSuite) cancelJob(token []byte) *adminservice.CancelDLQJobResponse {
 }
 
 // List all queues
-func (s *dlqSuite) listQueues() []*adminservice.ListQueuesResponse_QueueInfo {
+func (s *dlqSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesResponse_QueueInfo {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -647,7 +650,7 @@ func (s *dlqSuite) listQueues() []*adminservice.ListQueuesResponse_QueueInfo {
 		"--" + tdbg.FlagPrintJSON,
 	}
 
-	err := s.tdbgApp.Run(args)
+	err := s.tdbgApp.RunContext(ctx, args)
 	s.NoError(err)
 	b := s.writer.Bytes()
 	s.writer.Truncate(0)
