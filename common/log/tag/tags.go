@@ -619,6 +619,10 @@ func TimerTaskStatus(timerTaskStatus int32) ZapTag {
 	return NewInt32("timer-task-status", timerTaskStatus)
 }
 
+func DLQMessageID(dlqMessageID int64) ZapTag {
+	return NewInt64("dlq-message-id", dlqMessageID)
+}
+
 // retry
 
 // Attempt returns tag for Attempt
