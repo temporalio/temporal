@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -2020,7 +2021,11 @@ func newContext(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
 	ioConcurrency := historyConfig.ShardIOConcurrency()
-	if persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil {
+	if ioConcurrency != 1 && persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil {
+		throttledLogger.Warn(
+			fmt.Sprintf("Cassandra persistence implementation only supports %v == 1", dynamicconfig.ShardIOConcurrency),
+			tag.NewInt("shard-io-concurrency", ioConcurrency),
+		)
 		ioConcurrency = 1
 	}
 
