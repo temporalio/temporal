@@ -1,2 +1,14 @@
 *.png filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
+# vendor is marked as linguist-vendored by default, but this
+# only excludes the code from stats.
+#
+# Forcing it to be linguist-generated will also exclude it from diffs.
+#
+# See https://github.com/github-linguist/linguist/blob/master/docs/overrides.md#summary
+# for more info.
+api/ linguist-generated
+common/persistence/mock/ linguist-generated
+*.pb.go linguist-generated
+*.mock.go linguist-generated
+*_mock.go linguist-generated
