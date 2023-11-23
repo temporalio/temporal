@@ -35,13 +35,10 @@ import (
 	"testing"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/api/operatorservice/v1"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/temporal"
-
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -62,8 +59,10 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -119,22 +118,36 @@ const (
 	tlsCertCommonName = "my-common-name"
 )
 
-// NewCluster creates and sets up the test cluster
-func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
-		options.ClusterMetadata.EnableGlobalNamespace,
-		options.IsMasterCluster,
-	)
-	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
-		clusterMetadataConfig = &cluster.Config{
-			EnableGlobalNamespace:    options.ClusterMetadata.EnableGlobalNamespace,
-			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
-			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
-			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
-			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
-		}
-	}
+type TestClusterFactory interface {
+	NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
+}
 
+type defaultTestClusterFactory struct {
+	tbFactory PersistenceTestBaseFactory
+}
+
+func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
+	return NewClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
+}
+
+func NewTestClusterFactory() TestClusterFactory {
+	tbFactory := &defaultPersistenceTestBaseFactory{}
+	return NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory)
+}
+
+func NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory PersistenceTestBaseFactory) TestClusterFactory {
+	return &defaultTestClusterFactory{
+		tbFactory: tbFactory,
+	}
+}
+
+type PersistenceTestBaseFactory interface {
+	NewTestBase(options *TestClusterConfig) *persistencetests.TestBase
+}
+
+type defaultPersistenceTestBaseFactory struct{}
+
+func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *TestClusterConfig) *persistencetests.TestBase {
 	options.Persistence.StoreType = TestFlags.PersistenceType
 	switch TestFlags.PersistenceType {
 	case config.StoreTypeSQL:
@@ -155,7 +168,7 @@ func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*T
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
+			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
 		}
 		options.Persistence.SQLDBPluginName = TestFlags.PersistenceDriver
 		options.Persistence.DBUsername = ops.DBUsername
@@ -175,9 +188,28 @@ func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*T
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
 		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
+
+	return persistencetests.NewTestBase(&options.Persistence)
+}
+
+func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
+		options.ClusterMetadata.EnableGlobalNamespace,
+		options.IsMasterCluster,
+	)
+	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
+		clusterMetadataConfig = &cluster.Config{
+			EnableGlobalNamespace:    options.ClusterMetadata.EnableGlobalNamespace,
+			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
+			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
+			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
+			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
+		}
+	}
 	options.Persistence.Logger = logger
 
-	testBase := persistencetests.NewTestBase(&options.Persistence)
+	testBase := tbFactory.NewTestBase(options)
+
 	testBase.Setup(clusterMetadataConfig)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 
@@ -260,6 +292,8 @@ func NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*T
 		ShardMgr:                         testBase.ShardMgr,
 		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
+		AbstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
+		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
 		TaskMgr:                          testBase.TaskMgr,
 		Logger:                           logger,
 		ClusterNo:                        options.ClusterNo,
