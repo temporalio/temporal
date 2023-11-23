@@ -45,7 +45,7 @@ func (d *FakeQueueWriter) EnqueueTask(
 	request *persistence.EnqueueTaskRequest,
 ) (*persistence.EnqueueTaskResponse, error) {
 	d.EnqueueTaskRequests = append(d.EnqueueTaskRequests, request)
-	return nil, d.EnqueueTaskErr
+	return &persistence.EnqueueTaskResponse{Metadata: persistence.MessageMetadata{ID: 0}}, d.EnqueueTaskErr
 }
 
 func (d *FakeQueueWriter) CreateQueue(
