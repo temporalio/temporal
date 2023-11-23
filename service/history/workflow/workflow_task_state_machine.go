@@ -355,11 +355,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	}
 
 	// TODO merge active & passive task generation
-	// Always bypass task generation for speculative workflow task.
 	if !bypassTaskGeneration {
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEventID,
-		); err != nil {
+		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			err = m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask)
+		} else {
+			err = m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(scheduledEventID)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1009,7 +1011,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	if wt.StartedEventID != common.EmptyEventID {
-		// If WT is has started then started event is written to the history and
+		// If WT is started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
@@ -1028,8 +1030,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			return err
 		}
 	} else {
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEvent.EventId,
+		if err := m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(
+			wt,
 		); err != nil {
 			return err
 		}

@@ -66,6 +66,9 @@ type (
 		GenerateScheduleWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
 		) error
+		GenerateScheduleSpeculativeWorkflowTaskTasks(
+			workflowTask *WorkflowTaskInfo,
+		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
 		) error
@@ -327,38 +330,12 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	if workflowTask == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
-
-	scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
-
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		if !r.mutableState.IsStickyTaskQueueSet() {
-			// Speculative WT has ScheduleToStart timeout even on normal task queue.
-			// Normally WT should be added to matching right after being created
-			// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
-			// there is no good way to handle the error.
-			// In this case WT will be timed out (as if it was on sticky task queue),
-			// and new normal WT will be created.
-			// Note: this timer will also fire if workflow received an update,
-			// but there is no workers available. Speculative WT will time out, and normal WT will be created.
-			scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
-		}
-
-		wttt := &tasks.WorkflowTaskTimeoutTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
-			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-			EventID:             workflowTask.ScheduledEventID,
-			ScheduleAttempt:     workflowTask.Attempt,
-			Version:             workflowTask.Version,
-		}
-
-		// Create task in in-memory task queue if WT is speculative.
-		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, GenerateScheduleSpeculativeWorkflowTaskTasks must be called for speculative workflow task: %v", workflowTaskScheduledEventID))
 	}
 
-	// Normal WT.
 	if r.mutableState.IsStickyTaskQueueSet() {
+		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 		wttt := &tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -385,6 +362,53 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	})
 
 	return nil
+}
+
+// GenerateScheduleSpeculativeWorkflowTaskTasks is different from GenerateScheduleWorkflowTaskTasks (above):
+//  1. Always create ScheduleToStart timeout timer task (even for normal task queue).
+//  2. Don't create transfer task to push WT to matching.
+func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
+	workflowTask *WorkflowTaskInfo,
+) error {
+
+	var scheduleToStartTimeout time.Duration
+	if r.mutableState.IsStickyTaskQueueSet() {
+		scheduleToStartTimeout = timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
+	} else {
+		// Speculative WT has ScheduleToStart timeout even on normal task queue.
+		// Normally WT should be added to matching right after being created
+		// (i.e. from UpdateWorkflowExecution API handler), but if this "add" operation failed,
+		// there is no good way to handle the error.
+		// In this case WT will be timed out (as if it was on sticky task queue),
+		// and new normal WT will be created.
+		// Note: this timer will also fire if workflow received an update,
+		// but there is no workers available. Speculative WT will time out, and normal WT will be created.
+		scheduleToStartTimeout = tasks.SpeculativeWorkflowTaskScheduleToStartTimeout
+	}
+
+	wttt := &tasks.WorkflowTaskTimeoutTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: workflowTask.ScheduledTime.Add(scheduleToStartTimeout),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             workflowTask.ScheduledEventID,
+		ScheduleAttempt:     workflowTask.Attempt,
+		Version:             workflowTask.Version,
+	}
+
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// It WT is still speculative, create task in in-memory task queue.
+		return r.mutableState.SetSpeculativeWorkflowTaskTimeoutTask(wttt)
+	}
+
+	// This function can be called for speculative WT which just was converted to normal
+	// (it will be of type Normal). In this case persisted timer task needs to be created.
+	r.mutableState.AddTasks(wttt)
+	return nil
+
+	// Note: no transfer task is created for speculative WT or speculative WT
+	// which became normal. API handler (i.e. UpdateWorkflowExecution) should
+	// add WT to matching directly. If WT wasn't added it will be timed out by timers above.
 }
 
 func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
