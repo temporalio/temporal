@@ -59,14 +59,14 @@ type (
 		eventsBlob          *common.DataBlob
 		newRunEventsBlob    *common.DataBlob
 
-		deserializeLock   sync.Mutex
-		eventsDesResponse *eventsDeserializeResponse
+		deserializeLock    sync.Mutex
+		deserializedEvents *deserializedEvents
 
 		batchLock sync.Mutex
 		batchable bool
 	}
-	eventsDeserializeResponse struct {
-		events       []*historypb.HistoryEvent
+	deserializedEvents struct {
+		events       [][]*historypb.HistoryEvent
 		newRunEvents []*historypb.HistoryEvent
 		err          error
 	}
@@ -157,7 +157,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 		e.WorkflowKey,
 		e.baseExecutionInfo,
 		e.versionHistoryItems,
-		[][]*historypb.HistoryEvent{events},
+		events,
 		newRunEvents,
 	)
 }
@@ -255,20 +255,20 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
-func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
-	if e.eventsDesResponse != nil {
-		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
+	if e.deserializedEvents != nil {
+		return e.deserializedEvents.events, e.deserializedEvents.newRunEvents, e.deserializedEvents.err
 	}
 	e.deserializeLock.Lock()
 	defer e.deserializeLock.Unlock()
 
-	if e.eventsDesResponse != nil {
-		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
+	if e.deserializedEvents != nil {
+		return e.deserializedEvents.events, e.deserializedEvents.newRunEvents, e.deserializedEvents.err
 	}
 
 	defer func() {
 		if retError != nil {
-			e.eventsDesResponse = &eventsDeserializeResponse{
+			e.deserializedEvents = &deserializedEvents{
 				events:       nil,
 				newRunEvents: nil,
 				err:          retError,
@@ -299,12 +299,13 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ []*historypb.HistoryE
 		)
 		return nil, nil, err
 	}
-	e.eventsDesResponse = &eventsDeserializeResponse{
-		events:       events,
+	eventsSlice := [][]*historypb.HistoryEvent{events}
+	e.deserializedEvents = &deserializedEvents{
+		events:       eventsSlice,
 		newRunEvents: newRunEvents,
 		err:          nil,
 	}
-	return events, newRunEvents, err
+	return eventsSlice, newRunEvents, err
 }
 
 func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
@@ -324,8 +325,14 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (Trackable
 		return nil, false
 	}
 
-	currentEvents, currentNewRunEvents, _ := e.getDeserializedEvents()
-	incomingEvents, incomingNewRunEvents, _ := incomingHistoryTask.getDeserializedEvents()
+	currentEvents, currentNewRunEvents, err := e.getDeserializedEvents()
+	if err != nil {
+		return nil, false
+	}
+	incomingEvents, incomingNewRunEvents, err := incomingHistoryTask.getDeserializedEvents()
+	if err != nil {
+		return nil, false
+	}
 
 	return &ExecutableHistoryTask{
 		ProcessToolBox:      e.ProcessToolBox,
@@ -333,7 +340,7 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (Trackable
 		ExecutableTask:      e.ExecutableTask,
 		baseExecutionInfo:   e.baseExecutionInfo,
 		versionHistoryItems: e.getFresherVersionHistoryItems(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
-		eventsDesResponse: &eventsDeserializeResponse{
+		deserializedEvents: &deserializedEvents{
 			events:       append(currentEvents, incomingEvents...),
 			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
 			err:          nil,
@@ -423,8 +430,8 @@ func (e *ExecutableHistoryTask) checkBaseExecutionInfo(incomingTaskExecutionInfo
 	return nil
 }
 
-func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryEvent, incomingNewRunEvents []*historypb.HistoryEvent) error {
-	if len(incomingEvents) == 0 {
+func (e *ExecutableHistoryTask) checkEvents(incomingEventBatches [][]*historypb.HistoryEvent, incomingNewRunEvents []*historypb.HistoryEvent) error {
+	if len(incomingEventBatches) == 0 {
 		return serviceerror.NewInvalidArgument("incoming task is empty")
 	}
 	currentEvents, currentNewRunEvents, err := e.getDeserializedEvents()
@@ -435,10 +442,14 @@ func (e *ExecutableHistoryTask) checkEvents(incomingEvents []*historypb.HistoryE
 	if currentNewRunEvents != nil {
 		return serviceerror.NewInvalidArgument("Current Task is expected to be the last event of a workflow")
 	}
-	currentLastEvent := currentEvents[len(currentEvents)-1]
-	incomingFirstEvent := incomingEvents[0]
+
+	currentLastBatch := currentEvents[len(currentEvents)-1]
+	currentLastEvent := currentLastBatch[len(currentLastBatch)-1]
+	incomingFirstBatch := incomingEventBatches[0]
+	incomingFirstEvent := incomingFirstBatch[0]
+
 	if currentLastEvent.Version != incomingFirstEvent.Version {
-		return serviceerror.NewInvalidArgument("events version mismatch")
+		return serviceerror.NewInvalidArgument("events version does not match")
 	}
 	if currentLastEvent.EventId+1 != incomingFirstEvent.EventId {
 		return serviceerror.NewInvalidArgument("events id is not consecutive")
