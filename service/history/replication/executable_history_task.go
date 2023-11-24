@@ -59,13 +59,13 @@ type (
 		eventsBlob          *common.DataBlob
 		newRunEventsBlob    *common.DataBlob
 
-		deserializeLock    sync.Mutex
-		deserializedEvents *deserializedEvents
+		deserializeLock   sync.Mutex
+		eventsDesResponse *eventsDeserializeResponse
 
 		batchLock sync.Mutex
 		batchable bool
 	}
-	deserializedEvents struct {
+	eventsDeserializeResponse struct {
 		events       [][]*historypb.HistoryEvent
 		newRunEvents []*historypb.HistoryEvent
 		err          error
@@ -256,19 +256,19 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 }
 
 func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {
-	if e.deserializedEvents != nil {
-		return e.deserializedEvents.events, e.deserializedEvents.newRunEvents, e.deserializedEvents.err
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
 	}
 	e.deserializeLock.Lock()
 	defer e.deserializeLock.Unlock()
 
-	if e.deserializedEvents != nil {
-		return e.deserializedEvents.events, e.deserializedEvents.newRunEvents, e.deserializedEvents.err
+	if e.eventsDesResponse != nil {
+		return e.eventsDesResponse.events, e.eventsDesResponse.newRunEvents, e.eventsDesResponse.err
 	}
 
 	defer func() {
 		if retError != nil {
-			e.deserializedEvents = &deserializedEvents{
+			e.eventsDesResponse = &eventsDeserializeResponse{
 				events:       nil,
 				newRunEvents: nil,
 				err:          retError,
@@ -300,7 +300,7 @@ func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.Histor
 		return nil, nil, err
 	}
 	eventsSlice := [][]*historypb.HistoryEvent{events}
-	e.deserializedEvents = &deserializedEvents{
+	e.eventsDesResponse = &eventsDeserializeResponse{
 		events:       eventsSlice,
 		newRunEvents: newRunEvents,
 		err:          nil,
@@ -340,7 +340,7 @@ func (e *ExecutableHistoryTask) BatchWith(incomingTask BatchableTask) (Trackable
 		ExecutableTask:      e.ExecutableTask,
 		baseExecutionInfo:   e.baseExecutionInfo,
 		versionHistoryItems: e.getFresherVersionHistoryItems(e.versionHistoryItems, incomingHistoryTask.versionHistoryItems),
-		deserializedEvents: &deserializedEvents{
+		eventsDesResponse: &eventsDeserializeResponse{
 			events:       append(currentEvents, incomingEvents...),
 			newRunEvents: append(currentNewRunEvents, incomingNewRunEvents...),
 			err:          nil,

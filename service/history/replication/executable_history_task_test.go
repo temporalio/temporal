@@ -326,7 +326,7 @@ func (s *executableHistoryTaskSuite) TestBatchWith_Success() {
 
 func (s *executableHistoryTaskSuite) TestBatchWith_EventNotConsecutive_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.deserializedEvents.events = [][]*historypb.HistoryEvent{
+	currentTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 101,
@@ -342,7 +342,7 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventNotConsecutive_BatchFail
 			},
 		},
 	}
-	incomingTask.deserializedEvents.events = [][]*historypb.HistoryEvent{
+	incomingTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 105,
@@ -356,7 +356,7 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventNotConsecutive_BatchFail
 
 func (s *executableHistoryTaskSuite) TestBatchWith_EventVersionNotMatch_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.deserializedEvents.events = [][]*historypb.HistoryEvent{
+	currentTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 101,
@@ -372,7 +372,7 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventVersionNotMatch_BatchFai
 			},
 		},
 	}
-	incomingTask.deserializedEvents.events = [][]*historypb.HistoryEvent{
+	incomingTask.eventsDesResponse.events = [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 104,
@@ -412,7 +412,7 @@ func (s *executableHistoryTaskSuite) TestBatchWith_WorkflowKeyDoesNotMatch_Batch
 
 func (s *executableHistoryTaskSuite) TestBatchWith_CurrentTaskHasNewRunEvents_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.deserializedEvents.newRunEvents = []*historypb.HistoryEvent{
+	currentTask.eventsDesResponse.newRunEvents = []*historypb.HistoryEvent{
 		{
 			EventId: 104,
 			Version: 3,
@@ -490,11 +490,11 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	s.Equal(incomingVersionHistoryItems, resultHistoryTask.versionHistoryItems)
 	expectedBatchedEvents := append(currentEvent, incomingEvent...)
 
-	s.Equal(len(resultHistoryTask.deserializedEvents.events), len(expectedBatchedEvents))
+	s.Equal(len(resultHistoryTask.eventsDesResponse.events), len(expectedBatchedEvents))
 	for i := range expectedBatchedEvents {
-		protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents[i], resultHistoryTask.deserializedEvents.events[i])
+		protorequire.ProtoSliceEqual(s.T(), expectedBatchedEvents[i], resultHistoryTask.eventsDesResponse.events[i])
 	}
-	s.Nil(resultHistoryTask.deserializedEvents.newRunEvents)
+	s.Nil(resultHistoryTask.eventsDesResponse.newRunEvents)
 	return currentTask, incomingTask
 }
 
