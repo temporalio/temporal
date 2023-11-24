@@ -176,6 +176,19 @@ func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.Versio
 	return lowestCommonAncestor.Equal(aLastItem) || lowestCommonAncestor.Equal(bLastItem)
 }
 
+func ParseVersionHistoryToPastAndFuture(
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+	initialFailoverVersion int64,
+	failoverVersionIncrement int64,
+) ([]*historyspb.VersionHistoryItem, []*historyspb.VersionHistoryItem) {
+	for i := len(versionHistoryItems) - 1; i >= 0; i-- {
+		if versionHistoryItems[i].Version%failoverVersionIncrement == initialFailoverVersion {
+			return versionHistoryItems[:i+1], versionHistoryItems[i+1:]
+		}
+	}
+	return nil, versionHistoryItems
+}
+
 // IsLCAVersionHistoryItemAppendable checks if a LCA VersionHistoryItem is appendable.
 func IsLCAVersionHistoryItemAppendable(v *historyspb.VersionHistory, lcaItem *historyspb.VersionHistoryItem) bool {
 	if len(v.Items) == 0 {

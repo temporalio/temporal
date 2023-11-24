@@ -747,3 +747,7 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
 }
+
+func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_FutureOnly() {
+
+}
