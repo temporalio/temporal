@@ -36,6 +36,7 @@ import (
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -83,6 +84,7 @@ import (
 type (
 	matchingEngineSuite struct {
 		suite.Suite
+		*require.Assertions
 		controller            *gomock.Controller
 		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
@@ -112,6 +114,7 @@ func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
 	s.logger = log.NewTestLogger()
 	s.Lock()
 	defer s.Unlock()

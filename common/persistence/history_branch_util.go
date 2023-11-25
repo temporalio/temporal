@@ -30,6 +30,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -39,6 +40,8 @@ type (
 	HistoryBranchUtil interface {
 		NewHistoryBranch(
 			namespaceID string,
+			workflowID string,
+			runID string,
 			treeID string,
 			branchID *string,
 			ancestors []*persistencespb.HistoryBranchRange,
@@ -81,6 +84,8 @@ func NewHistoryBranch(
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 	namespaceID string,
+	workflowID string,
+	runID string,
 	treeID string,
 	branchID *string,
 	ancestors []*persistencespb.HistoryBranchRange,

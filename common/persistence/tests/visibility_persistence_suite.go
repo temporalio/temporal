@@ -67,6 +67,7 @@ type (
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
+		CustomVisibilityStoreFactory   visibility.VisibilityStoreFactory
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -85,6 +86,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.VisibilityMgr, err = visibility.NewManager(
 		cfg,
 		resolver.NewNoopResolver(),
+		s.CustomVisibilityStoreFactory,
 		nil,
 		nil,
 		s.SearchAttributesProvider,

@@ -26,7 +26,6 @@ package queues
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -288,19 +287,7 @@ func (p *queueBase) FailoverNamespace(
 }
 
 func (p *queueBase) processNewRange() {
-	var newMaxKey tasks.Key
-	switch categoryType := p.category.Type(); categoryType {
-	case tasks.CategoryTypeImmediate:
-		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
-	case tasks.CategoryTypeScheduled:
-		var err error
-		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
-			p.logger.Error("Unable to process new range", tag.Error(err))
-			return
-		}
-	default:
-		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
-	}
+	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(p.category)
 
 	reader, err := p.readerGroup.GetOrCreateReader(DefaultReaderId)
 	if err != nil {
