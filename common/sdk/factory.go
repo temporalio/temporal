@@ -27,16 +27,19 @@
 package sdk
 
 import (
+	"context"
 	"crypto/tls"
 	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -91,6 +94,9 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.Logger = f.sdklogger
 	options.ConnectionOptions = sdkclient.ConnectionOptions{
 		TLS: f.tlsConfig,
+		DialOptions: []grpc.DialOption{
+			grpc.WithChainUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
+		},
 	}
 	return options
 }
@@ -135,4 +141,20 @@ func (f *clientFactory) NewWorker(
 	options sdkworker.Options,
 ) sdkworker.Worker {
 	return sdkworker.New(client, taskQueue, options)
+}
+
+// Overwrite the 'client-name' and 'client-version' headers on requests sent using the
+// Go SDK so that they clearly indicate that the request is coming from the server.
+func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
+	return func (
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		ctx = headers.SetVersions(ctx);
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }
