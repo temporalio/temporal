@@ -165,6 +165,7 @@ func TestDLQWriter_Ok(t *testing.T) {
 	assert.Equal(t, expectedShardID, request.SourceShardID)
 	assert.NotEmpty(t, logger.records)
 	assert.Contains(t, logger.records[0].msg, "Task enqueued to DLQ")
+	assert.Contains(t, logger.records[0].tags, tag.DLQMessageID(0))
 	snapshot := capture.Snapshot()
 	recordings := snapshot[metrics.DLQWrites.GetMetricName()]
 	assert.Len(t, recordings, 1)

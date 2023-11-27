@@ -218,7 +218,7 @@ func (s *streamSenderSuite) TestSendCatchUp() {
 			},
 		},
 	}, true)
-	s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 		tasks.NewImmediateKey(endExclusiveWatermark),
 	)
 
@@ -251,10 +251,10 @@ func (s *streamSenderSuite) TestSendLive() {
 	watermark2 := watermark1 + 1 + rand.Int63n(100)
 
 	gomock.InOrder(
-		s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+		s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 			tasks.NewImmediateKey(watermark1),
 		),
-		s.shardContext.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(
+		s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
 			tasks.NewImmediateKey(watermark2),
 		),
 	)
