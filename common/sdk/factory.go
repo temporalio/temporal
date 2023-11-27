@@ -146,7 +146,7 @@ func (f *clientFactory) NewWorker(
 // Overwrite the 'client-name' and 'client-version' headers on requests sent using the
 // Go SDK so that they clearly indicate that the request is coming from the server.
 func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
-	return func (
+	return func(
 		ctx context.Context,
 		method string,
 		req, reply interface{},
@@ -154,7 +154,7 @@ func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx = headers.SetVersions(ctx);
+		ctx = headers.SetVersions(ctx)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
