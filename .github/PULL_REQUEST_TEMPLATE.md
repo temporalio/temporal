@@ -11,4 +11,4 @@
 <!-- Assuming the worst case, what can be broken when deploying this change to production? -->
 
 ## Is hotfix candidate?
-<!-- Is this PR a hotfix candidate or require that a notification be sent to the broader community? (Yes/No) -->
+<!-- Is this PR a hotfix candidate or does it require a notification to be sent to the broader community? (Yes/No) -->
