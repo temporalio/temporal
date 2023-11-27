@@ -93,7 +93,7 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		if cfg.TLS != nil && cfg.TLS.Enabled {
 			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create TLS HTTP client %w", err)
+				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
 			}
 			httpClient = tlsHttpClient
 		} else {

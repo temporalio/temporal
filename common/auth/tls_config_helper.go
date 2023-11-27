@@ -129,12 +129,12 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	if temporalTls.CaFile != "" {
 		caBytes, err = os.ReadFile(temporalTls.CaFile)
 		if err != nil {
-			return nil, fmt.Errorf("error reading client ca file %w", err)
+			return nil, fmt.Errorf("unable to read client ca file: %w", err)
 		}
 	} else if temporalTls.CaData != "" {
 		caBytes, err = base64.StdEncoding.DecodeString(temporalTls.CaData)
 		if err != nil {
-			return nil, fmt.Errorf("error decoding client ca data %w", err)
+			return nil, fmt.Errorf("unable to decode client ca data: %w", err)
 		}
 	}
 	if len(caBytes) > 0 {
@@ -151,24 +151,24 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	if temporalTls.CertFile != "" {
 		certBytes, err = os.ReadFile(temporalTls.CertFile)
 		if err != nil {
-			return nil, fmt.Errorf("error reading client certificate file: %w", err)
+			return nil, fmt.Errorf("unable to read client certificate file: %w", err)
 		}
 	} else if temporalTls.CertData != "" {
 		certBytes, err = base64.StdEncoding.DecodeString(temporalTls.CertData)
 		if err != nil {
-			return nil, fmt.Errorf("client certificate could not be decoded: %w", err)
+			return nil, fmt.Errorf("unable to decode client certificate: %w", err)
 		}
 	}
 
 	if temporalTls.KeyFile != "" {
 		keyBytes, err = os.ReadFile(temporalTls.KeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
+			return nil, fmt.Errorf("unable to read client certificate private key file: %w", err)
 		}
 	} else if temporalTls.KeyData != "" {
 		keyBytes, err = base64.StdEncoding.DecodeString(temporalTls.KeyData)
 		if err != nil {
-			return nil, fmt.Errorf("client certificate private key could not be decoded: %w", err)
+			return nil, fmt.Errorf("unable to decode client certificate private key: %w", err)
 		}
 	}
 
