@@ -144,8 +144,8 @@ func (f *clientFactory) NewWorker(
 	return sdkworker.New(client, taskQueue, options)
 }
 
-// Overwrite the 'client-name' and 'client-version' headers on requests sent using the
-// Go SDK so that they clearly indicate that the request is coming from the server.
+// Overwrite the 'client-name' and 'client-version' headers on gRPC requests sent using the Go SDK
+// so they clearly indicate that the request is coming from the Temporal server.
 func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -155,8 +155,8 @@ func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		// Can't use headers.SetVersions() because it is using _appending_ headers to
-		// the context rather than replacing them, which may be incorect in this case.
+		// Can't use headers.SetVersions() here because it is _appending_ headers to the context
+		// rather than _replacing_ them, which means Go SDK's default headers would still be present.
 		md, mdExist := metadata.FromOutgoingContext(ctx)
 		if !mdExist {
 			md = metadata.New(nil)
