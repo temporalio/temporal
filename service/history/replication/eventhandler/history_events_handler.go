@@ -63,8 +63,8 @@ type (
 
 	historyEventsHandlerImpl struct {
 		replication.ProcessToolBox
-		PastEventsHandler
-		FutureEventsHandler
+		pastEventsHandler   PastEventsHandler
+		futureEventsHandler FutureEventsHandler
 	}
 )
 
@@ -94,7 +94,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	}
 
 	if len(pastEvents) != 0 {
-		if err := h.PastEventsHandler.HandlePastEvents(
+		if err := h.pastEventsHandler.HandlePastEvents(
 			ctx,
 			sourceClusterName,
 			workflowKey,
@@ -105,7 +105,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 		}
 	}
 	if len(futureEvents) != 0 {
-		if err := h.FutureEventsHandler.HandleFutureEvents(
+		if err := h.futureEventsHandler.HandleFutureEvents(
 			ctx,
 			workflowKey,
 			baseExecutionInfo,

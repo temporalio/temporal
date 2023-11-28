@@ -749,5 +749,44 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 }
 
 func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_FutureOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 2},
+		{EventId: 10, Version: 3},
+		{EventId: 13, Version: 4},
+		{EventId: 15, Version: 5},
+	}
 
+	past, future := ParseVersionHistoryToPastAndFuture(versionHistoryItems, 1, 1000)
+	s.Empty(past)
+	s.Equal(versionHistoryItems, future)
+}
+
+func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_PastOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+
+	past, future := ParseVersionHistoryToPastAndFuture(versionHistoryItems, 1, 1000)
+	s.Empty(future)
+	s.Equal(versionHistoryItems, past)
+}
+
+func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_PastAndFuture() {
+	pastItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+	futureItems := []*historyspb.VersionHistoryItem{
+		{EventId: 20, Version: 1004},
+		{EventId: 25, Version: 1005},
+	}
+
+	past, future := ParseVersionHistoryToPastAndFuture(append(pastItems, futureItems...), 1, 1000)
+	s.Equal(pastItems, past)
+	s.Equal(futureItems, future)
 }

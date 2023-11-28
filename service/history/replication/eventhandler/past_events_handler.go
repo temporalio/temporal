@@ -70,6 +70,10 @@ func NewPastEventsHandler(toolBox replication.ProcessToolBox) PastEventsHandler 
 	}
 }
 
+// HandlePastEvents current implementation is using Import API which requires transactional importing.
+// So when this API is called, it will try to import all past history events in one transaction.
+// i.e. From version history, past events are [1,100]. When this API is called with events[10,11], it will try to import
+// [10,11] and if success, it will fetch [12,100] from source cluster and also import them, then commit the transaction.
 func (h *pastEventsHandlerImpl) HandlePastEvents(
 	ctx context.Context,
 	sourceClusterName string,

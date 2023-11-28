@@ -262,8 +262,8 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
 			{EventId: 5, Version: 3},
-			{EventId: 10, Version: 1},
-			{EventId: 13, Version: 2},
+			{EventId: 10, Version: 1001},
+			{EventId: 13, Version: 1002},
 			{EventId: 15, Version: 1003},
 		},
 	}
@@ -331,7 +331,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 		WorkflowID:  workflowId,
 		RunID:       runId,
 	}
-	metricsTag := "some random metrics tag"
+
 	gomock.InOrder(
 		s.pastEventsHandler.EXPECT().HandlePastEvents(
 			gomock.Any(),
@@ -343,7 +343,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 
 		s.futureEventHandler.EXPECT().HandleFutureEvents(
 			gomock.Any(),
-			metricsTag,
+			workflowKey,
 			nil,
 			versionHistory.Items,
 			futureHistoryEvents,
