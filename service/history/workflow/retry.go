@@ -65,28 +65,31 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
+	if !isRetryable(failure, nonRetryableTypes) {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+	}
+
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
+}
+
+func nextBackoffInterval(
+	now time.Time,
+	currentAttempt int32,
+	maxAttempts int32,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
+	backoffCoefficient float64,
+) (time.Duration, enumspb.RetryState) {
 	// TODO remove below checks, most are already set with correct values
 	if currentAttempt < 1 {
 		currentAttempt = 1
-	}
-
-	if initInterval == nil {
-		initInterval = durationpb.New(time.Duration(0))
-	}
-
-	if maxInterval.AsDuration() == 0 {
-		maxInterval = nil
 	}
 
 	if expirationTime != nil && expirationTime.AsTime().IsZero() {
 		expirationTime = nil
 	}
 	// TODO remove above checks, most are already set with correct values
-
-	if !isRetryable(failure, nonRetryableTypes) {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
-	}
-
 	// currentAttempt starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
@@ -99,14 +102,12 @@ func getBackoffInterval(
 	}
 
 	interval := time.Duration(int64(float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
-	if maxInterval != nil && (interval <= 0 || interval > maxInterval.AsDuration()) {
-		interval = maxInterval.AsDuration()
-	} else if maxInterval == nil && interval <= 0 {
+	if maxInterval.AsDuration() == 0 && interval <= 0 {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-		// } else {
-		// maxInterval != nil && (0 < interval && interval <= *maxInterval)
-		// or
-		// maxInterval == nil && interval > 0
+	}
+
+	if maxInterval.AsDuration() != 0 && (interval <= 0 || interval > maxInterval.AsDuration()) {
+		interval = maxInterval.AsDuration()
 	}
 
 	if expirationTime != nil && now.Add(interval).After(expirationTime.AsTime()) {
