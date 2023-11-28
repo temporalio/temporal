@@ -190,6 +190,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}
 	newHistoryBranchToken, err := r.shardContext.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
 		request.NamespaceId,
+		wid,
+		rid,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,

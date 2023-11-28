@@ -251,11 +251,12 @@ writerLoop:
 			}
 
 			resp, err := w.appendTasks(ctx, tasks)
-			w.sendWriteResponse(reqs, resp, err)
-			// Update the maxReadLevel after the writes are completed.
+			// Update the maxReadLevel after the writes are completed, but before we send the response,
+			// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
 			if maxReadLevel > 0 {
 				atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
 			}
+			w.sendWriteResponse(reqs, resp, err)
 
 		case <-ctx.Done():
 			return ctx.Err()

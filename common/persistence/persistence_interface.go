@@ -535,6 +535,8 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
+		// The base branch token
+		ForkBranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo

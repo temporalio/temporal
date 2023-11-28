@@ -116,8 +116,15 @@ func (c *SourceTaskConverterImpl) Convert(
 	if clientShardID != c.clientShardKey.ShardID {
 		return nil, nil
 	}
+	var ctx context.Context
+	var cancel context.CancelFunc
 
-	ctx, cancel := newTaskContext(namespaceEntry.Name().String())
+	if namespaceEntry != nil {
+		ctx, cancel = newTaskContext(namespaceEntry.Name().String())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), applyReplicationTimeout)
+	}
+
 	defer cancel()
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task)
 	if err != nil {

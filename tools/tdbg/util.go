@@ -196,7 +196,7 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(context.Background(), timeout)
+	return context.WithTimeout(c.Context, timeout)
 }
 
 func StringToEnum(search string, candidates map[string]int32) (int32, error) {

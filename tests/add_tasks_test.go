@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.uber.org/atomic"
 	"go.uber.org/fx"
 
 	enumspb "go.temporal.io/server/api/enums/v1"
@@ -63,9 +64,10 @@ type (
 		worker          worker.Worker
 		sdkClient       sdkclient.Client
 		skippedTasks    chan tasks.Task
-		shouldSkip      bool
-		getEngineErr    error
-		workflowID      string
+
+		shouldSkip   atomic.Bool
+		getEngineErr atomic.Error
+		workflowID   atomic.String
 	}
 	faultyShardController struct {
 		shard.Controller
@@ -97,8 +99,9 @@ func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, erro
 }
 
 func (c *faultyShardContext) GetEngine(ctx context.Context) (shard.Engine, error) {
-	if c.suite.getEngineErr != nil {
-		return nil, c.suite.getEngineErr
+	err := c.suite.getEngineErr.Load()
+	if err != nil {
+		return nil, err
 	}
 	return c.Context.GetEngine(ctx)
 }
@@ -126,9 +129,9 @@ func (e *noopExecutor) Execute(ctx context.Context, executable queues.Executable
 // shouldExecute returns true if the task is not a workflow task, or if the workflow task is not from this test suite
 // (e.g. from the history scanner), or if we've turned off skipping (which we do when we re-add the task).
 func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
-	return task.GetWorkflowID() != e.suite.workflowID ||
+	return task.GetWorkflowID() != e.suite.workflowID.Load() ||
 		task.GetType() != enumspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
-		!e.suite.shouldSkip
+		!e.suite.shouldSkip.Load()
 }
 
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
@@ -197,14 +200,14 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 
 			// Execute that workflow
 			// We need to track the workflow ID so that we can filter out tasks from this test suite
-			s.workflowID = uuid.New()
-			s.shouldSkip = true
+			workflowID := uuid.New()
+			s.workflowID.Store(workflowID)
+			s.shouldSkip.Store(true)
 			s.skippedTasks = make(chan tasks.Task)
 			ctx := context.Background()
 			timeout := 5 * debug.TimeoutMultiplier * time.Second
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			workflowID := s.workflowID
 			run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 				ID:        workflowID,
 				TaskQueue: taskQueue,
@@ -219,7 +222,7 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 				s.FailNow("timed out waiting for skipped task")
 			}
 
-			s.shouldSkip = false
+			s.shouldSkip.Store(false)
 			blob, err := serialization.NewTaskSerializer().SerializeTask(task)
 			s.NoError(err)
 			shardID := tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards))
@@ -260,14 +263,14 @@ func (s *addTasksSuite) TestAddTasks_ErrGetShardByID() {
 
 func (s *addTasksSuite) TestAddTasks_GetEngineErr() {
 	defer func() {
-		s.getEngineErr = nil
+		s.getEngineErr.Store(nil)
 	}()
-	s.getEngineErr = errors.New("example shard engine error")
+	s.getEngineErr.Store(errors.New("example shard engine error"))
 	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})
 	s.Error(err)
-	s.ErrorContains(err, s.getEngineErr.Error())
+	s.ErrorContains(err, s.getEngineErr.Load().Error())
 }
 
 func (s *addTasksSuite) newSDKClient() sdkclient.Client {
