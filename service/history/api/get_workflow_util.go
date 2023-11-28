@@ -54,7 +54,7 @@ func GetOrPollMutableState(
 	eventNotifier events.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
 
-	logger := shardContext.GetLogger()
+	logger := shard.GetLogger()
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := ValidateNamespaceUUID(namespaceID)
 	if err != nil {
