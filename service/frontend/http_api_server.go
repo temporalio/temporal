@@ -27,27 +27,21 @@ package frontend
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"path"
 	"reflect"
-	"strings"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -56,7 +50,6 @@ import (
 	"github.com/gogo/status"
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -73,9 +66,7 @@ type HTTPAPIServer struct {
 	serveMux               *runtime.ServeMux
 	stopped                chan struct{}
 	matchAdditionalHeaders map[string]bool
-	nexusHandler           http.Handler
 	metricsHandler         metrics.Handler
-	auth                   *authorization.Policy
 }
 
 var defaultForwardedHeaders = []string{
@@ -93,6 +84,8 @@ var (
 )
 
 // NewHTTPAPIServer creates an [HTTPAPIServer].
+//
+// routes registered with additionalRouteRegistrationFuncs take precedence over the auto generated grpc proxy routes.
 func NewHTTPAPIServer(
 	serviceConfig *Config,
 	rpcConfig config.RPC,
@@ -101,9 +94,8 @@ func NewHTTPAPIServer(
 	handler Handler,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
+	additionalRouteRegistrationFuncs []func(*mux.Router),
 	namespaceRegistry namespace.Registry,
-	matchingClient matchingservice.MatchingServiceClient,
-	authPolicy *authorization.Policy,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
 	// Create a TCP listener the same as the frontend one but with different port
@@ -140,7 +132,6 @@ func NewHTTPAPIServer(
 		logger:         logger,
 		stopped:        make(chan struct{}),
 		metricsHandler: metricsHandler,
-		auth:           authPolicy,
 	}
 
 	// Build 4 possible marshalers in order based on content type
@@ -183,24 +174,11 @@ func NewHTTPAPIServer(
 		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
 	}
 
-	// Set up a Nexus HTTP handler.
-	h.nexusHandler = nexus.NewHTTPHandler(nexus.HandlerOptions{
-		Handler: &nexusHandler{
-			logger:            logger,
-			metricsHandler:    metricsHandler,
-			namespaceRegistry: namespaceRegistry,
-			matchingClient:    matchingClient,
-			auth:              authPolicy,
-		},
-		GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
-		Logger:           log.NewSlogLogger(logger),
-		Serializer:       commonnexus.PayloadSerializer{},
-	})
-
-	// Instantiate a router to route either gRPC proxy and nexus requests.
+	// Instantiate a router to support additional route prefixes.
 	r := mux.NewRouter().UseEncodedPath()
-	r.PathPrefix("/api/v1/namespaces/{namespace}/task-queues/{task_queue}/dispatch-nexus-task/").HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/api/v1/services/{service}/").HandlerFunc(h.dispatchNexusTaskByService)
+	for _, f := range additionalRouteRegistrationFuncs {
+		f(r)
+	}
 
 	r.PathPrefix("/").HandlerFunc(h.serveHTTPGrpcProxy)
 	// Set the handler as our function that wraps serve mux
@@ -529,75 +507,4 @@ func getChainUnaryHandler(
 	return func(ctx context.Context, req interface{}) (interface{}, error) {
 		return interceptors[curr+1](ctx, req, info, getChainUnaryHandler(interceptors, curr+1, info, finalHandler))
 	}
-}
-func (h *HTTPAPIServer) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
-	var err error
-	var bytes []byte
-	if failure != nil {
-		bytes, err = json.Marshal(failure)
-		if err != nil {
-			h.logger.Error("failed to marshal failure", tag.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json")
-	}
-
-	writer.WriteHeader(statusCode)
-
-	if _, err := writer.Write(bytes); err != nil {
-		h.logger.Error("failed to write response body", tag.Error(err))
-	}
-}
-
-// Handler for /api/v1/namespaces/{namespace}/task-queues/{task_queue}/dispatch-nexus-task
-func (h *HTTPAPIServer) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
-	// Limit the request body to max allowed Payload size. This is hardcoded to 2MB for headers at the moment.
-	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
-	// limit is enforced on top of this in the nexusHandler.StartOperation method.
-	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
-
-	var err error
-	vars := mux.Vars(r)
-	nc := nexusContext{
-		// This name does not map to an underlying gRPC service. This format is used since for consistency with
-		// the gRPC API names on which the authorizer - the consumer of this string - may depend.
-		apiName:       "/temporal.api.nexusservice.v1/DispatchNexusTask",
-		namespaceName: vars["namespace"],
-		taskQueue:     vars["task_queue"],
-	}
-
-	var tlsInfo *credentials.TLSInfo
-	if r.TLS != nil {
-		tlsInfo = &credentials.TLSInfo{
-			State:          *r.TLS,
-			CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.PrivacyAndIntegrity},
-		}
-	}
-
-	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
-		return "" // TODO: support audience getter
-	})
-	if authInfo != nil {
-		nc.claims, err = h.auth.GetClaims(authInfo)
-		if err != nil {
-			h.logger.Error("failed to get claims", tag.Error(err))
-			h.writeNexusFailure(w, http.StatusUnauthorized, &nexus.Failure{Message: "unauthorized"})
-			return
-		}
-		// Make the auth info and claims available on the context.
-		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, nc.claims))
-	}
-
-	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
-	// Hard-code to taking the first 8 parts for this route. There doesn't seem to be a better way to retrieve the
-	// prefix from gorilla.
-	parts := strings.Split(r.URL.EscapedPath(), "/")
-	http.StripPrefix("/"+path.Join(parts[:8]...), h.nexusHandler).ServeHTTP(w, r)
-}
-
-// Handler for /api/v1/services/{service}
-func (h *HTTPAPIServer) dispatchNexusTaskByService(w http.ResponseWriter, r *http.Request) {
-	// To be implemented once the service registry is implemented.
-	w.WriteHeader(http.StatusNotImplemented)
 }

@@ -94,7 +94,7 @@ type nexusHandler struct {
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 	matchingClient    matchingservice.MatchingServiceClient
-	auth              *authorization.Policy
+	auth              *authorization.Interceptor
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.

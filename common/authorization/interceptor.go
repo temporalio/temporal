@@ -94,6 +94,11 @@ func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
 	return tlsInfo.State.VerifiedChains[0][0]
 }
 
+// HeaderGetter is an interface for getting a single header value from a case insensitive key.
+type HeaderGetter interface {
+	Get(string) string
+}
+
 // Wrapper for gRPC metadata that exposes a helper to extract a single metadata value.
 type grpcHeaderGetter struct {
 	metadata metadata.MD
@@ -109,25 +114,38 @@ func (h grpcHeaderGetter) Get(key string) string {
 	return values[0]
 }
 
-type interceptor struct {
-	*Policy
-	logger         log.Logger
-	audienceGetter JWTAudienceMapper
+type Interceptor struct {
+	claimMapper         ClaimMapper
+	authorizer          Authorizer
+	metricsHandler      metrics.Handler
+	logger              log.Logger
+	audienceGetter      JWTAudienceMapper
+	authHeaderName      string
+	authExtraHeaderName string
 }
 
-// NewAuthorizationInterceptor creates an authorization interceptor and returns a func that points to its Interceptor
-// method.
-func NewAuthorizationInterceptor(
-	policy *Policy,
+// NewInterceptor creates an authorization interceptor.
+func NewInterceptor(
+	claimMapper ClaimMapper,
+	authorizer Authorizer,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
-) grpc.UnaryServerInterceptor {
-	return (&interceptor{
-		Policy:         policy,
-		audienceGetter: audienceGetter,
-	}).Interceptor
+	authHeaderName string,
+	authExtraHeaderName string,
+) *Interceptor {
+	return &Interceptor{
+		claimMapper:         claimMapper,
+		authorizer:          authorizer,
+		logger:              logger,
+		metricsHandler:      metricsHandler,
+		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
+		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
+		audienceGetter:      audienceGetter,
+	}
 }
 
-func (a *interceptor) Interceptor(
+func (a *Interceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -173,44 +191,10 @@ func (a *interceptor) Interceptor(
 	return handler(ctx, req)
 }
 
-// HeaderGetter is an interface for getting a single header value from a case insensitive key.
-type HeaderGetter interface {
-	Get(string) string
-}
-
-// Policy is a reusable container for authorization related functionality.
-// It combines an [Authorizer], a [ClaimMapper], and configuration.
-type Policy struct {
-	claimMapper         ClaimMapper
-	authorizer          Authorizer
-	logger              log.Logger
-	metricsHandler      metrics.Handler
-	authHeaderName      string
-	authExtraHeaderName string
-}
-
-func NewPolicy(
-	claimMapper ClaimMapper,
-	authorizer Authorizer,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	authHeaderName string,
-	authExtraHeaderName string,
-) *Policy {
-	return &Policy{
-		claimMapper:         claimMapper,
-		authorizer:          authorizer,
-		logger:              logger,
-		metricsHandler:      metricsHandler,
-		authHeaderName:      util.Coalesce(authHeaderName, defaultAuthHeaderName),
-		authExtraHeaderName: util.Coalesce(authExtraHeaderName, defaultAuthExtraHeaderName),
-	}
-}
-
 // GetAuthInfo extracts auth info from TLS info and headers.
 // Returns nil if either the policy's claimMapper or authorizer are nil or when there is no auth information in the
 // provided TLS info or headers.
-func (a *Policy) GetAuthInfo(tlsConnection *credentials.TLSInfo, header HeaderGetter, audienceGetter func() string) *AuthInfo {
+func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header HeaderGetter, audienceGetter func() string) *AuthInfo {
 	if a.claimMapper == nil || a.authorizer == nil {
 		return nil
 	}
@@ -247,12 +231,12 @@ func (a *Policy) GetAuthInfo(tlsConnection *credentials.TLSInfo, header HeaderGe
 }
 
 // GetClaims uses the policy's claimMapper to map the provided authInfo to claims.
-func (a *Policy) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+func (a *Interceptor) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	return a.claimMapper.GetClaims(authInfo)
 }
 
 // EnhanceContext returns a new context with [MappedClaims] and [AuthHeader] values.
-func (a *Policy) EnhanceContext(ctx context.Context, authInfo *AuthInfo, claims *Claims) context.Context {
+func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, claims *Claims) context.Context {
 	ctx = context.WithValue(ctx, MappedClaims, claims)
 	if authInfo.AuthToken != "" {
 		ctx = context.WithValue(ctx, AuthHeader, authInfo.AuthToken)
@@ -262,7 +246,7 @@ func (a *Policy) EnhanceContext(ctx context.Context, authInfo *AuthInfo, claims 
 
 // Authorize uses the policy's authorizer to authorize a request based on provided claims and call target.
 // Logs and emits metrics when unauthorized.
-func (a *Policy) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) error {
+func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) error {
 	if a.authorizer == nil {
 		return nil
 	}
@@ -289,7 +273,7 @@ func (a *Policy) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) 
 }
 
 // getMetricsHandler returns a metrics handler with a namespace tag
-func (a *Policy) getMetricsHandler(namespace string) metrics.Handler {
+func (a *Interceptor) getMetricsHandler(namespace string) metrics.Handler {
 	var metricsHandler metrics.Handler
 	if namespace != "" {
 		metricsHandler = a.metricsHandler.WithTags(metrics.OperationTag(metrics.AuthorizationScope), metrics.NamespaceTag(namespace))

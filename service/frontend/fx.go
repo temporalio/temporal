@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gorilla/mux"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -90,13 +91,14 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(AuthorizationPolicyProvider),
+	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(NexusHTTPHandlerProvider),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -143,19 +145,21 @@ type GrpcServerOptions struct {
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
-func AuthorizationPolicyProvider(
+func AuthorizationInterceptorProvider(
 	cfg *config.Config,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
-) *authorization.Policy {
-	return authorization.NewPolicy(
+	audienceGetter authorization.JWTAudienceMapper,
+) *authorization.Interceptor {
+	return authorization.NewInterceptor(
 		claimMapper,
 		authorizer,
-		logger,
 		metricsHandler,
+		logger,
+		audienceGetter,
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 	)
@@ -178,8 +182,7 @@ func GrpcServerOptionsProvider(
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	authPolicy *authorization.Policy,
-	audienceGetter authorization.JWTAudienceMapper,
+	authInterceptor *authorization.Interceptor,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -216,7 +219,7 @@ func GrpcServerOptionsProvider(
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
-		authorization.NewAuthorizationInterceptor(authPolicy, audienceGetter),
+		authInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -633,6 +636,25 @@ func HandlerProvider(
 	return wfHandler
 }
 
+func NexusHTTPHandlerProvider(
+	serviceConfig *Config,
+	serviceName primitives.ServiceName,
+	matchingClient resource.MatchingClient,
+	metricsHandler metrics.Handler,
+	namespaceRegistry namespace.Registry,
+	authInterceptor *authorization.Interceptor,
+	logger log.Logger,
+) *NexusHTTPHandler {
+	return NewNexusHTTPHandler(
+		serviceConfig,
+		matchingClient,
+		metricsHandler,
+		namespaceRegistry,
+		authInterceptor,
+		logger,
+	)
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -643,11 +665,10 @@ func HTTPAPIServerProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
 	grpcServerOptions GrpcServerOptions,
-	authPolicy *authorization.Policy,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
-	matchingClient resource.MatchingClient,
 	logger log.Logger,
+	nexusHTTPHandler *NexusHTTPHandler,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
 	if serviceName != primitives.FrontendService {
@@ -666,9 +687,8 @@ func HTTPAPIServerProvider(
 		handler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
+		[]func(*mux.Router){nexusHTTPHandler.RegisterRoutes},
 		namespaceRegistry,
-		matchingClient,
-		authPolicy,
 		logger,
 	)
 }

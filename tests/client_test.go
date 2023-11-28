@@ -102,6 +102,7 @@ func (s *clientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
 		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.FrontendEnableNexusHTTPHandler:      true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }
