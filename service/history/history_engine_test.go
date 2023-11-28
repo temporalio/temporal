@@ -5278,6 +5278,9 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("mock")
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("mock", false).Return(searchattribute.NameTypeMap{}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
 		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
