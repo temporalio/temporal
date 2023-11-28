@@ -42,6 +42,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/batch/v1"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -1623,6 +1624,156 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 		err = workflowRun.Get(context.Background(), &result)
 		return err == nil && result == 1
 	}, 5*time.Second, 200*time.Millisecond)
+}
+
+func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
+	tq := s.randomizeStr(s.T().Name())
+	v1 := "v1"
+	v2 := "v2"
+	v3 := "v3"
+
+	var act1count, act2count, act3count, badcount atomic.Int32
+	act1 := func() error { act1count.Add(1); return nil }
+	act2 := func() error { act2count.Add(1); return nil }
+	act3 := func() error { act3count.Add(1); return nil }
+	badact := func() error { badcount.Add(1); return nil }
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		return "done 1!", nil
+	}
+
+	wf2 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		// same as wf1 up to here
+
+		// run act2
+		s.NoError(workflow.ExecuteActivity(ao, "act2").Get(ctx, nil))
+
+		// now do something bad in a loop.
+		// (we want something that's visible in history, not just failing workflow tasks,
+		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
+		for {
+			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
+			workflow.Sleep(ctx, time.Second)
+		}
+
+		return "done 2!", nil
+	}
+
+	wf3 := func(ctx workflow.Context) (string, error) {
+		ao := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ScheduleToCloseTimeout: 5 * time.Second})
+
+		s.NoError(workflow.ExecuteActivity(ao, "act1").Get(ctx, nil))
+
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		s.NoError(workflow.ExecuteActivity(ao, "act2").Get(ctx, nil))
+
+		// same as wf2 up to here
+
+		// instead of calling badact, do something different to force a non-determinism error
+		// (the change of activity type below isn't enough)
+		workflow.Sleep(ctx, time.Second)
+
+		// call act3 once
+		s.NoError(workflow.ExecuteActivity(ao, "act3").Get(ctx, nil))
+
+		return "done 3!", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	w1 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v1})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	s.NoError(w1.Start())
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.NoError(err)
+	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+	// wait for first wft and first activity to complete
+	s.Eventually(func() bool { return len(s.getHistory(s.namespace, ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+
+	w1.Stop()
+
+	// should see one run of act1
+	s.Equal(int32(1), act1count.Load())
+
+	w2 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v2})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	w2.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
+	w2.RegisterActivityWithOptions(badact, activity.RegisterOptions{Name: "badact"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// unblock the workflow
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait until we see three calls to badact
+	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
+
+	// at this point act2 should have been invokved once also
+	s.Equal(int32(1), act2count.Load())
+
+	w2.Stop()
+
+	w3 := worker.New(s.sdkClient, tq, worker.Options{BuildID: v3})
+	w3.RegisterWorkflowWithOptions(wf3, workflow.RegisterOptions{Name: "wf"})
+	w3.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
+	w3.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
+	w3.RegisterActivityWithOptions(act3, activity.RegisterOptions{Name: "act3"})
+	w3.RegisterActivityWithOptions(badact, activity.RegisterOptions{Name: "badact"})
+	s.NoError(w3.Start())
+	defer w3.Stop()
+
+	// but v3 is not quite compatible, the workflow should be blocked on non-determinism errors for now.
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	s.Error(run.Get(waitCtx, nil))
+
+	// reset it using v2 as the bad build id
+	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.namespace,
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_BuildId{
+						BuildId: v2,
+					},
+				},
+			},
+		},
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		},
+		JobId:  uuid.New(),
+		Reason: "test",
+	})
+	s.NoError(err)
+
+	// now it can complete on v3. (need to loop since runid will be resolved early and we need
+	// to re-resolve to pick up the new run instead of the terminated one)
+	s.Eventually(func() bool {
+		var out string
+		return s.sdkClient.GetWorkflow(ctx, run.GetID(), "").Get(ctx, &out) == nil && out == "done 3!"
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.Equal(int32(1), act1count.Load()) // we should not see an addition run of act1
+	s.Equal(int32(2), act2count.Load()) // we should see an addition run of act2 (reset point was before it)
+	s.Equal(int32(1), act3count.Load()) // we should see one run of act3
 }
 
 func (s *ClientFunctionalSuite) Test_FinishWorkflowWithDeferredCommands() {
