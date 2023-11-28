@@ -22,11 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package eventhandler
 
 import (
 	"context"
-	"time"
 
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,14 +33,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 )
+
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination past_events_handler_mock.go
 
 const (
 	historyImportBlobSize = 16
@@ -49,48 +49,35 @@ const (
 )
 
 type (
-	// HistoryEventsHandler is to handle all cases that add history events from remote cluster to current cluster.
-	// so it can be used by:
-	// 1. ExecutableHistoryTask to replicate events
-	// 2. When HistoryResender trying to add events (currently triggered by RetryReplication error, which still need to handle import case)
-	HistoryEventsHandler interface {
-		HandleHistoryEvents(
+	PastEventsHandler interface {
+		HandlePastEvents(
 			ctx context.Context,
-			workflowKey definition.WorkflowKey,
 			remoteCluster string,
-			metricsTag string,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			workflowKey definition.WorkflowKey,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
-			historyEvents []*historypb.HistoryEvent,
-			newEvents []*historypb.HistoryEvent,
+			pastEvents [][]*historypb.HistoryEvent,
 		) error
 	}
 
-	historyEventsHandlerImpl struct {
-		ProcessToolBox
+	pastEventsHandlerImpl struct {
+		replication.ProcessToolBox
 	}
 )
 
-func NewHistoryEventsHandler(toolBox ProcessToolBox) HistoryEventsHandler {
-	return &historyEventsHandlerImpl{
+func NewPastEventsHandler(toolBox replication.ProcessToolBox) PastEventsHandler {
+	return &pastEventsHandlerImpl{
 		toolBox,
 	}
 }
 
-func (h *historyEventsHandlerImpl) HandleHistoryEvents(
+func (h *pastEventsHandlerImpl) HandlePastEvents(
 	ctx context.Context,
-	workflowKey definition.WorkflowKey,
 	sourceClusterName string,
-	metricsTag string,
-	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	workflowKey definition.WorkflowKey,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-	historyEvents []*historypb.HistoryEvent,
-	newEvents []*historypb.HistoryEvent,
+	pastEvents [][]*historypb.HistoryEvent,
 ) error {
-	shardContext, err := h.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(workflowKey.NamespaceID),
-		workflowKey.WorkflowID,
-	)
+	shardContext, err := h.ShardController.GetShardByNamespaceWorkflow(namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
 	if err != nil {
 		return err
 	}
@@ -98,120 +85,53 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	if err != nil {
 		return err
 	}
+	versionHistory := versionhistory.NewVersionHistory([]byte{}, versionHistoryItems)
+	pastEventsBlobs := make([]*common.DataBlob, len(pastEvents))
+
+	for index, batch := range pastEvents {
+		blob, err := h.EventSerializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return err
+		}
+		pastEventsBlobs[index] = blob
+	}
+	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, pastEventsBlobs, versionHistory, nil)
+	if err != nil {
+		return err
+	}
+	if !response.EventsApplied { // means past events were already existing before importing, no more action needed
+		return nil
+	}
 
 	pastVersionHistory, _ := versionhistory.ParseVersionHistoryToPastAndFuture(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
-	if len(pastVersionHistory) != 0 {
-		boundaryVersionHistoryItem := pastVersionHistory[len(pastVersionHistory)-1]
-		pastEvents, futureEvents, err := h.parseEventsToPastAndFuture(historyEvents, boundaryVersionHistoryItem.EventId)
-		if err != nil {
-			return err
-		}
-		if len(pastEvents) != 0 {
-			err = h.handlePastEvents(ctx, engine, sourceClusterName, metricsTag, workflowKey, pastEvents, versionHistoryItems, boundaryVersionHistoryItem)
-			if err != nil {
-				return err
-			}
-		}
-		if len(futureEvents) != 0 {
-			return engine.ReplicateHistoryEvents(
-				ctx,
-				workflowKey,
-				baseExecutionInfo,
-				versionHistoryItems,
-				[][]*historypb.HistoryEvent{futureEvents},
-				newEvents,
-			)
-		} else {
-			return nil
-		}
-	}
 
-	return engine.ReplicateHistoryEvents(
-		ctx,
-		workflowKey,
-		baseExecutionInfo,
-		versionHistoryItems,
-		[][]*historypb.HistoryEvent{historyEvents},
-		newEvents,
-	)
-}
+	lastBatch := pastEvents[len(pastEvents)-1]
+	lastPastEvent := lastBatch[len(lastBatch)-1]
 
-func (h *historyEventsHandlerImpl) parseEventsToPastAndFuture(events []*historypb.HistoryEvent, boundaryEventId int64) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
-	if events[len(events)-1].EventId < boundaryEventId {
-		return events, nil, nil
-	}
-	if events[0].EventId > boundaryEventId {
-		return nil, events, nil
-	}
-	boundaryIndex := -1
-	for index, item := range events {
-		if item.EventId == boundaryEventId {
-			boundaryIndex = index
-			break
-		}
-	}
-	if boundaryIndex == -1 {
-		return nil, nil, serviceerror.NewInvalidArgument("No boundary events found") // if this happens, means the events are not consecutive and we have bug somewhere
-	}
-	return events[:boundaryIndex+1], events[boundaryIndex+1:], nil
-}
-
-func (h *historyEventsHandlerImpl) handlePastEvents(
-	ctx context.Context,
-	engine shard.Engine,
-	sourceClusterName string,
-	metricsTag string,
-	workflowKey definition.WorkflowKey,
-	pastEvents []*historypb.HistoryEvent,
-	versionHistoryItems []*historyspb.VersionHistoryItem,
-	boundaryVersionHistoryItem *historyspb.VersionHistoryItem,
-) error {
-	eventBlob, err := h.EventSerializer.SerializeEvents(pastEvents, enumspb.ENCODING_TYPE_PROTO3)
-	if err != nil {
-		return err
-	}
-	versionHistory := versionhistory.NewVersionHistory([]byte{}, versionHistoryItems)
-
-	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, []*common.DataBlob{eventBlob}, versionHistory, nil)
-	if err != nil {
-		return err
-	}
-	if !response.EventsApplied { // means events already exist before importing, no more action needed
-		return nil
-	}
-
-	lastPastEvent := pastEvents[len(pastEvents)-1]
-	if lastPastEvent.EventId == boundaryVersionHistoryItem.EventId { // means all past events are imported, we just need to commit.
-		response, err = h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, []*common.DataBlob{}, versionHistory, response.Token) // commit
+	if lastPastEvent.EventId == pastVersionHistory[len(pastVersionHistory)-1].EventId {
+		// all past events were imported successfully
+		_, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token)
 		if err != nil {
 			return err
 		}
 		return nil
-	}
-	// otherwise we need to import events all the way until boundaryEvent and then commit
-
-	//nextEventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, nextEventId)
-	if err != nil {
-		return err
 	}
 	return h.importEvents(
 		ctx,
 		sourceClusterName,
-		metricsTag,
 		engine,
 		workflowKey,
 		lastPastEvent.EventId,
 		lastPastEvent.Version,
-		boundaryVersionHistoryItem.EventId,
-		boundaryVersionHistoryItem.Version,
+		pastVersionHistory[len(pastVersionHistory)-1].EventId,
+		pastVersionHistory[len(pastVersionHistory)-1].Version,
 		response.Token,
 	)
 }
 
-func (h *historyEventsHandlerImpl) importEvents(
+func (h *pastEventsHandlerImpl) importEvents(
 	ctx context.Context,
 	remoteCluster string,
-	metricsTag string,
 	engine shard.Engine,
 	workflowKey definition.WorkflowKey,
 	startEventId int64,
@@ -220,18 +140,6 @@ func (h *historyEventsHandlerImpl) importEvents(
 	endEventVersion int64,
 	token []byte,
 ) error {
-	h.MetricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
-		1,
-		metrics.OperationTag(metricsTag+"Import"),
-	)
-	startTime := time.Now().UTC()
-	defer func() {
-		h.MetricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
-			time.Since(startTime),
-			metrics.OperationTag(metricsTag+"Import"),
-		)
-	}()
-
 	historyIterator := h.ProcessToolBox.HistoryPaginatedFetcher.GetSingleWorkflowHistoryPaginatedIterator(
 		ctx,
 		remoteCluster,
@@ -298,7 +206,7 @@ func (h *historyEventsHandlerImpl) importEvents(
 	return nil
 }
 
-func (h *historyEventsHandlerImpl) invokeImportWorkflowExecutionCall(
+func (h *pastEventsHandlerImpl) invokeImportWorkflowExecutionCall(
 	ctx context.Context,
 	historyEngine shard.Engine,
 	workflowKey definition.WorkflowKey,
