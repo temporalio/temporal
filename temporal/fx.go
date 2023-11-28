@@ -936,13 +936,12 @@ var TraceExportModule = fx.Options(
 //   - telemetry.ServerTraceInterceptor
 //   - telemetry.ClientTraceInterceptor
 var ServiceTracingModule = fx.Options(
-	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
 		fx.Annotate(
-			func(exps []otelsdktrace.SpanExporter, opts []otelsdktrace.BatchSpanProcessorOption) []otelsdktrace.SpanProcessor {
+			func(exps []otelsdktrace.SpanExporter, c *config.Config) []otelsdktrace.SpanProcessor {
 				sps := make([]otelsdktrace.SpanProcessor, 0, len(exps))
 				for _, exp := range exps {
-					sps = append(sps, otelsdktrace.NewBatchSpanProcessor(exp, opts...))
+					sps = append(sps, c.ExporterConfig.SpanProcessor(exp))
 				}
 				return sps
 			},

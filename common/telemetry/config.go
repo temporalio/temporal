@@ -27,6 +27,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -44,15 +45,17 @@ import (
 )
 
 const (
+	DebugModeEnvVar = "TEMPORAL_OTEL_DEBUG"
+
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
-	// they are not available programatically
+	// they are not available programmatically
 
 	defaultReadBufferSize    = 32 * 1024
 	defaultWriteBufferSize   = 32 * 1024
 	defaultMinConnectTimeout = 10 * time.Second
 
 	// the following defaults were taken from the otel library as of v1.7.
-	// they are not available programatically
+	// they are not available programmatically
 
 	retryDefaultEnabled         = true
 	retryDefaultInitialInterval = 5 * time.Second
@@ -174,6 +177,10 @@ func (ec *ExportConfig) MetricExporters() ([]metric.Exporter, error) {
 	return ec.inner.MetricExporters()
 }
 
+func (ec *ExportConfig) SpanProcessor(exp otelsdktrace.SpanExporter) otelsdktrace.SpanProcessor {
+	return ec.inner.SpanProcessor(exp)
+}
+
 // Dial returns the cached *grpc.ClientConn instance or creates a new one,
 // caches and then returns it. This function is not threadsafe.
 func (g *grpcconn) Dial(ctx context.Context) (*grpc.ClientConn, error) {
@@ -215,6 +222,29 @@ func (g *grpcconn) dialOpts() []grpc.DialOption {
 // unmarshaled into this ExportConfig object. The returned SpanExporters have
 // not been started.
 func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
+	if debugMode() {
+		// in debug mode, emit traces to a local OTEL gRPC collector
+		ec.Exporters = append(ec.Exporters, exporter{
+			Kind: struct {
+				Signal   string
+				Model    string
+				Protocol string
+			}{
+				Signal:   "traces",
+				Model:    "otlp",
+				Protocol: "grpc",
+			},
+			Spec: &otlpGrpcSpanExporter{
+				otlpGrpcExporter: otlpGrpcExporter{
+					Connection: grpcconn{
+						Endpoint: "localhost:4317",
+						Insecure: true,
+					},
+				},
+			},
+		})
+	}
+
 	out := make([]otelsdktrace.SpanExporter, 0, len(ec.Exporters))
 	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "trace") {
@@ -253,6 +283,14 @@ func (ec *exportConfig) MetricExporters() ([]metric.Exporter, error) {
 	}
 	return out, nil
 
+}
+
+func (ec *exportConfig) SpanProcessor(exp otelsdktrace.SpanExporter) otelsdktrace.SpanProcessor {
+	if debugMode() {
+		// in debug mode, don't batch span exports but instead emit them ASAP
+		return otelsdktrace.NewSimpleSpanProcessor(exp)
+	}
+	return otelsdktrace.NewBatchSpanProcessor(exp)
 }
 
 func (ec *exportConfig) buildOtlpGrpcMetricExporter(
@@ -416,4 +454,8 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		)
 	}
 	return obj.Spec.Decode(e.Spec)
+}
+
+func debugMode() bool {
+	return os.Getenv(DebugModeEnvVar) == "true"
 }
