@@ -35,6 +35,7 @@ import (
 	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -95,7 +96,7 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.ConnectionOptions = sdkclient.ConnectionOptions{
 		TLS: f.tlsConfig,
 		DialOptions: []grpc.DialOption{
-			grpc.WithChainUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
+			grpc.WithUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
 		},
 	}
 	return options
@@ -154,7 +155,15 @@ func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx = headers.SetVersions(ctx)
+		// Can't use headers.SetVersions() because it is using _appending_ headers to
+		// the context rather than replacing them, which may be incorect in this case.
+		md, mdExist := metadata.FromOutgoingContext(ctx)
+		if !mdExist {
+			md = metadata.New(nil)
+		}
+		md.Set(headers.ClientNameHeaderName, headers.ClientNameServer)
+		md.Set(headers.ClientVersionHeaderName, headers.ServerVersion)
+		ctx = metadata.NewOutgoingContext(ctx, md)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
