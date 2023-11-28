@@ -536,9 +536,6 @@ func (s *Starter) generateResponse(
 	workflowTaskInfo *workflow.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
-		return nil, err
-	}
 	shardCtx := s.shardContext
 	tokenSerializer := s.tokenSerializer
 	request := s.request.StartRequest
@@ -549,6 +546,11 @@ func (s *Starter) generateResponse(
 			RunId: runID,
 		}, nil
 	}
+
+	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+		return nil, err
+	}
+
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {
 		return nil, err

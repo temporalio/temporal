@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -49,7 +50,7 @@ func (s *functionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (s *functionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
-	options := baseOptions
+	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest)
 	options.RequestEagerExecution = true
 
 	if options.Namespace == "" {
