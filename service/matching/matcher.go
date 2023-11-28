@@ -233,6 +233,43 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	}
 }
 
+// OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
+// Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
+// forwarding occurs then response or error is returned.
+func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	select {
+	case tm.taskC <- task:
+		<-task.responseC
+		return nil, nil
+	default:
+	}
+
+	fwdrTokenC := tm.fwdrAddReqTokenC()
+
+	for {
+		select {
+		case tm.taskC <- task:
+			<-task.responseC
+			return nil, nil
+		case token := <-fwdrTokenC:
+			resp, err := tm.fwdr.ForwardNexusTask(ctx, task)
+			token.release()
+			if err == nil {
+				return resp, nil
+			}
+			if err == errForwarderSlowDown {
+				// if we are rate limited, try only local match for the
+				// remainder of the context timeout left
+				fwdrTokenC = nil
+				continue
+			}
+			return nil, err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
 // MustOffer blocks until a consumer is found to handle this task
 // Returns error only when context is canceled or the ratelimit is set to zero (allow nothing)
 // The passed in context MUST NOT have a deadline associated with it

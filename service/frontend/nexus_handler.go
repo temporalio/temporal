@@ -176,6 +176,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		// TODO: check for deadline error and convert to downstream timeout handler error.
 		return nil, err
 	}
 	// Convert to standard Nexus SDK response.
@@ -183,7 +184,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 		return nil, &nexus.HandlerError{
-			Type:    nexus.HandlerErrorType(t.HandlerError.GetErrorType()),
+			Type:    convertNexusHandlerError(nexus.HandlerErrorType(t.HandlerError.GetErrorType())),
 			Failure: commonnexus.ProtoFailureToNexusFailure(t.HandlerError.GetFailure()),
 		}
 	case *matchingservice.DispatchNexusTaskResponse_Response:
@@ -207,4 +208,18 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		}
 	}
 	return nil, errors.New("unhandled response outcome") //nolint:goerr113
+}
+
+// convertNexusHandlerError converts any 5xx user handler error to a downsream error.
+func convertNexusHandlerError(t nexus.HandlerErrorType) nexus.HandlerErrorType {
+	switch t {
+	case nexus.HandlerErrorTypeDownstreamTimeout,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeForbidden,
+		nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
+		return t
+	}
+	return nexus.HandlerErrorTypeDownstreamError
 }
