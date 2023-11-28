@@ -921,10 +921,6 @@ var TraceExportModule = fx.Options(
 // ServiceTracingModule holds per-service (i.e. frontend/history/matching/worker) fx
 // state. The following types can be overriden with fx.Replace/fx.Decorate:
 //
-//   - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
-//     default: empty slice
-//   - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
-//     default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
 //   - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption

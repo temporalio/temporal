@@ -127,6 +127,7 @@ type (
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		spanExporters                    []otelsdktrace.SpanExporter
+		spanProcessors                   []otelsdktrace.SpanProcessor
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 
@@ -175,6 +176,7 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		SpanExporters                    []otelsdktrace.SpanExporter
+		SpanProcessors                   []otelsdktrace.SpanProcessor
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -215,6 +217,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
+		spanProcessors:                   params.SpanProcessors,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         testDCClient,
@@ -457,6 +460,7 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
+		fx.Replace(c.spanProcessors),
 		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry, &rpcFactory),
@@ -551,6 +555,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),
+			fx.Replace(c.spanProcessors),
 			temporal.ServiceTracingModule,
 			history.QueueModule,
 			history.Module,
@@ -646,6 +651,7 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
+		fx.Replace(c.spanProcessors),
 		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
@@ -744,6 +750,7 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(c.GetTLSConfigProvider),
 		fx.Provide(c.GetTaskCategoryRegistry),
 		fx.Supply(c.spanExporters),
+		fx.Replace(c.spanProcessors),
 		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
