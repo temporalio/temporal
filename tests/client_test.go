@@ -827,25 +827,18 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 
 	// wait until wf started and sticky is set
 	var stickyQueue string
-	for i := 0; i < 5; i++ {
+	s.Eventually(func() bool {
 		ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
 		})
-
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
 		// verify workflow has sticky task queue
-		if stickyQueue == "" {
-			// wait until we see sticky task queue is set
-			time.Sleep(time.Second)
-			continue
-		}
-	}
-	s.NotEmpty(stickyQueue)
-	s.NotEqual(stickyQueue, s.taskQueue)
+		return stickyQueue != "" && stickyQueue != s.taskQueue
+	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker
 	s.worker.Stop()
@@ -1016,22 +1009,18 @@ func (s *ClientFunctionalSuite) Test_StickyWorkerRestartWorkflowTask() {
 			s.NotNil(workflowRun)
 			s.True(workflowRun.GetRunID() != "")
 
-			findFirstWorkflowTaskCompleted := false
-		WaitForFirstWorkflowTaskComplete:
-			for i := 0; i < 10; i++ {
+			s.Eventually(func() bool {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
 				iter := s.sdkClient.GetWorkflowHistory(ctx, id, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 				for iter.HasNext() {
 					evt, err := iter.Next()
 					s.NoError(err)
 					if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-						findFirstWorkflowTaskCompleted = true
-						break WaitForFirstWorkflowTaskComplete
+						return true
 					}
 				}
-				time.Sleep(time.Second)
-			}
-			s.True(findFirstWorkflowTaskCompleted)
+				return false
+			}, 10*time.Second, 200*time.Millisecond)
 
 			// stop old worker
 			oldWorker.Stop()
@@ -1574,15 +1563,13 @@ func (s *ClientFunctionalSuite) TestBatchSignal() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchReset() {
-
-	var count int32
+	var count atomic.Int32
 
 	activityFn := func(ctx context.Context) (int32, error) {
-		val := atomic.LoadInt32(&count)
-		if val == 0 {
-			return 0, temporal.NewApplicationError("some random error", "", false, nil)
+		if val := count.Load(); val != 0 {
+			return val, nil
 		}
-		return val, nil
+		return 0, temporal.NewApplicationError("some random error", "", false, nil)
 	}
 	workflowFn := func(ctx workflow.Context) (int, error) {
 		ao := workflow.ActivityOptions{
@@ -1593,10 +1580,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 
 		var result int
 		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, &result)
-		if err != nil {
-			return 0, err
-		}
-		return result, nil
+		return result, err
 	}
 	s.worker.RegisterWorkflow(workflowFn)
 	s.worker.RegisterActivity(activityFn)
@@ -1613,7 +1597,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	err = workflowRun.Get(context.Background(), &result)
 	s.Error(err)
 
-	atomic.AddInt32(&count, 1)
+	count.Add(1)
 
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
@@ -1633,16 +1617,12 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	})
 	s.NoError(err)
 
-	// wait for signal to be processed
-	time.Sleep(5 * time.Second)
-
-	// get the latest run
-	workflowRun = s.sdkClient.GetWorkflow(context.Background(), workflowRun.GetID(), "")
-
-	err = workflowRun.Get(context.Background(), &result)
-	s.NoError(err)
-
-	s.Equal(1, result)
+	// latest run should complete successfully
+	s.Eventually(func() bool {
+		workflowRun = s.sdkClient.GetWorkflow(context.Background(), workflowRun.GetID(), "")
+		err = workflowRun.Get(context.Background(), &result)
+		return err == nil && result == 1
+	}, 5*time.Second, 200*time.Millisecond)
 }
 
 func (s *ClientFunctionalSuite) Test_FinishWorkflowWithDeferredCommands() {
