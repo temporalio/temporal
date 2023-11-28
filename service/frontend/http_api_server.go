@@ -34,6 +34,16 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/gorilla/mux"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
@@ -45,16 +55,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
-
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/status"
-	"github.com/gorilla/mux"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 )
 
 // HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
@@ -66,7 +66,6 @@ type HTTPAPIServer struct {
 	serveMux               *runtime.ServeMux
 	stopped                chan struct{}
 	matchAdditionalHeaders map[string]bool
-	metricsHandler         metrics.Handler
 }
 
 var defaultForwardedHeaders = []string{
@@ -128,10 +127,9 @@ func NewHTTPAPIServer(
 	}
 
 	h := &HTTPAPIServer{
-		listener:       listener,
-		logger:         logger,
-		stopped:        make(chan struct{}),
-		metricsHandler: metricsHandler,
+		listener: listener,
+		logger:   logger,
+		stopped:  make(chan struct{}),
 	}
 
 	// Build 4 possible marshalers in order based on content type
@@ -180,9 +178,10 @@ func NewHTTPAPIServer(
 		f(r)
 	}
 
-	r.PathPrefix("/").HandlerFunc(h.serveHTTPGrpcProxy)
-	// Set the handler as our function that wraps serve mux
-	h.server.Handler = http.HandlerFunc(r.ServeHTTP)
+	// Set the / handler as our function that wraps serve mux.
+	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	// Register the router as the HTTP server handler.
+	h.server.Handler = r
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
@@ -231,7 +230,7 @@ func (h *HTTPAPIServer) GracefulStop(gracefulDrainTime time.Duration) {
 	close(h.stopped)
 }
 
-func (h *HTTPAPIServer) serveHTTPGrpcProxy(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// Limit the request body to max gRPC size. This is hardcoded to 4MB at the
 	// moment using gRPC's default at
 	// https://github.com/grpc/grpc-go/blob/0673105ebcb956e8bf50b96e28209ab7845a65ad/server.go#L58

@@ -13,7 +13,6 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.5.2
-	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/mock v1.7.0-rc.1
@@ -68,6 +67,7 @@ require (
 
 require (
 	github.com/gogo/googleapis v0.0.0-20180223154316-0cd9801be74a // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 )
