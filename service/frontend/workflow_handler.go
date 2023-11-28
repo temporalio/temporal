@@ -3455,8 +3455,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
 		identity = op.ResetOperation.GetIdentity()
 		operationType = batcher.BatchTypeReset
-		resetParams.ResetType = op.ResetOperation.GetResetType()
-		resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+		if op.ResetOperation.Options != nil {
+			encoded, err := op.ResetOperation.Options.Marshal()
+			if err != nil {
+				return nil, err
+			}
+			resetParams.ResetOptions = encoded
+		} else {
+			// TODO: remove support for old fields later
+			resetParams.ResetType = op.ResetOperation.GetResetType()
+			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
+		}
+
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
