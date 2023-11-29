@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/version/check"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
@@ -145,7 +146,7 @@ func (vc *VersionChecker) performVersionCheck(
 
 func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
 	return metadata.VersionInfo == nil || (metadata.VersionInfo.LastUpdateTime != nil &&
-		metadata.VersionInfo.LastUpdateTime.Before(time.Now().Add(-time.Hour)))
+		metadata.VersionInfo.LastUpdateTime.AsTime().Before(time.Now().Add(-time.Hour)))
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*check.VersionCheckRequest, error) {
@@ -195,7 +196,7 @@ func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, er
 				Recommended:    convertReleaseInfo(product.Recommended),
 				Instructions:   product.Instructions,
 				Alerts:         convertAlerts(product.Alerts),
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC()),
+				LastUpdateTime: timestamppb.New(time.Now().UTC()),
 			}, nil
 		}
 	}

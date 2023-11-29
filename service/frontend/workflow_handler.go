@@ -49,6 +49,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -104,6 +106,7 @@ var (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
+		workflowservice.UnsafeWorkflowServiceServer
 		status int32
 
 		tokenSerializer                 common.TaskTokenSerializer
@@ -343,7 +346,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
 		return nil, err
 	}
 
@@ -1672,7 +1675,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
 		return nil, err
 	}
 
@@ -1820,15 +1823,15 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
+	if request.StartTimeFilter.EarliestTime == nil || request.StartTimeFilter.EarliestTime.AsTime().IsZero() {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
+	if request.StartTimeFilter.LatestTime == nil || request.StartTimeFilter.LatestTime.AsTime().IsZero() {
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
@@ -1848,8 +1851,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespaceName,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
+		EarliestStartTime: request.StartTimeFilter.EarliestTime.AsTime(),
+		LatestStartTime:   request.StartTimeFilter.LatestTime.AsTime(),
 	}
 
 	var persistenceResp *manager.ListWorkflowExecutionsResponse
@@ -1903,15 +1906,15 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
+	if request.StartTimeFilter.EarliestTime == nil || request.StartTimeFilter.EarliestTime.AsTime().IsZero() {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
+	if request.StartTimeFilter.LatestTime == nil || request.StartTimeFilter.GetLatestTime().AsTime().IsZero() {
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
@@ -2091,7 +2094,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+		if execution.ExecutionTime == nil || execution.ExecutionTime.AsTime().IsZero() {
 			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
@@ -3187,7 +3190,6 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	if request.GetWaitPolicy() == nil {
 		request.WaitPolicy = &updatepb.WaitPolicy{}
 	}
-	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
 
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3465,7 +3467,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
-		RPS:             float64(request.GetMaxOperationsPerSecond()),
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
@@ -3967,15 +3968,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowRunTimeout); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -3984,7 +3985,7 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 
 func (wh *WorkflowHandler) validateWorkflowStartDelay(
 	cronSchedule string,
-	startDelay *time.Duration,
+	startDelay *durationpb.Duration,
 ) error {
 	if len(cronSchedule) > 0 && startDelay != nil {
 		return errCronAndStartDelaySet
@@ -4144,10 +4145,10 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return newRequest, nil
 }
 
 func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
@@ -4159,10 +4160,10 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return newRequest, nil
 }
 
 func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
@@ -4175,12 +4176,12 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 
 	if unaliasedSas != nil {
 		newRequest.SearchAttributes = unaliasedSas
 	}
 
-	return &newRequest, nil
+	return newRequest, nil
 }

@@ -49,7 +49,7 @@ type (
 		// performed
 		PickWritePartition(
 			namespaceID namespace.ID,
-			taskQueue taskqueuepb.TaskQueue,
+			taskQueue *taskqueuepb.TaskQueue,
 			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) string
@@ -59,7 +59,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			namespaceID namespace.ID,
-			taskQueue taskqueuepb.TaskQueue,
+			taskQueue *taskqueuepb.TaskQueue,
 			taskQueueType enumspb.TaskQueueType,
 			forwardedFrom string,
 		) *pollToken
@@ -116,7 +116,7 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	namespaceID namespace.ID,
-	taskQueue taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) string {
@@ -148,7 +148,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 // Caller is responsible to call pollToken.Release() after complete the poll.
 func (lb *defaultLoadBalancer) PickReadPartition(
 	namespaceID namespace.ID,
-	taskQueue taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 	forwardedFrom string,
 ) *pollToken {

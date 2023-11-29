@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/service/history/consts"
@@ -51,7 +52,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -77,8 +77,8 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		Header:              header,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -106,10 +106,10 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					Header:                 header,
-					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+					StartToCloseTimeout:    durationpb.New(15 * time.Second),
+					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -176,7 +176,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	})
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED {
-			s.Equal(header, event.GetActivityTaskScheduledEventAttributes().Header)
+			s.ProtoEqual(header, event.GetActivityTaskScheduledEventAttributes().Header)
 		}
 	}
 }
@@ -201,8 +201,8 @@ func (s *functionalSuite) TestActivityRetry() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -228,14 +228,14 @@ func (s *functionalSuite) TestActivityRetry() {
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("1"),
-						ScheduleToCloseTimeout: timestamp.DurationPtr(4 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(4 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(4 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(4 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(4 * time.Second),
+						StartToCloseTimeout:    durationpb.New(4 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
-							InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+							InitialInterval:        durationpb.New(1 * time.Second),
 							MaximumAttempts:        3,
-							MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+							MaximumInterval:        durationpb.New(1 * time.Second),
 							NonRetryableErrorTypes: []string{"bad-bug"},
 							BackoffCoefficient:     1,
 						},
@@ -247,10 +247,10 @@ func (s *functionalSuite) TestActivityRetry() {
 						ActivityType:           &commonpb.ActivityType{Name: timeoutActivityName},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: "no_worker_taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  payloads.EncodeString("2"),
-						ScheduleToCloseTimeout: timestamp.DurationPtr(5 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(5 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(5 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(5 * time.Second),
+						StartToCloseTimeout:    durationpb.New(5 * time.Second),
+						HeartbeatTimeout:       durationpb.New(0 * time.Second),
 					}}},
 			}, nil
 		} else if previousStartedEventID > 0 {
@@ -412,8 +412,8 @@ func (s *functionalSuite) TestActivityRetry_Infinite() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -438,7 +438,7 @@ func (s *functionalSuite) TestActivityRetry_Infinite() {
 						ActivityType:        &commonpb.ActivityType{Name: activityName},
 						TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:               payloads.EncodeString("1"),
-						StartToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
+						StartToCloseTimeout: durationpb.New(100 * time.Second),
 						RetryPolicy: &commonpb.RetryPolicy{
 							MaximumAttempts:    0,
 							BackoffCoefficient: 1,
@@ -517,8 +517,8 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -548,10 +548,10 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+					StartToCloseTimeout:    durationpb.New(15 * time.Second),
+					HeartbeatTimeout:       durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -621,8 +621,8 @@ func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -651,10 +651,10 @@ func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(15 * time.Second),
+					HeartbeatTimeout:       durationpb.New(0 * time.Second),
 				}},
 			}}, nil
 		}
@@ -766,8 +766,8 @@ func (s *functionalSuite) TestActivityCancellationNotStarted() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -796,10 +796,10 @@ func (s *functionalSuite) TestActivityCancellationNotStarted() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(15 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(15 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(0 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(15 * time.Second),
+					HeartbeatTimeout:       durationpb.New(0 * time.Second),
 				}},
 			}}, nil
 		}

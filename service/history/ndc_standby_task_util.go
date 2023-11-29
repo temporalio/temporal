@@ -60,6 +60,10 @@ func standbyTaskPostActionNoOp(
 		return nil
 	}
 
+	if err, ok := postActionInfo.(error); ok {
+		return err
+	}
+
 	// return error so task processing logic will retry
 	return consts.ErrTaskRetry
 }
@@ -113,22 +117,10 @@ type (
 	workflowTaskPostActionInfo struct {
 		*historyResendInfo
 
-		workflowTaskScheduleToStartTimeout *time.Duration
-		taskqueue                          taskqueuepb.TaskQueue
+		workflowTaskScheduleToStartTimeout time.Duration
+		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
-
-	startChildExecutionPostActionInfo struct {
-		*historyResendInfo
-	}
-)
-
-var (
-	// verifyChildCompletionRecordedInfo is the post action info returned by
-	// standby close execution task action func. The actual content of the
-	// struct doesn't matter. We just need a non-nil pointer to to indicate
-	// that the verification has failed.
-	verifyChildCompletionRecordedInfo = &struct{}{}
 )
 
 func newHistoryResendInfo(
@@ -183,8 +175,8 @@ func newActivityRetryTimePostActionInfo(
 
 func newWorkflowTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	workflowTaskScheduleToStartTimeout *time.Duration,
-	taskqueue taskqueuepb.TaskQueue,
+	workflowTaskScheduleToStartTimeout time.Duration,
+	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {

@@ -63,7 +63,7 @@ const NumTotalEvents = 10
 // pattern contains either c or f representing completed or failed task
 // Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
 // eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
-func generateEventHistory(pattern string) history.History {
+func generateEventHistory(pattern string) *history.History {
 	events := make([]*history.HistoryEvent, 0)
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
@@ -84,10 +84,10 @@ func generateEventHistory(pattern string) history.History {
 		events = append(events, &event)
 	}
 
-	return history.History{Events: events}
+	return &history.History{Events: events}
 }
 
-func reverse(hist history.History) history.History {
+func reverse(hist *history.History) *history.History {
 	for i, j := 0, len(hist.Events)-1; i < j; i, j = i+1, j-1 {
 		hist.Events[i], hist.Events[j] = hist.Events[j], hist.Events[i]
 	}
@@ -97,10 +97,9 @@ func reverse(hist history.History) history.History {
 
 func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	namespaceStr := "test-namespace"
-	workflowExecution := commonpb.WorkflowExecution{}
 	tests := []struct {
 		name                    string
-		history                 history.History
+		history                 *history.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -133,9 +132,10 @@ func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
+			workflowExecution := &commonpb.WorkflowExecution{}
 			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistoryReverse(ctx, gomock.Any()).Return(
-				&workflowservice.GetWorkflowExecutionHistoryReverseResponse{History: &tt.history, NextPageToken: nil}, nil)
-			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
+				&workflowservice.GetWorkflowExecutionHistoryReverseResponse{History: tt.history, NextPageToken: nil}, nil)
+			gotWorkflowTaskEventID, err := getLastWorkflowTaskEventID(ctx, namespaceStr, workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getLastWorkflowTaskEventID() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -152,7 +152,7 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 	workflowExecution := commonpb.WorkflowExecution{}
 	tests := []struct {
 		name                    string
-		history                 history.History
+		history                 *history.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -191,7 +191,7 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 		s.T().Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			s.mockFrontendClient.EXPECT().GetWorkflowExecutionHistory(ctx, gomock.Any()).Return(
-				&workflowservice.GetWorkflowExecutionHistoryResponse{History: &tt.history, NextPageToken: nil}, nil)
+				&workflowservice.GetWorkflowExecutionHistoryResponse{History: tt.history, NextPageToken: nil}, nil)
 			gotWorkflowTaskEventID, err := getFirstWorkflowTaskEventID(ctx, namespaceStr, &workflowExecution, s.mockFrontendClient, log.NewTestLogger())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getLastWorkflowTaskEventID() error = %v, wantErr %v", err, tt.wantErr)

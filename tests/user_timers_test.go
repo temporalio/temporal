@@ -37,11 +37,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/timer"
 )
 
@@ -58,8 +58,8 @@ func (s *functionalSuite) TestUserTimers_Sequential() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -81,7 +81,7 @@ func (s *functionalSuite) TestUserTimers_Sequential() {
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            fmt.Sprintf("timer-id-%d", timerCounter),
-					StartToFireTimeout: timestamp.DurationPtr(1 * time.Second),
+					StartToFireTimeout: durationpb.New(1 * time.Second),
 				}},
 			}}, nil
 		}
@@ -131,8 +131,8 @@ func (s *functionalSuite) TestUserTimers_CapDuration() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(timer.MaxAllowedTimer * 2),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(timer.MaxAllowedTimer * 2),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -147,7 +147,7 @@ func (s *functionalSuite) TestUserTimers_CapDuration() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(timer.MaxAllowedTimer, *descResp.ExecutionConfig.WorkflowRunTimeout)
+	s.Equal(timer.MaxAllowedTimer, descResp.ExecutionConfig.WorkflowRunTimeout.AsDuration())
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -162,7 +162,7 @@ func (s *functionalSuite) TestUserTimers_CapDuration() {
 			CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 			Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 				TimerId:            timerID,
-				StartToFireTimeout: timestamp.DurationPtr(timer.MaxAllowedTimer * 2),
+				StartToFireTimeout: durationpb.New(timer.MaxAllowedTimer * 2),
 			}},
 		}}, nil
 	}
@@ -193,7 +193,7 @@ func (s *functionalSuite) TestUserTimers_CapDuration() {
 	s.NoError(err)
 	timerInfos := adminDescResp.DatabaseMutableState.TimerInfos
 	s.Len(timerInfos, 1)
-	s.True(timerInfos[timerID].ExpiryTime.Before(time.Now().Add(timer.MaxAllowedTimer)))
+	s.True(timerInfos[timerID].ExpiryTime.AsTime().Before(time.Now().Add(timer.MaxAllowedTimer)))
 
 	_, err = s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,

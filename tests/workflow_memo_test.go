@@ -36,11 +36,12 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type RunIdGetter interface {
@@ -67,8 +68,8 @@ func (s *functionalSuite) TestStartWithMemo() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		Memo:                memo,
 	}
@@ -100,8 +101,8 @@ func (s *functionalSuite) TestSignalWithStartWithMemo() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		SignalName:          signalName,
 		SignalInput:         signalInput,
 		Identity:            identity,
@@ -150,8 +151,8 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -166,7 +167,7 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.NotNil(openExecutionInfo)
-	s.Equal(memo, openExecutionInfo.Memo)
+	s.ProtoEqual(memo, openExecutionInfo.Memo)
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -180,7 +181,7 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// make progress of workflow
 	_, err = poller.PollAndProcessWorkflowTask()
@@ -197,12 +198,12 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	firstEvent := history.Events[0]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, firstEvent.GetEventType())
 	startdEventAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Equal(memo, startdEventAttributes.Memo)
+	s.ProtoEqual(memo, startdEventAttributes.Memo)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
 	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// verify closed visibility
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
@@ -211,8 +212,8 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -227,10 +228,10 @@ func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.NotNil(closedExecutionInfo)
-	s.Equal(memo, closedExecutionInfo.Memo)
+	s.ProtoEqual(memo, closedExecutionInfo.Memo)
 
 	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
 	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
+	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 }

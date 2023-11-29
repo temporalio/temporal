@@ -89,10 +89,10 @@ func GetBackoffForNextSchedule(cronSchedule string, scheduledTime time.Time, now
 }
 
 // GetBackoffForNextScheduleNonNegative calculates the backoff time and ensures a non-negative duration.
-func GetBackoffForNextScheduleNonNegative(cronSchedule string, scheduledTime time.Time, now time.Time) *time.Duration {
+func GetBackoffForNextScheduleNonNegative(cronSchedule string, scheduledTime time.Time, now time.Time) time.Duration {
 	backoffDuration := GetBackoffForNextSchedule(cronSchedule, scheduledTime, now)
 	if backoffDuration == NoBackoff || backoffDuration < 0 {
 		backoffDuration = 0
 	}
-	return &backoffDuration
+	return backoffDuration
 }

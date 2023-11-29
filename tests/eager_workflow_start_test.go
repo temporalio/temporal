@@ -36,7 +36,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *functionalSuite) defaultWorkflowID() string {
@@ -48,8 +49,8 @@ func (s *functionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *functionalSuite) startEagerWorkflow(baseOptions workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
-	options := baseOptions
+func (s *functionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
+	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest)
 	options.RequestEagerExecution = true
 
 	if options.Namespace == "" {
@@ -71,7 +72,7 @@ func (s *functionalSuite) startEagerWorkflow(baseOptions workflowservice.StartWo
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.engine.StartWorkflowExecution(NewContext(), &options)
+	response, err := s.engine.StartWorkflowExecution(NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
@@ -121,9 +122,22 @@ func (s *functionalSuite) getWorkflowStringResult(workflowID, runID string) stri
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_StartNew() {
-	response := s.startEagerWorkflow(workflowservice.StartWorkflowExecutionRequest{})
+	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
+	// response.
+	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"CustomKeywordField": {
+					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+					Data:     []byte(`"value"`),
+				},
+			},
+		},
+	})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+	kwData := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes().SearchAttributes.IndexedFields["CustomKeywordField"].Data
+	s.Require().Equal(`"value"`, string(kwData))
 	s.respondWorkflowTaskCompleted(task, "ok")
 	// Verify workflow completes and client can get the result
 	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)
@@ -131,9 +145,9 @@ func (s *functionalSuite) TestEagerWorkflowStart_StartNew() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
-	response := s.startEagerWorkflow(workflowservice.StartWorkflowExecutionRequest{
+	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 	})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
@@ -146,9 +160,9 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
-	request := workflowservice.StartWorkflowExecutionRequest{
+	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
-		WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
 		RequestId:           uuid.New(),
 	}
 	response := s.startEagerWorkflow(request)
@@ -156,7 +170,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 
 	// Let it timeout
-	time.Sleep(*request.WorkflowTaskTimeout)
+	time.Sleep(request.WorkflowTaskTimeout.AsDuration())
 	response = s.startEagerWorkflow(request)
 	task = response.GetEagerWorkflowTask()
 	s.Require().Nil(task, "StartWorkflowExecution response contained a workflow task")
@@ -169,7 +183,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	request := workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
+	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
@@ -184,7 +198,7 @@ func (s *functionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
-	request := workflowservice.StartWorkflowExecutionRequest{
+	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 	s.startEagerWorkflow(request)

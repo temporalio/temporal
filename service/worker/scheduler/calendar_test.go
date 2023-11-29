@@ -31,9 +31,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	schedpb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type calendarSuite struct {
@@ -172,7 +172,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.NoError(err)
 	s.Nil(scs)
 	s.Equal(&schedpb.IntervalSpec{
-		Interval: timestamp.DurationPtr(5 * 24 * time.Hour),
+		Interval: durationpb.New(5 * 24 * time.Hour),
 	}, iv)
 	s.Equal("", tz)
 
@@ -180,8 +180,8 @@ func (s *calendarSuite) TestParseCronString() {
 	s.NoError(err)
 	s.Nil(scs)
 	s.Equal(&schedpb.IntervalSpec{
-		Interval: timestamp.DurationPtr(5 * time.Hour),
-		Phase:    timestamp.DurationPtr(45 * time.Minute),
+		Interval: durationpb.New(5 * time.Hour),
+		Phase:    durationpb.New(45 * time.Minute),
 	}, iv)
 	s.Equal("", tz)
 }

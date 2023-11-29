@@ -155,7 +155,7 @@ func (m *clusterMetadataManagerImpl) GetCurrentClusterMetadata(
 	if err != nil {
 		return nil, err
 	}
-	return &GetClusterMetadataResponse{ClusterMetadata: *mcm, Version: resp.Version}, nil
+	return &GetClusterMetadataResponse{ClusterMetadata: mcm, Version: resp.Version}, nil
 }
 
 func (m *clusterMetadataManagerImpl) GetClusterMetadata(
@@ -171,14 +171,14 @@ func (m *clusterMetadataManagerImpl) GetClusterMetadata(
 	if err != nil {
 		return nil, err
 	}
-	return &GetClusterMetadataResponse{ClusterMetadata: *mcm, Version: resp.Version}, nil
+	return &GetClusterMetadataResponse{ClusterMetadata: mcm, Version: resp.Version}, nil
 }
 
 func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 	ctx context.Context,
 	request *SaveClusterMetadataRequest,
 ) (bool, error) {
-	mcm, err := m.serializer.SerializeClusterMetadata(&request.ClusterMetadata, clusterMetadataEncoding)
+	mcm, err := m.serializer.SerializeClusterMetadata(request.ClusterMetadata, clusterMetadataEncoding)
 	if err != nil {
 		return false, err
 	}
@@ -225,13 +225,13 @@ func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(
 	}
 
 	return &GetClusterMetadataResponse{
-		ClusterMetadata: *mcm,
+		ClusterMetadata: mcm,
 		Version:         resp.Version,
 	}, nil
 }
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
-func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
+func immutableFieldsChanged(old *persistencespb.ClusterMetadata, cur *persistencespb.ClusterMetadata) bool {
 	if (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
 		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||

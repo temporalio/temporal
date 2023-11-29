@@ -75,7 +75,10 @@ func TestInvoke(t *testing.T, manager persistence.HistoryTaskQueueManager) {
 				},
 			)
 			require.NoError(t, err)
-			listedQueueNames = append(listedQueueNames, res.QueueNames...)
+			for _, queue := range res.Queues {
+				listedQueueNames = append(listedQueueNames, queue.QueueName)
+
+			}
 			if len(res.NextPageToken) == 0 {
 				break
 			}

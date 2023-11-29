@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -54,8 +55,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -76,6 +77,7 @@ worker restart/long-poll activity failure:
 type (
 	scheduleFunctionalSuite struct {
 		*require.Assertions
+		protorequire.ProtoAssertions
 		FunctionalTestBase
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -106,6 +108,7 @@ func (s *scheduleFunctionalSuite) TearDownSuite() {
 
 func (s *scheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.hostPort,
@@ -146,7 +149,7 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(5 * time.Second)},
+				{Interval: durationpb.New(5 * time.Second)},
 			},
 			Calendar: []*schedulepb.CalendarSpec{
 				{DayOfMonth: "10", Year: "2010"},
@@ -220,10 +223,10 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	s.NoError(err)
 
 	checkSpec := func(spec *schedulepb.ScheduleSpec) {
-		s.Equal(schedule.Spec.Interval, spec.Interval)
+		protorequire.ProtoSliceEqual(s.T(), schedule.Spec.Interval, spec.Interval)
 		s.Nil(spec.Calendar)
 		s.Nil(spec.CronString)
-		s.ElementsMatch([]*schedulepb.StructuredCalendarSpec{
+		s.ProtoElementsMatch([]*schedulepb.StructuredCalendarSpec{
 			{
 				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
 				Minute:     []*schedulepb.Range{{Start: 11, End: 11, Step: 1}},
@@ -246,8 +249,8 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	}
 	checkSpec(describeResp.Schedule.Spec)
 
-	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
-	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.Seconds())          // set to default value
+	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy)     // set to default value
+	s.EqualValues(365*24*3600, describeResp.Schedule.Policies.CatchupWindow.AsDuration().Seconds()) // set to default value
 
 	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
 	s.Nil(describeResp.SearchAttributes.IndexedFields[searchattribute.BinaryChecksums])
@@ -256,16 +259,16 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 3*time.Second)
+	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
 	s.EqualValues(2, describeResp.Info.ActionCount)
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
 	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
 	s.EqualValues(2, len(describeResp.Info.RecentActions))
 	action0 := describeResp.Info.RecentActions[0]
-	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
-	s.True(action0.ScheduleTime.UnixNano()%int64(5*time.Second) == 0)
-	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 3*time.Second)
+	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
+	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
 	// list
 
@@ -329,7 +332,7 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 
 	// update
 
-	schedule.Spec.Interval[0].Phase = timestamp.DurationPtr(1 * time.Second)
+	schedule.Spec.Interval[0].Phase = durationpb.New(1 * time.Second)
 	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
 
 	updateTime := time.Now()
@@ -357,9 +360,9 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 3*time.Second)
+	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
-	s.True(lastAction.ScheduleTime.UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.UnixNano())
+	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
 
 	// pause
 
@@ -444,7 +447,7 @@ func (s *scheduleFunctionalSuite) TestInput() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(3 * time.Second)},
+				{Interval: durationpb.New(3 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -499,7 +502,7 @@ func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(3 * time.Second)},
+				{Interval: durationpb.New(3 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -579,9 +582,9 @@ func (s *scheduleFunctionalSuite) TestRefresh() {
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
 				{
-					Interval: timestamp.DurationPtr(30 * time.Second),
+					Interval: durationpb.New(30 * time.Second),
 					// start within three seconds
-					Phase: timestamp.DurationPtr(time.Duration((time.Now().Unix()+3)%30) * time.Second),
+					Phase: durationpb.New(time.Duration((time.Now().Unix()+3)%30) * time.Second),
 				},
 			},
 		},
@@ -591,7 +594,7 @@ func (s *scheduleFunctionalSuite) TestRefresh() {
 					WorkflowId:               wid,
 					WorkflowType:             &commonpb.WorkflowType{Name: wt},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					WorkflowExecutionTimeout: timestamp.DurationPtr(3 * time.Second),
+					WorkflowExecutionTimeout: durationpb.New(3 * time.Second),
 				},
 			},
 		},
@@ -674,7 +677,7 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(3 * time.Second)},
+				{Interval: durationpb.New(3 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -712,11 +715,11 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 		entry := listResp.Schedules[0]
 		s.Equal(sid, entry.ScheduleId)
 		s.NotNil(entry.Info)
-		s.Equal(schedule.Spec, entry.Info.Spec)
+		s.ProtoEqual(schedule.Spec, entry.Info.Spec)
 		s.Equal(wt, entry.Info.WorkflowType.Name)
 		s.False(entry.Info.Paused)
 		s.Greater(len(entry.Info.FutureActionTimes), 1)
-		s.True(entry.Info.FutureActionTimes[0].After(startTime))
+		s.True(entry.Info.FutureActionTimes[0].AsTime().After(startTime))
 		return true
 	}, 10*time.Second, 1*time.Second)
 
@@ -765,7 +768,7 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 		schedule := &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{
-					{Interval: timestamp.DurationPtr(1 * time.Second)},
+					{Interval: durationpb.New(1 * time.Second)},
 				},
 			},
 			Action: &schedulepb.ScheduleAction{
@@ -820,7 +823,7 @@ func (s *scheduleFunctionalSuite) TestNextTimeCache() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(1 * time.Second)},
+				{Interval: durationpb.New(1 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{

@@ -50,7 +50,7 @@ func GetRawHistory(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
 	pageSize int32,
@@ -113,7 +113,7 @@ func GetHistory(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
 	pageSize int32,
@@ -185,7 +185,7 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
-	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
+	if err := ProcessOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
 
@@ -199,7 +199,7 @@ func GetHistoryReverse(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	nextEventID int64,
 	lastFirstTxnID int64,
 	pageSize int32,
@@ -236,7 +236,7 @@ func GetHistoryReverse(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 
-	if err := processOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
+	if err := ProcessOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err
 	}
 
@@ -254,7 +254,7 @@ func GetHistoryReverse(
 	return executionHistory, nextPageToken, newNextEventID, nil
 }
 
-func processOutgoingSearchAttributes(
+func ProcessOutgoingSearchAttributes(
 	shard shard.Context,
 	events []*historypb.HistoryEvent,
 	namespaceId namespace.ID,

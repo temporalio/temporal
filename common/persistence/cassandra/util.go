@@ -1113,7 +1113,7 @@ func createHistoryEventBatchBlob(
 		switch k {
 		case "encoding_type":
 			encodingStr := v.(string)
-			if encoding, ok := enumspb.EncodingType_value[encodingStr]; ok {
+			if encoding, err := enumspb.EncodingTypeFromString(encodingStr); err == nil {
 				eventBatch.EncodingType = enumspb.EncodingType(encoding)
 			}
 		case "data":

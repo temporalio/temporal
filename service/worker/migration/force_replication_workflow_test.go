@@ -69,7 +69,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -77,7 +77,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 			LastStartTime: startTime,
 			LastCloseTime: closeTime,
@@ -139,7 +139,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -147,7 +147,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	}).Times(maxPageCountPerExecution)
@@ -257,13 +257,13 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testi
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	}).Times(totalPageCount)
@@ -305,13 +305,13 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -360,13 +360,13 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -410,7 +410,7 @@ func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
-		Executions:    []commonpb.WorkflowExecution{},
+		Executions:    []*commonpb.WorkflowExecution{},
 		NextPageToken: nil, // last page
 	}, nil)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil)

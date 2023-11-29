@@ -953,6 +953,18 @@ func (mr *MockHandlerMockRecorder) UpdateWorkflowExecution(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockHandler)(nil).UpdateWorkflowExecution), arg0, arg1)
 }
 
+// mustEmbedUnimplementedWorkflowServiceServer mocks base method.
+func (m *MockHandler) mustEmbedUnimplementedWorkflowServiceServer() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "mustEmbedUnimplementedWorkflowServiceServer")
+}
+
+// mustEmbedUnimplementedWorkflowServiceServer indicates an expected call of mustEmbedUnimplementedWorkflowServiceServer.
+func (mr *MockHandlerMockRecorder) mustEmbedUnimplementedWorkflowServiceServer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedWorkflowServiceServer", reflect.TypeOf((*MockHandler)(nil).mustEmbedUnimplementedWorkflowServiceServer))
+}
+
 // MockOperatorHandler is a mock of OperatorHandler interface.
 type MockOperatorHandler struct {
 	ctrl     *gomock.Controller
@@ -1079,4 +1091,16 @@ func (m *MockOperatorHandler) RemoveSearchAttributes(arg0 context.Context, arg1 
 func (mr *MockOperatorHandlerMockRecorder) RemoveSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).RemoveSearchAttributes), arg0, arg1)
+}
+
+// mustEmbedUnimplementedOperatorServiceServer mocks base method.
+func (m *MockOperatorHandler) mustEmbedUnimplementedOperatorServiceServer() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "mustEmbedUnimplementedOperatorServiceServer")
+}
+
+// mustEmbedUnimplementedOperatorServiceServer indicates an expected call of mustEmbedUnimplementedOperatorServiceServer.
+func (mr *MockOperatorHandlerMockRecorder) mustEmbedUnimplementedOperatorServiceServer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedOperatorServiceServer", reflect.TypeOf((*MockOperatorHandler)(nil).mustEmbedUnimplementedOperatorServiceServer))
 }

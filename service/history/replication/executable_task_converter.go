@@ -81,7 +81,7 @@ func (e *executableTaskConverterImpl) convertOne(
 ) TrackableExecutableTask {
 	var taskCreationTime time.Time
 	if replicationTask.VisibilityTime != nil {
-		taskCreationTime = *replicationTask.VisibilityTime
+		taskCreationTime = replicationTask.VisibilityTime.AsTime()
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}

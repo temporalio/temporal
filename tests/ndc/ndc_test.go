@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/ndc"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -53,7 +54,6 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -64,6 +64,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -82,6 +84,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		suite.Suite
 
 		controller *gomock.Controller
@@ -132,7 +135,7 @@ func (s *nDCFunctionalTestSuite) SetupSuite() {
 			Messages: &repicationpb.WorkflowReplicationMessages{
 				ReplicationTasks:           []*repicationpb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
-				ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, 100)),
+				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},
 		},
 	}, nil).AnyTimes()
@@ -202,6 +205,7 @@ func (s *nDCFunctionalTestSuite) GetReplicationMessagesMock(
 func (s *nDCFunctionalTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }
 
@@ -541,27 +545,27 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
 					Input:                    nil,
-					WorkflowRunTimeout:       timestamp.DurationPtr(1000 * time.Second),
-					WorkflowTaskTimeout:      timestamp.DurationPtr(1000 * time.Second),
-					FirstWorkflowTaskBackoff: timestamp.DurationPtr(100 * time.Second),
+					WorkflowRunTimeout:       durationpb.New(1000 * time.Second),
+					WorkflowTaskTimeout:      durationpb.New(1000 * time.Second),
+					FirstWorkflowTaskBackoff: durationpb.New(100 * time.Second),
 					Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{
 				EventId:   2,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -569,7 +573,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -582,7 +586,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -593,7 +597,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   5,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -606,7 +610,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   6,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -615,17 +619,17 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 					ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
-					ScheduleToCloseTimeout:       timestamp.DurationPtr(20 * time.Second),
-					ScheduleToStartTimeout:       timestamp.DurationPtr(20 * time.Second),
-					StartToCloseTimeout:          timestamp.DurationPtr(20 * time.Second),
-					HeartbeatTimeout:             timestamp.DurationPtr(20 * time.Second),
+					ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+					StartToCloseTimeout:          durationpb.New(20 * time.Second),
+					HeartbeatTimeout:             durationpb.New(20 * time.Second),
 				}},
 			},
 		}},
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -639,7 +643,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -650,12 +654,12 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   9,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -663,7 +667,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -676,7 +680,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -687,7 +691,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   12,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -698,18 +702,18 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   13,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
 			{
 				EventId:   14,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -725,7 +729,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
@@ -739,7 +743,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
@@ -750,7 +754,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   16,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
@@ -765,12 +769,12 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   17,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -778,7 +782,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -791,7 +795,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -802,7 +806,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   20,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -884,27 +888,27 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                    nil,
-					WorkflowRunTimeout:       timestamp.DurationPtr(1000 * time.Second),
-					WorkflowTaskTimeout:      timestamp.DurationPtr(1000 * time.Second),
-					FirstWorkflowTaskBackoff: timestamp.DurationPtr(100 * time.Second),
+					WorkflowRunTimeout:       durationpb.New(1000 * time.Second),
+					WorkflowTaskTimeout:      durationpb.New(1000 * time.Second),
+					FirstWorkflowTaskBackoff: durationpb.New(100 * time.Second),
 					Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{
 				EventId:   2,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -912,7 +916,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -925,7 +929,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -936,7 +940,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   5,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -949,7 +953,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   6,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -958,17 +962,17 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 					ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
-					ScheduleToCloseTimeout:       timestamp.DurationPtr(20 * time.Second),
-					ScheduleToStartTimeout:       timestamp.DurationPtr(20 * time.Second),
-					StartToCloseTimeout:          timestamp.DurationPtr(20 * time.Second),
-					HeartbeatTimeout:             timestamp.DurationPtr(20 * time.Second),
+					ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+					StartToCloseTimeout:          durationpb.New(20 * time.Second),
+					HeartbeatTimeout:             durationpb.New(20 * time.Second),
 				}},
 			},
 		}},
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -982,7 +986,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -993,12 +997,12 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   9,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -1006,7 +1010,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1019,7 +1023,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1030,7 +1034,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   12,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1041,18 +1045,18 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   13,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
 			{
 				EventId:   14,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1068,7 +1072,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   33,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1085,7 +1089,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1096,7 +1100,7 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 			},
 			{
 				EventId:   16,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
@@ -1104,8 +1108,8 @@ func (s *nDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 					WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
-					WorkflowRunTimeout:           timestamp.DurationPtr(1000 * time.Second),
-					WorkflowTaskTimeout:          timestamp.DurationPtr(1000 * time.Second),
+					WorkflowRunTimeout:           durationpb.New(1000 * time.Second),
+					WorkflowTaskTimeout:          durationpb.New(1000 * time.Second),
 					WorkflowTaskCompletedEventId: 19,
 					Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
@@ -1527,7 +1531,7 @@ func (s *nDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch() {
 				{
 					EventId:   baseBranchLastEvent.GetEventId() + 1,
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   baseBranchLastEvent.GetVersion(), // dummy event from other cluster
 					TaskId:    taskID,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1594,27 +1598,27 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                    nil,
-					WorkflowRunTimeout:       timestamp.DurationPtr(1000 * time.Second),
-					WorkflowTaskTimeout:      timestamp.DurationPtr(1000 * time.Second),
-					FirstWorkflowTaskBackoff: timestamp.DurationPtr(100 * time.Second),
+					WorkflowRunTimeout:       durationpb.New(1000 * time.Second),
+					WorkflowTaskTimeout:      durationpb.New(1000 * time.Second),
+					FirstWorkflowTaskBackoff: durationpb.New(100 * time.Second),
 					Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
 				}},
 			},
 			{
 				EventId:   2,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -1622,7 +1626,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1635,7 +1639,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1646,7 +1650,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   5,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -1659,7 +1663,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   6,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1668,17 +1672,17 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 					ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
-					ScheduleToCloseTimeout:       timestamp.DurationPtr(20 * time.Second),
-					ScheduleToStartTimeout:       timestamp.DurationPtr(20 * time.Second),
-					StartToCloseTimeout:          timestamp.DurationPtr(20 * time.Second),
-					HeartbeatTimeout:             timestamp.DurationPtr(20 * time.Second),
+					ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+					StartToCloseTimeout:          durationpb.New(20 * time.Second),
+					HeartbeatTimeout:             durationpb.New(20 * time.Second),
 				}},
 			},
 		}},
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -1692,7 +1696,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1703,12 +1707,12 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   9,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -1716,7 +1720,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1729,7 +1733,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1740,7 +1744,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   12,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1751,18 +1755,18 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   13,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
 			{
 				EventId:   14,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1778,7 +1782,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1789,7 +1793,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   16,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1798,10 +1802,10 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 					ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
-					ScheduleToCloseTimeout:       timestamp.DurationPtr(20 * time.Second),
-					ScheduleToStartTimeout:       timestamp.DurationPtr(20 * time.Second),
-					StartToCloseTimeout:          timestamp.DurationPtr(20 * time.Second),
-					HeartbeatTimeout:             timestamp.DurationPtr(20 * time.Second),
+					ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+					ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+					StartToCloseTimeout:          durationpb.New(20 * time.Second),
+					HeartbeatTimeout:             durationpb.New(20 * time.Second),
 				}},
 			},
 		}},
@@ -1811,7 +1815,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
@@ -1822,7 +1826,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   16,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
@@ -1837,12 +1841,12 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   17,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					StartToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
+					StartToCloseTimeout: durationpb.New(1000 * time.Second),
 					Attempt:             1,
 				}},
 			},
@@ -1850,7 +1854,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1863,7 +1867,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1874,7 +1878,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 			},
 			{
 				EventId:   20,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -1889,7 +1893,7 @@ func (s *nDCFunctionalTestSuite) TestResend() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   17,
-				EventTime: timestamp.TimePtr(time.Now().UTC()),
+				EventTime: timestamppb.New(time.Now().UTC()),
 				Version:   33,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
@@ -2058,7 +2062,7 @@ func (s *nDCFunctionalTestSuite) registerNamespace() {
 		Clusters:          clusterReplicationConfig,
 		// make the cluster `cluster-a` `passive` and replicate from `active` cluster `cluster-b`
 		ActiveClusterName:                clusterName[1],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
@@ -2097,7 +2101,7 @@ func (s *nDCFunctionalTestSuite) generateNewRunHistory(
 
 	newRunFirstEvent := &historypb.HistoryEvent{
 		EventId:   common.FirstEventID,
-		EventTime: timestamp.TimePtr(time.Now().UTC()),
+		EventTime: timestamppb.New(time.Now().UTC()),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Version:   version,
 		TaskId:    1,
@@ -2111,15 +2115,15 @@ func (s *nDCFunctionalTestSuite) generateNewRunHistory(
 			},
 			ParentInitiatedEventId:          event.GetEventId(),
 			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			WorkflowRunTimeout:              timestamp.DurationPtr(10 * time.Second),
-			WorkflowTaskTimeout:             timestamp.DurationPtr(10 * time.Second),
+			WorkflowRunTimeout:              durationpb.New(10 * time.Second),
+			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
 			ContinuedExecutionRunId:         runID,
 			Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 			OriginalExecutionRunId:          runID,
 			Identity:                        "NDC-test",
 			FirstExecutionRunId:             runID,
 			Attempt:                         1,
-			WorkflowExecutionExpirationTime: timestamp.TimePtr(time.Now().UTC().Add(time.Minute)),
+			WorkflowExecutionExpirationTime: timestamppb.New(time.Now().UTC().Add(time.Minute)),
 		}},
 	}
 
@@ -2178,10 +2182,10 @@ func (s *nDCFunctionalTestSuite) applyEvents(
 
 		resp, err := historyClient.ReplicateEventsV2(s.newContext(), req)
 		s.NoError(err, "Failed to replicate history event")
-		s.Equal(&historyservice.ReplicateEventsV2Response{}, resp)
+		s.ProtoEqual(&historyservice.ReplicateEventsV2Response{}, resp)
 		resp, err = historyClient.ReplicateEventsV2(s.newContext(), req)
 		s.NoError(err, "Failed to dedup replicate history event")
-		s.Equal(&historyservice.ReplicateEventsV2Response{}, resp)
+		s.ProtoEqual(&historyservice.ReplicateEventsV2Response{}, resp)
 	}
 }
 
