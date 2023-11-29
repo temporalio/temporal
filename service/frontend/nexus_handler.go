@@ -61,7 +61,7 @@ type operationContext struct {
 	namespace      *namespace.Namespace
 	metricsHandler metrics.Handler
 	logger         log.Logger
-	auth           *authorization.Policy
+	auth           *authorization.Interceptor
 }
 
 // Panic handler and metrics recording function.
