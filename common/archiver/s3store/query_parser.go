@@ -32,7 +32,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"

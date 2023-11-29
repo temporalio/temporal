@@ -1116,7 +1116,7 @@ func (p *queueRetryablePersistenceClient) Init(
 
 func (p *queueRetryablePersistenceClient) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	op := func(ctx context.Context) error {
 		return p.persistence.EnqueueMessage(ctx, blob)
@@ -1179,7 +1179,7 @@ func (p *queueRetryablePersistenceClient) DeleteMessagesBefore(
 
 func (p *queueRetryablePersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	var response int64
 	op := func(ctx context.Context) error {

@@ -113,7 +113,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
 		},
@@ -190,18 +190,20 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	}
 	newHistoryBranchToken, err := r.shardContext.GetExecutionManager().GetHistoryBranchUtil().NewHistoryBranch(
 		request.NamespaceId,
+		wid,
+		rid,
 		branchInfo.GetTreeId(),
 		&branchInfo.BranchId,
 		branchInfo.Ancestors,
-		nil,
-		nil,
-		nil,
+		time.Duration(0),
+		time.Duration(0),
+		time.Duration(0),
 	)
 	if err != nil {
 		return err
 	}
 
-	_, lastFirstTxnID, err := r.backfillHistory(
+	lastFirstTxnID, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
 		namespaceID,
@@ -263,7 +265,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
-) (*time.Time, int64, error) {
+) (int64, error) {
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
@@ -281,7 +283,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 			}
 		case *serviceerror.NotFound:
 		default:
-			return nil, common.EmptyEventTaskID, err
+			return common.EmptyEventTaskID, err
 		}
 	}
 
@@ -297,11 +299,10 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
 	historyBranch, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken)
 	if err != nil {
-		return nil, common.EmptyEventTaskID, err
+		return common.EmptyEventTaskID, err
 	}
 
 	prevTxnID := common.EmptyEventTaskID
-	var lastHistoryBatch *commonpb.DataBlob
 	var prevBranchID string
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
 	sortedAncestorsIdx := 0
@@ -311,7 +312,7 @@ BackfillLoop:
 	for remoteHistoryIterator.HasNext() {
 		historyBlob, err := remoteHistoryIterator.Next()
 		if err != nil {
-			return nil, common.EmptyEventTaskID, err
+			return common.EmptyEventTaskID, err
 		}
 
 		if historyBlob.nodeID <= lastBatchNodeID {
@@ -332,7 +333,7 @@ BackfillLoop:
 				currentAncestor = sortedAncestors[sortedAncestorsIdx]
 				branchID = currentAncestor.GetBranchId()
 				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-					return nil, common.EmptyEventTaskID, serviceerror.NewInternal(
+					return common.EmptyEventTaskID, serviceerror.NewInternal(
 						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
 							historyBlob.nodeID,
 							currentAncestor.GetBeginNodeId(),
@@ -351,11 +352,11 @@ BackfillLoop:
 			},
 		)
 		if err != nil {
-			return nil, common.EmptyEventTaskID, err
+			return common.EmptyEventTaskID, err
 		}
 		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
-			return nil, common.EmptyEventTaskID, err
+			return common.EmptyEventTaskID, err
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -372,19 +373,13 @@ BackfillLoop:
 			),
 		})
 		if err != nil {
-			return nil, common.EmptyEventTaskID, err
+			return common.EmptyEventTaskID, err
 		}
 		prevTxnID = txnID
 		prevBranchID = branchID
-		lastHistoryBatch = historyBlob.rawHistory
 	}
 
-	var lastEventTime *time.Time
-	events, _ := r.historySerializer.DeserializeEvents(lastHistoryBatch)
-	if len(events) > 0 {
-		lastEventTime = events[len(events)-1].EventTime
-	}
-	return lastEventTime, prevTxnID, nil
+	return prevTxnID, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(

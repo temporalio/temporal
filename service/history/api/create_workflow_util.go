@@ -26,12 +26,12 @@ package api
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -76,7 +76,7 @@ func NewWorkflowWithSignal(
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -144,8 +144,8 @@ func CreateMutableState(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
-	executionTimeout *time.Duration,
-	runTimeout *time.Duration,
+	executionTimeout *durationpb.Duration,
+	runTimeout *durationpb.Duration,
 	runID string,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
@@ -314,7 +314,7 @@ func OverrideStartWorkflowExecutionRequest(
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
-		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
+		request.WorkflowRunTimeout = durationpb.New(workflowRunTimeout)
 		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(operation),
@@ -329,7 +329,7 @@ func OverrideStartWorkflowExecutionRequest(
 		shard.GetConfig().DefaultWorkflowTaskTimeout,
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
-		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
+		request.WorkflowTaskTimeout = durationpb.New(workflowTaskStartToCloseTimeout)
 		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.GetMetricName()).Record(
 			1,
 			metrics.OperationTag(operation),

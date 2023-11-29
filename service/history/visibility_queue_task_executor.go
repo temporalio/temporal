@@ -266,11 +266,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	wfCloseTimePtr, err := mutableState.GetWorkflowCloseTime(ctx)
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
-	wfCloseTime := timestamp.TimeValue(wfCloseTimePtr)
 	historyLength := mutableState.GetNextEventID() - 1
 	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
@@ -349,13 +348,21 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
 	)
 
+	var parentExecution *commonpb.WorkflowExecution
+	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
+		parentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.ParentWorkflowId,
+			RunId:      executionInfo.ParentRunId,
+		}
+	}
+
 	// Data from mutable state used to build VisibilityRequestBase must be deep
 	// copied to ensure that the mutable state is not accessed after the workflow
 	// lock is released and that there is no data race.
 	return &manager.VisibilityRequestBase{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Execution: commonpb.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowID(),
 			RunId:      task.GetRunID(),
 		},
@@ -368,6 +375,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		Memo:             visibilityMemo,
 		TaskQueue:        executionInfo.TaskQueue,
 		SearchAttributes: searchAttributes,
+		ParentExecution:  parentExecution,
 	}
 }
 

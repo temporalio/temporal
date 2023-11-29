@@ -998,7 +998,7 @@ func (p *queuePersistenceClient) Init(
 
 func (p *queuePersistenceClient) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
@@ -1063,7 +1063,7 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 
 func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (_ int64, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()

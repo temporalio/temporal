@@ -29,16 +29,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/server/service/history/tests"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -171,7 +172,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			msg     = &protocolpb.Message{
 				Id:                 msgID,
 				ProtocolInstanceId: "does_not_matter",
-				Body:               mustMarshalAny(t, &types.Empty{}),
+				Body:               mustMarshalAny(t, &anypb.Any{}),
 			}
 		)
 
@@ -196,7 +197,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			msg     = &protocolpb.Message{
 				Id:                 msgID,
 				ProtocolInstanceId: "does_not_matter",
-				Body:               mustMarshalAny(t, &types.Empty{}),
+				Body:               mustMarshalAny(t, &anypb.Any{}),
 			}
 		)
 
@@ -309,9 +310,9 @@ func newMsgList(msgs ...*protocolpb.Message) *collection.IndexedTakeList[string,
 	return collection.NewIndexedTakeList(msgs, func(msg *protocolpb.Message) string { return msg.Id })
 }
 
-func mustMarshalAny(t *testing.T, pb proto.Message) *types.Any {
+func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	t.Helper()
-	a, err := types.MarshalAny(pb)
-	require.NoError(t, err)
-	return a
+	var a anypb.Any
+	require.NoError(t, a.MarshalFrom(pb))
+	return &a
 }

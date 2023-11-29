@@ -286,7 +286,7 @@ func persistFirstWorkflowEvents(
 	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -336,7 +336,7 @@ func persistNonFirstWorkflowEvents(
 		ctx,
 		shard,
 		namespaceID,
-		execution,
+		&execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch:       false,
 			BranchToken:       branchToken,
@@ -352,7 +352,7 @@ func appendHistoryEvents(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 

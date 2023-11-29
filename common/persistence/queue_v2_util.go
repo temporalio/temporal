@@ -41,7 +41,7 @@ const (
 	pageTokenPrefixByte = 0
 )
 
-func GetNextPageTokenForQueueV2(result []QueueV2Message) []byte {
+func GetNextPageTokenForReadMessages(result []QueueV2Message) []byte {
 	if len(result) == 0 {
 		return nil
 	}
@@ -82,6 +82,38 @@ func GetMinMessageIDToReadForQueueV2(
 		)
 	}
 	return token.LastReadMessageId + 1, nil
+}
+
+func GetNextPageTokenForListQueues(queueNumber int64) []byte {
+	token := &persistencespb.ListQueuesNextPageToken{
+		LastReadQueueNumber: queueNumber,
+	}
+	// This can never fail if you inspect the implementation.
+	b, _ := token.Marshal()
+
+	// See the comment above pageTokenPrefixByte for why we want to do this.
+	return append([]byte{pageTokenPrefixByte}, b...)
+}
+
+func GetOffsetForListQueues(
+	nextPageToken []byte,
+) (int64, error) {
+	if len(nextPageToken) == 0 {
+		return 0, nil
+	}
+	var token persistencespb.ListQueuesNextPageToken
+
+	// Skip the first byte. See the comment on pageTokenPrefixByte for more details.
+	err := token.Unmarshal(nextPageToken[1:])
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%w: %q: %v",
+			ErrInvalidListQueuesNextPageToken,
+			nextPageToken,
+			err,
+		)
+	}
+	return token.LastReadQueueNumber, nil
 }
 
 func GetPartitionForQueueV2(

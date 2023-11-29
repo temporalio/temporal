@@ -90,10 +90,10 @@ func (m *HistoryTaskQueueManagerImpl) EnqueueTask(
 	taskCategory := request.Task.GetCategory()
 	task := persistencespb.HistoryTask{
 		ShardId: int32(request.SourceShardID),
-		Blob:    &blob,
+		Blob:    blob,
 	}
 	taskBytes, _ := task.Marshal()
-	blob = commonpb.DataBlob{
+	blob = &commonpb.DataBlob{
 		EncodingType: enums.ENCODING_TYPE_PROTO3,
 		Data:         taskBytes,
 	}
@@ -175,7 +175,7 @@ func (m *HistoryTaskQueueManagerImpl) ReadTasks(ctx context.Context, request *Re
 			return nil, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, ErrHistoryTaskBlobIsNil)
 		}
 
-		task, err := m.serializer.DeserializeTask(request.QueueKey.Category, *blob)
+		task, err := m.serializer.DeserializeTask(request.QueueKey.Category, blob)
 		if err != nil {
 			return nil, fmt.Errorf("%v: %w", ErrMsgDeserializeHistoryTask, err)
 		}
@@ -219,6 +219,24 @@ func (m *HistoryTaskQueueManagerImpl) DeleteTasks(
 		return nil, err
 	}
 	return &DeleteTasksResponse{MessagesDeleted: resp.MessagesDeleted}, nil
+}
+
+func (m HistoryTaskQueueManagerImpl) ListQueues(
+	ctx context.Context,
+	request *ListQueuesRequest,
+) (*ListQueuesResponse, error) {
+	resp, err := m.queue.ListQueues(ctx, &InternalListQueuesRequest{
+		QueueType:     request.QueueType,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ListQueuesResponse{
+		Queues:        resp.Queues,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 // combineUnique combines the given strings into a single string by hashing the length of each string and the string

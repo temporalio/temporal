@@ -847,7 +847,7 @@ func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(
 
 func (p *queueRateLimitedPersistenceClient) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	if ok := allow(ctx, "EnqueueMessage", CallerSegmentMissing, p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
@@ -902,7 +902,7 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(
 
 func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	if ok := allow(ctx, "EnqueueMessageToDLQ", CallerSegmentMissing, p.rateLimiter); !ok {
 		return EmptyQueueMessageID, ErrPersistenceLimitExceeded

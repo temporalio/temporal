@@ -302,10 +302,10 @@ func (a *Activities) findBuildIdsToRemove(
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+			if hlc.Since(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if !input.IgnoreRetentionTime && hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
+			if !input.IgnoreRetentionTime && hlc.Since(buildId.StateUpdateTimestamp) < retention {
 				continue
 			}
 

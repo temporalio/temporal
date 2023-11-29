@@ -35,7 +35,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -52,6 +51,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -63,8 +65,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 )
@@ -79,6 +81,7 @@ type advancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
+	protorequire.ProtoAssertions
 	FunctionalTestBase
 	isElasticsearchEnabled bool
 
@@ -147,6 +150,7 @@ func (s *advancedVisibilitySuite) TearDownSuite() {
 func (s *advancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -175,10 +179,10 @@ func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startTime
+	startFilter.EarliestTime = timestamppb.New(startTime)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: defaultPageSize,
@@ -424,7 +428,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -484,11 +488,14 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": payload.EncodeString("justice for all"),
+	searchAttr, err := searchattribute.Encode(
+		map[string]any{
+			"CustomKeywordField": "justice for all",
 		},
-	}
+		&searchattribute.TestNameTypeMap,
+	)
+	s.NoError(err)
+
 	request.SearchAttributes = searchAttr
 	we1, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
@@ -513,7 +520,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -540,59 +547,99 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
-	if s.isElasticsearchEnabled {
-		// LIKE is supported on Elasticsearch only.
-
-		// LIKE exact match on Keyword (supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%justice for all%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 1)
-
-		// LIKE %word% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%justice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE %chars% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField LIKE "%ice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		s.Len(resp.GetExecutions(), 0)
-
-		// LIKE NOT %chars% on Keyword (not supported)
-		listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
-			PageSize:  defaultPageSize,
-			Query:     `CustomKeywordField NOT LIKE "%ice%"`,
-		}
-		resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-		s.NoError(err)
-		executionCount := 0
-		for _, execution := range resp.GetExecutions() {
-			saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
-			var saValue string
-			err = payload.Decode(saPayload, &saValue)
-			s.NoError(err)
-			if strings.Contains(saValue, "ice") {
-				executionCount++ // execution will be found because NOT LIKE is not supported.
-			}
-		}
-		s.Equal(executionCount, 1)
+	// Prefix search
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField STARTS_WITH "justice"`,
 	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
+	s.Equal(wt, resp.Executions[0].GetType().GetName())
+	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
+
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     fmt.Sprintf(`WorkflowId = %q AND CustomKeywordField NOT STARTS_WITH "justice"`, id),
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+}
+
+func (s *advancedVisibilitySuite) TestListWorkflow_LikeQuery() {
+	if !s.isElasticsearchEnabled {
+		s.T().Skip("This test is only for Elasticsearch")
+	}
+
+	id := "es-functional-list-workflow-keyword-query-like-test"
+	wt := "es-functional-list-workflow-keyword-query-like-test-type"
+	tl := "es-functional-list-workflow-keyword-query-like-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("foo bar"),
+		},
+	}
+	request.SearchAttributes = searchAttr
+	_, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	time.Sleep(waitForESToSettle)
+
+	// LIKE exact match on Keyword (supported)
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%foo bar%"`,
+	}
+	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %word% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%foo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField LIKE "%oo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE NOT %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultPageSize,
+		Query:     `CustomKeywordField NOT LIKE "%oo%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	executionCount := 0
+	for _, execution := range resp.GetExecutions() {
+		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
+		var saValue string
+		err = payload.Decode(saPayload, &saValue)
+		s.NoError(err)
+		if strings.Contains(saValue, "oo") {
+			executionCount++ // execution will be found because NOT LIKE is not supported.
+		}
+	}
+	s.Equal(executionCount, 1)
 }
 
 func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
@@ -630,7 +677,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
@@ -1028,7 +1075,7 @@ func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
-	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -1058,8 +1105,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1112,8 +1159,8 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1190,7 +1237,7 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 		}
 	}
 
-	query := `GROUP BY ExecutionStatus`
+	query := fmt.Sprintf(`WorkflowType = %q GROUP BY ExecutionStatus`, wt)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		Query:     query,
@@ -1216,14 +1263,14 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{runningStatusPayload},
 			Count:       int64(numWorkflows - numClosedWorkflows),
 		},
 		resp.Groups[0],
 	)
-	s.Equal(
+	s.ProtoEqual(
 		&workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
 			GroupValues: []*commonpb.Payload{terminatedStatusPayload},
 			Count:       int64(numClosedWorkflows),
@@ -1255,8 +1302,8 @@ func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	return request
@@ -1279,8 +1326,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1577,8 +1624,8 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1773,7 +1820,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
-	s.True(proto.Equal(expectedMemo, descResp.WorkflowExecutionInfo.Memo))
+	s.ProtoEqual(expectedMemo, descResp.WorkflowExecutionInfo.Memo)
 }
 
 func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
@@ -1854,8 +1901,8 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1913,6 +1960,94 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
 	s.NotNil(failedEventAttr.GetFailure())
+}
+
+func (s *advancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
+	var (
+		ctx         = NewContext()
+		id          = s.randomizeStr(s.T().Name())
+		childWfType = "child-wf-type-" + id
+		wfType      = "wf-type-" + id
+		taskQueue   = "task-queue-" + id
+	)
+
+	childWf := func(ctx workflow.Context) error {
+		return nil
+	}
+	wf := func(ctx workflow.Context) error {
+		err := workflow.ExecuteChildWorkflow(ctx, childWfType).Get(ctx, nil)
+		return err
+	}
+
+	w := worker.New(s.sdkClient, taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
+	w.RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
+	s.Require().NoError(w.Start())
+
+	startOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: taskQueue,
+	}
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, startOptions, wfType)
+	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
+	w.Stop()
+
+	// check child workflow has parent workflow
+	var childWfInfo *workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			resp, err := s.engine.ListWorkflowExecutions(
+				ctx,
+				&workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.namespace,
+					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
+					PageSize:  defaultPageSize,
+				},
+			)
+			if err != nil {
+				return false
+			}
+			if len(resp.Executions) != 1 {
+				return false
+			}
+			childWfInfo = resp.Executions[0]
+			return true
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.NotNil(childWfInfo)
+	parentExecution := childWfInfo.GetParentExecution()
+	s.NotNil(parentExecution)
+	s.Equal(id, parentExecution.GetWorkflowId())
+
+	// check main workflow doesn't have parent workflow
+	var wfInfo *workflowpb.WorkflowExecutionInfo
+	s.Eventually(
+		func() bool {
+			resp, err := s.engine.ListWorkflowExecutions(
+				ctx,
+				&workflowservice.ListWorkflowExecutionsRequest{
+					Namespace: s.namespace,
+					Query:     fmt.Sprintf("WorkflowType = %q", wfType),
+					PageSize:  defaultPageSize,
+				},
+			)
+			if err != nil {
+				return false
+			}
+			if len(resp.Executions) != 1 {
+				return false
+			}
+			wfInfo = resp.Executions[0]
+			return true
+		},
+		waitForESToSettle,
+		100*time.Millisecond,
+	)
+	s.NotNil(wfInfo)
+	s.Nil(wfInfo.GetParentExecution())
 }
 
 func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
@@ -2486,7 +2621,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
 	s.Require().NoError(err)
-	s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+	protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 		BuildId:               buildId,
 		TaskQueueReachability: []*taskqueuepb.TaskQueueReachability(nil),
 	}}, reachabilityResponse.BuildIdReachability)
@@ -2505,7 +2640,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 			TaskQueues: []string{tq},
 		})
 		s.Require().NoError(err)
-		s.Require().Equal([]*taskqueuepb.BuildIdReachability{{
+		protorequire.ProtoSliceEqual(s.T(), []*taskqueuepb.BuildIdReachability{{
 			BuildId:               v01,
 			TaskQueueReachability: []*taskqueuepb.TaskQueueReachability{{TaskQueue: tq, Reachability: []enumspb.TaskReachability(nil)}},
 		}}, reachabilityResponse.BuildIdReachability)

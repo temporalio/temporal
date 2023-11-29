@@ -33,6 +33,9 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -41,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -221,7 +225,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
 	}
@@ -247,7 +251,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &we,
+		WorkflowExecution: we,
 		ScheduledEventId:  2,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -265,7 +269,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
 	expectedResponse.ScheduledEventId = wt.ScheduledEventID
-	expectedResponse.ScheduledTime = wt.ScheduledTime
+	expectedResponse.ScheduledTime = timestamppb.New(wt.ScheduledTime)
 	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = ms.GetNextEventID() + 1
@@ -281,7 +285,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
 	s.NotNil(response)
-	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
+	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
 	s.Equal(&expectedResponse, response)
 }
@@ -310,8 +314,8 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			RequestId:                requestID,
 		},
@@ -356,7 +360,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
@@ -400,8 +404,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			Identity:                 identity,
 			SignalName:               signalName,
 			Input:                    input,

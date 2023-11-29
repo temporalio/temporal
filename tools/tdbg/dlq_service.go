@@ -45,6 +45,7 @@ type (
 		ReadMessages(c *cli.Context) error
 		PurgeMessages(c *cli.Context) error
 		MergeMessages(c *cli.Context) error
+		ListQueues(c *cli.Context) error
 	}
 	DLQServiceProvider struct {
 		clientFactory        ClientFactory
@@ -106,7 +107,7 @@ func getDLQV2Service(
 	taskBlobEncoder TaskBlobEncoder,
 ) (DLQService, error) {
 	dlqType := c.String(FlagDLQType)
-	category, ok, err := getCategoryByID(taskCategoryRegistry, dlqType)
+	category, ok, err := getCategoryByID(c, taskCategoryRegistry, dlqType)
 	if err != nil {
 		return nil, err
 	}
@@ -178,4 +179,12 @@ func getOutputFile(outputFile string, writer io.Writer) (io.WriteCloser, error) 
 
 func (n noCloseWriter) Close() error {
 	return nil
+}
+
+// GetDLQJobService returns a DLQJobService.
+func (p *DLQServiceProvider) GetDLQJobService() DLQJobService {
+	return DLQJobService{
+		clientFactory: p.clientFactory,
+		writer:        p.writer,
+	}
 }

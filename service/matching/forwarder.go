@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -129,13 +129,15 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errForwarderSlowDown
 	}
 
-	var expirationDuration time.Duration
-	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
-	if !expirationTime.IsZero() {
-		expirationDuration = time.Until(expirationTime)
-		if expirationDuration <= 0 {
+	var expirationDuration *durationpb.Duration
+	var expirationTime time.Time
+	if task.event.Data.ExpiryTime != nil {
+		expirationTime = task.event.Data.ExpiryTime.AsTime()
+		remaining := time.Until(expirationTime)
+		if remaining <= 0 {
 			return nil
 		}
+		expirationDuration = durationpb.New(remaining)
 	}
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
@@ -149,7 +151,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &expirationDuration,
+			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
 			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
@@ -164,7 +166,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &expirationDuration,
+			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
 			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})

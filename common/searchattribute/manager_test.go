@@ -92,7 +92,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
 	// Initial call
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -104,7 +104,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	// Second call, no changes in DB (version is the same)
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 10, 0, time.UTC))
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -116,7 +116,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	// Third call, DB changed
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 20, 0, time.UTC))
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -176,7 +176,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableE
 
 	// First call populates cache.
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -205,7 +205,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableE
 
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -225,14 +225,14 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_RefreshIfAbs
 
 	// First call populates cache.
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{},
 		},
 		Version: 1,
 	}, nil)
 
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -260,7 +260,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_RefreshIfAbs
 
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -271,7 +271,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 	}, nil)
 
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -288,7 +288,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 }
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -299,7 +299,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 	}, nil)
 
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -321,7 +321,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributesCache_EmptyIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata(gomock.Any()).Return(&persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
@@ -332,7 +332,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributesCache_EmptyIndex(
 	}, nil)
 
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
 					CustomSearchAttributes: map[string]enumspb.IndexedValueType{

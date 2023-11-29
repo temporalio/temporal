@@ -50,6 +50,8 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
+	ParentWorkflowID      = "ParentWorkflowId"
+	ParentRunID           = "ParentRunId"
 
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
@@ -83,6 +85,8 @@ var (
 		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
 		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
 		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
+		ParentWorkflowID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		ParentRunID:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -100,9 +104,9 @@ var (
 
 	// reserved are internal field names that can't be used as search attribute names.
 	reserved = map[string]struct{}{
-		NamespaceID:       {},
-		MemoEncoding:      {},
-		Memo:              {},
+		NamespaceID:  {},
+		MemoEncoding: {},
+		Memo:         {},
 		// Used in the Elasticsearch bulk processor, not needed in SQL databases.
 		VisibilityTaskKey: {},
 	}
@@ -123,6 +127,8 @@ var (
 		StateTransitionCount: "state_transition_count",
 		Memo:                 "memo",
 		MemoEncoding:         "encoding",
+		ParentWorkflowID:     "parent_workflow_id",
+		ParentRunID:          "parent_run_id",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{

@@ -103,6 +103,7 @@ var (
 		"client.history.GetReplicationStatus":   true,
 		"client.history.GetDLQTasks":            true,
 		"client.history.DeleteDLQTasks":         true,
+		"client.history.ListQueues":             true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,

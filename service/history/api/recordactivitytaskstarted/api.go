@@ -118,7 +118,7 @@ func Invoke(
 				return nil, err
 			}
 
-			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
+			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 

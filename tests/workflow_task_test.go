@@ -35,10 +35,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
@@ -59,8 +59,8 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(20 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(3 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
 	}
 
@@ -94,7 +94,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			Commands:  []*commandpb.Command{},
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:        stickyTaskQueue,
-				ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+				ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,
@@ -132,7 +132,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyTaskQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
@@ -161,8 +161,8 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(20 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(5 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(20 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(5 * time.Second),
 		Identity:            identity,
 	}
 
@@ -193,7 +193,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 		Commands:  []*commandpb.Command{},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyTaskQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -215,7 +215,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyTaskQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -237,7 +237,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyTaskQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: true,
@@ -257,7 +257,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 			}},
 		StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 			WorkerTaskQueue:        stickyTaskQueue,
-			ScheduleToStartTimeout: timestamp.DurationPtr(5 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		},
 		ReturnNewWorkflowTask:      true,
 		ForceCreateNewWorkflowTask: false,
@@ -303,8 +303,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -376,8 +376,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -449,8 +449,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -535,8 +535,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -639,8 +639,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -740,8 +740,8 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(3 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(3 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 

@@ -29,8 +29,8 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: v1.21.0
-      version-is-repo-ref: false
+      version: f9d73bfdf7c8d3ec0311306140fbfafa7fb6f9cf
+      version-is-repo-ref: true
       docker-image-artifact-name: temporal-server-docker
 
   feature-tests-python:

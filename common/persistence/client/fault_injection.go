@@ -360,7 +360,7 @@ func (q *FaultInjectionQueue) Init(
 
 func (q *FaultInjectionQueue) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
@@ -410,7 +410,7 @@ func (q *FaultInjectionQueue) GetAckLevels(
 
 func (q *FaultInjectionQueue) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return 0, err
@@ -522,6 +522,16 @@ func (f *FaultInjectionQueueV2) RangeDeleteMessages(
 		return nil, err
 	}
 	return f.baseQueue.RangeDeleteMessages(ctx, request)
+}
+
+func (f *FaultInjectionQueueV2) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if err := f.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return f.baseQueue.ListQueues(ctx, request)
 }
 
 func NewFaultInjectionExecutionStore(

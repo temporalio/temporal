@@ -70,7 +70,7 @@ type (
 			ctx context.Context,
 			shardContext shard.Context,
 			namespaceID namespace.ID,
-			execution commonpb.WorkflowExecution,
+			execution *commonpb.WorkflowExecution,
 			lockPriority workflow.LockPriority,
 		) (workflow.Context, ReleaseCacheFunc, error)
 	}
@@ -167,7 +167,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		shardContext,
 		namespaceID,
-		execution,
+		&execution,
 		handler,
 		true,
 		lockPriority,
@@ -182,11 +182,11 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	lockPriority workflow.LockPriority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, &execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution); err != nil {
 		return nil, nil, err
 	}
 
@@ -217,7 +217,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
