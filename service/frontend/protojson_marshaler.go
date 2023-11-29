@@ -36,13 +36,6 @@ import (
 	"go.temporal.io/api/temporalproto"
 )
 
-const (
-	mimeAll                   = "*"
-	mimePrettyJSONNoShorthand = "application/json+pretty+no-payload-shorthand"
-	mimeJSONNoShorthand       = "application/json+no-payload-shorthand"
-	mimePrettyJSONShorthand   = "application/json+pretty"
-)
-
 var _ runtime.Marshaler = temporalProtoMarshaler{}
 
 type temporalProtoMarshaler struct {
@@ -69,16 +62,16 @@ func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (stri
 		metadata[commonpb.EnablePayloadShorthandMetadataKey] = true
 	}
 	// Shorthand is enabled by default
-	contentType := mimeAll
+	contentType := runtime.MIMEWildcard
 	if enablePayloadShorthand {
 		if indent != "" {
-			contentType = mimePrettyJSONShorthand
+			contentType = "application/json+pretty"
 		}
 	} else {
 		if indent != "" {
-			contentType = mimePrettyJSONNoShorthand
+			contentType = "application/json+pretty+no-payload-shorthand"
 		} else {
-			contentType = mimeJSONNoShorthand
+			contentType = "application/json+no-payload-shorthand"
 		}
 	}
 	return contentType, temporalProtoMarshaler{
