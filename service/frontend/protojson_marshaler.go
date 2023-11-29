@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	mimeJSON                  = "application/json"
+	mimeAll                   = "*"
 	mimePrettyJSONNoShorthand = "application/json+pretty+no-payload-shorthand"
 	mimeJSONNoShorthand       = "application/json+no-payload-shorthand"
 	mimePrettyJSONShorthand   = "application/json+pretty"
@@ -69,7 +69,7 @@ func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (stri
 		metadata[commonpb.EnablePayloadShorthandMetadataKey] = true
 	}
 	// Shorthand is enabled by default
-	contentType := mimeJSON
+	contentType := mimeAll
 	if enablePayloadShorthand {
 		if indent != "" {
 			contentType = mimePrettyJSONShorthand
