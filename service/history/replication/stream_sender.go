@@ -141,6 +141,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 	defer func() {
 		if panicErr != nil {
 			retErr = panicErr
+			s.metrics.Counter(metrics.ReplicationStreamPanic.GetMetricName()).Record(1)
 		}
 	}()
 
