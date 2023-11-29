@@ -96,8 +96,6 @@ type (
 	// to fail.
 
 	replicationTaskExecutorParams struct {
-		// We use an interface{} for these tasks because we don't care about the data, and the concrete type changes
-		// depending on whether we have streaming enabled for replication or not.
 		executedTasks       chan *replicationspb.ReplicationTask
 		workflowIDToFail    atomic.String
 		workflowIDToObserve atomic.String
