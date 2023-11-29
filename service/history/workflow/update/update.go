@@ -38,6 +38,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
@@ -82,12 +83,13 @@ type (
 	// (OnMessage calls) must be done while holding the workflow lock.
 	Update struct {
 		// accessed only while holding workflow lock
-		id              string
-		state           state
-		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
-		acceptedEventID int64
-		onComplete      func()
-		instrumentation *instrumentation
+		id                         string
+		state                      state
+		request                    *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
+		acceptedEventID            int64
+		workflowTaskStartedEventID int64
+		onComplete                 func()
+		instrumentation            *instrumentation
 
 		// these fields might be accessed while not holding the workflow lock
 		accepted future.Future[*failurepb.Failure]
@@ -303,14 +305,16 @@ func (u *Update) OnMessage(
 	}
 }
 
-// ReadOutgoingMessages loads any outbound messages from this Update state
-// machine into the output slice provided.
-func (u *Update) ReadOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId) {
+// AppendOutgoingMessages loads any outbound messages from this Update state
+// machine into the output slice provided. It also links the Update with workflow task,
+// for which it is sending messages, by setting provided workflowTaskStartedEventID.
+func (u *Update) AppendOutgoingMessages(out *[]*protocolpb.Message, sequencingID *protocolpb.Message_EventId, workflowTaskStartedEventID int64) {
 	if u.state != stateRequested {
-		// Update only sends messages to the workflow when it is in
-		// stateRequested
+		// Update only sends messages to the workflow when it is in stateRequested.
 		return
 	}
+
+	u.workflowTaskStartedEventID = workflowTaskStartedEventID
 
 	reqMessage := &protocolpb.Message{
 		ProtocolInstanceId: u.id,

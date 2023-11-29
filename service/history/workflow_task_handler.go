@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -209,6 +210,28 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	}
 
 	return mutations, nil
+}
+
+func (handler *workflowTaskHandlerImpl) ensureUpdatesProcessed(
+	_ context.Context,
+	workflowTaskStartedEventID int64,
+) error {
+	unprocessedUpdateIDs := handler.updateRegistry.Unprocessed(workflowTaskStartedEventID)
+	if len(unprocessedUpdateIDs) > 0 {
+		var updateIDs strings.Builder
+
+		for _, unprocessedUpdateID := range unprocessedUpdateIDs {
+			updateIDs.WriteString(unprocessedUpdateID)
+			updateIDs.WriteRune(',')
+		}
+
+		return handler.failWorkflowTask(
+			// TODO: change cause before merge to WORKFLOW_TASK_FAILED_CAUSE_WORKER_UNPROCESSED_UPDATE
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE,
+			serviceerror.NewInvalidArgument(fmt.Sprintf("updates [%s] were delivered to worker but were not processed with workflow task %d", updateIDs, workflowTaskStartedEventID)))
+	}
+
+	return nil
 }
 
 //revive:disable:cyclomatic grandfathered

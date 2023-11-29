@@ -47,8 +47,9 @@ import (
 )
 
 const (
-	testAcceptedEventID   int64 = 1234
-	testSequencingEventID int64 = 2203
+	testAcceptedEventID            int64 = 1234
+	testWorkflowTaskStartedEventID int64 = 2203
+	testSequencingEventID          int64 = 2203
 )
 
 func successOutcome(t *testing.T, s string) *updatepb.Outcome {
@@ -348,21 +349,21 @@ func TestMessageOutput(t *testing.T) {
 
 	t.Run("before request received", func(t *testing.T) {
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
+		upd.AppendOutgoingMessages(&msgs, sequencingID, testWorkflowTaskStartedEventID)
 		require.Empty(t, msgs)
 	})
 	t.Run("requested", func(t *testing.T) {
 		require.NoError(t, upd.OnMessage(ctx, &req, store))
 		effects.Apply(ctx)
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
+		upd.AppendOutgoingMessages(&msgs, sequencingID, testWorkflowTaskStartedEventID)
 		require.Len(t, msgs, 1)
-		require.Equal(t, msgs[0].GetEventId(), testSequencingEventID)
+		require.Equal(t, msgs[0].GetEventId(), testSequencingEventID, testWorkflowTaskStartedEventID)
 	})
 	t.Run("after requested", func(t *testing.T) {
 		upd := update.NewAccepted(updateID, testAcceptedEventID)
 		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
+		upd.AppendOutgoingMessages(&msgs, sequencingID, testWorkflowTaskStartedEventID)
 		require.Empty(t, msgs)
 	})
 }
@@ -417,7 +418,7 @@ func TestDuplicateRequestNoError(t *testing.T) {
 		"a second request message should be ignored, not cause an error")
 
 	msgs := make([]*protocolpb.Message, 0)
-	upd.ReadOutgoingMessages(&msgs, sequencingID)
+	upd.AppendOutgoingMessages(&msgs, sequencingID, testWorkflowTaskStartedEventID)
 	require.Empty(t, msgs)
 }
 

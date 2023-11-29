@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/dynamicconfig"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -584,6 +585,16 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return nil, err
 		}
 
+		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
+		// message that were delivered on specific WT, when completing this WT.
+		// If worker ignored the update request (old SDK or SDK bug), then server fails the WT.
+		// Otherwise, this update will be delivered (and new WT created) again and again.
+		if !workflowTaskHeartbeating {
+			if err = workflowTaskHandler.ensureUpdatesProcessed(ctx, currentWorkflowTask.StartedEventID); err != nil {
+				return nil, err
+			}
+		}
+
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
@@ -917,7 +928,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
+	response.Messages = updateRegistry.OutgoingMessages(workflowTask.StartedEventID)
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
