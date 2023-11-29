@@ -3394,6 +3394,14 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_TerminateUpdate() 
 			s.NoError(err)
 			<-updateResultCh
 
+			// Check that update didn't block workflow completion.
+			descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				Execution: tv.WorkflowExecution(),
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 		})

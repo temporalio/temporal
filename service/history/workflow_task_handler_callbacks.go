@@ -589,7 +589,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server fails the WT.
 		// Otherwise, this update will be delivered (and new WT created) again and again.
-		if !workflowTaskHeartbeating {
+		// With 2 exceptions:
+		//  1. This is heartbeat WT,
+		//  2. This WT has COMPLETE_WORKFLOW_EXECUTION command which was already handled.
+		if !workflowTaskHeartbeating && ms.IsWorkflowExecutionRunning() {
 			if err = workflowTaskHandler.ensureUpdatesProcessed(ctx, currentWorkflowTask.StartedEventID); err != nil {
 				return nil, err
 			}
