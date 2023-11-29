@@ -84,13 +84,15 @@ func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
 	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.GetMetricName(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
 }
 
-func (c *operationContext) interceptRequest(ctx context.Context, req *nexuspb.Request) (*matchingservice.DispatchNexusTaskRequest, error) {
-	request := &matchingservice.DispatchNexusTaskRequest{
+func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
+	return &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: c.namespace.ID().String(),
 		TaskQueue:   &taskqueue.TaskQueue{Name: c.taskQueue, Kind: enums.TASK_QUEUE_KIND_NORMAL},
 		Request:     req,
 	}
+}
 
+func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:   c.apiName,
 		Namespace: c.namespace.Name().String(),
@@ -98,10 +100,11 @@ func (c *operationContext) interceptRequest(ctx context.Context, req *nexuspb.Re
 	})
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
-		return nil, adaptAuthorizeError(err)
+		return adaptAuthorizeError(err)
 	}
 	// TODO: Redirect if current cluster is passive for this namespace.
-	return request, nil
+	// TODO: Apply other relevant interceptors.
+	return nil
 }
 
 // Key to extract a nexusContext object from a context.Context.
@@ -158,13 +161,13 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		Callback:  options.CallbackURL,
 		RequestId: options.RequestID,
 	}
-	request, err := oc.interceptRequest(ctx, &nexuspb.Request{
+	request := oc.matchingRequest(&nexuspb.Request{
 		Header: options.Header,
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &startOperationRequest,
 		},
 	})
-	if err != nil {
+	if err := oc.interceptRequest(ctx, request); err != nil {
 		return nil, err
 	}
 
@@ -216,7 +219,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 	}
 	defer oc.capturePanicAndRecordMetrics(&retErr)
 
-	request, err := oc.interceptRequest(ctx, &nexuspb.Request{
+	request := oc.matchingRequest(&nexuspb.Request{
 		Header: options.Header,
 		Variant: &nexuspb.Request_CancelOperation{
 			CancelOperation: &nexuspb.CancelOperationRequest{
@@ -225,7 +228,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 			},
 		},
 	})
-	if err != nil {
+	if err := oc.interceptRequest(ctx, request); err != nil {
 		return err
 	}
 
