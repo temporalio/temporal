@@ -81,7 +81,6 @@ func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (stri
 			contentType = mimeJSONNoShorthand
 		}
 	}
-	logfunc("Created marshaller for %s", contentType)
 	return contentType, temporalProtoMarshaler{
 		contentType: contentType,
 		mOpts: temporalproto.CustomJSONMarshalOptions{
@@ -94,13 +93,8 @@ func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (stri
 	}
 }
 
-var logfunc = func(string, ...any) {}
-
-func Setlogfunc(f func(string, ...any)) { logfunc = f }
-
 func (p temporalProtoMarshaler) Marshal(v any) ([]byte, error) {
 	if m, ok := v.(proto.Message); ok {
-		logfunc("Marshalling using Content-Type %s", p.contentType)
 		return p.mOpts.Marshal(m)
 	}
 
@@ -112,7 +106,6 @@ func (p temporalProtoMarshaler) Marshal(v any) ([]byte, error) {
 }
 
 func (p temporalProtoMarshaler) Unmarshal(data []byte, v interface{}) error {
-	logfunc("Unmarshalling using Content-Type %s", p.contentType)
 	if m, ok := v.(proto.Message); ok {
 		return p.uOpts.Unmarshal(data, m)
 	}
