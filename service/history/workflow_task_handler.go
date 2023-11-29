@@ -228,7 +228,7 @@ func (handler *workflowTaskHandlerImpl) ensureUpdatesProcessed(
 		return handler.failWorkflowTask(
 			// TODO: change cause before merge to WORKFLOW_TASK_FAILED_CAUSE_WORKER_UNPROCESSED_UPDATE
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("updates [%s] were delivered to worker but were not processed with workflow task %d", updateIDs, workflowTaskStartedEventID)))
+			serviceerror.NewInvalidArgument(fmt.Sprintf("updates [%s] were delivered to worker but were not processed with workflow task %d", updateIDs.String(), workflowTaskStartedEventID)))
 	}
 
 	return nil
