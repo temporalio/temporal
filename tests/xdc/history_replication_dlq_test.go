@@ -485,6 +485,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		s.Equal(run.GetID(), task.WorkflowId)
 		s.Equal(run.GetRunID(), task.RunId)
 	} else {
+		var opts temporalproto.CustomJSONUnmarshalOptions
 		replicationTasks, err := tdbgtest.ParseJSONL(
 			buffer,
 			func(decoder *json.Decoder) (*replicationspb.ReplicationTask, error) {
@@ -493,7 +494,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 				if err := decoder.Decode(&obj); err != nil {
 					return nil, err
 				}
-				return task, temporalproto.UnmarshalJSON(obj, task)
+				return task, opts.Unmarshal(obj, task)
 			},
 		)
 		s.NoError(err)
