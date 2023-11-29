@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/frontend"
 )
 
 type (
@@ -104,6 +105,7 @@ func (s *clientFunctionalSuite) SetupSuite() {
 		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
+	frontend.Setlogfunc(s.T().Logf)
 }
 
 func (s *clientFunctionalSuite) TearDownSuite() {
@@ -113,6 +115,7 @@ func (s *clientFunctionalSuite) TearDownSuite() {
 func (s *clientFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	frontend.Setlogfunc(s.T().Logf)
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,

@@ -44,6 +44,7 @@ type (
 
 // ParseDLQMessages parses a JSONL file containing serialized [tdbg.DLQMessage] objects.
 func ParseDLQMessages[T proto.Message](file io.Reader, newMessage func() T) ([]DLQMessage[T], error) {
+	var opts temporalproto.CustomJSONUnmarshalOptions
 	decodeNext := func(decoder *json.Decoder) (DLQMessage[T], error) {
 		var dlqMessage tdbg.DLQMessage
 		err := decoder.Decode(&dlqMessage)
@@ -52,8 +53,7 @@ func ParseDLQMessages[T proto.Message](file io.Reader, newMessage func() T) ([]D
 		}
 		protoMessage := newMessage()
 		b := dlqMessage.Payload.Bytes()
-		err = temporalproto.UnmarshalJSON(b, protoMessage)
-		if err != nil {
+		if err = opts.Unmarshal(b, protoMessage); err != nil {
 			return DLQMessage[T]{}, err
 		}
 		return DLQMessage[T]{
