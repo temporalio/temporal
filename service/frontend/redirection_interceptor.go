@@ -46,8 +46,8 @@ import (
 
 const (
 	dcRedirectionContextHeaderName = "xdc-redirection"
-
-	dcRedirectionMetricsPrefix = "DCRedirection"
+	dcRedirectionApiHeaderName     = "xdc-redirection-api"
+	dcRedirectionMetricsPrefix     = "DCRedirection"
 )
 
 var (
@@ -242,6 +242,7 @@ func (i *RedirectionInterceptor) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
+			ctx = metadata.AppendToOutgoingContext(ctx, dcRedirectionApiHeaderName, "true")
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err
