@@ -142,13 +142,13 @@ func NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory PersistenceTestBas
 }
 
 type PersistenceTestBaseFactory interface {
-	NewTestBase(options *TestClusterConfig) *persistencetests.TestBase
+	NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase
 }
 
 type defaultPersistenceTestBaseFactory struct{}
 
-func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *TestClusterConfig) *persistencetests.TestBase {
-	options.Persistence.StoreType = TestFlags.PersistenceType
+func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
+	options.StoreType = TestFlags.PersistenceType
 	switch TestFlags.PersistenceType {
 	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
@@ -170,26 +170,25 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *TestClusterConf
 		default:
 			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
 		}
-		options.Persistence.SQLDBPluginName = TestFlags.PersistenceDriver
-		options.Persistence.DBUsername = ops.DBUsername
-		options.Persistence.DBPassword = ops.DBPassword
-		options.Persistence.DBHost = ops.DBHost
-		options.Persistence.DBPort = ops.DBPort
-		options.Persistence.SchemaDir = ops.SchemaDir
-		options.Persistence.ConnectAttributes = ops.ConnectAttributes
+		options.SQLDBPluginName = TestFlags.PersistenceDriver
+		options.DBUsername = ops.DBUsername
+		options.DBPassword = ops.DBPassword
+		options.DBHost = ops.DBHost
+		options.DBPort = ops.DBPort
+		options.SchemaDir = ops.SchemaDir
+		options.ConnectAttributes = ops.ConnectAttributes
 	case config.StoreTypeNoSQL:
 		// noop for now
 	default:
-		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
+		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
 	}
 
-	options.Persistence.FaultInjection = &options.FaultInjection
 	// If the fault injection rate command line flag is set, override the fault injection rate in the config.
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
-		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
+		options.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
 	}
 
-	return persistencetests.NewTestBase(&options.Persistence)
+	return persistencetests.NewTestBase(options)
 }
 
 func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
@@ -207,8 +206,9 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		}
 	}
 	options.Persistence.Logger = logger
+	options.Persistence.FaultInjection = &options.FaultInjection
 
-	testBase := tbFactory.NewTestBase(options)
+	testBase := tbFactory.NewTestBase(&options.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
