@@ -70,8 +70,8 @@ func GenerateTask(
 	state, _ := mutableState.GetWorkflowStateStatus()
 	if !request.AllowZombie && state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return &historyservice.GenerateLastHistoryReplicationTasksResponse{
-			StateTransitionCount: mutableState.GetExecutionInfo().StateTransitionCount,
-			HistoryLength:        max(mutableState.GetNextEventID()-1, 0),
+			StateTransitionCount: 0,
+			HistoryLength:        0,
 		}, nil
 	}
 
