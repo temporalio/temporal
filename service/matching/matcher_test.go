@@ -71,8 +71,8 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection(), false, false)
-	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5*time.Second)
-	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5*time.Millisecond)
+	cfg.BacklogNegligibleAge = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Second)
+	cfg.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(5 * time.Millisecond)
 
 	n := mustFromBaseName("tl0").WithPartition(1)
 	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), n.FullName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -202,9 +202,9 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// sync match happens when there is no backlog
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.Poll(ctx, &pollMetadata{})
+	go t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
 	time.Sleep(time.Millisecond)
-	go func() {historyTask.responseC <- nil}()
+	go func() { historyTask.responseC <- nil }()
 	happened, err := t.matcher.Offer(ctx, historyTask)
 	t.True(happened)
 	t.Nil(err)
@@ -212,7 +212,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	intruptC := make(chan struct{})
 	youngBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Second), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.MustOffer(ctx, youngBacklogTask, intruptC)
+	go t.matcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match when there is only young tasks in the backlog
@@ -223,7 +223,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// should not allow sync match when there is an old task in backlog
 	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
-	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC)
+	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	happened, err = t.matcher.Offer(ctx, historyTask)
 	t.False(happened)
@@ -238,9 +238,9 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// should allow sync match now
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.Poll(ctx, &pollMetadata{})
+	go t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
 	time.Sleep(time.Millisecond)
-	go func() {historyTask.responseC <- nil}()
+	go func() { historyTask.responseC <- nil }()
 	happened, err = t.matcher.Offer(ctx, historyTask)
 	t.True(happened)
 	t.Nil(err)
@@ -256,7 +256,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 
 	// poll forwarding attempt happens when there is no backlog
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.Poll(ctx, &pollMetadata{})
+	go t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 
 	// task is not forwarded because there is a poller waiting
@@ -268,7 +268,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	// young task is forwarded
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	go t.matcher.MustOffer(ctx, youngBacklogTask, intruptC)
+	go t.matcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	cancel()
 }
@@ -279,14 +279,14 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	// poll forwarding attempt happens when there is no backlog
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.Poll(ctx, &pollMetadata{})
+	go t.matcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	cancel()
 
 	// old task is not forwarded (forwarded client is not called)
 	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC)
+	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 
 	// poll both tasks
@@ -295,10 +295,10 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	cancel()
 
 	// even old task is forwarded if last poll is not recent enough
-	time.Sleep(t.cfg.MaxWaitForPollerBeforeFwd()+time.Millisecond)
+	time.Sleep(t.cfg.MaxWaitForPollerBeforeFwd() + time.Millisecond)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC)
+	go t.matcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	cancel()
 }
@@ -311,17 +311,17 @@ func (t *MatcherTestSuite) TestBacklogAge() {
 	intruptC := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
-	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC)
+	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
 
 	// offering the same task twice to make sure of correct counting
-	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC)
+	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
 
 	oldBacklogTask := newInternalTask(randomTaskInfoWithAge(time.Minute), nil, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
-	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC)
+	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	t.InEpsilon(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
 

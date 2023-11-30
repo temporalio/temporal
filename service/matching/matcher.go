@@ -68,7 +68,7 @@ type TaskMatcher struct {
 	numPartitions          func() int      // number of task queue partitions
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
-	lastPoller             atomic.Int64    // unix nanos of most recent poll start time
+	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
 }
 
 const (
