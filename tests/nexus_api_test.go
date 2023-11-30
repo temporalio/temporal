@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -147,7 +148,9 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 				s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
-		// TODO:
+		// TODO: This can't be tested without the test taking over a minute since this is the default matching
+		// client timeout and there's currently no way for the client to specify the request timeout.
+		// Tested manually for now.
 		// {
 		// 	outcome: "handler_timeout",
 		// 	handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
@@ -157,9 +160,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		// 	assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 		// 		var unexpectedError *nexus.UnexpectedResponseError
 		// 		s.Require().ErrorAs(err, &unexpectedError)
-		// 		// TODO: nexus should export this
-		// 		s.Require().Equal(520, unexpectedError.Response.StatusCode)
-		// 		s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+		//              ...
 		// 	},
 		// },
 	}
@@ -201,8 +202,10 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
 	taskQueue := s.randomizeStr("task-queue")
-	url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, "namespace-not-found", taskQueue)
-	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+
+	// Also use this test to verify that namespaces are unescaped in the path.
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, url.PathEscape("namespace not/found"), taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.Require().NoError(err)
 	ctx := NewContext()
 	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
@@ -211,12 +214,12 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.Require().ErrorAs(err, &unexpectedResponse)
 	s.Require().Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Require().Equal(`namespace not found: "namespace-not-found"`, unexpectedResponse.Failure.Message)
+	s.Require().Equal(`namespace not found: "namespace not/found"`, unexpectedResponse.Failure.Message)
 
 	snap := capture.Snapshot()
 
 	s.Equal(1, len(snap["nexus_requests"]))
-	s.Equal(map[string]string{"namespace": "namespace-not-found", "method": "StartOperation", "outcome": "namespace_not_found"}, snap["nexus_requests"][0].Tags)
+	s.Equal(map[string]string{"namespace": "namespace not/found", "method": "StartOperation", "outcome": "namespace_not_found"}, snap["nexus_requests"][0].Tags)
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
@@ -405,19 +408,21 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 				s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
-		// TODO:
+		// TODO: This can't be tested without the test taking over a minute since this is the default matching
+		// client timeout and there's currently no way for the client to specify the request timeout.
+		// Tested manually for now.
 		// {
 		// 	outcome: "handler_timeout",
 		// 	handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
 		// 		time.Sleep(time.Minute)
 		// 		return nil, nil
 		// 	},
-		// 	assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+		// 	assertion: func(err error) {
 		// 		var unexpectedError *nexus.UnexpectedResponseError
 		// 		s.Require().ErrorAs(err, &unexpectedError)
 		// 		// TODO: nexus should export this
-		// 		s.Require().Equal(520, unexpectedError.Response.StatusCode)
-		// 		s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+		// 		s.Require().Equal(521, unexpectedError.Response.StatusCode)
+		// 		s.Require().Equal("downstream timeout", unexpectedError.Failure.Message)
 		// 	},
 		// },
 	}

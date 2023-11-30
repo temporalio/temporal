@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -177,9 +178,14 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
+	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
+	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		// TODO: check for deadline error and convert to downstream timeout handler error.
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
 		return nil, err
 	}
 	// Convert to standard Nexus SDK response.
@@ -233,9 +239,14 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
+	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
+	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		// TODO: check for deadline error and convert to downstream timeout handler error.
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
 		return err
 	}
 	// Convert to standard Nexus SDK response.
