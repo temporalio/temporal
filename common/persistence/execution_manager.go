@@ -920,7 +920,8 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 
 	category := tasks.CategoryReplication
 	dlqTasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, internalTask := range resp.Tasks {
+	for i := range resp.Tasks {
+		internalTask := resp.Tasks[i]
 		task, err := m.serializer.DeserializeTask(category, internalTask.Blob)
 		if err != nil {
 			return nil, err

@@ -1358,6 +1358,21 @@ func (mr *MockHistoryTaskQueueManagerMockRecorder) EnqueueTask(ctx, request inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueTask", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).EnqueueTask), ctx, request)
 }
 
+// ListQueues mocks base method.
+func (m *MockHistoryTaskQueueManager) ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListQueues", ctx, request)
+	ret0, _ := ret[0].(*ListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockHistoryTaskQueueManagerMockRecorder) ListQueues(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockHistoryTaskQueueManager)(nil).ListQueues), ctx, request)
+}
+
 // ReadRawTasks mocks base method.
 func (m *MockHistoryTaskQueueManager) ReadRawTasks(ctx context.Context, request *ReadRawTasksRequest) (*ReadRawTasksResponse, error) {
 	m.ctrl.T.Helper()

@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history/historytest"
 	"go.temporal.io/server/common"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
+	"go.temporal.io/server/service/history/api/listqueues/listqueuestest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -95,10 +95,23 @@ func (q faultyQueue) RangeDeleteMessages(
 	return q.base.RangeDeleteMessages(ctx, req)
 }
 
+func (q faultyQueue) ListQueues(
+	ctx context.Context,
+	req *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if q.rangeDeleteMessagesErr != nil {
+		return nil, q.rangeDeleteMessagesErr
+	}
+	return q.base.ListQueues(ctx, req)
+}
+
 // RunHistoryTaskQueueManagerTestSuite runs all tests for the history task queue manager against a given queue provided by a
 // particular database. This test suite should be re-used to test all queue implementations.
 func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2) {
 	historyTaskQueueManager := persistence.NewHistoryTaskQueueManager(queue)
+	t.Run("ListQueues", func(t *testing.T) {
+		listqueuestest.TestInvoke(t, historyTaskQueueManager)
+	})
 	t.Run("TestHistoryTaskQueueManagerEnqueueTasks", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerEnqueueTasks(t, historyTaskQueueManager)
@@ -292,7 +305,7 @@ func enqueueAndDeserializeBlob(
 	_, err = queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: commonpb.DataBlob{
+		Blob: &commonpb.DataBlob{
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
 			Data:         historyTaskBytes,
 		},

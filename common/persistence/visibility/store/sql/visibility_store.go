@@ -535,6 +535,8 @@ func (s *VisibilityStore) generateVisibilityRow(
 		Encoding:         request.Memo.EncodingType.String(),
 		TaskQueue:        request.TaskQueue,
 		SearchAttributes: searchAttributes,
+		ParentWorkflowID: request.ParentWorkflowID,
+		ParentRunID:      request.ParentRunID,
 	}, nil
 }
 
@@ -621,6 +623,12 @@ func (s *VisibilityStore) rowToInfo(
 	}
 	if row.StateTransitionCount != nil {
 		info.StateTransitionCount = *row.StateTransitionCount
+	}
+	if row.ParentWorkflowID != nil {
+		info.ParentWorkflowID = *row.ParentWorkflowID
+	}
+	if row.ParentRunID != nil {
+		info.ParentRunID = *row.ParentRunID
 	}
 	return info, nil
 }

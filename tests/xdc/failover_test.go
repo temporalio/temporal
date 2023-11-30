@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -63,7 +64,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests"
 )
@@ -104,7 +104,7 @@ func (s *functionalClustersTestSuite) TestNamespaceFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -155,8 +155,8 @@ func (s *functionalClustersTestSuite) TestNamespaceFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -179,7 +179,7 @@ func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -213,8 +213,8 @@ func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -242,10 +242,10 @@ func (s *functionalClustersTestSuite) TestSimpleWorkflowFailover() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(30 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(20 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(30 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(20 * time.Second),
 				}},
 			}}, nil
 		}
@@ -460,7 +460,7 @@ func (s *functionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -497,8 +497,8 @@ func (s *functionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(2592000 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(2592000 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            identity1,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -610,7 +610,7 @@ func (s *functionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -644,8 +644,8 @@ func (s *functionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		WorkflowType:          workflowType,
 		TaskQueue:             taskQueue,
 		Input:                 nil,
-		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 		Identity:              identity,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
@@ -733,7 +733,7 @@ func (s *functionalClustersTestSuite) TestTerminateFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -763,8 +763,8 @@ func (s *functionalClustersTestSuite) TestTerminateFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -788,10 +788,10 @@ func (s *functionalClustersTestSuite) TestTerminateFailover() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -865,7 +865,7 @@ GetHistoryLoop:
 
 		terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 		s.Equal(terminateReason, terminateEventAttributes.Reason)
-		s.Equal(terminateDetails, terminateEventAttributes.Details)
+		s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
 		s.Equal(identity, terminateEventAttributes.Identity)
 		executionTerminated = true
 		break GetHistoryLoop
@@ -884,7 +884,7 @@ GetHistoryLoop2:
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				terminateEventAttributes := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
 				s.Equal(terminateReason, terminateEventAttributes.Reason)
-				s.Equal(terminateDetails, terminateEventAttributes.Details)
+				s.ProtoEqual(terminateDetails, terminateEventAttributes.Details)
 				s.Equal(identity, terminateEventAttributes.Identity)
 				eventsReplicated = true
 				break GetHistoryLoop2
@@ -904,7 +904,7 @@ func (s *functionalClustersTestSuite) TestResetWorkflowFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -934,8 +934,8 @@ func (s *functionalClustersTestSuite) TestResetWorkflowFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -1061,7 +1061,7 @@ func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1091,8 +1091,8 @@ func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -1118,8 +1118,8 @@ func (s *functionalClustersTestSuite) TestContinueAsNewFailover() {
 					WorkflowType:        workflowType,
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
-					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+					WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1185,7 +1185,7 @@ func (s *functionalClustersTestSuite) TestSignalFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1215,8 +1215,8 @@ func (s *functionalClustersTestSuite) TestSignalFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
@@ -1388,7 +1388,7 @@ func (s *functionalClustersTestSuite) TestUserTimerFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1418,8 +1418,8 @@ func (s *functionalClustersTestSuite) TestUserTimerFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1462,7 +1462,7 @@ func (s *functionalClustersTestSuite) TestUserTimerFailover() {
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            "timer-id",
-					StartToFireTimeout: timestamp.DurationPtr(2 * time.Second),
+					StartToFireTimeout: durationpb.New(2 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1546,7 +1546,7 @@ func (s *functionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1576,8 +1576,8 @@ func (s *functionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1698,7 +1698,7 @@ func (s *functionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1728,8 +1728,8 @@ func (s *functionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(8 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(300 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(8 * time.Second),
 		Identity:            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -1805,7 +1805,7 @@ func (s *functionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1835,8 +1835,8 @@ func (s *functionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        "@every 5s",
 	}
@@ -1895,7 +1895,7 @@ func (s *functionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -1925,8 +1925,8 @@ func (s *functionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        "@every 5s",
 	}
@@ -2002,7 +2002,7 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -2032,13 +2032,13 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
-			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
 		},
@@ -2099,7 +2099,7 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -2129,13 +2129,13 @@ func (s *functionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:        durationpb.New(1 * time.Second),
 			MaximumAttempts:        3,
-			MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
+			MaximumInterval:        durationpb.New(1 * time.Second),
 			NonRetryableErrorTypes: []string{"bad-bug"},
 			BackoffCoefficient:     1,
 		},
@@ -2256,15 +2256,15 @@ func (s *functionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	shard := resp.Shards[0]
 	s.True(shard.MaxReplicationTaskId > 0)
 	s.NotNil(shard.ShardLocalTime)
-	s.True(shard.ShardLocalTime.Before(time.Now()))
-	s.True(shard.ShardLocalTime.After(startTime))
+	s.True(shard.ShardLocalTime.AsTime().Before(time.Now()))
+	s.True(shard.ShardLocalTime.AsTime().After(startTime))
 	s.NotNil(shard.RemoteClusters)
 	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
 	s.True(ok)
 	s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.Before(time.Now()))
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.After(startTime))
+	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
+	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
 
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
@@ -2954,7 +2954,7 @@ func (s *functionalClustersTestSuite) registerNamespace(namespace string, isGlob
 		IsGlobalNamespace:                isGlobalNamespace,
 		Clusters:                         clusters,
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)

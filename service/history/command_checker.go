@@ -27,7 +27,6 @@ package history
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -35,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -273,7 +273,7 @@ func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 func (v *commandAttrValidator) validateProtocolMessageAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ProtocolMessageCommandAttributes,
-	runTimeout time.Duration,
+	runTimeout *durationpb.Duration,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
 
@@ -291,7 +291,7 @@ func (v *commandAttrValidator) validateProtocolMessageAttributes(
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
-	runTimeout time.Duration,
+	runTimeout *durationpb.Duration,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
@@ -339,9 +339,9 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid HeartbeatTimeout: %v.", err))
 	}
 
-	ScheduleToCloseSet := timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > 0
-	ScheduleToStartSet := timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > 0
-	StartToCloseSet := timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > 0
+	ScheduleToCloseSet := attributes.GetScheduleToCloseTimeout().AsDuration() > 0
+	ScheduleToStartSet := attributes.GetScheduleToStartTimeout().AsDuration() > 0
+	StartToCloseSet := attributes.GetStartToCloseTimeout().AsDuration() > 0
 
 	if ScheduleToCloseSet {
 		if ScheduleToStartSet {
@@ -358,27 +358,28 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		}
 	} else if StartToCloseSet {
 		// We are in !validScheduleToClose due to the first if above
-		attributes.ScheduleToCloseTimeout = &runTimeout
+		attributes.ScheduleToCloseTimeout = runTimeout
 		if !ScheduleToStartSet {
-			attributes.ScheduleToStartTimeout = &runTimeout
+			attributes.ScheduleToStartTimeout = runTimeout
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
 		return failedCause, serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on command.")
 	}
 	// ensure activity timeout never larger than workflow timeout
-	if runTimeout > 0 {
-		if timestamp.DurationValue(attributes.GetScheduleToCloseTimeout()) > runTimeout {
-			attributes.ScheduleToCloseTimeout = &runTimeout
+	if runTimeout.AsDuration() > 0 {
+		runTimeoutDur := runTimeout.AsDuration()
+		if attributes.GetScheduleToCloseTimeout().AsDuration() > runTimeoutDur {
+			attributes.ScheduleToCloseTimeout = runTimeout
 		}
-		if timestamp.DurationValue(attributes.GetScheduleToStartTimeout()) > runTimeout {
-			attributes.ScheduleToStartTimeout = &runTimeout
+		if attributes.GetScheduleToStartTimeout().AsDuration() > runTimeoutDur {
+			attributes.ScheduleToStartTimeout = runTimeout
 		}
-		if timestamp.DurationValue(attributes.GetStartToCloseTimeout()) > runTimeout {
-			attributes.StartToCloseTimeout = &runTimeout
+		if attributes.GetStartToCloseTimeout().AsDuration() > runTimeoutDur {
+			attributes.StartToCloseTimeout = runTimeout
 		}
-		if timestamp.DurationValue(attributes.GetHeartbeatTimeout()) > runTimeout {
-			attributes.HeartbeatTimeout = &runTimeout
+		if attributes.GetHeartbeatTimeout().AsDuration() > runTimeoutDur {
+			attributes.HeartbeatTimeout = runTimeout
 		}
 	}
 	attributes.HeartbeatTimeout = timestamp.MinDurationPtr(attributes.GetHeartbeatTimeout(), attributes.GetStartToCloseTimeout())
@@ -657,29 +658,17 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid BackoffStartInterval: %v.", err))
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowRunTimeout()) == 0 {
-		attributes.WorkflowRunTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.WorkflowRunTimeout))
+	if attributes.GetWorkflowRunTimeout().AsDuration() == 0 {
+		attributes.WorkflowRunTimeout = executionInfo.WorkflowRunTimeout
 	}
 
-	if timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()) == 0 {
-		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
+	if attributes.GetWorkflowTaskTimeout().AsDuration() == 0 {
+		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
 	}
 
-	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
-		common.OverrideWorkflowRunTimeout(
-			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
-			timestamp.DurationValue(executionInfo.GetWorkflowExecutionTimeout()),
-		),
-	)
+	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration()))
 
-	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
-		common.OverrideWorkflowTaskTimeout(
-			namespace.String(),
-			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
-			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
-			v.config.DefaultWorkflowTaskTimeout,
-		),
-	)
+	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
 
 	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
 		return failedCause, err
@@ -767,21 +756,9 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	attributes.WorkflowRunTimeout = timestamp.DurationPtr(
-		common.OverrideWorkflowRunTimeout(
-			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
-			timestamp.DurationValue(attributes.GetWorkflowExecutionTimeout()),
-		),
-	)
+	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
 
-	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
-		common.OverrideWorkflowTaskTimeout(
-			targetNamespace.String(),
-			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
-			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
-			defaultWorkflowTaskTimeoutFn,
-		),
-	)
+	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

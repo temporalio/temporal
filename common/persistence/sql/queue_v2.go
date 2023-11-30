@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -161,21 +162,21 @@ func (q *queueV2) ReadMessages(
 	}
 	var messages []persistence.QueueV2Message
 	for _, row := range rows {
-		encoding, ok := enums.EncodingType_value[row.MessageEncoding]
-		if !ok {
+		encoding, err := enums.EncodingTypeFromString(row.MessageEncoding)
+		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(row.MessageEncoding)
 		}
 		encodingType := enums.EncodingType(encoding)
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: row.MessageID},
-			Data: commonpb.DataBlob{
+			Data: &commonpb.DataBlob{
 				EncodingType: encodingType,
 				Data:         row.MessagePayload,
 			},
 		}
 		messages = append(messages, message)
 	}
-	nextPageToken := persistence.GetNextPageTokenForQueueV2(messages)
+	nextPageToken := persistence.GetNextPageTokenForReadMessages(messages)
 	response := &persistence.InternalReadMessagesResponse{
 		Messages:      messages,
 		NextPageToken: nextPageToken,
@@ -187,7 +188,7 @@ func newQueueV2Row(
 	queueType persistence.QueueV2Type,
 	queueName string,
 	messageID int64,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) sqlplugin.QueueV2MessageRow {
 
 	return sqlplugin.QueueV2MessageRow{
@@ -229,7 +230,7 @@ func (q *queueV2) CreateQueue(
 	}
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
-			"ReadMessages failed for queue with type: %v and name: %v. InsertIntoQueueV2Metadata operation failed. Error: %v",
+			"CreateQueue failed for queue with type: %v and name: %v. InsertIntoQueueV2Metadata operation failed. Error: %v",
 			request.QueueType,
 			request.QueueName,
 			err),
@@ -363,30 +364,34 @@ func (q *queueV2) getQueueMetadata(
 			fmt.Sprintf("failed to get metadata for queue with type: %v and name: %v. Error: %v", queueType, queueName, err),
 		)
 	}
-	if metadata.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {
+	return q.extractQueueMetadata(metadata)
+}
+
+func (q queueV2) extractQueueMetadata(metadataRow *sqlplugin.QueueV2MetadataRow) (*persistencespb.Queue, error) {
+	if metadataRow.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
 			"queue with type %v and name %v has invalid encoding: %w",
-			metadata.QueueType,
-			metadata.QueueName,
-			serialization.NewUnknownEncodingTypeError(metadata.MetadataEncoding, enums.ENCODING_TYPE_PROTO3),
+			metadataRow.QueueType,
+			metadataRow.QueueName,
+			serialization.NewUnknownEncodingTypeError(metadataRow.MetadataEncoding, enums.ENCODING_TYPE_PROTO3),
 		)
 	}
 	qm := &persistencespb.Queue{}
-	err = qm.Unmarshal(metadata.MetadataPayload)
+	err := qm.Unmarshal(metadataRow.MetadataPayload)
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
 			enums.ENCODING_TYPE_PROTO3,
 			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w",
-				metadata.QueueType,
-				metadata.QueueName,
+				metadataRow.QueueType,
+				metadataRow.QueueName,
 				err),
 		)
 	}
 	return qm, nil
 }
 
-func (q *queueV2) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tx sqlplugin.Tx) (int64, bool, error) {
-	lastMessageID, err := tx.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
+func (q *queueV2) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tc sqlplugin.TableCRUD) (int64, bool, error) {
+	lastMessageID, err := tc.GetLastEnqueuedMessageIDForUpdateV2(ctx, sqlplugin.QueueV2Filter{
 		QueueType: queueType,
 		QueueName: queueName,
 		Partition: defaultPartition,
@@ -401,8 +406,8 @@ func (q *queueV2) getMaxMessageID(ctx context.Context, queueType persistence.Que
 	}
 }
 
-func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tx sqlplugin.Tx) (int64, error) {
-	maxMessageID, ok, err := q.getMaxMessageID(ctx, queueType, queueName, tx)
+func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string, tc sqlplugin.TableCRUD) (int64, error) {
+	maxMessageID, ok, err := q.getMaxMessageID(ctx, queueType, queueName, tc)
 	if err != nil {
 		return 0, err
 	}
@@ -410,4 +415,77 @@ func (q *queueV2) getNextMessageID(ctx context.Context, queueType persistence.Qu
 		return persistence.FirstQueueMessageID, nil
 	}
 	return maxMessageID + 1, nil
+}
+
+func (q *queueV2) ListQueues(
+	ctx context.Context,
+	request *persistence.InternalListQueuesRequest,
+) (*persistence.InternalListQueuesResponse, error) {
+	if request.PageSize <= 0 {
+		return nil, persistence.ErrNonPositiveListQueuesPageSize
+	}
+	offset, err := persistence.GetOffsetForListQueues(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+	if offset < 0 {
+		return nil, persistence.ErrNegativeListQueuesOffset
+	}
+	rows, err := q.Db.SelectNameFromQueueV2Metadata(ctx, sqlplugin.QueueV2MetadataTypeFilter{
+		QueueType:  request.QueueType,
+		PageSize:   request.PageSize,
+		PageOffset: offset,
+	})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+			"ListQueues failed for type: %v. SelectNameFromQueueV2Metadata operation failed. Error: %v",
+			request.QueueType,
+			err),
+		)
+	}
+	var queues []persistence.QueueInfo
+	for _, row := range rows {
+		messageCount, err := q.getMessageCount(ctx, &row)
+		if err != nil {
+			return nil, err
+		}
+		queues = append(queues, persistence.QueueInfo{
+			QueueName:    row.QueueName,
+			MessageCount: messageCount,
+		})
+	}
+	lastReadQueueNumber := offset + int64(len(queues))
+	var nextPageToken []byte
+	if len(queues) > 0 {
+		nextPageToken = persistence.GetNextPageTokenForListQueues(lastReadQueueNumber)
+	}
+	response := &persistence.InternalListQueuesResponse{
+		Queues:        queues,
+		NextPageToken: nextPageToken,
+	}
+	return response, nil
+}
+
+func (q *queueV2) getMessageCount(
+	ctx context.Context,
+	row *sqlplugin.QueueV2MetadataRow,
+) (int64, error) {
+	nextMessageID, err := q.getNextMessageID(ctx, row.QueueType, row.QueueName, q.Db)
+	if err != nil {
+		return 0, serviceerror.NewUnavailable(fmt.Sprintf(
+			"getNextMessageID operation failed for queue with type %v and name %v. Error: %v",
+			row.QueueType,
+			row.QueueName,
+			err),
+		)
+	}
+	qm, err := q.extractQueueMetadata(row)
+	if err != nil {
+		return 0, err
+	}
+	partition, err := persistence.GetPartitionForQueueV2(row.QueueType, row.QueueName, qm)
+	if err != nil {
+		return 0, err
+	}
+	return nextMessageID - partition.MinMessageId, nil
 }

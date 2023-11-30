@@ -35,15 +35,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/serialization"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 
@@ -55,12 +54,14 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -357,11 +358,11 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
-	var expirationTime *time.Time
-	now := timestamp.TimePtr(time.Now().UTC())
-	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
+	var expirationTime *timestamppb.Timestamp
+	now := time.Now().UTC()
+	expirationDuration := addRequest.GetScheduleToStartTimeout().AsDuration()
 	if expirationDuration != 0 {
-		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
+		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId:      namespaceID.String(),
@@ -370,7 +371,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ScheduledEventId: addRequest.GetScheduledEventId(),
 		Clock:            addRequest.GetClock(),
 		ExpiryTime:       expirationTime,
-		CreateTime:       now,
+		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
 	}
 
@@ -409,11 +410,11 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	var expirationTime *time.Time
-	now := timestamp.TimePtr(time.Now().UTC())
+	var expirationTime *timestamppb.Timestamp
+	now := time.Now().UTC()
 	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
 	if expirationDuration != 0 {
-		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
+		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
 		NamespaceId:      namespaceID.String(),
@@ -421,7 +422,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		WorkflowId:       addRequest.Execution.GetWorkflowId(),
 		ScheduledEventId: addRequest.GetScheduledEventId(),
 		Clock:            addRequest.GetClock(),
-		CreateTime:       now,
+		CreateTime:       timestamppb.New(now),
 		ExpiryTime:       expirationTime,
 		VersionDirective: addRequest.VersionDirective,
 	}
@@ -872,7 +873,7 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		namespace.Name(request.GetNamespace()),
-		*request.TaskQueue,
+		request.TaskQueue,
 		taskQueueType,
 	)
 
@@ -928,9 +929,9 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		clk := data.GetClock()
 		if clk == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
-			clk = &tmp
+			clk = tmp
 		}
-		updatedClock := hlc.Next(*clk, e.timeSource)
+		updatedClock := hlc.Next(clk, e.timeSource)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
@@ -967,10 +968,10 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			return nil, false, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid operation: %v", req.GetOperation()))
 		}
 		// Avoid mutation
-		ret := *data
-		ret.Clock = &updatedClock
+		ret := common.CloneProto(data)
+		ret.Clock = updatedClock
 		ret.VersioningData = versioningData
-		return &ret, true, nil
+		return ret, true, nil
 	})
 	if err != nil {
 		return nil, err
@@ -979,12 +980,12 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	// Only clear tombstones after they have been replicated.
 	if operationCreatedTombstones {
 		err = tqMgr.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-			updatedClock := hlc.Next(*data.GetClock(), e.timeSource)
+			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
 			// Avoid mutation
-			ret := *data
-			ret.Clock = &updatedClock
+			ret := common.CloneProto(data)
+			ret.Clock = updatedClock
 			ret.VersioningData = ClearTombstones(data.VersioningData)
-			return &ret, false, nil // Do not replicate the deletion of tombstones
+			return ret, false, nil // Do not replicate the deletion of tombstones
 		})
 		if err != nil {
 			return nil, err
@@ -1097,7 +1098,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		TaskQueueLimitPerBuildId: 0,
 	}
 	err = tqMgr.UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		mergedUserData := *current
+		mergedUserData := common.CloneProto(current)
 		_, buildIdsRemoved := GetBuildIdDeltas(current.GetVersioningData(), req.GetUserData().GetVersioningData())
 		var buildIdsToRevive []string
 		for _, buildId := range buildIdsRemoved {
@@ -1120,7 +1121,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 			set := mergedData.VersionSets[setIdx]
 			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
-			mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *set.BuildIds[buildIdIdx].StateUpdateTimestamp))
+			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIdIdx].StateUpdateTimestamp)
 
 			setDefault := set.BuildIds[len(set.BuildIds)-1]
 			if setDefault.State == persistencespb.STATE_DELETED {
@@ -1128,13 +1129,13 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				// x. We discovered we're still using the other one, so we revive it. now we also have to revive the default
 				// for set x, or it will be left with the wrong default.
 				set.BuildIds[len(set.BuildIds)-1] = e.reviveBuildId(ns, req.GetTaskQueue(), setDefault)
-				mergedUserData.Clock = hlc.Ptr(hlc.Max(*mergedUserData.Clock, *setDefault.StateUpdateTimestamp))
+				mergedUserData.Clock = hlc.Max(mergedUserData.Clock, setDefault.StateUpdateTimestamp)
 			}
 		}
 
 		// No need to keep the tombstones around after replication.
 		mergedUserData.VersioningData = ClearTombstones(mergedData)
-		return &mergedUserData, len(buildIdsToRevive) > 0, nil
+		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
 }
@@ -1232,7 +1233,7 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 
 func (e *matchingEngineImpl) getAllPartitions(
 	ns namespace.Name,
-	taskQueue taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
 	var partitionKeys []string
@@ -1557,7 +1558,7 @@ func newRecordTaskStartedContext(
 // Returns a new build id leaving the provided one untouched.
 func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
 	// Bump the stamp and ensure it's newer than the deletion stamp.
-	prevStamp := *buildId.StateUpdateTimestamp
+	prevStamp := common.CloneProto(buildId.StateUpdateTimestamp)
 	stamp := hlc.Next(prevStamp, e.timeSource)
 	stamp.ClusterId = e.clusterMeta.GetClusterID()
 	e.logger.Info("Revived build id while applying replication event",
@@ -1567,7 +1568,7 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 	return &persistencespb.BuildId{
 		Id:                     buildId.GetId(),
 		State:                  persistencespb.STATE_ACTIVE,
-		StateUpdateTimestamp:   &stamp,
+		StateUpdateTimestamp:   stamp,
 		BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 	}
 }

@@ -26,7 +26,6 @@ package updateworkflow
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -34,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -68,28 +68,6 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 
-	var waitLifecycleStage func(ctx context.Context, u *update.Update) (*updatepb.Outcome, error)
-	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
-	switch waitStage {
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
-		waitLifecycleStage = func(
-			ctx context.Context,
-			u *update.Update,
-		) (*updatepb.Outcome, error) {
-			return u.WaitAccepted(ctx)
-		}
-	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
-		waitLifecycleStage = func(
-			ctx context.Context,
-			u *update.Update,
-		) (*updatepb.Outcome, error) {
-			return u.WaitOutcome(ctx)
-		}
-	default:
-		return nil, serviceerror.NewUnimplemented(
-			fmt.Sprintf("%v is not implemented", waitStage))
-	}
-
 	wfKey := definition.NewWorkflowKey(
 		req.NamespaceId,
 		req.Request.WorkflowExecution.WorkflowId,
@@ -100,7 +78,7 @@ func Invoke(
 	// they are copied and don't have any pointers to workflow context or mutable state.
 	var (
 		upd                    *update.Update
-		taskQueue              taskqueuepb.TaskQueue
+		taskQueue              *taskqueuepb.TaskQueue
 		normalTaskQueueName    string
 		scheduledEventID       int64
 		scheduleToStartTimeout time.Duration
@@ -190,9 +168,10 @@ func Invoke(
 
 			scheduledEventID = newWorkflowTask.ScheduledEventID
 			if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
-				scheduleToStartTimeout = *scheduleToStartTimeoutPtr
+				scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
 			}
-			taskQueue = *newWorkflowTask.TaskQueue
+
+			taskQueue = common.CloneProto(newWorkflowTask.TaskQueue)
 			normalTaskQueueName = ms.GetExecutionInfo().TaskQueue
 			directive = worker_versioning.MakeDirectiveForWorkflowTask(
 				ms.GetWorkerVersionStamp(),
@@ -220,23 +199,44 @@ func Invoke(
 	// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 	//   Helper function needs to be extracted to avoid code duplication.
 	if scheduledEventID != common.EmptyEventID {
-		err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
+		err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
-			taskQueue = taskqueuepb.TaskQueue{
+			taskQueue = &taskqueuepb.TaskQueue{
 				Name: normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = addWorkflowTaskToMatching(ctx, wfKey, &taskQueue, scheduledEventID, &scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
+			err = addWorkflowTaskToMatching(ctx, wfKey, taskQueue, scheduledEventID, scheduleToStartTimeout, namespace.ID(req.GetNamespaceId()), directive, shardCtx, matchingClient)
 		}
 
 		if err != nil {
-			return nil, err
+			shardCtx.GetLogger().Warn("Unable to add WorkflowTask directly to matching.",
+				tag.WorkflowNamespace(req.Request.Namespace),
+				tag.WorkflowNamespaceID(wfKey.NamespaceID),
+				tag.WorkflowID(wfKey.WorkflowID),
+				tag.WorkflowRunID(wfKey.RunID),
+				tag.Error(err))
+
+			// Intentionally just log error here and don't return it to the client.
+			// If adding speculative WT to matching failed with error,
+			// this error can't be handled outside of WF lock and can't be returned to the client (because it is not a client error).
+			// This speculative WT will be timed out in tasks.SpeculativeWorkflowTaskScheduleToStartTimeout (5) seconds,
+			// and new normal WT will be scheduled.
+			// If subsequent attempt succeeds within current context timeout, caller of this API will get a valid response.
+			err = nil
 		}
 	}
 
-	updOutcome, err := waitLifecycleStage(ctx, upd)
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := shardCtx.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	serverTimeout := shardCtx.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
+	// If the long-poll times out due to serverTimeout then return a non-error empty response.
+	status, err := upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +249,8 @@ func Invoke(
 				},
 				UpdateId: req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: updOutcome,
+			Outcome: status.Outcome,
+			Stage:   status.Stage,
 		},
 	}
 
@@ -262,7 +263,7 @@ func addWorkflowTaskToMatching(
 	wfKey definition.WorkflowKey,
 	tq *taskqueuepb.TaskQueue,
 	scheduledEventID int64,
-	wtScheduleToStartTimeout *time.Duration,
+	wtScheduleToStartTimeout time.Duration,
 	nsID namespace.ID,
 	directive *taskqueuespb.TaskVersionDirective,
 	shardCtx shard.Context,
@@ -281,7 +282,7 @@ func addWorkflowTaskToMatching(
 		},
 		TaskQueue:              tq,
 		ScheduledEventId:       scheduledEventID,
-		ScheduleToStartTimeout: wtScheduleToStartTimeout,
+		ScheduleToStartTimeout: durationpb.New(wtScheduleToStartTimeout),
 		Clock:                  clock,
 		VersionDirective:       directive,
 	})

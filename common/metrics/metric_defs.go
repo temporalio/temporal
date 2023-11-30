@@ -606,8 +606,10 @@ var (
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	LockRequests                             = NewCounterDef("lock_requests")
-	LockFailures                             = NewCounterDef("lock_failures")
 	LockLatency                              = NewTimerDef("lock_latency")
+	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
+	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
+	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
 	ClientRequests                           = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
@@ -869,6 +871,7 @@ var (
 	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
+	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
@@ -911,12 +914,17 @@ var (
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
+	DLQWrites                                      = NewCounterDef(
+		"dlq_writes",
+		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
+	)
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
 	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching

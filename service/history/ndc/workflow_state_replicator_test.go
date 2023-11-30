@@ -169,7 +169,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		},
 		RemoteCluster: "test",
 	}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
 		RunId:      s.runID,
 	}
@@ -274,7 +274,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		},
 		RemoteCluster: "test",
 	}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
 		RunId:      s.runID,
 	}
@@ -447,7 +447,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		},
 		RemoteCluster: "test",
 	}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: s.workflowID,
 		RunId:      s.runID,
 	}

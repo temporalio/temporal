@@ -355,6 +355,20 @@ func (c *metricClient) IsWorkflowTaskValid(
 	return c.client.IsWorkflowTaskValid(ctx, request, opts...)
 }
 
+func (c *metricClient) ListQueues(
+	ctx context.Context,
+	request *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ListQueuesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientListQueues")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListQueues(ctx, request, opts...)
+}
+
 func (c *metricClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

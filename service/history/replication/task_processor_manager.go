@@ -283,7 +283,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
 
-	minAckedTaskID := r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 1
+	minAckedTaskID := r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 1
 	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
 	if !ok {
 		queueStates = &persistencespb.QueueState{
@@ -314,7 +314,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
 	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
-		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
+		r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID-minAckedTaskID,
 		metrics.TargetClusterTag(currentClusterName),
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)

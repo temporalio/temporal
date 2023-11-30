@@ -35,9 +35,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestVisibility() {
@@ -57,8 +58,8 @@ func (s *functionalSuite) TestVisibility() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -119,8 +120,8 @@ func (s *functionalSuite) TestVisibility() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -128,8 +129,8 @@ func (s *functionalSuite) TestVisibility() {
 	s.NoError(err2)
 
 	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startTime
-	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
+	startFilter.EarliestTime = timestamppb.New(startTime)
+	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 	closedCount := 0
 	openCount := 0

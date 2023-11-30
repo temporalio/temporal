@@ -153,7 +153,7 @@ func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *repli
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	return q.queue.EnqueueMessage(ctx, *blob)
+	return q.queue.EnqueueMessage(ctx, blob)
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
@@ -161,7 +161,7 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	messageID, err := q.queue.EnqueueMessageToDLQ(ctx, *blob)
+	messageID, err := q.queue.EnqueueMessageToDLQ(ctx, blob)
 	if err != nil {
 		return err
 	}

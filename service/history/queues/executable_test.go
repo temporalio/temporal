@@ -357,7 +357,7 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return false
 		}
@@ -377,7 +377,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 func (s *executableSuite) TestExecute_DLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
@@ -399,7 +399,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
 		}
@@ -421,7 +421,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}

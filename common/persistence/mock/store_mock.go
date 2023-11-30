@@ -1239,7 +1239,7 @@ func (mr *MockQueueMockRecorder) DeleteMessagesBefore(ctx, messageID interface{}
 }
 
 // EnqueueMessage mocks base method.
-func (m *MockQueue) EnqueueMessage(ctx context.Context, blob common.DataBlob) error {
+func (m *MockQueue) EnqueueMessage(ctx context.Context, blob *common.DataBlob) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnqueueMessage", ctx, blob)
 	ret0, _ := ret[0].(error)
@@ -1253,7 +1253,7 @@ func (mr *MockQueueMockRecorder) EnqueueMessage(ctx, blob interface{}) *gomock.C
 }
 
 // EnqueueMessageToDLQ mocks base method.
-func (m *MockQueue) EnqueueMessageToDLQ(ctx context.Context, blob common.DataBlob) (int64, error) {
+func (m *MockQueue) EnqueueMessageToDLQ(ctx context.Context, blob *common.DataBlob) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnqueueMessageToDLQ", ctx, blob)
 	ret0, _ := ret[0].(int64)
@@ -1435,6 +1435,21 @@ func (m *MockQueueV2) EnqueueMessage(ctx context.Context, request *persistence.I
 func (mr *MockQueueV2MockRecorder) EnqueueMessage(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueMessage", reflect.TypeOf((*MockQueueV2)(nil).EnqueueMessage), ctx, request)
+}
+
+// ListQueues mocks base method.
+func (m *MockQueueV2) ListQueues(ctx context.Context, request *persistence.InternalListQueuesRequest) (*persistence.InternalListQueuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListQueues", ctx, request)
+	ret0, _ := ret[0].(*persistence.InternalListQueuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListQueues indicates an expected call of ListQueues.
+func (mr *MockQueueV2MockRecorder) ListQueues(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListQueues", reflect.TypeOf((*MockQueueV2)(nil).ListQueues), ctx, request)
 }
 
 // RangeDeleteMessages mocks base method.

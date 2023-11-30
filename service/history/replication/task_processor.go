@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -253,7 +254,7 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 		if taskCreationTime != nil {
 			now := p.shard.GetTimeSource().Now()
 			p.metricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
-				now.Sub(*taskCreationTime),
+				now.Sub(taskCreationTime.AsTime()),
 				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
@@ -468,11 +469,15 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	var lastProcessedVisTime *timestamppb.Timestamp
+	if !p.maxRxProcessedTimestamp.IsZero() {
+		lastProcessedVisTime = timestamppb.New(p.maxRxProcessedTimestamp)
+	}
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
 			ShardId:                     p.sourceShardID,
 			LastProcessedMessageId:      p.maxRxProcessedTaskID,
-			LastProcessedVisibilityTime: &p.maxRxProcessedTimestamp,
+			LastProcessedVisibilityTime: lastProcessedVisTime,
 			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
 		},
 		respChan: respChan,

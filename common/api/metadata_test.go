@@ -26,6 +26,7 @@ package api
 
 import (
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"golang.org/x/exp/maps"
 )
+
+var publicMethodRgx = regexp.MustCompile("^[A-Z]")
 
 func TestWorkflowServiceMetadata(t *testing.T) {
 	tp := reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem()
@@ -109,7 +112,12 @@ func TestGetMethodMetadata(t *testing.T) {
 func getMethodNames(tp reflect.Type) []string {
 	var out []string
 	for i := 0; i < tp.NumMethod(); i++ {
-		out = append(out, tp.Method(i).Name)
+		name := tp.Method(i).Name
+		// Don't collect unimplemented methods. This weeds out the
+		// `mustEmbedUnimplementedFooBarBaz` required by the GRPC v2 gateway
+		if publicMethodRgx.MatchString(name) {
+			out = append(out, name)
+		}
 	}
 	return out
 }

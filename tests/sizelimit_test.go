@@ -46,8 +46,9 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type sizeLimitFunctionalSuite struct {
@@ -94,8 +95,8 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -120,10 +121,10 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -226,8 +227,8 @@ SignalLoop:
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -296,7 +297,7 @@ func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowTaskTimeout: timestamp.DurationPtr(60 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
 		Identity:            identity,
 	}
 
@@ -360,8 +361,8 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -385,10 +386,10 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
 						TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 						Input:                  activityLargePayload,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(5 * time.Second),
 					}},
 				}
 			}
@@ -477,8 +478,8 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -509,8 +510,8 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -572,8 +573,8 @@ SignalLoop:
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: &filterpb.StartTimeFilter{
-				EarliestTime: timestamp.TimePtr(time.Time{}),
-				LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+				EarliestTime: nil,
+				LatestTime:   timestamppb.New(time.Now().UTC()),
 			},
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
