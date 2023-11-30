@@ -1245,6 +1245,57 @@ func (s *workflowSuite) TestBackfill() {
 	)
 }
 
+func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
+	s.runAcrossContinue(
+		[]workflowRun{
+			// if start and end time were not inclusive, this backfill run would not exist
+			{
+				id:     "myid-2022-05-31T19:17:00Z",
+				start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// this is the scheduled one
+			{
+				id:     "myid-2022-07-31T19:00:00Z",
+				start:  time.Date(2022, 7, 31, 19, 0, 0, 0, time.UTC),
+				end:    time.Date(2022, 7, 31, 19, 5, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+						BackfillRequest: []*schedpb.BackfillRequest{{
+							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)),
+							EndTime:       timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)),
+							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+						}},
+					})
+				},
+			},
+			{
+				at:         time.Date(2022, 7, 31, 19, 6, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Minute:     "*/17",
+					Hour:       "19",
+					DayOfMonth: "31",
+				}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+	)
+}
+
 func (s *workflowSuite) TestPause() {
 	s.runAcrossContinue(
 		[]workflowRun{
