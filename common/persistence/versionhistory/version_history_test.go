@@ -756,7 +756,7 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 		{EventId: 15, Version: 5},
 	}
 
-	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, 1, 1000)
+	past, future := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
 	s.Empty(past)
 	s.Equal(versionHistoryItems, future)
 }
@@ -769,7 +769,7 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 		{EventId: 15, Version: 1001},
 	}
 
-	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, 1, 1000)
+	past, future := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
 	s.Empty(future)
 	s.Equal(versionHistoryItems, past)
 }
@@ -786,7 +786,7 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 		{EventId: 25, Version: 1005},
 	}
 
-	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(append(localItems, remoteItems...), 1, 1000)
+	past, future := SplitVersionHistoryByLastLocalGeneratedItem(append(localItems, remoteItems...), 1, 1000)
 	s.Equal(localItems, past)
 	s.Equal(remoteItems, future)
 }

@@ -107,7 +107,7 @@ func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 		return nil
 	}
 
-	localVersionHistory, _ := versionhistory.SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
 
 	lastBatch := localEvents[len(localEvents)-1]
 	lastLocalEvent := lastBatch[len(lastBatch)-1]
