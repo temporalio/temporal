@@ -53,7 +53,7 @@ import (
 
 // TODO treat 0 as 0, not infinite
 
-func getBackoffInterval(
+var getBackoffInterval = func(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
