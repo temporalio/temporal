@@ -589,13 +589,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server fails the WT.
 		// Otherwise, this update will be delivered (and new WT created) again and again.
-		// With 2 exceptions:
-		//  1. This is heartbeat WT,
-		//  2. This WT has COMPLETE_WORKFLOW_EXECUTION command which was already handled.
-		if !workflowTaskHeartbeating && ms.IsWorkflowExecutionRunning() {
-			if err = workflowTaskHandler.ensureUpdatesProcessed(ctx, currentWorkflowTask.StartedEventID); err != nil {
-				return nil, err
-			}
+		if err = workflowTaskHandler.ensureUpdatesProcessed(
+			ctx,
+			currentWorkflowTask.ScheduledEventID,
+			workflowTaskHeartbeating,
+		); err != nil {
+			return nil, err
 		}
 
 		// set the vars used by following logic
@@ -931,7 +930,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages = updateRegistry.OutgoingMessages(workflowTask.StartedEventID)
+	response.Messages = updateRegistry.OutgoingMessages(workflowTask.ScheduledEventID, workflowTask.StartedEventID)
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")

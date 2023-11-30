@@ -4818,55 +4818,42 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 
-	// Complete of the 4th WT should succeed
+	// Complete of the 4th WT should succeed. It accepts both updates.
 	wt5Resp, err := s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
 		Commands: append(
-			s.acceptUpdateCommands(tv, "2"),
-			&commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             tv.ActivityID("3"),
-					ActivityType:           tv.ActivityType(),
-					TaskQueue:              tv.TaskQueue(),
-					ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-				}},
-			}),
-		Messages:              s.acceptUpdateMessages(tv, wt4.Messages[0], "2"),
+			s.acceptUpdateCommands(tv, "1"),
+			append(
+				s.acceptUpdateCommands(tv, "2"),
+				&commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             tv.ActivityID("3"),
+						ActivityType:           tv.ActivityType(),
+						TaskQueue:              tv.TaskQueue(),
+						ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+					}},
+				},
+				&commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             tv.ActivityID("4"),
+						ActivityType:           tv.ActivityType(),
+						TaskQueue:              tv.TaskQueue(),
+						ScheduleToCloseTimeout: tv.InfiniteTimeout(),
+					}},
+				},
+			)...),
+		Messages: append(
+			s.acceptUpdateMessages(tv, wt4.Messages[0], "1"),
+			s.acceptUpdateMessages(tv, wt4.Messages[1], "2")...),
 		ReturnNewWorkflowTask: true,
 	})
 	s.NoError(err)
 	s.NotNil(wt5Resp)
 	wt5 := wt5Resp.WorkflowTask
-	s.NotNil(wt5)
-	s.NotEmpty(wt5.TaskToken, "5th workflow task must have valid task token")
-	s.Len(wt5.Messages, 1, "5th workflow task must have a message with 2nd update")
-	s.EqualValues(15, wt5.StartedEventId)
-	s.EqualValues(14, wt5.Messages[0].GetEventId())
-	s.EqualHistory(`
-	11 WorkflowTaskCompleted
-	12 WorkflowExecutionUpdateAccepted
-	13 ActivityTaskScheduled
-	14 WorkflowTaskScheduled
-	15 WorkflowTaskStarted`, wt5.History)
-
-	// Complete WT5 should succeed.
-	_, err = s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
-		TaskToken: wt5.TaskToken,
-		Commands: append(s.acceptUpdateCommands(tv, "1"), &commandpb.Command{
-			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-				ActivityId:             tv.ActivityID("4"),
-				ActivityType:           tv.ActivityType(),
-				TaskQueue:              tv.TaskQueue(),
-				ScheduleToCloseTimeout: tv.InfiniteTimeout(),
-			}},
-		}),
-		Messages: s.acceptUpdateMessages(tv, wt5.Messages[0], "1"),
-	})
-	s.NoError(err)
+	s.Nil(wt5)
 
 	events := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
@@ -4882,12 +4869,9 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	 10 WorkflowTaskStarted
 	 11 WorkflowTaskCompleted
 	 12 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":9}
-	 13 ActivityTaskScheduled
-	 14 WorkflowTaskScheduled
-	 15 WorkflowTaskStarted
-	 16 WorkflowTaskCompleted
-	 17 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":14}
-	 18 ActivityTaskScheduled
+	 13 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId":9}
+	 14 ActivityTaskScheduled
+	 15 ActivityTaskScheduled
 	`, events)
 }
 

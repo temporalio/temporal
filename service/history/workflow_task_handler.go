@@ -214,9 +214,26 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 
 func (handler *workflowTaskHandlerImpl) ensureUpdatesProcessed(
 	_ context.Context,
-	workflowTaskStartedEventID int64,
+	workflowTaskScheduledEventID int64,
+	workflowTaskHeartbeating bool,
 ) error {
-	unprocessedUpdateIDs := handler.updateRegistry.Unprocessed(workflowTaskStartedEventID)
+
+	// If WT is already about to fail with another cause, don't check for unprocessed updates.
+	if handler.workflowTaskFailedCause != nil {
+		return nil
+	}
+
+	// If WT is a heartbeat WT, then it doesn't have to have messages.
+	if workflowTaskHeartbeating {
+		return nil
+	}
+
+	// If worker has just completed workflow with COMPLETE_WORKFLOW_EXECUTION command, then it doesn't have to have messages.
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	unprocessedUpdateIDs := handler.updateRegistry.Unprocessed(workflowTaskScheduledEventID)
 	if len(unprocessedUpdateIDs) > 0 {
 		var updateIDs strings.Builder
 
@@ -228,7 +245,7 @@ func (handler *workflowTaskHandlerImpl) ensureUpdatesProcessed(
 		return handler.failWorkflowTask(
 			// TODO: change cause before merge to WORKFLOW_TASK_FAILED_CAUSE_WORKER_UNPROCESSED_UPDATE
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_UPDATE,
-			serviceerror.NewInvalidArgument(fmt.Sprintf("updates [%s] were delivered to worker but were not processed with workflow task %d", updateIDs.String(), workflowTaskStartedEventID)))
+			serviceerror.NewInvalidArgument(fmt.Sprintf("updates [%s] were delivered to worker but were not processed with workflow task %d", updateIDs.String(), workflowTaskScheduledEventID)))
 	}
 
 	return nil

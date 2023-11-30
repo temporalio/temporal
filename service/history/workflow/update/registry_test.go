@@ -253,9 +253,10 @@ func TestMessageGathering(t *testing.T) {
 	require.NoError(t, err)
 	upd2, _, err := reg.FindOrCreate(ctx, updateID2)
 	require.NoError(t, err)
+	wftScheduledEventID := int64(122)
 	wftStartedEventID := int64(123)
 
-	msgs := reg.OutgoingMessages(wftStartedEventID)
+	msgs := reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Empty(t, msgs)
 
 	err = upd1.OnMessage(ctx, &updatepb.Request{
@@ -264,7 +265,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs = reg.OutgoingMessages(wftStartedEventID)
+	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Len(t, msgs, 1)
 
 	err = upd2.OnMessage(ctx, &updatepb.Request{
@@ -273,7 +274,7 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs = reg.OutgoingMessages(wftStartedEventID)
+	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Len(t, msgs, 2)
 
 	for _, msg := range msgs {

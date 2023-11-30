@@ -60,15 +60,15 @@ type (
 
 		// OutgoingMessages return all outbound messages from all Updates
 		// that need to be delivered to the worker. It also links every Update with workflow task,
-		// for which it is sending messages, by setting provided workflowTaskStartedEventID.
-		OutgoingMessages(startedEventID int64) []*protocolpb.Message
+		// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
+		OutgoingMessages(workflowTaskScheduledEventID int64, workflowTaskStartedEventID int64) []*protocolpb.Message
 
 		// Unprocessed returns IDs of all updates that have outgoing messages and
-		// are waiting for workflow task with provided workflowTaskStartedEventID to be completed.
+		// are waiting for workflow task with provided workflowTaskScheduledEventID to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 		// In this case it should return an empty slice.
-		Unprocessed(workflowTaskStartedEventID int64) []string
+		Unprocessed(workflowTaskScheduledEventID int64) []string
 
 		// TerminateUpdates terminates all existing updates in the registry
 		// and notifies update API callers with corresponding error.
@@ -211,17 +211,17 @@ func (r *registry) HasOutgoing() bool {
 	return false
 }
 
-// Unprocessed returns IDs of all updates that have outgoing messages and
-// are waiting for workflow task with provided workflowTaskStartedEventID to be completed.
+// Unprocessed returns IDs of all updates that are waiting for workflow task
+// with provided workflowTaskScheduledEventID to be completed but still in stateRequested.
 // This method should be called after all messages from worker are handled to make sure
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 // In this case it should return an empty slice.
-func (r *registry) Unprocessed(workflowTaskStartedEventID int64) []string {
+func (r *registry) Unprocessed(workflowTaskScheduledEventID int64) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var unprocessedUpdates []string
 	for _, upd := range r.updates {
-		if upd.hasOutgoingMessage() && upd.workflowTaskStartedEventID == workflowTaskStartedEventID {
+		if upd.workflowTaskScheduledEventID == workflowTaskScheduledEventID && upd.hasOutgoingMessage() {
 			unprocessedUpdates = append(unprocessedUpdates, upd.id)
 		}
 	}
@@ -230,11 +230,12 @@ func (r *registry) Unprocessed(workflowTaskStartedEventID int64) []string {
 
 // OutgoingMessages return all outbound messages from all Updates
 // that need to be delivered to the worker. It also links every Update with workflow task,
-// for which it is sending messages, by setting provided workflowTaskStartedEventID.
+// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
 func (r *registry) OutgoingMessages(
+	workflowTaskScheduledEventID int64,
 	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
-	// Need full write lock here because workflowTaskStartedEventID needs to be recorded for every update.
+	// Need full write lock here because workflowTaskScheduledEventID needs to be recorded for every update.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []*protocolpb.Message
@@ -249,7 +250,7 @@ func (r *registry) OutgoingMessages(
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
 	for _, upd := range r.updates {
-		upd.AppendOutgoingMessages(&out, sequencingEventID, workflowTaskStartedEventID)
+		upd.AppendOutgoingMessages(&out, workflowTaskScheduledEventID, sequencingEventID)
 	}
 	return out
 }
