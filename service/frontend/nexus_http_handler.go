@@ -117,7 +117,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	nc := nexusContext{
 		// This name does not map to an underlying gRPC service. This format is used since for consistency with
 		// the gRPC API names on which the authorizer - the consumer of this string - may depend.
-		apiName:       "/temporal.api.nexusservice.v1/DispatchNexusTask",
+		apiName:       "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
 		namespaceName: vars["namespace"],
 		taskQueue:     vars["task_queue"],
 	}

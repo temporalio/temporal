@@ -68,6 +68,8 @@ const (
 	WorkflowServicePrefix = "/temporal.api.workflowservice.v1.WorkflowService/"
 	OperatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
 	AdminServicePrefix    = "/temporal.server.api.adminservice.v1.AdminService/"
+	// Technically not a gRPC service, but still using this format for metadata.
+	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
 )
 
 var (
@@ -146,6 +148,9 @@ var (
 		"GetNexusIncomingService":            {Scope: ScopeCluster, Access: AccessAdmin},
 		"ListNexusIncomingServices":          {Scope: ScopeCluster, Access: AccessAdmin},
 	}
+	nexusServiceMetadata = map[string]MethodMetadata{
+		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},
+	}
 )
 
 // GetMethodMetadata gets metadata for a given API method in one of the services exported by
@@ -156,6 +161,8 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 		return workflowServiceMetadata[MethodName(fullApiName)]
 	case strings.HasPrefix(fullApiName, OperatorServicePrefix):
 		return operatorServiceMetadata[MethodName(fullApiName)]
+	case strings.HasPrefix(fullApiName, NexusServicePrefix):
+		return nexusServiceMetadata[MethodName(fullApiName)]
 	case strings.HasPrefix(fullApiName, AdminServicePrefix):
 		return MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin}
 	default:
