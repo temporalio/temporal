@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -39,6 +40,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
@@ -55,7 +57,6 @@ func (s *clientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 }
 
 func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Outcomes() {
-
 	type testcase struct {
 		outcome   string
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
@@ -74,6 +75,13 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			outcome: "async_success",
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
+				s.Require().Equal(op.Name(), start.Operation)
+				s.Require().Equal("http://localhost/callback", start.Callback)
+				s.Require().Equal("request-id", start.RequestId)
+				s.Require().Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
@@ -170,7 +178,11 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 			go s.nexusTaskPoller(ctx, taskQueue, tc.handler)
 
-			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+				Header:      nexus.Header{"key": "value"},
+			})
 			tc.assertion(result, err)
 
 			snap := capture.Snapshot()
@@ -350,12 +362,152 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		})
 	}
 }
+func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQueue_Outcomes() {
+	type testcase struct {
+		outcome   string
+		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
+		assertion func(error)
+	}
+
+	testCases := []testcase{
+		{
+			outcome: "success",
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				// Choose an arbitrary test case to assert that all of the input is delivered to the
+				// poll response.
+				op := res.Request.Variant.(*nexuspb.Request_CancelOperation).CancelOperation
+				s.Require().Equal("operation", op.Operation)
+				s.Require().Equal("id", op.OperationId)
+				s.Require().Equal("value", res.Request.Header["key"])
+				return &nexuspb.Response{
+					Variant: &nexuspb.Response_CancelOperation{
+						CancelOperation: &nexuspb.CancelOperationResponse{},
+					},
+				}, nil
+			},
+			assertion: func(err error) {
+				s.Require().NoError(err)
+			},
+		},
+		{
+			outcome: "handler_error",
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				return nil, &nexuspb.HandlerError{
+					ErrorType: string(nexus.HandlerErrorTypeInternal),
+					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
+				}
+			},
+			assertion: func(err error) {
+				var unexpectedError *nexus.UnexpectedResponseError
+				s.Require().ErrorAs(err, &unexpectedError)
+				// TODO: nexus should export this
+				s.Require().Equal(520, unexpectedError.Response.StatusCode)
+				s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+			},
+		},
+		// TODO:
+		// {
+		// 	outcome: "handler_timeout",
+		// 	handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+		// 		time.Sleep(time.Minute)
+		// 		return nil, nil
+		// 	},
+		// 	assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+		// 		var unexpectedError *nexus.UnexpectedResponseError
+		// 		s.Require().ErrorAs(err, &unexpectedError)
+		// 		// TODO: nexus should export this
+		// 		s.Require().Equal(520, unexpectedError.Response.StatusCode)
+		// 		s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+		// 	},
+		// },
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.T().Run(tc.outcome, func(t *testing.T) {
+			taskQueue := s.randomizeStr("task-queue")
+			ctx := NewContext()
+
+			url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+			s.Require().NoError(err)
+			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
+			go s.nexusTaskPoller(ctx, taskQueue, tc.handler)
+
+			handle, err := client.NewHandle("operation", "id")
+			s.Require().NoError(err)
+			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
+			tc.assertion(err)
+
+			snap := capture.Snapshot()
+
+			s.Equal(1, len(snap["nexus_requests"]))
+			s.Equal(map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome}, snap["nexus_requests"][0].Tags)
+			s.Equal(int64(1), snap["nexus_requests"][0].Value)
+			s.Equal(metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
+
+			s.Equal(1, len(snap["nexus_latency"]))
+			s.Equal(map[string]string{"namespace": s.namespace, "method": "CancelOperation", "outcome": tc.outcome}, snap["nexus_latency"][0].Tags)
+			s.Equal(metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
+		})
+	}
+}
+
+func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning() {
+	ctx, cancel := context.WithCancel(NewContext())
+	defer cancel()
+	taskQueue := s.randomizeStr("task-queue")
+	err := s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &client.UpdateWorkerBuildIdCompatibilityOptions{
+		TaskQueue: taskQueue,
+		Operation: &client.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
+	})
+	s.Require().NoError(err)
+	err = s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &client.UpdateWorkerBuildIdCompatibilityOptions{
+		TaskQueue: taskQueue,
+		Operation: &client.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
+	})
+	s.Require().NoError(err)
+
+	url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+	s.Require().NoError(err)
+	// Versioned poller gets task
+	go s.versionedNexusTaskPoller(ctx, taskQueue, "new-build-id", nexusEchoHandler)
+
+	result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+	s.Require().NoError(err)
+	s.Require().Equal("input", result.Successful)
+
+	// Unversioned poller doesn't get a task
+	go s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
+	// Versioned poller gets task with wrong build ID
+	go s.versionedNexusTaskPoller(ctx, taskQueue, "old-build-id", nexusEchoHandler)
+
+	ctx, cancel = context.WithTimeout(ctx, time.Second*2)
+	defer cancel()
+	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+}
 
 func (s *clientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
 	s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
 }
 
 func (s *clientFunctionalSuite) nexusTaskPoller(ctx context.Context, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+	s.versionedNexusTaskPoller(ctx, taskQueue, "", handler)
+}
+
+func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, taskQueue, buildID string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+	var vc *commonpb.WorkerVersionCapabilities
+
+	if buildID != "" {
+		vc = &commonpb.WorkerVersionCapabilities{
+			BuildId:       buildID,
+			UseVersioning: true,
+		}
+	}
 	res, err := s.testCluster.GetFrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: s.namespace,
 		Identity:  uuid.NewString(),
@@ -363,7 +515,12 @@ func (s *clientFunctionalSuite) nexusTaskPoller(ctx context.Context, taskQueue s
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
+		WorkerVersionCapabilities: vc,
 	})
+	// We allow tests to leave pollers dangling and cancel the context.
+	if ctx.Err() != nil {
+		return
+	}
 	s.Require().NoError(err)
 	response, handlerError := handler(res)
 	if handlerError != nil {
