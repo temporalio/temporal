@@ -27,16 +27,20 @@
 package sdk
 
 import (
+	"context"
 	"crypto/tls"
 	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -91,6 +95,9 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.Logger = f.sdklogger
 	options.ConnectionOptions = sdkclient.ConnectionOptions{
 		TLS: f.tlsConfig,
+		DialOptions: []grpc.DialOption{
+			grpc.WithUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
+		},
 	}
 	return options
 }
@@ -135,4 +142,28 @@ func (f *clientFactory) NewWorker(
 	options sdkworker.Options,
 ) sdkworker.Worker {
 	return sdkworker.New(client, taskQueue, options)
+}
+
+// Overwrite the 'client-name' and 'client-version' headers on gRPC requests sent using the Go SDK
+// so they clearly indicate that the request is coming from the Temporal server.
+func sdkClientNameHeadersInjectorInterceptor() grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		// Can't use headers.SetVersions() here because it is _appending_ headers to the context
+		// rather than _replacing_ them, which means Go SDK's default headers would still be present.
+		md, mdExist := metadata.FromOutgoingContext(ctx)
+		if !mdExist {
+			md = metadata.New(nil)
+		}
+		md.Set(headers.ClientNameHeaderName, headers.ClientNameServer)
+		md.Set(headers.ClientVersionHeaderName, headers.ServerVersion)
+		ctx = metadata.NewOutgoingContext(ctx, md)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }

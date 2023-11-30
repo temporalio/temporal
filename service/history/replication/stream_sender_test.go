@@ -408,3 +408,17 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	)
 	s.NoError(err)
 }
+
+func (s *streamSenderSuite) TestSendEventLoop_Panic_ShouldCaptureAsError() {
+	s.historyEngine.EXPECT().SubscribeReplicationNotification().Do(func() {
+		panic("panic")
+	})
+	err := s.streamSender.sendEventLoop()
+	s.Error(err) // panic is captured as error
+}
+
+func (s *streamSenderSuite) TestRecvEventLoop_Panic_ShouldCaptureAsError() {
+	s.streamSender.shutdownChan = nil // mimic nil pointer panic
+	err := s.streamSender.recvEventLoop()
+	s.Error(err) // panic is captured as error
+}

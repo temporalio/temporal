@@ -130,10 +130,10 @@ func NewHTTPAPIServer(
 
 	// Build 4 possible marshalers in order based on content type
 	opts := []runtime.ServeMuxOption{
-		runtime.WithMarshalerOption("application/json+pretty+no-payload-shorthand", h.newMarshaler("  ", true)),
-		runtime.WithMarshalerOption("application/json+no-payload-shorthand", h.newMarshaler("", true)),
-		runtime.WithMarshalerOption("application/json+pretty", h.newMarshaler("  ", false)),
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, h.newMarshaler("", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("  ", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("", false)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("  ", true)),
+		runtime.WithMarshalerOption(newTemporalProtoMarshaler("", true)),
 	}
 
 	// Set Temporal service error handler
@@ -292,23 +292,6 @@ func (h *HTTPAPIServer) errorHandler(
 
 	w.WriteHeader(runtime.HTTPStatusFromCode(s.Code()))
 	_, _ = w.Write(buf)
-}
-
-func (h *HTTPAPIServer) newMarshaler(indent string, disablePayloadShorthand bool) runtime.Marshaler {
-	return newProtoJsonMarshaler(indent)
-	// TODO: reintroduce shorthand JSON marshaling here
-	// marshalOpts := proxy.JSONPBMarshalerOptions{
-	// 	Indent:                  indent,
-	// 	DisablePayloadShorthand: disablePayloadShorthand,
-	// }
-	// unmarshalOpts := proxy.JSONPBUnmarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
-	// if m, err := proxy.NewJSONPBMarshaler(marshalOpts); err != nil {
-	// 	panic(err)
-	// } else if u, err := proxy.NewJSONPBUnmarshaler(unmarshalOpts); err != nil {
-	// 	panic(err)
-	// } else {
-	// 	return proxy.NewGRPCGatewayJSONPBMarshaler(m, u)
-	// }
 }
 
 func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) {
