@@ -151,7 +151,6 @@ func AuthorizationInterceptorProvider(
 	metricsHandler metrics.Handler,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
-	customInterceptors []grpc.UnaryServerInterceptor,
 	audienceGetter authorization.JWTAudienceMapper,
 ) *authorization.Interceptor {
 	return authorization.NewInterceptor(
