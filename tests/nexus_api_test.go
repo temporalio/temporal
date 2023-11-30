@@ -40,7 +40,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/client"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
@@ -459,14 +459,14 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	ctx, cancel := context.WithCancel(NewContext())
 	defer cancel()
 	taskQueue := s.randomizeStr("task-queue")
-	err := s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &client.UpdateWorkerBuildIdCompatibilityOptions{
+	err := s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{
 		TaskQueue: taskQueue,
-		Operation: &client.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
+		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
 	})
 	s.Require().NoError(err)
-	err = s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &client.UpdateWorkerBuildIdCompatibilityOptions{
+	err = s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{
 		TaskQueue: taskQueue,
-		Operation: &client.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
+		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
 	})
 	s.Require().NoError(err)
 
