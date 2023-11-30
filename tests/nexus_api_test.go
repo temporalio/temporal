@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -201,10 +202,10 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 }
 
 func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
-	taskQueue := s.randomizeStr("task-queue")
-
 	// Also use this test to verify that namespaces are unescaped in the path.
-	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, url.PathEscape("namespace not/found"), taskQueue)
+	taskQueue := s.randomizeStr("task-queue")
+	namespace := "namespace not/found"
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, url.PathEscape(namespace), taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.Require().NoError(err)
 	ctx := NewContext()
@@ -214,12 +215,12 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	var unexpectedResponse *nexus.UnexpectedResponseError
 	s.Require().ErrorAs(err, &unexpectedResponse)
 	s.Require().Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Require().Equal(`namespace not found: "namespace not/found"`, unexpectedResponse.Failure.Message)
+	s.Require().Equal(fmt.Sprintf("namespace not found: %q", namespace), unexpectedResponse.Failure.Message)
 
 	snap := capture.Snapshot()
 
 	s.Equal(1, len(snap["nexus_requests"]))
-	s.Equal(map[string]string{"namespace": "namespace not/found", "method": "StartOperation", "outcome": "namespace_not_found"}, snap["nexus_requests"][0].Tags)
+	s.Equal(map[string]string{"namespace": namespace, "method": "StartOperation", "outcome": "namespace_not_found"}, snap["nexus_requests"][0].Tags)
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
@@ -263,8 +264,8 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 
 	taskQueue := s.randomizeStr("task-queue")
-	url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
-	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.Require().NoError(err)
 	ctx := NewContext()
 
@@ -295,16 +296,17 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	type testcase struct {
 		name      string
 		header    nexus.Header
-		assertion func(*nexus.ClientStartOperationResult[string], error)
+		assertion func(*nexus.ClientStartOperationResult[string], error, map[string][]*metricstest.CapturedRecording)
 	}
 	testCases := []testcase{
 		{
 			name: "no header",
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
 				s.Require().ErrorAs(err, &unexpectedResponse)
 				s.Require().Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
 				s.Require().Equal("permission denied", unexpectedResponse.Failure.Message)
+				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 		{
@@ -312,11 +314,12 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			header: nexus.Header{
 				"authorization": "Bearer invalid",
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
 				s.Require().ErrorAs(err, &unexpectedResponse)
 				s.Require().Equal(http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
 				s.Require().Equal("unauthorized", unexpectedResponse.Failure.Message)
+				s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 		{
@@ -324,9 +327,10 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			header: nexus.Header{
 				"authorization": "Bearer test",
 			},
-			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				s.Require().NoError(err)
 				s.Require().Equal("input", res.Successful)
+				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
 	}
@@ -351,17 +355,22 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 	go s.echoNexusTaskPoller(ctx, taskQueue)
 
-	url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
-	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.Require().NoError(err)
 
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
+			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+
 			result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
 				Header: tc.header,
 			})
-			tc.assertion(result, err)
+
+			snap := capture.Snapshot()
+			tc.assertion(result, err, snap)
 		})
 	}
 }
@@ -475,8 +484,8 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	})
 	s.Require().NoError(err)
 
-	url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
-	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
 	s.Require().NoError(err)
 	// Versioned poller gets task
 	go s.versionedNexusTaskPoller(ctx, taskQueue, "new-build-id", nexusEchoHandler)

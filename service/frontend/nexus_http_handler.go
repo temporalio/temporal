@@ -26,8 +26,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"path"
-	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -43,10 +43,11 @@ import (
 )
 
 type NexusHTTPHandler struct {
-	logger       log.Logger
-	nexusHandler http.Handler
-	auth         *authorization.Interceptor
-	enabled      func() bool
+	logger                 log.Logger
+	nexusHandler           http.Handler
+	preprocessErrorCounter metrics.CounterFunc
+	auth                   *authorization.Interceptor
+	enabled                func() bool
 }
 
 func NewNexusHTTPHandler(
@@ -58,9 +59,10 @@ func NewNexusHTTPHandler(
 	logger log.Logger,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
-		logger:  logger,
-		auth:    authInterceptor,
-		enabled: serviceConfig.EnableNexusHTTPHandler,
+		logger:                 logger,
+		auth:                   authInterceptor,
+		enabled:                serviceConfig.EnableNexusHTTPHandler,
+		preprocessErrorCounter: metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:            logger,
@@ -82,6 +84,7 @@ func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
 }
 
 func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
+	h.preprocessErrorCounter.Record(1)
 	var err error
 	var bytes []byte
 	if failure != nil {
@@ -117,11 +120,19 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	nc := nexusContext{
 		// This name does not map to an underlying gRPC service. This format is used since for consistency with
 		// the gRPC API names on which the authorizer - the consumer of this string - may depend.
-		apiName:       "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
-		namespaceName: vars["namespace"],
-		taskQueue:     vars["task_queue"],
+		apiName: "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
 	}
 
+	if nc.namespaceName, err = url.PathUnescape(vars["namespace"]); err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		return
+	}
+	if nc.taskQueue, err = url.PathUnescape(vars["task_queue"]); err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		return
+	}
 	var tlsInfo *credentials.TLSInfo
 	if r.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{
@@ -145,10 +156,23 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	}
 
 	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
-	// Hard-code to taking the first 8 parts for this route. There doesn't seem to be a better way to retrieve the
-	// prefix from gorilla.
-	parts := strings.Split(r.URL.EscapedPath(), "/")
-	http.StripPrefix("/"+path.Join(parts[:8]...), h.nexusHandler).ServeHTTP(w, r)
+
+	// This whole mess is required to support escaped path vars for namespace and task queue.
+	u, err := mux.CurrentRoute(r).URL("namespace", vars["namespace"], "task_queue", vars["task_queue"])
+	if err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		return
+	}
+	prefix, err := url.PathUnescape(u.Path)
+	if err != nil {
+		h.logger.Error("invalid URL", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusInternalServerError, &nexus.Failure{Message: "internal error"})
+		return
+	}
+	prefix = path.Dir(prefix)
+	r.URL.RawPath = ""
+	http.StripPrefix(prefix, h.nexusHandler).ServeHTTP(w, r)
 }
 
 // Handler for /api/v1/services/{service}

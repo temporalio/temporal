@@ -666,6 +666,10 @@ var (
 		"nexus_requests",
 		WithDescription("The number of Nexus requests received by the service."),
 	)
+	NexusRequestPreProcessErrors = NewCounterDef(
+		"nexus_request_preprocess_errors",
+		WithDescription("The number of Nexus requests for which pre-processing failed."),
+	)
 	NexusLatencyHistogram = NewCounterDef(
 		"nexus_latency",
 		WithDescription("Latency histogram of Nexus requests."),
