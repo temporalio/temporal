@@ -36,6 +36,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -65,9 +66,9 @@ type TaskMatcher struct {
 	fwdr                   *Forwarder
 	metricsHandler         metrics.Handler // namespace metric scope
 	numPartitions          func() int      // number of task queue partitions
-	backlogTasksCreateTime map[int64]int   // counting the number of tasks for each creation time
+	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
-	lastPoller             atomic.Int64
+	lastPoller             atomic.Int64    // unix nanos of most recent poll start time
 }
 
 const (
@@ -260,12 +261,12 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 // Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
 // backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
 func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh chan struct{}) error {
+	tm.registerBacklogTask(task)
+	defer tm.unregisterBacklogTask(task)
+
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
-
-	tm.registerBacklogTask(task)
-	defer tm.unregisterBacklogTask(task)
 
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match
@@ -370,7 +371,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 	}
 
 	tm.metricsHandler.Timer(metrics.TaskDispatchLatencyPerTaskQueue.GetMetricName()).Record(
-		time.Since(*task.event.Data.CreateTime),
+		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
@@ -558,7 +559,7 @@ func (tm *TaskMatcher) registerBacklogTask(task *internalTask) {
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
-	ts := task.event.Data.CreateTime.UnixNano()
+	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
 	tm.backlogTasksCreateTime[ts] += 1
 }
 
@@ -570,7 +571,7 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
 
-	ts := task.event.Data.CreateTime.UnixNano()
+	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
 	counter := tm.backlogTasksCreateTime[ts]
 	if counter == 1 {
 		delete(tm.backlogTasksCreateTime, ts)
