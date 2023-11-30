@@ -1246,6 +1246,8 @@ func (s *workflowSuite) TestBackfill() {
 }
 
 func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
+	backfillTime := timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC))
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			// if start and end time were not inclusive, this backfill run would not exist
@@ -1269,8 +1271,8 @@ func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
 				f: func() {
 					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
 						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)),
-							EndTime:       timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)),
+							StartTime:     backfillTime,
+							EndTime:       backfillTime,
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 						}},
 					})
