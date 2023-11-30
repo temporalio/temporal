@@ -233,7 +233,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1/DispatchNexusTask" {
+				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
 					return authorization.Result{Decision: authorization.DecisionDeny, Reason: "unauthorized in test"}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -243,7 +243,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny without reason",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1/DispatchNexusTask" {
+				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
 					return authorization.Result{Decision: authorization.DecisionDeny}, nil
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -253,7 +253,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		{
 			name: "deny with generic error",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-				if ct.APIName == "/temporal.api.nexusservice.v1/DispatchNexusTask" {
+				if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" {
 					return authorization.Result{}, errors.New("some generic error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
@@ -332,7 +332,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	}
 
 	s.testCluster.host.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
-		if ct.APIName == "/temporal.api.nexusservice.v1/DispatchNexusTask" && (c == nil || c.Subject != "test") {
+		if ct.APIName == "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask" && (c == nil || c.Subject != "test") {
 			return authorization.Result{Decision: authorization.DecisionDeny}, nil
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
