@@ -24,7 +24,7 @@ type (
 		testProcessToolBox
 		replication.ProcessToolBox
 
-		futureEventHandler FutureEventsHandler
+		futureEventHandler RemoteGeneratedEventsHandler
 	}
 )
 
@@ -92,7 +92,7 @@ func (s *futureEventsHandlerSuite) TestHandleFutureHistoryEvents() {
 		nil,
 	).Times(1)
 
-	err := s.futureEventHandler.HandleFutureEvents(
+	err := s.futureEventHandler.HandleRemoteGeneratedHistoryEvents(
 		context.Background(),
 		workflowKey,
 		nil,

@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination past_events_handler_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination local_events_handler_mock.go
 
 const (
 	historyImportBlobSize = 16
@@ -49,37 +49,37 @@ const (
 )
 
 type (
-	PastEventsHandler interface {
-		HandlePastEvents(
+	LocalGeneratedEventsHandler interface {
+		HandleLocalGeneratedHistoryEvents(
 			ctx context.Context,
 			remoteCluster string,
 			workflowKey definition.WorkflowKey,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
-			pastEvents [][]*historypb.HistoryEvent,
+			localEvents [][]*historypb.HistoryEvent,
 		) error
 	}
 
-	pastEventsHandlerImpl struct {
+	localEventsHandlerImpl struct {
 		replication.ProcessToolBox
 	}
 )
 
-func NewPastEventsHandler(toolBox replication.ProcessToolBox) PastEventsHandler {
-	return &pastEventsHandlerImpl{
+func NewLocalEventsHandler(toolBox replication.ProcessToolBox) LocalGeneratedEventsHandler {
+	return &localEventsHandlerImpl{
 		toolBox,
 	}
 }
 
-// HandlePastEvents current implementation is using Import API which requires transactional importing.
-// So when this API is called, it will try to import all past history events in one transaction.
-// i.e. From version history, past events are [1,100]. When this API is called with events[10,11], it will try to import
+// HandleLocalEvents current implementation is using Import API which requires transactional importing.
+// So when this API is called, it will try to import all local history events in one transaction.
+// i.e. From version history, local events are [1,100]. When this API is called with events[10,11], it will try to import
 // [10,11] and if success, it will fetch [12,100] from source cluster and also import them, then commit the transaction.
-func (h *pastEventsHandlerImpl) HandlePastEvents(
+func (h *localEventsHandlerImpl) HandleLocalGeneratedHistoryEvents(
 	ctx context.Context,
 	sourceClusterName string,
 	workflowKey definition.WorkflowKey,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-	pastEvents [][]*historypb.HistoryEvent,
+	localEvents [][]*historypb.HistoryEvent,
 ) error {
 	shardContext, err := h.ShardController.GetShardByNamespaceWorkflow(namespace.ID(workflowKey.NamespaceID), workflowKey.WorkflowID)
 	if err != nil {
@@ -90,30 +90,30 @@ func (h *pastEventsHandlerImpl) HandlePastEvents(
 		return err
 	}
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, versionHistoryItems)
-	pastEventsBlobs := make([]*common.DataBlob, len(pastEvents))
+	localEventsBlobs := make([]*common.DataBlob, len(localEvents))
 
-	for index, batch := range pastEvents {
+	for index, batch := range localEvents {
 		blob, err := h.EventSerializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return err
 		}
-		pastEventsBlobs[index] = blob
+		localEventsBlobs[index] = blob
 	}
-	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, pastEventsBlobs, versionHistory, nil)
+	response, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, localEventsBlobs, versionHistory, nil)
 	if err != nil {
 		return err
 	}
-	if !response.EventsApplied { // means past events were already existing before importing, no more action needed
+	if !response.EventsApplied { // means local events were already existing before importing, no more action needed
 		return nil
 	}
 
-	pastVersionHistory, _ := versionhistory.ParseVersionHistoryToPastAndFuture(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
+	localVersionHistory, _ := versionhistory.SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, h.ClusterMetadata.GetClusterID(), h.ClusterMetadata.GetFailoverVersionIncrement())
 
-	lastBatch := pastEvents[len(pastEvents)-1]
-	lastPastEvent := lastBatch[len(lastBatch)-1]
+	lastBatch := localEvents[len(localEvents)-1]
+	lastLocalEvent := lastBatch[len(lastBatch)-1]
 
-	if lastPastEvent.EventId == pastVersionHistory[len(pastVersionHistory)-1].EventId {
-		// all past events were imported successfully
+	if lastLocalEvent.EventId == localVersionHistory[len(localVersionHistory)-1].EventId {
+		// all local events were imported successfully
 		_, err := h.invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, nil, versionHistory, response.Token)
 		if err != nil {
 			return err
@@ -125,15 +125,15 @@ func (h *pastEventsHandlerImpl) HandlePastEvents(
 		sourceClusterName,
 		engine,
 		workflowKey,
-		lastPastEvent.EventId,
-		lastPastEvent.Version,
-		pastVersionHistory[len(pastVersionHistory)-1].EventId,
-		pastVersionHistory[len(pastVersionHistory)-1].Version,
+		lastLocalEvent.EventId,
+		lastLocalEvent.Version,
+		localVersionHistory[len(localVersionHistory)-1].EventId,
+		localVersionHistory[len(localVersionHistory)-1].Version,
 		response.Token,
 	)
 }
 
-func (h *pastEventsHandlerImpl) importEvents(
+func (h *localEventsHandlerImpl) importEvents(
 	ctx context.Context,
 	remoteCluster string,
 	engine shard.Engine,
@@ -211,7 +211,7 @@ func (h *pastEventsHandlerImpl) importEvents(
 	return nil
 }
 
-func (h *pastEventsHandlerImpl) invokeImportWorkflowExecutionCall(
+func (h *localEventsHandlerImpl) invokeImportWorkflowExecutionCall(
 	ctx context.Context,
 	historyEngine shard.Engine,
 	workflowKey definition.WorkflowKey,

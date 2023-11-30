@@ -176,7 +176,7 @@ func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.Versio
 	return lowestCommonAncestor.Equal(aLastItem) || lowestCommonAncestor.Equal(bLastItem)
 }
 
-func ParseVersionHistoryToPastAndFuture(
+func SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	initialFailoverVersion int64,
 	failoverVersionIncrement int64,

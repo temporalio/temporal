@@ -35,11 +35,11 @@ import (
 	"go.temporal.io/server/service/history/replication"
 )
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination future_events_handler_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination remote_events_handler_mock.go
 
 type (
-	FutureEventsHandler interface {
-		HandleFutureEvents(
+	RemoteGeneratedEventsHandler interface {
+		HandleRemoteGeneratedHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 			baseExecutionInfo *workflowpb.BaseExecutionInfo,
@@ -54,13 +54,13 @@ type (
 	}
 )
 
-func NewFutureEventsHandler(toolBox replication.ProcessToolBox) FutureEventsHandler {
+func NewFutureEventsHandler(toolBox replication.ProcessToolBox) RemoteGeneratedEventsHandler {
 	return &futureEventsHandlerImpl{
 		toolBox,
 	}
 }
 
-func (f futureEventsHandlerImpl) HandleFutureEvents(
+func (f futureEventsHandlerImpl) HandleRemoteGeneratedHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	baseExecutionInfo *workflowpb.BaseExecutionInfo,

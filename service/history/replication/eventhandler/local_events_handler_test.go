@@ -23,34 +23,34 @@ import (
 )
 
 type (
-	pastEventsHandlerSuite struct {
+	localEventsHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
 		testProcessToolBox
 		replication.ProcessToolBox
 
-		pastEventsHandler PastEventsHandler
+		localEventsHandler LocalGeneratedEventsHandler
 	}
 )
 
-func TestPastEventsHandlerSuite(t *testing.T) {
-	s := new(pastEventsHandlerSuite)
+func TestLocalEventsHandlerSuite(t *testing.T) {
+	s := new(localEventsHandlerSuite)
 	suite.Run(t, s)
 }
 
-func (s *pastEventsHandlerSuite) SetupSuite() {
+func (s *localEventsHandlerSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *pastEventsHandlerSuite) TearDownSuite() {
+func (s *localEventsHandlerSuite) TearDownSuite() {
 
 }
 
-func (s *pastEventsHandlerSuite) SetupTest() {
+func (s *localEventsHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
-	s.pastEventsHandler = NewPastEventsHandler(
+	s.localEventsHandler = NewLocalEventsHandler(
 		s.ProcessToolBox,
 	)
 }
@@ -67,7 +67,7 @@ func (m *ImportWorkflowExecutionRequestMatcher) String() string {
 	return m.ExpectedRequest.String()
 }
 
-func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_AlreadyExist() {
+func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -119,7 +119,7 @@ func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_AlreadyExist() {
 			EventsApplied: false,
 		}, nil).Times(1)
 
-	err := s.pastEventsHandler.HandlePastEvents(
+	err := s.localEventsHandler.HandleLocalGeneratedHistoryEvents(
 		context.Background(),
 		remoteCluster,
 		workflowKey,
@@ -129,7 +129,7 @@ func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_AlreadyExist() {
 	s.Nil(err)
 }
 
-func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_IncludeLastEvent_AppliedAndDirectCommit() {
+func (s *localEventsHandlerSuite) TestHandleLocalHistoryEvents_IncludeLastEvent_AppliedAndDirectCommit() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -140,7 +140,7 @@ func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_IncludeLastEvent_Ap
 
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
-			{EventId: 10, Version: 1}, // Last past event is 10
+			{EventId: 10, Version: 1}, // Last local event is 10
 			{EventId: 15, Version: 2},
 		},
 	}
@@ -206,7 +206,7 @@ func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_IncludeLastEvent_Ap
 		}, nil).Times(1),
 	)
 
-	err := s.pastEventsHandler.HandlePastEvents(
+	err := s.localEventsHandler.HandleLocalGeneratedHistoryEvents(
 		context.Background(),
 		remoteCluster,
 		workflowKey,
@@ -216,7 +216,7 @@ func (s *pastEventsHandlerSuite) TestHandlePastHistoryEvents_IncludeLastEvent_Ap
 	s.Nil(err)
 }
 
-func (s *pastEventsHandlerSuite) TestHandleHistoryEvents_PastOnly_ImportAllPastAndCommit() {
+func (s *localEventsHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLocalAndCommit() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -377,7 +377,7 @@ func (s *pastEventsHandlerSuite) TestHandleHistoryEvents_PastOnly_ImportAllPastA
 		}, nil).Times(1),
 	)
 
-	err := s.pastEventsHandler.HandlePastEvents(
+	err := s.localEventsHandler.HandleLocalGeneratedHistoryEvents(
 		context.Background(),
 		remoteCluster,
 		workflowKey,

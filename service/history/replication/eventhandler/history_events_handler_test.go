@@ -71,8 +71,8 @@ type (
 		testProcessToolBox
 		replication.ProcessToolBox
 
-		pastEventsHandler  *MockPastEventsHandler
-		futureEventHandler *MockFutureEventsHandler
+		localEventsHandler *MockLocalGeneratedEventsHandler
+		remoteEventHandler *MockRemoteGeneratedEventsHandler
 
 		historyEventHandler *historyEventsHandlerImpl
 	}
@@ -126,16 +126,16 @@ func (s *historyEventHandlerSuite) TearDownSuite() {
 func (s *historyEventHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.testProcessToolBox, s.ProcessToolBox = initializeToolBox(s.controller)
-	s.pastEventsHandler = NewMockPastEventsHandler(s.controller)
-	s.futureEventHandler = NewMockFutureEventsHandler(s.controller)
+	s.localEventsHandler = NewMockLocalGeneratedEventsHandler(s.controller)
+	s.remoteEventHandler = NewMockRemoteGeneratedEventsHandler(s.controller)
 	s.historyEventHandler = &historyEventsHandlerImpl{
 		s.ProcessToolBox,
-		s.pastEventsHandler,
-		s.futureEventHandler,
+		s.localEventsHandler,
+		s.remoteEventHandler,
 	}
 }
 
-func (s *historyEventHandlerSuite) TestHandleHistoryEvents_FutureOnly() {
+func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -174,7 +174,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_FutureOnly() {
 		RunID:       runId,
 	}
 
-	s.futureEventHandler.EXPECT().HandleFutureEvents(
+	s.remoteEventHandler.EXPECT().HandleRemoteGeneratedHistoryEvents(
 		gomock.Any(),
 		workflowKey,
 		nil,
@@ -195,7 +195,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_FutureOnly() {
 	s.Nil(err)
 }
 
-func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastOnly() {
+func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -230,7 +230,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastOnly() {
 		RunID:       runId,
 	}
 
-	s.pastEventsHandler.EXPECT().HandlePastEvents(
+	s.localEventsHandler.EXPECT().HandleLocalGeneratedHistoryEvents(
 		gomock.Any(),
 		remoteCluster,
 		workflowKey,
@@ -250,7 +250,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastOnly() {
 	s.Nil(err)
 }
 
-func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandlePastThenFuture() {
+func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_HandleLocalThenRemote() {
 	remoteCluster := cluster.TestAlternativeClusterName
 	namespaceId := uuid.NewString()
 	workflowId := uuid.NewString()
@@ -267,7 +267,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 			{EventId: 15, Version: 1003},
 		},
 	}
-	pastHistoryEvents := [][]*historypb.HistoryEvent{
+	localHistoryEvents := [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 5,
@@ -299,7 +299,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 			},
 		},
 	}
-	futureHistoryEvents := [][]*historypb.HistoryEvent{
+	remoteHistoryEvents := [][]*historypb.HistoryEvent{
 		{
 			{
 				EventId: 11,
@@ -325,7 +325,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 			},
 		},
 	}
-	initialHistoryEvents := append(pastHistoryEvents, futureHistoryEvents...)
+	initialHistoryEvents := append(localHistoryEvents, remoteHistoryEvents...)
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: namespaceId,
 		WorkflowID:  workflowId,
@@ -333,20 +333,20 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_PastAndFuture_HandleP
 	}
 
 	gomock.InOrder(
-		s.pastEventsHandler.EXPECT().HandlePastEvents(
+		s.localEventsHandler.EXPECT().HandleLocalGeneratedHistoryEvents(
 			gomock.Any(),
 			remoteCluster,
 			workflowKey,
 			versionHistory.Items,
-			pastHistoryEvents,
+			localHistoryEvents,
 		).Return(nil).Times(1),
 
-		s.futureEventHandler.EXPECT().HandleFutureEvents(
+		s.remoteEventHandler.EXPECT().HandleRemoteGeneratedHistoryEvents(
 			gomock.Any(),
 			workflowKey,
 			nil,
 			versionHistory.Items,
-			futureHistoryEvents,
+			remoteHistoryEvents,
 			nil,
 		).Return(nil).Times(1),
 	)

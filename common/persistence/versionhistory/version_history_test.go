@@ -748,7 +748,7 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
 }
 
-func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_FutureOnly() {
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_RemoteOnly() {
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
 		{EventId: 5, Version: 2},
 		{EventId: 10, Version: 3},
@@ -756,12 +756,12 @@ func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_FutureOnl
 		{EventId: 15, Version: 5},
 	}
 
-	past, future := ParseVersionHistoryToPastAndFuture(versionHistoryItems, 1, 1000)
+	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, 1, 1000)
 	s.Empty(past)
 	s.Equal(versionHistoryItems, future)
 }
 
-func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_PastOnly() {
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalOnly() {
 	versionHistoryItems := []*historyspb.VersionHistoryItem{
 		{EventId: 5, Version: 1},
 		{EventId: 10, Version: 2},
@@ -769,24 +769,24 @@ func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_PastOnly(
 		{EventId: 15, Version: 1001},
 	}
 
-	past, future := ParseVersionHistoryToPastAndFuture(versionHistoryItems, 1, 1000)
+	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(versionHistoryItems, 1, 1000)
 	s.Empty(future)
 	s.Equal(versionHistoryItems, past)
 }
 
-func (s *versionHistoriesSuite) TestParseVersionHistoryToPastAndFuture_PastAndFuture() {
-	pastItems := []*historyspb.VersionHistoryItem{
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalAndRemote() {
+	localItems := []*historyspb.VersionHistoryItem{
 		{EventId: 5, Version: 1},
 		{EventId: 10, Version: 2},
 		{EventId: 13, Version: 3},
 		{EventId: 15, Version: 1001},
 	}
-	futureItems := []*historyspb.VersionHistoryItem{
+	remoteItems := []*historyspb.VersionHistoryItem{
 		{EventId: 20, Version: 1004},
 		{EventId: 25, Version: 1005},
 	}
 
-	past, future := ParseVersionHistoryToPastAndFuture(append(pastItems, futureItems...), 1, 1000)
-	s.Equal(pastItems, past)
-	s.Equal(futureItems, future)
+	past, future := SplitVersionHistoryToLocalGeneratedAndRemoteGenerated(append(localItems, remoteItems...), 1, 1000)
+	s.Equal(localItems, past)
+	s.Equal(remoteItems, future)
 }
