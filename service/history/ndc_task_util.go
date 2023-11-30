@@ -207,7 +207,7 @@ func validateTaskByClock(
 	if err != nil {
 		return err
 	}
-	if result > 0 {
+	if result >= 0 {
 		shardContext.UnloadForOwnershipLost()
 		return &persistence.ShardOwnershipLostError{
 			ShardID: shardID,

@@ -2461,7 +2461,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 			mockShard.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 			mockShard.EXPECT().CurrentVectorClock().Return(
-				vclock.NewVectorClock(mockClusterMetadata.GetClusterID(), mockShard.GetShardID(), deleteExecutionTaskId),
+				vclock.NewVectorClock(mockClusterMetadata.GetClusterID(), mockShard.GetShardID(), deleteExecutionTaskId+1),
 			).Times(1)
 			mockShard.EXPECT().GetConfig().Return(&configs.Config{
 				TransferProcessorEnsureCloseBeforeDelete: func() bool {
