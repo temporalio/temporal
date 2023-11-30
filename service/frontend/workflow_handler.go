@@ -35,6 +35,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -47,6 +48,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3124,6 +3126,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	request *workflowservice.UpdateWorkflowExecutionRequest,
 ) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
+	trace.SpanFromContext(ctx).SetAttributes(telemetry.WorkflowId.String(request.WorkflowExecution.WorkflowId))
 
 	if request == nil {
 		return nil, errRequestNotSet
