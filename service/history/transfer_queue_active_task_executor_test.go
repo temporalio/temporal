@@ -2457,7 +2457,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+			mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 
+			mockShard.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
+			mockShard.EXPECT().CurrentVectorClock().Return(
+				vclock.NewVectorClock(mockClusterMetadata.GetClusterID(), mockShard.GetShardID(), deleteExecutionTaskId),
+			).Times(1)
 			mockShard.EXPECT().GetConfig().Return(&configs.Config{
 				TransferProcessorEnsureCloseBeforeDelete: func() bool {
 					return c.EnsureCloseBeforeDelete
