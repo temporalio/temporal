@@ -121,10 +121,10 @@ type (
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
 		AddTask(ctx context.Context, params addTaskParams) (syncMatch bool, err error)
-		// GetTask blocks waiting for a task Returns error when context deadline is exceeded
+		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
-		GetTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
 		// MarkAlive updates the liveness timer to keep this taskQueueManager alive.
 		MarkAlive()
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
@@ -478,11 +478,11 @@ func (c *taskQueueManagerImpl) SpoolTask(params addTaskParams) error {
 	return err
 }
 
-// GetTask blocks waiting for a task.
+// PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
 // to be dispatched from this task queue to pollers
-func (c *taskQueueManagerImpl) GetTask(
+func (c *taskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {

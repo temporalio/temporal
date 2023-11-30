@@ -107,6 +107,7 @@ type (
 	pollMetadata struct {
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+		forwardedFrom             string
 	}
 
 	namespaceUpdateLocks struct {
@@ -497,16 +498,15 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -676,19 +676,18 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
-		task, err := e.getTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
+		task, err := e.pollTask(pollerCtx, taskQueue, stickyInfo, pollMetadata)
 		if err != nil {
 			if err == errNoTasks {
 				return emptyPollActivityTaskQueueResponse, nil
 			}
 			return nil, err
 		}
-
-		e.emitForwardedSourceStats(opMetrics, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -1254,7 +1253,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	return partitionKeys, nil
 }
 
-func (e *matchingEngineImpl) getTask(
+func (e *matchingEngineImpl) pollTask(
 	ctx context.Context,
 	origTaskQueue *taskQueueID,
 	stickyInfo stickyInfo,
@@ -1292,7 +1291,7 @@ func (e *matchingEngineImpl) getTask(
 		defer baseTqm.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	return tqm.GetTask(ctx, pollMetadata)
+	return tqm.PollTask(ctx, pollMetadata)
 }
 
 func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
@@ -1476,24 +1475,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
 	})
-}
-
-func (e *matchingEngineImpl) emitForwardedSourceStats(
-	metricsHandler metrics.Handler,
-	isTaskForwarded bool,
-	pollForwardedSource string,
-) {
-	isPollForwarded := len(pollForwardedSource) > 0
-	switch {
-	case isTaskForwarded && isPollForwarded:
-		metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isTaskForwarded:
-		metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	case isPollForwarded:
-		metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	default:
-		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
-	}
 }
 
 func (m *lockableQueryTaskMap) put(key string, value chan *queryResult) {
