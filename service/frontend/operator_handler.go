@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common"
 	clustermetadata "go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -104,6 +105,12 @@ type (
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
 	}
+)
+
+const (
+	namespaceTagName                 = "namespace"
+	visibilityIndexNameTagName       = "visibility-index-name"
+	visibilitySearchAttributeTagName = "visibility-search-attribute"
 )
 
 // NewOperatorHandlerImpl creates a gRPC handler for operatorservice
@@ -217,15 +224,27 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	// Check if custom search attribute already exists in cluster metadata.
 	// This check is not needed in SQL DB because no custom search attributes
 	// are pre-allocated, and only aliases are created.
-	for saName := range request.GetSearchAttributes() {
-		if currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
+	customAttributesToAdd := map[string]enumspb.IndexedValueType{}
+	for saName, saType := range request.GetSearchAttributes() {
+		if !currentSearchAttributes.IsDefined(saName) {
+			customAttributesToAdd[saName] = saType
+		} else {
+			h.logger.Warn(
+				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
+				tag.NewStringTag(visibilityIndexNameTagName, indexName),
+				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+			)
 		}
+	}
+
+	// If the map is empty, then all custom search attributes already exists.
+	if len(customAttributesToAdd) == 0 {
+		return nil
 	}
 
 	// Execute workflow.
 	wfParams := addsearchattributes.WorkflowParams{
-		CustomAttributesToAdd: request.GetSearchAttributes(),
+		CustomAttributesToAdd: customAttributesToAdd,
 		IndexName:             indexName,
 		SkipSchemaUpdate:      false,
 	}
@@ -291,9 +310,12 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
 		if _, ok := aliasToFieldMap[saName]; ok {
-			return serviceerror.NewAlreadyExist(
+			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
+				tag.NewStringTag(namespaceTagName, nsName),
+				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
 			)
+			continue
 		}
 		// find the first available field for the given type
 		targetFieldName := ""
@@ -323,16 +345,24 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		upsertFieldToAliasMap[targetFieldName] = saName
 	}
 
+	// If the map is empty, then all custom search attributes already exists.
+	if len(upsertFieldToAliasMap) == 0 {
+		return nil
+	}
+
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName,
 		Config: &namespacepb.NamespaceConfig{
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
-	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
-		return errRaceConditionAddingSearchAttributes
+	if err != nil {
+		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+			return errRaceConditionAddingSearchAttributes
+		}
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
-	return err
+	return nil
 }
 
 func (h *OperatorHandlerImpl) RemoveSearchAttributes(
