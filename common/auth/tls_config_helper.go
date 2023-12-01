@@ -142,17 +142,14 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 		caCertPool := x509.NewCertPool()
 		caCerts, err := parseCertsFromPEM(caBytes)
 		if len(caCerts) == 0 {
-			return nil, errors.New("fail to parse certs as PEM")
+			return nil, errors.New("unable to parse certs as PEM")
 		}
 		for _, cert := range caCerts {
 			caCertPool.AddCert(cert)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to load decoded CA Cert as PEM: %w", err)
+			return nil, fmt.Errorf("unable to load decoded CA Cert as PEM: %w", err)
 		}
-		// if !caCertPool.AppendCertsFromPEM(caBytes) {
-		// 	return nil, errors.New("failed to load decoded CA Cert as PEM")
-		// }
 		tlsConfig.RootCAs = caCertPool
 	}
 
