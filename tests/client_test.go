@@ -68,6 +68,7 @@ type (
 	clientFunctionalSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
+		// Please never change this to assert.Assertions, tests rely on the fail fast behavior.
 		*require.Assertions
 		FunctionalTestBase
 		sdkClient                 sdkclient.Client

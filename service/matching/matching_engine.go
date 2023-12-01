@@ -822,7 +822,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 }
 
 func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *queryResult) error {
-	queryResultCh, ok := e.lockableQueryResultMap.get(taskID)
+	queryResultCh, ok := e.lockableQueryResultMap.pop(taskID)
 	if !ok {
 		return serviceerror.NewNotFound("query task not found, or already expired")
 	}
@@ -1348,7 +1348,7 @@ pollLoop:
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
-	resultCh, ok := e.lockableNexusResultMap.get(request.GetTaskId())
+	resultCh, ok := e.lockableNexusResultMap.pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
 		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
@@ -1361,7 +1361,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
-	resultCh, ok := e.lockableNexusResultMap.get(request.GetTaskId())
+	resultCh, ok := e.lockableNexusResultMap.pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
 		return nil, serviceerror.NewNotFound("nexus task not found or already expired")
@@ -1663,10 +1663,11 @@ func (m *lockableResultMap[T]) put(key string, value chan T) {
 	m.resultMap[key] = value
 }
 
-func (m *lockableResultMap[T]) get(key string) (chan T, bool) {
+func (m *lockableResultMap[T]) pop(key string) (chan T, bool) {
 	m.RLock()
 	defer m.RUnlock()
 	result, ok := m.resultMap[key]
+	delete(m.resultMap, key)
 	return result, ok
 }
 

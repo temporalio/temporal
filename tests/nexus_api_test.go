@@ -54,7 +54,7 @@ var op = nexus.NewOperationReference[string, string]("my-operation")
 func (s *clientFunctionalSuite) mustToPayload(v any) *commonpb.Payload {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload(v)
-	s.Require().NoError(err)
+	s.NoError(err)
 	return payload
 }
 
@@ -70,8 +70,8 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			outcome: "sync_success",
 			handler: nexusEchoHandler,
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				s.Require().NoError(err)
-				s.Require().Equal("input", res.Successful)
+				s.NoError(err)
+				s.Equal("input", res.Successful)
 			},
 		},
 		{
@@ -80,10 +80,10 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
 				start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
-				s.Require().Equal(op.Name(), start.Operation)
-				s.Require().Equal("http://localhost/callback", start.Callback)
-				s.Require().Equal("request-id", start.RequestId)
-				s.Require().Equal("value", res.Request.Header["key"])
+				s.Equal(op.Name(), start.Operation)
+				s.Equal("http://localhost/callback", start.Callback)
+				s.Equal("request-id", start.RequestId)
+				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_StartOperation{
 						StartOperation: &nexuspb.StartOperationResponse{
@@ -97,8 +97,8 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 				}, nil
 			},
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
-				s.Require().NoError(err)
-				s.Require().Equal("test-id", res.Pending.ID)
+				s.NoError(err)
+				s.Equal("test-id", res.Pending.ID)
 			},
 		},
 		{
@@ -123,14 +123,14 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			},
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 				var operationError *nexus.UnsuccessfulOperationError
-				s.Require().ErrorAs(err, &operationError)
-				s.Require().Equal(nexus.OperationStateFailed, operationError.State)
-				s.Require().Equal("deliberate test failure", operationError.Failure.Message)
-				s.Require().Equal(map[string]string{"k": "v"}, operationError.Failure.Metadata)
+				s.ErrorAs(err, &operationError)
+				s.Equal(nexus.OperationStateFailed, operationError.State)
+				s.Equal("deliberate test failure", operationError.Failure.Message)
+				s.Equal(map[string]string{"k": "v"}, operationError.Failure.Metadata)
 				var details string
 				err = json.Unmarshal(operationError.Failure.Details, &details)
-				s.Require().NoError(err)
-				s.Require().Equal("details", details)
+				s.NoError(err)
+				s.Equal("details", details)
 			},
 		},
 		{
@@ -143,10 +143,10 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			},
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
-				s.Require().ErrorAs(err, &unexpectedError)
+				s.ErrorAs(err, &unexpectedError)
 				// TODO: nexus should export this
-				s.Require().Equal(520, unexpectedError.Response.StatusCode)
-				s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+				s.Equal(520, unexpectedError.Response.StatusCode)
+				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
 		// TODO: This can't be tested without the test taking over a minute since this is the default matching
@@ -160,7 +160,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		// 	},
 		// 	assertion: func(res *nexus.ClientStartOperationResult[string], err error) {
 		// 		var unexpectedError *nexus.UnexpectedResponseError
-		// 		s.Require().ErrorAs(err, &unexpectedError)
+		// 		s.ErrorAs(err, &unexpectedError)
 		//              ...
 		// 	},
 		// },
@@ -174,7 +174,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 			url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
 			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
-			s.Require().NoError(err)
+			s.NoError(err)
 			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
@@ -207,15 +207,15 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	namespace := "namespace not/found"
 	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, url.PathEscape(namespace), taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
-	s.Require().NoError(err)
+	s.NoError(err)
 	ctx := NewContext()
 	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	var unexpectedResponse *nexus.UnexpectedResponseError
-	s.Require().ErrorAs(err, &unexpectedResponse)
-	s.Require().Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
-	s.Require().Equal(fmt.Sprintf("namespace not found: %q", namespace), unexpectedResponse.Failure.Message)
+	s.ErrorAs(err, &unexpectedResponse)
+	s.Equal(http.StatusNotFound, unexpectedResponse.Response.StatusCode)
+	s.Equal(fmt.Sprintf("namespace not found: %q", namespace), unexpectedResponse.Failure.Message)
 
 	snap := capture.Snapshot()
 
@@ -266,7 +266,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	taskQueue := s.randomizeStr("task-queue")
 	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
-	s.Require().NoError(err)
+	s.NoError(err)
 	ctx := NewContext()
 
 	for _, tc := range testCases {
@@ -279,9 +279,9 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 			_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 			var unexpectedResponse *nexus.UnexpectedResponseError
-			s.Require().ErrorAs(err, &unexpectedResponse)
-			s.Require().Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-			s.Require().Equal(tc.failureMessage, unexpectedResponse.Failure.Message)
+			s.ErrorAs(err, &unexpectedResponse)
+			s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+			s.Equal(tc.failureMessage, unexpectedResponse.Failure.Message)
 
 			snap := capture.Snapshot()
 
@@ -303,9 +303,9 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			name: "no header",
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
-				s.Require().ErrorAs(err, &unexpectedResponse)
-				s.Require().Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
-				s.Require().Equal("permission denied", unexpectedResponse.Failure.Message)
+				s.ErrorAs(err, &unexpectedResponse)
+				s.Equal(http.StatusForbidden, unexpectedResponse.Response.StatusCode)
+				s.Equal("permission denied", unexpectedResponse.Failure.Message)
 				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -316,9 +316,9 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 			},
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var unexpectedResponse *nexus.UnexpectedResponseError
-				s.Require().ErrorAs(err, &unexpectedResponse)
-				s.Require().Equal(http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
-				s.Require().Equal("unauthorized", unexpectedResponse.Failure.Message)
+				s.ErrorAs(err, &unexpectedResponse)
+				s.Equal(http.StatusUnauthorized, unexpectedResponse.Response.StatusCode)
+				s.Equal("unauthorized", unexpectedResponse.Failure.Message)
 				s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -328,8 +328,8 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 				"authorization": "Bearer test",
 			},
 			assertion: func(res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
-				s.Require().NoError(err)
-				s.Require().Equal("input", res.Successful)
+				s.NoError(err)
+				s.Equal("input", res.Successful)
 				s.Equal(0, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -357,7 +357,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 
 	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -388,9 +388,9 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 				// Choose an arbitrary test case to assert that all of the input is delivered to the
 				// poll response.
 				op := res.Request.Variant.(*nexuspb.Request_CancelOperation).CancelOperation
-				s.Require().Equal("operation", op.Operation)
-				s.Require().Equal("id", op.OperationId)
-				s.Require().Equal("value", res.Request.Header["key"])
+				s.Equal("operation", op.Operation)
+				s.Equal("id", op.OperationId)
+				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_CancelOperation{
 						CancelOperation: &nexuspb.CancelOperationResponse{},
@@ -398,7 +398,7 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 				}, nil
 			},
 			assertion: func(err error) {
-				s.Require().NoError(err)
+				s.NoError(err)
 			},
 		},
 		{
@@ -411,10 +411,10 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 			},
 			assertion: func(err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
-				s.Require().ErrorAs(err, &unexpectedError)
+				s.ErrorAs(err, &unexpectedError)
 				// TODO: nexus should export this
-				s.Require().Equal(520, unexpectedError.Response.StatusCode)
-				s.Require().Equal("deliberate internal failure", unexpectedError.Failure.Message)
+				s.Equal(520, unexpectedError.Response.StatusCode)
+				s.Equal("deliberate internal failure", unexpectedError.Failure.Message)
 			},
 		},
 		// TODO: This can't be tested without the test taking over a minute since this is the default matching
@@ -428,10 +428,10 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 		// 	},
 		// 	assertion: func(err error) {
 		// 		var unexpectedError *nexus.UnexpectedResponseError
-		// 		s.Require().ErrorAs(err, &unexpectedError)
+		// 		s.ErrorAs(err, &unexpectedError)
 		// 		// TODO: nexus should export this
-		// 		s.Require().Equal(521, unexpectedError.Response.StatusCode)
-		// 		s.Require().Equal("downstream timeout", unexpectedError.Failure.Message)
+		// 		s.Equal(521, unexpectedError.Response.StatusCode)
+		// 		s.Equal("downstream timeout", unexpectedError.Failure.Message)
 		// 	},
 		// },
 	}
@@ -444,14 +444,14 @@ func (s *clientFunctionalSuite) TestNexusCancelOperation_WithNamespaceAndTaskQue
 
 			url := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
 			client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: url})
-			s.Require().NoError(err)
+			s.NoError(err)
 			capture := s.testCluster.host.captureMetricsHandler.StartCapture()
 			defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
 
 			go s.nexusTaskPoller(ctx, taskQueue, tc.handler)
 
 			handle, err := client.NewHandle("operation", "id")
-			s.Require().NoError(err)
+			s.NoError(err)
 			err = handle.Cancel(ctx, nexus.CancelOperationOptions{Header: nexus.Header{"key": "value"}})
 			tc.assertion(err)
 
@@ -477,22 +477,22 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "old-build-id"},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 	err = s.sdkClient.UpdateWorkerBuildIdCompatibility(ctx, &sdkclient.UpdateWorkerBuildIdCompatibilityOptions{
 		TaskQueue: taskQueue,
 		Operation: &sdkclient.BuildIDOpAddNewIDInNewDefaultSet{BuildID: "new-build-id"},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, s.namespace, taskQueue)
 	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
-	s.Require().NoError(err)
+	s.NoError(err)
 	// Versioned poller gets task
 	go s.versionedNexusTaskPoller(ctx, taskQueue, "new-build-id", nexusEchoHandler)
 
 	result, err := nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-	s.Require().NoError(err)
-	s.Require().Equal("input", result.Successful)
+	s.NoError(err)
+	s.Equal("input", result.Successful)
 
 	// Unversioned poller doesn't get a task
 	go s.nexusTaskPoller(ctx, taskQueue, nexusEchoHandler)
@@ -502,7 +502,7 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	ctx, cancel = context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-	s.Require().ErrorIs(err, context.DeadlineExceeded)
+	s.ErrorIs(err, context.DeadlineExceeded)
 }
 
 func (s *clientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
@@ -531,11 +531,11 @@ func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 		},
 		WorkerVersionCapabilities: vc,
 	})
-	// We allow tests to leave pollers dangling and cancel the context.
+	// If the context is canceled, the test is written in a way that it doesn't expect the poll to be unblocked.
 	if ctx.Err() != nil {
 		return
 	}
-	s.Require().NoError(err)
+	s.NoError(err)
 	response, handlerError := handler(res)
 	if handlerError != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
@@ -544,7 +544,7 @@ func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			TaskToken: res.TaskToken,
 			Error:     handlerError,
 		})
-		s.Require().NoError(err)
+		s.NoError(err)
 	} else if response != nil {
 		_, err = s.testCluster.GetFrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
 			Namespace: s.namespace,
@@ -552,7 +552,7 @@ func (s *clientFunctionalSuite) versionedNexusTaskPoller(ctx context.Context, ta
 			TaskToken: res.TaskToken,
 			Response:  response,
 		})
-		s.Require().NoError(err)
+		s.NoError(err)
 	}
 }
 
