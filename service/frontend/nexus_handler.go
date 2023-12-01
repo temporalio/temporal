@@ -216,7 +216,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 			}
 		}
 	}
-	return nil, errors.New("unhandled response outcome") //nolint:goerr113
+	return nil, fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
 }
 func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelOperation")
@@ -261,7 +261,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
 		return nil
 	}
-	return errors.New("unhandled response outcome") //nolint:goerr113
+	return fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
 }
 
 // convertNexusHandlerError converts any 5xx user handler error to a downsream error.

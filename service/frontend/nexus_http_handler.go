@@ -42,6 +42,7 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
 type NexusHTTPHandler struct {
 	logger                 log.Logger
 	nexusHandler           http.Handler
@@ -85,18 +86,19 @@ func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
 
 func (h *NexusHTTPHandler) writeNexusFailure(writer http.ResponseWriter, statusCode int, failure *nexus.Failure) {
 	h.preprocessErrorCounter.Record(1)
-	var err error
-	var bytes []byte
-	if failure != nil {
-		bytes, err = json.Marshal(failure)
-		if err != nil {
-			h.logger.Error("failed to marshal failure", tag.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json")
+
+	if failure == nil {
+		writer.WriteHeader(statusCode)
+		return
 	}
 
+	bytes, err := json.Marshal(failure)
+	if err != nil {
+		h.logger.Error("failed to marshal failure", tag.Error(err))
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(statusCode)
 
 	if _, err := writer.Write(bytes); err != nil {
@@ -110,7 +112,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 		h.writeNexusFailure(w, http.StatusNotFound, &nexus.Failure{Message: "nexus endpoints disabled"})
 		return
 	}
-	// Limit the request body to max allowed Payload size. This is hardcoded to 2MB for headers at the moment.
+	// Limit the request body to max allowed Payload size.
 	// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 	// limit is enforced on top of this in the nexusHandler.StartOperation method.
 	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
@@ -118,8 +120,8 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	var err error
 	vars := mux.Vars(r)
 	nc := nexusContext{
-		// This name does not map to an underlying gRPC service. This format is used since for consistency with
-		// the gRPC API names on which the authorizer - the consumer of this string - may depend.
+		// This name does not map to an underlying gRPC service. This format is used for consistency with the
+		// gRPC API names on which the authorizer - the consumer of this string - may depend.
 		apiName: "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
 	}
 
