@@ -87,6 +87,8 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
+		testClusterFactory tests.TestClusterFactory
+
 		controller *gomock.Controller
 		cluster    *tests.TestCluster
 		generator  test.Generator
@@ -111,6 +113,7 @@ func TestNDCFuncTestSuite(t *testing.T) {
 func (s *nDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
+	s.testClusterFactory = tests.NewTestClusterFactory()
 
 	fileName := "../testdata/ndc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
@@ -158,7 +161,7 @@ func (s *nDCFunctionalTestSuite) SetupSuite() {
 	}
 	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
-	cluster, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
+	cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.cluster = cluster
 
