@@ -193,10 +193,10 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 		if err != nil {
 			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
-				scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.GetMetricName()).Record(1)
+				scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.Name()).Record(1)
 			}
 		} else {
-			scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.GetMetricName()).Record(1)
+			scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.Name()).Record(1)
 		}
 	} else {
 		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
@@ -588,11 +588,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.GetMetricName()).Record(1)
+		scope.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.Name()).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.GetMetricName()).Record(1)
+	scope.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.Name()).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),

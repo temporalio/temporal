@@ -211,7 +211,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
-			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
+			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.Name()).Record(1)
 			p.processNewTime()
 		case <-p.lookAheadCh:
 			p.lookAheadTask()

@@ -110,7 +110,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	// can't test overall counts because the metrics handler is shared across
 	// concurrently executing tests.
 	var found bool
-	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.GetMetricName()] {
+	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.Name()] {
 		found =
 			metric.Tags[metrics.OperationTagName] == "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution" &&
 				metric.Tags["namespace"] == s.namespace &&

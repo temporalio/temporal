@@ -64,7 +64,7 @@ func (e *executableTaskConverterImpl) Convert(
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for index, replicationTask := range replicationTasks {
-		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.Name()).Record(
 			int64(1),
 			metrics.FromClusterIDTag(serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),

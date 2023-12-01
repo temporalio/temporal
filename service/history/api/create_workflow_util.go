@@ -225,7 +225,7 @@ func ValidateStart(
 	}
 
 	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
-	handler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(int64(workflowMemoSize))
+	handler.Histogram(metrics.MemoSize.Name(), metrics.MemoSize.Unit()).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -315,7 +315,7 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = durationpb.New(workflowRunTimeout)
-		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.GetMetricName()).Record(
+		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.Name()).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
@@ -330,7 +330,7 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = durationpb.New(workflowTaskStartToCloseTimeout)
-		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.GetMetricName()).Record(
+		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.Name()).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),

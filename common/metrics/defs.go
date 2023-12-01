@@ -45,11 +45,11 @@ const (
 	Bytes         = "By"
 )
 
-func (md metricDefinition) GetMetricName() string {
+func (md metricDefinition) Name() string {
 	return md.name
 }
 
-func (md metricDefinition) GetMetricUnit() MetricUnit {
+func (md metricDefinition) Unit() MetricUnit {
 	return md.unit
 }
 

@@ -82,7 +82,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.AuthorizationScope)).Return(s.mockMetricsHandler).AnyTimes()
-	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Timer(metrics.ServiceAuthorizationLatency.Name()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
 	s.interceptor = NewAuthorizationInterceptor(
 		s.mockClaimMapper,
@@ -121,7 +121,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionDeny}, nil)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrUnauthorizedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)
@@ -131,7 +131,7 @@ func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
 		Return(Result{Decision: DecisionDeny}, errUnauthorized)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ServiceErrAuthorizeFailedCounter.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)

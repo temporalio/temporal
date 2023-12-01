@@ -138,7 +138,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		e.metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
 		)
@@ -171,13 +171,13 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		e.metricsHandler.Counter(metrics.ClientRequests.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			e.metricsHandler.Timer(metrics.ClientLatency.Name()).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 			)
@@ -228,7 +228,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		e.metricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
 		)
@@ -256,13 +256,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		e.metricsHandler.Counter(metrics.ClientRequests.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			e.metricsHandler.Timer(metrics.ClientLatency.Name()).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 			)
