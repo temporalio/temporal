@@ -266,10 +266,10 @@ func (i *RedirectionInterceptor) afterCall(
 	retError error,
 ) {
 	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metricsHandler.Counter(metrics.ClientRedirectionRequests.GetMetricName()).Record(1)
-	metricsHandler.Timer(metrics.ClientRedirectionLatency.GetMetricName()).Record(i.timeSource.Now().Sub(startTime))
+	metricsHandler.Counter(metrics.ClientRedirectionRequests.Name()).Record(1)
+	metricsHandler.Timer(metrics.ClientRedirectionLatency.Name()).Record(i.timeSource.Now().Sub(startTime))
 	if retError != nil {
-		metricsHandler.Counter(metrics.ClientRedirectionFailures.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.ClientRedirectionFailures.Name()).Record(1)
 	}
 }
 

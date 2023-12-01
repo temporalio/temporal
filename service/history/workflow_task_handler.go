@@ -218,7 +218,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) (*handleCommandResponse, error) {
 
-	handler.metricsHandler.Counter(metrics.CommandCounter.GetMetricName()).
+	handler.metricsHandler.Counter(metrics.CommandCounter.Name()).
 		Record(1, metrics.CommandTypeTag(command.GetCommandType().String()))
 
 	switch command.GetCommandType() {
@@ -315,7 +315,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandProtocolMessage(
 	attr *commandpb.ProtocolMessageCommandAttributes,
 	msgs *collection.IndexedTakeList[string, *protocolpb.Message],
 ) error {
-	handler.metricsHandler.Counter(metrics.CommandTypeProtocolMessage.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeProtocolMessage.Name()).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -346,7 +346,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeScheduleActivityCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeScheduleActivityCounter.Name()).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -486,7 +486,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 	}
 	handler.metricsHandler.Counter(
-		metrics.ActivityEagerExecutionCounter.GetMetricName(),
+		metrics.ActivityEagerExecutionCounter.Name(),
 	).Record(
 		1,
 		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
@@ -504,7 +504,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelActivityCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelActivityCounter.Name()).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -551,7 +551,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeStartTimerCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeStartTimerCounter.Name()).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -581,7 +581,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		}
 	}
 
-	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -607,7 +607,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.GetMetricName()).Record(1)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION),
@@ -641,7 +641,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeFailWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeFailWorkflowCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -668,7 +668,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.GetMetricName()).Record(1)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION),
@@ -716,7 +716,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelTimerCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelTimerCounter.Name()).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -745,7 +745,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelWorkflowCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -763,7 +763,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.GetMetricName()).Record(1)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION),
@@ -781,7 +781,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeCancelExternalWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelExternalWorkflowCounter.Name()).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -823,7 +823,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeRecordMarkerCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeRecordMarkerCounter.Name()).Record(1)
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -850,7 +850,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeContinueAsNewCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeContinueAsNewCounter.Name()).Record(1)
 
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -921,7 +921,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.GetMetricName()).Record(1)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.Name()).Record(1)
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
@@ -960,7 +960,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeChildWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeChildWorkflowCounter.Name()).Record(1)
 
 	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
 	parentNamespaceID := parentNamespaceEntry.ID()
@@ -1070,7 +1070,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeSignalExternalWorkflowCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeSignalExternalWorkflowCounter.Name()).Record(1)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -1118,7 +1118,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeUpsertWorkflowSearchAttributesCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeUpsertWorkflowSearchAttributesCounter.Name()).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -1190,7 +1190,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
 
-	handler.metricsHandler.Counter(metrics.CommandTypeModifyWorkflowPropertiesCounter.GetMetricName()).Record(1)
+	handler.metricsHandler.Counter(metrics.CommandTypeModifyWorkflowPropertiesCounter.Name()).Record(1)
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()

@@ -764,7 +764,7 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	s.False(shard.IsValid())
 
 	s.Equal(float64(1), s.readMetricsCounter(
-		metrics.ShardLingerTimeouts.GetMetricName(),
+		metrics.ShardLingerTimeouts.Name(),
 		metrics.OperationTag(metrics.HistoryShardControllerScope)))
 }
 

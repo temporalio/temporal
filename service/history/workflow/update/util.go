@@ -63,27 +63,27 @@ func internalErrorf(tmpl string, args ...any) error {
 
 // CountRequestMsg adds 1 to the update request message counter
 func (i *instrumentation) CountRequestMsg() {
-	i.countMessage(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.GetMetricName())
+	i.countMessage(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.Name())
 }
 
 // CountAcceptanceMsg adds 1 to the update acceptance message counter
 func (i *instrumentation) CountAcceptanceMsg() {
-	i.countMessage(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.GetMetricName())
+	i.countMessage(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.Name())
 }
 
 // CountRejectionMsg counter adds 1 to the update rejection message counter
 func (i *instrumentation) CountRejectionMsg() {
-	i.countMessage(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.GetMetricName())
+	i.countMessage(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.Name())
 }
 
 // CountResponseMsg counter adds 1 to the update response message counter
 func (i *instrumentation) CountResponseMsg() {
-	i.countMessage(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.GetMetricName())
+	i.countMessage(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.Name())
 }
 
 // CountInvalidStateTransition counter adds 1 to invalid update state machine transition counter
 func (i *instrumentation) CountInvalidStateTransition() {
-	i.countMessage(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.GetMetricName())
+	i.countMessage(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
 }
 
 func (i *instrumentation) countMessage(ctrName string) {

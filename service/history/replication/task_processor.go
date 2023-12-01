@@ -213,7 +213,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-syncShardTimer.C:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
 				p.logger.Error("unable to sync shard status", tag.Error(err))
-				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.GetMetricName()).Record(
+				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.Name()).Record(
 					1,
 					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 			}
@@ -253,7 +253,7 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 		taskCreationTime := replicationTask.GetVisibilityTime()
 		if taskCreationTime != nil {
 			now := p.shard.GetTimeSource().Now()
-			p.metricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
+			p.metricsHandler.Timer(metrics.ReplicationLatency.Name()).Record(
 				now.Sub(taskCreationTime.AsTime()),
 				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
 		}
@@ -311,7 +311,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 		return nil
 	}
 
-	p.metricsHandler.Counter(metrics.SyncShardFromRemoteCounter.GetMetricName()).Record(
+	p.metricsHandler.Counter(metrics.SyncShardFromRemoteCounter.Name()).Record(
 		1,
 		metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
@@ -365,7 +365,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
-	p.metricsHandler.Gauge(metrics.ReplicationDLQMaxLevelGauge.GetMetricName()).Record(
+	p.metricsHandler.Gauge(metrics.ReplicationDLQMaxLevelGauge.Name()).Record(
 		float64(request.TaskInfo.GetTaskId()),
 		metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 		metrics.TargetClusterTag(p.sourceCluster),
@@ -375,7 +375,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		err := writeTaskToDLQ(ctx, p.dlqWriter, p.shard, request.SourceClusterName, request.TaskInfo)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
-			p.metricsHandler.Counter(metrics.ReplicationDLQFailed.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+			p.metricsHandler.Counter(metrics.ReplicationDLQFailed.Name()).Record(1, metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
 		}
 		return err
 	}, p.dlqRetryPolicy, p.isRetryableError)
@@ -522,32 +522,32 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	metricsScope := p.metricsHandler.WithTags(metrics.OperationTag(operation))
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.Name()).Record(1)
 		return
 	}
 
 	// Also update counter to distinguish between type of failures
 	switch err := err.(type) {
 	case nil:
-		metricsScope.Counter(metrics.ReplicationTasksApplied.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksApplied.Name()).Record(1)
 		return
 	case *serviceerrors.ShardOwnershipLost:
-		metricsScope.Counter(metrics.ServiceErrShardOwnershipLostCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrShardOwnershipLostCounter.Name()).Record(1)
 	case *serviceerror.InvalidArgument:
-		metricsScope.Counter(metrics.ServiceErrInvalidArgumentCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrInvalidArgumentCounter.Name()).Record(1)
 	case *serviceerror.NamespaceNotActive:
-		metricsScope.Counter(metrics.ServiceErrNamespaceNotActiveCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrNamespaceNotActiveCounter.Name()).Record(1)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		metricsScope.Counter(metrics.ServiceErrExecutionAlreadyStartedCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrExecutionAlreadyStartedCounter.Name()).Record(1)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		metricsScope.Counter(metrics.ServiceErrNotFoundCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrNotFoundCounter.Name()).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.Name()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 	case *serviceerrors.RetryReplication:
-		metricsScope.Counter(metrics.ServiceErrRetryTaskCounter.GetMetricName()).Record(1)
+		metricsScope.Counter(metrics.ServiceErrRetryTaskCounter.Name()).Record(1)
 	default:
 	}
-	metricsScope.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(1)
+	metricsScope.Counter(metrics.ReplicationTasksFailed.Name()).Record(1)
 }
 
 func (p *taskProcessorImpl) getOperationTagValue(

@@ -370,7 +370,7 @@ func newInlineClientConn(
 	return &inlineClientConn{
 		methods:           methods,
 		interceptor:       chainUnaryServerInterceptors(interceptors),
-		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.GetMetricName()),
+		requestsCounter:   metricsHandler.Counter(metrics.HTTPServiceRequests.Name()),
 		namespaceRegistry: namespaceRegistry,
 	}
 }

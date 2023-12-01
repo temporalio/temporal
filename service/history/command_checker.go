@@ -149,7 +149,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	message string,
 ) error {
-	c.metricsHandler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(
+	c.metricsHandler.Histogram(metrics.MemoSize.Name(), metrics.MemoSize.Unit()).Record(
 		int64(memo.Size()),
 		commandTypeTag)
 
@@ -219,7 +219,7 @@ func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
 	return c.checkCountConstraint(
 		len(c.mutableState.GetPendingChildExecutionInfos()),
 		c.numPendingChildExecutionsLimit,
-		metrics.TooManyPendingChildWorkflows.GetMetricName(),
+		metrics.TooManyPendingChildWorkflows.Name(),
 		PendingChildWorkflowExecutionsDescription,
 	)
 }
@@ -228,7 +228,7 @@ func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
 	return c.checkCountConstraint(
 		len(c.mutableState.GetPendingActivityInfos()),
 		c.numPendingActivitiesLimit,
-		metrics.TooManyPendingActivities.GetMetricName(),
+		metrics.TooManyPendingActivities.Name(),
 		PendingActivitiesDescription,
 	)
 }
@@ -237,7 +237,7 @@ func (c *workflowSizeChecker) checkIfNumPendingCancelRequestsExceedsLimit() erro
 	return c.checkCountConstraint(
 		len(c.mutableState.GetPendingRequestCancelExternalInfos()),
 		c.numPendingCancelsRequestLimit,
-		metrics.TooManyPendingCancelRequests.GetMetricName(),
+		metrics.TooManyPendingCancelRequests.Name(),
 		PendingCancelRequestsDescription,
 	)
 }
@@ -246,7 +246,7 @@ func (c *workflowSizeChecker) checkIfNumPendingSignalsExceedsLimit() error {
 	return c.checkCountConstraint(
 		len(c.mutableState.GetPendingSignalExternalInfos()),
 		c.numPendingSignalsLimit,
-		metrics.TooManyPendingSignalsToExternalWorkflows.GetMetricName(),
+		metrics.TooManyPendingSignalsToExternalWorkflows.Name(),
 		PendingSignalsDescription,
 	)
 }
@@ -256,7 +256,7 @@ func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
-	c.metricsHandler.Histogram(metrics.SearchAttributesSize.GetMetricName(), metrics.SearchAttributesSize.GetMetricUnit()).Record(
+	c.metricsHandler.Histogram(metrics.SearchAttributesSize.Name(), metrics.SearchAttributesSize.Unit()).Record(
 		int64(searchAttributes.Size()),
 		commandTypeTag)
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
