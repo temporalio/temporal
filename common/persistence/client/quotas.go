@@ -245,8 +245,8 @@ func RequestPriorityFn(req quotas.Request) int {
 	case headers.CallerTypePreemptable:
 		return CallerTypeDefaultPriority[req.CallerType]
 	default:
-		// default requests to high priority to be consistent with existing behavior
-		return RequestPrioritiesOrdered[0]
+		// default requests to API priority to be consistent with existing behavior
+		return CallerTypeDefaultPriority[headers.CallerTypeAPI]
 	}
 }
 

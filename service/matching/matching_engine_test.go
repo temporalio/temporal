@@ -1795,12 +1795,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	task, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task, err := s.matchingEngine.pollTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
 	task.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	task2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task2, err := s.matchingEngine.pollTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 	s.NotNil(task2)
 
@@ -2486,7 +2486,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	_, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
+	_, err := s.matchingEngine.pollTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "unknown",
 			UseVersioning: true,
@@ -2573,7 +2573,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 
 	go func() {
 		tqId := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		task, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
+		task, err := s.matchingEngine.pollTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "unknown",
 				UseVersioning: true,
@@ -2671,7 +2671,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	s.NoError(err)
 
 	// now poll for the task
-	task, err := s.matchingEngine.getTask(ctx, id, normalStickyInfo, &pollMetadata{
+	task, err := s.matchingEngine.pollTask(ctx, id, normalStickyInfo, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       build1,
 			UseVersioning: true,

@@ -463,6 +463,12 @@ const (
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.
 	MatchingGetUserDataLongPollTimeout = "matching.getUserDataLongPollTimeout"
+	// MatchingBacklogNegligibleAge if the head of backlog gets older than this we stop sync match and
+	// forwarding to ensure more equal dispatch order among partitions.
+	MatchingBacklogNegligibleAge = "matching.backlogNegligibleAge"
+	// MatchingMaxWaitForPollerBeforeFwd in presence of a non-negligible backlog, we resume forwarding tasks if the
+	// duration since last poll exceeds this threshold.
+	MatchingMaxWaitForPollerBeforeFwd = "matching.maxWaitForPollerBeforeFwd"
 
 	// for matching testing only:
 

@@ -457,8 +457,8 @@ func (s *localStoreTlsProvider) checkCertExpiration() {
 			return
 		}
 		if s.metricsHandler != nil {
-			s.metricsHandler.Gauge(metrics.TlsCertsExpired.GetMetricName()).Record(float64(len(expired)))
-			s.metricsHandler.Gauge(metrics.TlsCertsExpiring.GetMetricName()).Record(float64(len(expiring)))
+			s.metricsHandler.Gauge(metrics.TlsCertsExpired.Name()).Record(float64(len(expired)))
+			s.metricsHandler.Gauge(metrics.TlsCertsExpiring.Name()).Record(float64(len(expiring)))
 		}
 		s.logCerts(expired, true, errorTime)
 		s.logCerts(expiring, false, errorTime)

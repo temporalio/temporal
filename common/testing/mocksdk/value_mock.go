@@ -29,8 +29,9 @@
 package mocksdk
 
 import (
-	"github.com/golang/mock/gomock"
 	"reflect"
+
+	"github.com/golang/mock/gomock"
 )
 
 // MockEncodedValue is a mock of EncodedValue interface.
@@ -83,4 +84,3 @@ func (mr *MockEncodedValueMockRecorder) HasValue() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasValue", reflect.TypeOf((*MockEncodedValue)(nil).HasValue))
 }
-

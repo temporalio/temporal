@@ -200,7 +200,7 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 	if item != nil {
 		namespaceName = item.(namespace.Name).String()
 	}
-	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(
+	e.MetricsHandler.Counter(metrics.ReplicationTasksFailed.Name()).Record(
 		1,
 		metrics.OperationTag(e.metricsTag),
 		metrics.NamespaceTag(namespaceName),
@@ -284,12 +284,12 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	e.MetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+	e.MetricsHandler.Timer(metrics.ServiceLatency.Name()).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	e.MetricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
+	e.MetricsHandler.Timer(metrics.ReplicationLatency.Name()).Record(
 		e.taskReceivedTime.Sub(e.taskCreationTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
@@ -315,13 +315,13 @@ func (e *ExecutableTaskImpl) Resend(
 		return false, ErrResendAttemptExceeded
 	}
 
-	e.MetricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+	e.MetricsHandler.Counter(metrics.ClientRequests.Name()).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		e.MetricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+		e.MetricsHandler.Timer(metrics.ClientLatency.Name()).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
 		)
@@ -461,13 +461,13 @@ func (e *ExecutableTaskImpl) Import(
 	endEventId int64,
 	endEventVersion int64,
 ) error {
-	e.MetricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+	e.MetricsHandler.Counter(metrics.ClientRequests.Name()).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Import"),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
-		e.MetricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+		e.MetricsHandler.Timer(metrics.ClientLatency.Name()).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Import"),
 		)

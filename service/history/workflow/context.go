@@ -216,7 +216,7 @@ func (c *ContextImpl) IsDirty() bool {
 }
 
 func (c *ContextImpl) Clear() {
-	c.metricsHandler.Counter(metrics.WorkflowContextCleared.GetMetricName()).Record(1)
+	c.metricsHandler.Counter(metrics.WorkflowContextCleared.Name()).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
@@ -664,7 +664,7 @@ func (c *ContextImpl) SetWorkflowExecution(
 		return err
 	}
 	if len(resetWorkflowEventsSeq) != 0 {
-		c.metricsHandler.Counter(metrics.ClosedWorkflowBufferEventCount.GetMetricName()).Record(1)
+		c.metricsHandler.Counter(metrics.ClosedWorkflowBufferEventCount.Name()).Record(1)
 		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 
@@ -1041,8 +1041,8 @@ func emitStateTransitionCount(
 
 	namespaceEntry := mutableState.GetNamespaceEntry()
 	metricsHandler.Histogram(
-		metrics.StateTransitionCount.GetMetricName(),
-		metrics.StateTransitionCount.GetMetricUnit(),
+		metrics.StateTransitionCount.Name(),
+		metrics.StateTransitionCount.Unit(),
 	).Record(
 		mutableState.GetExecutionInfo().StateTransitionCount,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),

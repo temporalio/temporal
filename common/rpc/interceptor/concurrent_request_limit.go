@@ -109,7 +109,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 		defer atomic.AddInt32(counter, -int32(token))
 
 		handler := GetMetricsHandlerFromContext(ctx, ni.logger)
-		handler.Gauge(metrics.ServicePendingRequests.GetMetricName()).Record(float64(count))
+		handler.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
 
 		// frontend.namespaceCount is applied per poller type temporarily to prevent
 		// one poller type to take all token waiting in the long poll.

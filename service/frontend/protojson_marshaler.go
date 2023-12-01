@@ -30,38 +30,63 @@ import (
 	"io"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/temporalproto"
 )
 
-var _ runtime.Marshaler = protoJsonMarshaler{}
+var _ runtime.Marshaler = temporalProtoMarshaler{}
 
-type protoJsonMarshaler struct {
-	mOpts protojson.MarshalOptions
-	uOpts protojson.UnmarshalOptions
+type temporalProtoMarshaler struct {
+	contentType string
+	mOpts       temporalproto.CustomJSONMarshalOptions
+	uOpts       temporalproto.CustomJSONUnmarshalOptions
 }
 
-type protoJsonEncoder struct {
-	mOpts  protojson.MarshalOptions
+type temporalProtoEncoder struct {
+	mOpts  temporalproto.CustomJSONMarshalOptions
 	writer io.Writer
 	json   *json.Encoder
 }
 
-type protoJsonDecoder struct {
-	uOpts  protojson.UnmarshalOptions
+type temporalProtoDecoder struct {
+	uOpts  temporalproto.CustomJSONUnmarshalOptions
 	reader io.Reader
 	json   *json.Decoder
 }
 
-func newProtoJsonMarshaler(indent string) protoJsonMarshaler {
-	return protoJsonMarshaler{
-		mOpts: protojson.MarshalOptions{
-			Indent: indent,
+func newTemporalProtoMarshaler(indent string, enablePayloadShorthand bool) (string, temporalProtoMarshaler) {
+	metadata := map[string]interface{}{}
+	if enablePayloadShorthand {
+		metadata[commonpb.EnablePayloadShorthandMetadataKey] = true
+	}
+	// Shorthand is enabled by default
+	contentType := runtime.MIMEWildcard
+	if enablePayloadShorthand {
+		if indent != "" {
+			contentType = "application/json+pretty"
+		}
+	} else {
+		if indent != "" {
+			contentType = "application/json+pretty+no-payload-shorthand"
+		} else {
+			contentType = "application/json+no-payload-shorthand"
+		}
+	}
+	return contentType, temporalProtoMarshaler{
+		contentType: contentType,
+		mOpts: temporalproto.CustomJSONMarshalOptions{
+			Indent:   indent,
+			Metadata: metadata,
+		},
+		uOpts: temporalproto.CustomJSONUnmarshalOptions{
+			Metadata: metadata,
 		},
 	}
 }
 
-func (p protoJsonMarshaler) Marshal(v any) ([]byte, error) {
+func (p temporalProtoMarshaler) Marshal(v any) ([]byte, error) {
 	if m, ok := v.(proto.Message); ok {
 		return p.mOpts.Marshal(m)
 	}
@@ -73,35 +98,35 @@ func (p protoJsonMarshaler) Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func (p protoJsonMarshaler) Unmarshal(data []byte, v interface{}) error {
+func (p temporalProtoMarshaler) Unmarshal(data []byte, v interface{}) error {
 	if m, ok := v.(proto.Message); ok {
-		return protojson.Unmarshal(data, m)
+		return p.uOpts.Unmarshal(data, m)
 	}
 
 	return json.Unmarshal(data, v)
 }
 
-func (p protoJsonMarshaler) NewDecoder(r io.Reader) runtime.Decoder {
-	return protoJsonDecoder{
+func (p temporalProtoMarshaler) NewDecoder(r io.Reader) runtime.Decoder {
+	return temporalProtoDecoder{
 		p.uOpts,
 		r,
 		json.NewDecoder(r),
 	}
 }
 
-func (p protoJsonMarshaler) NewEncoder(w io.Writer) runtime.Encoder {
-	return protoJsonEncoder{
+func (p temporalProtoMarshaler) NewEncoder(w io.Writer) runtime.Encoder {
+	return temporalProtoEncoder{
 		p.mOpts,
 		w,
 		json.NewEncoder(w),
 	}
 }
 
-func (p protoJsonMarshaler) ContentType(_ any) string {
-	return "application/json"
+func (p temporalProtoMarshaler) ContentType(_ any) string {
+	return p.contentType
 }
 
-func (d protoJsonDecoder) Decode(v any) error {
+func (d temporalProtoDecoder) Decode(v any) error {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return d.json.Decode(v)
@@ -112,10 +137,10 @@ func (d protoJsonDecoder) Decode(v any) error {
 		return err
 	}
 
-	return protojson.Unmarshal([]byte(bs), m)
+	return d.uOpts.Unmarshal([]byte(bs), m)
 }
 
-func (e protoJsonEncoder) Encode(v any) error {
+func (e temporalProtoEncoder) Encode(v any) error {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return e.json.Encode(v)

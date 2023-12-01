@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -49,7 +50,7 @@ func (s *functionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (s *functionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
-	options := baseOptions
+	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest)
 	options.RequestEagerExecution = true
 
 	if options.Namespace == "" {
@@ -121,9 +122,22 @@ func (s *functionalSuite) getWorkflowStringResult(workflowID, runID string) stri
 }
 
 func (s *functionalSuite) TestEagerWorkflowStart_StartNew() {
-	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{})
+	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
+	// response.
+	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"CustomKeywordField": {
+					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+					Data:     []byte(`"value"`),
+				},
+			},
+		},
+	})
 	task := response.GetEagerWorkflowTask()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+	kwData := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes().SearchAttributes.IndexedFields["CustomKeywordField"].Data
+	s.Require().Equal(`"value"`, string(kwData))
 	s.respondWorkflowTaskCompleted(task, "ok")
 	// Verify workflow completes and client can get the result
 	result := s.getWorkflowStringResult(s.defaultWorkflowID(), response.RunId)

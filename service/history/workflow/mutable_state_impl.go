@@ -380,13 +380,13 @@ func NewMutableStateFromDB(
 		switch {
 		case mutableState.shouldInvalidateCheckum():
 			mutableState.checksum = nil
-			mutableState.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
+			mutableState.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.Name()).Record(1)
 		case mutableState.shouldVerifyChecksum():
 			if err := verifyMutableStateChecksum(mutableState, dbRecord.Checksum); err != nil {
 				// we ignore checksum verification errors for now until this
 				// feature is tested and/or we have mechanisms in place to deal
 				// with these types of errors
-				mutableState.metricsHandler.Counter(metrics.MutableStateChecksumMismatch.GetMetricName()).Record(1)
+				mutableState.metricsHandler.Counter(metrics.MutableStateChecksumMismatch.Name()).Record(1)
 				mutableState.logError("mutable state checksum mismatch", tag.Error(err))
 			}
 		}
@@ -4245,8 +4245,9 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
+	originalSize := 0
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
-		ms.approximateSize -= prev.Size()
+		originalSize = prev.Size()
 	}
 
 	now := ms.timeSource.Now()
@@ -4285,7 +4286,7 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size()
+	ms.approximateSize += ai.Size() - originalSize
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
@@ -4414,7 +4415,7 @@ func (ms *MutableStateImpl) StartTransaction(
 			tag.WorkflowRunID(ms.executionState.RunId),
 			tag.Value(ms.hBuilder),
 		)
-		ms.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
+		ms.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.Name()).Record(1)
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 

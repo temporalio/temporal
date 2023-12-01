@@ -64,6 +64,7 @@ func jsonPayload(data string) *common.Payloads {
 }
 
 func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
+	contentType string,
 	startWFRequestBody, queryBody, signalBody func() string,
 	verifyQueryResult, verifyHistory func(*clientFunctionalSuite, []byte)) {
 	// Create basic workflow that can answer queries, get signals, etc
@@ -99,7 +100,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 
 	// Start
 	workflowID := s.randomizeStr("wf")
-	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, startWFRequestBody())
+	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var startResp struct {
 		RunID string `json:"runId"`
 	}
@@ -109,7 +110,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	// can't test overall counts because the metrics handler is shared across
 	// concurrently executing tests.
 	var found bool
-	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.GetMetricName()] {
+	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.Name()] {
 		found =
 			metric.Tags[metrics.OperationTagName] == "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution" &&
 				metric.Tags["namespace"] == s.namespace &&
@@ -121,7 +122,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
-	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, startWFRequestBody())
+	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var errResp struct {
 		Message string `json:"message"`
 		Details []struct {
@@ -136,6 +137,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	_, respBody = s.httpPost(
 		http.StatusOK,
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/query/some-query",
+		contentType,
 		queryBody(),
 	)
 	verifyQueryResult(s, respBody)
@@ -144,6 +146,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	s.httpPost(
 		http.StatusOK,
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/signal/some-signal",
+		contentType,
 		signalBody(),
 	)
 
@@ -152,11 +155,28 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 		http.StatusOK,
 		// Our version of gRPC gateway only supports integer enums in queries :-(
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
+		contentType,
 	)
 	verifyHistory(s, respBody)
 }
 
 func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
+	s.runHTTPAPIBasicsTest_Protojson("application/json+no-payload-shorthand", false)
+}
+
+func (s *clientFunctionalSuite) TestHTTPAPIBasics_ProtojsonPretty() {
+	s.runHTTPAPIBasicsTest_Protojson("application/json+pretty+no-payload-shorthand", true)
+}
+
+func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
+	s.runHTTPAPIBasicsTest_Shorthand("application/json", false)
+}
+
+func (s *clientFunctionalSuite) TestHTTPAPIBasics_ShorthandPretty() {
+	s.runHTTPAPIBasicsTest_Shorthand("application/json+pretty", true)
+}
+
+func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pretty bool) {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -187,8 +207,13 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
 		return string(signalBody)
 	}
 	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+		s.T().Log(string(respBody))
+		if pretty {
+			// This is lazy but it'll work
+			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
+		}
 		var queryResp workflowservice.QueryWorkflowResponse
-		s.Require().NoError(protojson.Unmarshal(respBody, &queryResp))
+		s.Require().NoError(protojson.Unmarshal(respBody, &queryResp), string(respBody))
 		s.Require().Len(queryResp.QueryResult.Payloads, 1)
 		var payload SomeJSONStruct
 		conv := converter.NewJSONPayloadConverter()
@@ -196,6 +221,11 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
 		s.Require().Equal("query-arg", payload.SomeField)
 	}
 	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+		s.T().Log(string(respBody))
+		if pretty {
+			// This is lazy but it'll work
+			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
+		}
 		var histResp workflowservice.GetWorkflowExecutionHistoryResponse
 		s.Require().NoError(protojson.Unmarshal(respBody, &histResp))
 		s.Require().Len(histResp.History.Events, 1)
@@ -208,15 +238,14 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
 		s.Require().NoError(conv.FromPayload(event.Result.Payloads[0], &payload))
 		s.Require().Equal("workflow-arg", payload.SomeField)
 	}
-	s.runHTTPAPIBasicsTest(reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
+	s.runHTTPAPIBasicsTest(contentType, reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
+func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pretty bool) {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 
-	s.T().Skip("Shorthand payload format is temporarily disabled")
 	reqBody := func() string {
 		return `{
 				"workflowType": { "name": "http-basic-workflow" },
@@ -231,6 +260,10 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
 		return `{ "input": [{ "someField": "signal-arg" }] }`
 	}
 	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+		if pretty {
+			// This is lazy but it'll work
+			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
+		}
 		var queryResp struct {
 			QueryResult json.RawMessage `json:"queryResult"`
 		}
@@ -238,6 +271,10 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
 		s.Require().JSONEq(`[{ "someField": "query-arg" }]`, string(queryResp.QueryResult))
 	}
 	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+		if pretty {
+			// This is lazy but it'll work
+			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
+		}
 		var histResp struct {
 			History struct {
 				Events []struct {
@@ -249,13 +286,13 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
 			} `json:"history"`
 		}
 		s.Require().NoError(json.Unmarshal(respBody, &histResp))
-		s.Require().Equal("WorkflowExecutionCompleted", histResp.History.Events[0].EventType)
+		s.Require().Equal("EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED", histResp.History.Events[0].EventType)
 		s.Require().JSONEq(
 			`[{ "someField": "workflow-arg" }]`,
 			string(histResp.History.Events[0].WorkflowExecutionCompletedEventAttributes.Result),
 		)
 	}
-	s.runHTTPAPIBasicsTest(reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
+	s.runHTTPAPIBasicsTest(contentType, reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
 }
 
 func (s *clientFunctionalSuite) TestHTTPAPIHeaders() {
@@ -317,22 +354,27 @@ func (s *clientFunctionalSuite) TestHTTPAPIPretty() {
 	}
 	// Make a call to system info normal, confirm no newline, then ask for pretty
 	// and confirm newlines
-	_, b := s.httpGet(http.StatusOK, "/api/v1/system-info")
+	_, b := s.httpGet(http.StatusOK, "/api/v1/system-info", "application/json")
 	s.Require().NotContains(b, byte('\n'))
-	_, b = s.httpGet(http.StatusOK, "/api/v1/system-info?pretty")
+	_, b = s.httpGet(http.StatusOK, "/api/v1/system-info?pretty", "application/json")
 	s.Require().Contains(b, byte('\n'))
 }
 
-func (s *clientFunctionalSuite) httpGet(expectedStatus int, url string) (*http.Response, []byte) {
+func (s *clientFunctionalSuite) httpGet(expectedStatus int, url, contentType string) (*http.Response, []byte) {
 	req, err := http.NewRequest("GET", url, nil)
 	s.Require().NoError(err)
+	req.Header.Add("Accept", contentType)
+	req.Header.Add("Content-Type", contentType)
+	s.T().Logf("GET %s (Accept: %s)", url, contentType)
 	return s.httpRequest(expectedStatus, req)
 }
 
-func (s *clientFunctionalSuite) httpPost(expectedStatus int, url string, jsonBody string) (*http.Response, []byte) {
+func (s *clientFunctionalSuite) httpPost(expectedStatus int, url, contentType, jsonBody string) (*http.Response, []byte) {
 	req, err := http.NewRequest("POST", url, strings.NewReader(jsonBody))
 	s.Require().NoError(err)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Add("Accept", contentType)
+	req.Header.Add("Content-Type", contentType)
+	s.T().Logf("POST %s (Accept: %s)", url, contentType)
 	return s.httpRequest(expectedStatus, req)
 }
 

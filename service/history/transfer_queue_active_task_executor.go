@@ -1416,7 +1416,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
-		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.GetMetricName()).Record(
+		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.Name()).Record(
 			1,
 			metrics.OperationTag(metrics.TransferQueueProcessorScope),
 		)
@@ -1491,13 +1491,13 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		err := t.applyParentClosePolicy(ctx, parentExecution, childInfo)
 		switch err.(type) {
 		case nil:
-			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.GetMetricName()).Record(1)
+			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.Name()).Record(1)
 		case *serviceerror.NotFound:
 			// If child execution is deleted there is nothing to close.
 		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 		default:
-			scope.Counter(metrics.ParentClosePolicyProcessorFailures.GetMetricName()).Record(1)
+			scope.Counter(metrics.ParentClosePolicyProcessorFailures.Name()).Record(1)
 			return err
 		}
 	}

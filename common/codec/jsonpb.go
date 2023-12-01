@@ -40,7 +40,8 @@ type (
 	// This is an wrapper on top of jsonpb.Marshaler which supports not only single object serialization
 	// but also slices of concrete objects.
 	JSONPBEncoder struct {
-		marshaler protojson.MarshalOptions
+		marshaler   protojson.MarshalOptions
+		unmarshaler temporalproto.CustomJSONUnmarshalOptions
 	}
 )
 
@@ -65,7 +66,7 @@ func (e JSONPBEncoder) Encode(pb proto.Message) ([]byte, error) {
 
 // Decode bytes to protobuf struct.
 func (e JSONPBEncoder) Decode(data []byte, pb proto.Message) error {
-	return temporalproto.UnmarshalJSON(data, pb)
+	return e.unmarshaler.Unmarshal(data, pb)
 }
 
 // Encode HistoryEvent slice to bytes.
@@ -151,7 +152,7 @@ func (e *JSONPBEncoder) DecodeSlice(
 
 	// We need DiscardUnknown here as the history json may have been written by a
 	// different proto revision
-	unmarshaller := temporalproto.JSONUnmarshaller{
+	unmarshaller := temporalproto.CustomJSONUnmarshalOptions{
 		DiscardUnknown: true,
 	}
 

@@ -49,7 +49,7 @@ func TestSessionEmitsMetricOnRefreshError(t *testing.T) {
 	}
 
 	metricsHandler.EXPECT().WithTags(metrics.FailureTag(refreshErrorTagValue)).Return(metricsHandler)
-	metricsHandler.EXPECT().Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	metricsHandler.EXPECT().Counter(metrics.CassandraSessionRefreshFailures.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	s.refresh()
 }
@@ -65,7 +65,7 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 	}
 
 	metricsHandler.EXPECT().WithTags(metrics.FailureTag(refreshThrottleTagValue)).Return(metricsHandler)
-	metricsHandler.EXPECT().Counter(metrics.CassandraSessionRefreshFailures.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
+	metricsHandler.EXPECT().Counter(metrics.CassandraSessionRefreshFailures.Name()).Return(metrics.NoopCounterMetricFunc)
 
 	s.refresh()
 }

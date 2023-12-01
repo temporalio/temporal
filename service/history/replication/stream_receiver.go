@@ -144,6 +144,14 @@ func (r *StreamReceiverImpl) Key() ClusterShardKeyPair {
 }
 
 func (r *StreamReceiverImpl) sendEventLoop() {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+	defer log.CapturePanic(r.logger, &panicErr)
+
 	defer r.Stop()
 	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
@@ -163,6 +171,14 @@ func (r *StreamReceiverImpl) sendEventLoop() {
 }
 
 func (r *StreamReceiverImpl) recvEventLoop() {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			r.MetricsHandler.Counter(metrics.ReplicationStreamPanic.Name()).Record(1)
+		}
+	}()
+	defer log.CapturePanic(r.logger, &panicErr)
+
 	defer r.Stop()
 
 	err := r.processMessages(r.stream)
@@ -188,12 +204,12 @@ func (r *StreamReceiverImpl) ackMessage(
 		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
 		return err
 	}
-	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.GetMetricName(), metrics.ReplicationTasksRecvBacklog.GetMetricUnit()).Record(
+	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.Name(), metrics.ReplicationTasksRecvBacklog.Unit()).Record(
 		int64(size),
 		metrics.FromClusterIDTag(r.serverShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.clientShardKey.ClusterID),
 	)
-	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.GetMetricName()).Record(
+	r.MetricsHandler.Counter(metrics.ReplicationTasksSend.Name()).Record(
 		int64(1),
 		metrics.FromClusterIDTag(r.clientShardKey.ClusterID),
 		metrics.ToClusterIDTag(r.serverShardKey.ClusterID),

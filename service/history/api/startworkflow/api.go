@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
 
 	"go.temporal.io/server/common"
@@ -64,6 +65,7 @@ type Starter struct {
 	shardContext               shard.Context
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	tokenSerializer            common.TaskTokenSerializer
+	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 }
@@ -92,6 +94,7 @@ func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer common.TaskTokenSerializer,
+	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
@@ -102,6 +105,7 @@ func NewStarter(
 		shardContext:               shardContext,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tokenSerializer:            tokenSerializer,
+		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
 	}, nil
@@ -119,7 +123,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 	}
 
 	if request.RequestEagerExecution {
-		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.GetMetricName()).Record(
+		metricsHandler.Counter(metrics.WorkflowEagerExecutionCounter.Name()).Record(
 			1,
 			metrics.NamespaceTag(s.namespace.Name().String()),
 			metrics.TaskQueueTag(request.TaskQueue.Name),
@@ -141,7 +145,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 
 func (s *Starter) recordEagerDenied(reason eagerStartDeniedReason) {
 	metricsHandler := s.shardContext.GetMetricsHandler()
-	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.GetMetricName()).Record(
+	metricsHandler.Counter(metrics.WorkflowEagerExecutionDeniedCounter.Name()).Record(
 		1,
 		metrics.NamespaceTag(s.namespace.Name().String()),
 		metrics.TaskQueueTag(s.request.StartRequest.TaskQueue.Name),
@@ -542,6 +546,11 @@ func (s *Starter) generateResponse(
 			RunId: runID,
 		}, nil
 	}
+
+	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+		return nil, err
+	}
+
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {
 		return nil, err

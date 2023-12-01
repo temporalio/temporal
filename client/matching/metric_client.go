@@ -180,11 +180,11 @@ func (c *metricClient) emitForwardedSourceStats(
 
 	switch {
 	case forwardedFrom != "":
-		metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
+		metricsHandler.Counter(metrics.MatchingClientForwardedCounter.Name()).Record(1)
 	default:
 		_, err := tqname.FromBaseName(taskQueue.GetName())
 		if err != nil {
-			metricsHandler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
+			metricsHandler.Counter(metrics.MatchingClientInvalidTaskQueueName.Name()).Record(1)
 		}
 	}
 }
@@ -195,7 +195,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
-	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.ClientRequests.Name()).Record(1)
 	return handler, time.Now().UTC()
 }
 
@@ -218,7 +218,7 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metricsHandler.Counter(metrics.ClientFailures.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metricsHandler.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime))
 }
