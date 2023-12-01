@@ -148,7 +148,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName)
 
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsHandler)
-	metricsHandler.Counter(metrics.ServiceRequests.Name()).Record(1)
+	metrics.ServiceRequests.With(metricsHandler).Record(1)
 
 	startTime := time.Now().UTC()
 	userLatencyDuration := time.Duration(0)
