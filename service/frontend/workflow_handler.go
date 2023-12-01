@@ -3789,7 +3789,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		if ok {
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
-		wh.logger.Error("Unable to call matching.PollActivityTaskQueue.",
+		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
 			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -3811,8 +3811,7 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// the token as it is a more stable identifier.
 	// There's no need to validate that the namespace in the token and the request match,
 	// NamespaceValidatorInterceptor does this for us.
-	// TODO: test this
-	tt, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.GetTaskToken())
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3853,8 +3852,7 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	// the token as it is a more stable identifier.
 	// There's no need to validate that the namespace in the token and the request match,
 	// NamespaceValidatorInterceptor does this for us.
-	// TODO: test this
-	tt, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.GetTaskToken())
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
 	if err != nil {
 		return nil, err
 	}

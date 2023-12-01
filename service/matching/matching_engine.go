@@ -1314,7 +1314,7 @@ pollLoop:
 		}
 		task, err := e.getTask(pollerCtx, taskQueue, normalStickyInfo, pollMetadata)
 		if err != nil {
-			if err == errNoTasks {
+			if errors.Is(err, errNoTasks) {
 				return &matchingservice.PollNexusTaskQueueResponse{}, nil
 			}
 			return nil, err
@@ -1332,12 +1332,12 @@ pollLoop:
 			continue pollLoop
 		}
 
-		taskToken := &tokenspb.QueryTask{
+		taskToken := &tokenspb.NexusTask{
 			NamespaceId: string(namespaceID),
 			TaskQueue:   taskQueueName,
 			TaskId:      task.nexus.taskID,
 		}
-		serializedToken, _ := e.tokenSerializer.SerializeQueryTaskToken(taskToken)
+		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken: serializedToken,

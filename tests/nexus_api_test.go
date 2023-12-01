@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -503,6 +504,34 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	defer cancel()
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	s.ErrorIs(err, context.DeadlineExceeded)
+}
+
+func (s *clientFunctionalSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenMatchesRequestNamespace() {
+	ctx := NewContext()
+
+	tt := tokenspb.NexusTask{
+		NamespaceId: s.getNamespaceID(s.namespace),
+		TaskQueue:   "test",
+		TaskId:      uuid.NewString(),
+	}
+	ttBytes, err := tt.Marshal()
+	s.NoError(err)
+
+	_, err = s.testCluster.GetFrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: s.foreignNamespace,
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Response:  &nexuspb.Response{},
+	})
+	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
+
+	_, err = s.testCluster.GetFrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		Namespace: s.foreignNamespace,
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Error:     &nexuspb.HandlerError{},
+	})
+	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 }
 
 func (s *clientFunctionalSuite) echoNexusTaskPoller(ctx context.Context, taskQueue string) {
