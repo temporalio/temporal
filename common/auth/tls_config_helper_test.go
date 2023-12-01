@@ -70,7 +70,7 @@ func Test_NewTLSConfig(t *testing.T) {
 		},
 		"caData_badPEM": {
 			cfg:    &TLS{Enabled: true, CaData: "dGhpcyBpc24ndCBhIFBFTSBjZXJ0"},
-			cfgErr: errors.New("fail to parse certs as PEM"),
+			cfgErr: errors.New("unable to parse certs as PEM"),
 		},
 		"clientCert_badbase64cert": {
 			cfg: &TLS{
