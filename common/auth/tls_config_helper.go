@@ -28,6 +28,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -139,9 +140,19 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	}
 	if len(caBytes) > 0 {
 		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caBytes) {
-			return nil, errors.New("failed to load decoded CA Cert as PEM")
+		caCerts, err := parseCertsFromPEM(caBytes)
+		if len(caCerts) == 0 {
+			return nil, errors.New("fail to parse certs as PEM")
 		}
+		for _, cert := range caCerts {
+			caCertPool.AddCert(cert)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to load decoded CA Cert as PEM: %w", err)
+		}
+		// if !caCertPool.AppendCertsFromPEM(caBytes) {
+		// 	return nil, errors.New("failed to load decoded CA Cert as PEM")
+		// }
 		tlsConfig.RootCAs = caCertPool
 	}
 
@@ -182,4 +193,21 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	}
 
 	return tlsConfig, nil
+}
+
+func parseCertsFromPEM(pemCerts []byte) ([]*x509.Certificate, error) {
+	for len(pemCerts) > 0 {
+		var block *pem.Block
+		block, pemCerts = pem.Decode(pemCerts)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
+		}
+
+		certBytes := block.Bytes
+		return x509.ParseCertificates(certBytes)
+	}
+	return nil, nil
 }
