@@ -359,6 +359,8 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace

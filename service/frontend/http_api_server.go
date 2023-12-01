@@ -34,6 +34,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -82,6 +83,8 @@ var (
 )
 
 // NewHTTPAPIServer creates an [HTTPAPIServer].
+//
+// routes registered with additionalRouteRegistrationFuncs take precedence over the auto generated grpc proxy routes.
 func NewHTTPAPIServer(
 	serviceConfig *Config,
 	rpcConfig config.RPC,
@@ -90,6 +93,7 @@ func NewHTTPAPIServer(
 	handler Handler,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
+	additionalRouteRegistrationFuncs []func(*mux.Router),
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -167,8 +171,17 @@ func NewHTTPAPIServer(
 	if err != nil {
 		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
 	}
-	// Set the handler as our function that wraps serve mux
-	h.server.Handler = http.HandlerFunc(h.serveHTTP)
+
+	// Instantiate a router to support additional route prefixes.
+	r := mux.NewRouter().UseEncodedPath()
+	for _, f := range additionalRouteRegistrationFuncs {
+		f(r)
+	}
+
+	// Set the / handler as our function that wraps serve mux.
+	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	// Register the router as the HTTP server handler.
+	h.server.Handler = r
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
