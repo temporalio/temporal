@@ -38,6 +38,17 @@ import (
 	"go.temporal.io/server/tools/common/schema"
 )
 
+var embeddedSchemaNames = []string{
+	"mysql/v57/temporal",
+	"mysql/v57/visibility",
+	"mysql/v8/temporal",
+	"mysql/v8/visibility",
+	"postgresql/v96/temporal",
+	"postgresql/v96/visibility",
+	"postgresql/v12/temporal",
+	"postgresql/v12/visibility",
+}
+
 // setupSchema executes the setupSchemaTask
 // using the given command line arguments
 // as input
@@ -61,7 +72,7 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 }
 
 // updateSchema executes the updateSchemaTask
-// using the given command lien args as input
+// using the given command line args as input
 func updateSchema(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {

@@ -41,6 +41,7 @@ type (
 		DBName        string
 		TargetVersion string
 		SchemaDir     string
+		SchemaName    string
 		IsDryRun      bool
 	}
 	// SetupConfig holds the config
@@ -105,6 +106,8 @@ const (
 	CLIOptTargetVersion = "version"
 	// CLIOptSchemaDir is the cli option for schema directory
 	CLIOptSchemaDir = "schema-dir"
+	// CLIOptSchemaName is the cli option for which pre-embedded schema to use
+	CLIOptSchemaName = "schema-name"
 	// CLIOptReplicationFactor is the cli option for replication factor
 	CLIOptReplicationFactor = "replication-factor"
 	// CLIOptDatacenter is the cli option for NetworkTopologyStrategy datacenter
@@ -150,6 +153,8 @@ const (
 	CLIFlagTargetVersion = CLIOptTargetVersion + ", v"
 	// CLIFlagSchemaDir is the cli flag for schema directory
 	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
+	// CLIFlagSchemaName is the cli flag that says which pre-embedded schema to use
+	CLIFlagSchemaName = CLIOptSchemaName + ", s"
 	// CLIFlagReplicationFactor is the cli flag for replication factor
 	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
 	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter

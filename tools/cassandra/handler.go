@@ -40,6 +40,8 @@ import (
 
 const defaultNumReplicas = 1
 
+var embeddedSchemaNames = []string{"cassandra/temporal", "cassandra/visibility"}
+
 // SetupSchemaConfig contains the configuration params needed to setup schema tables
 type SetupSchemaConfig struct {
 	CQLClientConfig
@@ -69,7 +71,7 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 }
 
 // updateSchema executes the updateSchemaTask
-// using the given command lien args as input
+// using the given command line args as input
 func updateSchema(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {

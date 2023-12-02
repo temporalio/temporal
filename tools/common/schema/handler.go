@@ -51,6 +51,7 @@ func Update(cli *cli.Context, db DB, logger log.Logger) error {
 func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
 	config := new(UpdateConfig)
 	config.SchemaDir = cli.String(CLIOptSchemaDir)
+	config.SchemaName = cli.String(CLIOptSchemaName)
 	config.TargetVersion = cli.String(CLIOptTargetVersion)
 
 	if err := validateUpdateConfig(config); err != nil {
@@ -92,8 +93,13 @@ func validateSetupConfig(config *SetupConfig) error {
 }
 
 func validateUpdateConfig(config *UpdateConfig) error {
-	if len(config.SchemaDir) == 0 {
-		return NewConfigError("missing " + flag(CLIOptSchemaDir) + " argument ")
+	if len(config.SchemaDir) == 0 && len(config.SchemaName) == 0 {
+		return NewConfigError("missing argument; either" + flag(CLIOptSchemaDir) + " or " +
+			flag(CLIOptSchemaName) + " must be specified")
+	}
+	if len(config.SchemaDir) > 0 && len(config.SchemaName) > 0 {
+		return NewConfigError("either" + flag(CLIOptSchemaDir) + " or " +
+			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.TargetVersion) > 0 {
 		ver, err := normalizeVersionString(config.TargetVersion)

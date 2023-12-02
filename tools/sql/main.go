@@ -180,6 +180,10 @@ func BuildCLIOptions() *cli.App {
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
 				},
+				cli.StringFlag{
+					Name:  schema.CLIFlagSchemaName,
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", embeddedSchemaNames),
+				},
 			},
 			Action: func(c *cli.Context) {
 				cliHandler(c, updateSchema, logger)
