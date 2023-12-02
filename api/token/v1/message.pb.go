@@ -456,6 +456,69 @@ func (x *QueryTask) GetTaskId() string {
 	return ""
 }
 
+type NexusTask struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueue   string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskId      string `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+}
+
+func (x *NexusTask) Reset() {
+	*x = NexusTask{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_temporal_server_api_token_v1_message_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NexusTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NexusTask) ProtoMessage() {}
+
+func (x *NexusTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_token_v1_message_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NexusTask.ProtoReflect.Descriptor instead.
+func (*NexusTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_token_v1_message_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *NexusTask) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *NexusTask) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *NexusTask) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
 var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
 
 var file_temporal_server_api_token_v1_message_proto_rawDesc = []byte{
@@ -563,10 +626,17 @@ var file_temporal_server_api_token_v1_message_proto_rawDesc = []byte{
 	0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65,
 	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75,
 	0x65, 0x75, 0x65, 0x12, 0x17, 0x0a, 0x07, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x69, 0x64, 0x18, 0x03,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61, 0x73, 0x6b, 0x49, 0x64, 0x42, 0x2a, 0x5a, 0x28,
-	0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x2f,
-	0x76, 0x31, 0x3b, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61, 0x73, 0x6b, 0x49, 0x64, 0x22, 0x66, 0x0a, 0x09,
+	0x4e, 0x65, 0x78, 0x75, 0x73, 0x54, 0x61, 0x73, 0x6b, 0x12, 0x21, 0x0a, 0x0c, 0x6e, 0x61, 0x6d,
+	0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x0b, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a,
+	0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x12, 0x17, 0x0a, 0x07, 0x74,
+	0x61, 0x73, 0x6b, 0x5f, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x74, 0x61,
+	0x73, 0x6b, 0x49, 0x64, 0x42, 0x2a, 0x5a, 0x28, 0x67, 0x6f, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
+	0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70,
+	0x69, 0x2f, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x74, 0x6f, 0x6b, 0x65, 0x6e,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -581,24 +651,25 @@ func file_temporal_server_api_token_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_token_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_api_token_v1_message_proto_goTypes = []interface{}{
 	(*HistoryContinuation)(nil),          // 0: temporal.server.api.token.v1.HistoryContinuation
 	(*RawHistoryContinuation)(nil),       // 1: temporal.server.api.token.v1.RawHistoryContinuation
 	(*Task)(nil),                         // 2: temporal.server.api.token.v1.Task
 	(*QueryTask)(nil),                    // 3: temporal.server.api.token.v1.QueryTask
-	(*v1.TransientWorkflowTaskInfo)(nil), // 4: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v1.VersionHistoryItem)(nil),        // 5: temporal.server.api.history.v1.VersionHistoryItem
-	(*v1.VersionHistories)(nil),          // 6: temporal.server.api.history.v1.VersionHistories
-	(*v11.VectorClock)(nil),              // 7: temporal.server.api.clock.v1.VectorClock
-	(*timestamppb.Timestamp)(nil),        // 8: google.protobuf.Timestamp
+	(*NexusTask)(nil),                    // 4: temporal.server.api.token.v1.NexusTask
+	(*v1.TransientWorkflowTaskInfo)(nil), // 5: temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	(*v1.VersionHistoryItem)(nil),        // 6: temporal.server.api.history.v1.VersionHistoryItem
+	(*v1.VersionHistories)(nil),          // 7: temporal.server.api.history.v1.VersionHistories
+	(*v11.VectorClock)(nil),              // 8: temporal.server.api.clock.v1.VectorClock
+	(*timestamppb.Timestamp)(nil),        // 9: google.protobuf.Timestamp
 }
 var file_temporal_server_api_token_v1_message_proto_depIdxs = []int32{
-	4, // 0: temporal.server.api.token.v1.HistoryContinuation.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	5, // 1: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	6, // 2: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	7, // 3: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	8, // 4: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
+	5, // 0: temporal.server.api.token.v1.HistoryContinuation.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	6, // 1: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	7, // 2: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	8, // 3: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	9, // 4: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
 	5, // [5:5] is the sub-list for method output_type
 	5, // [5:5] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -660,6 +731,18 @@ func file_temporal_server_api_token_v1_message_proto_init() {
 				return nil
 			}
 		}
+		file_temporal_server_api_token_v1_message_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NexusTask); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -667,7 +750,7 @@ func file_temporal_server_api_token_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_temporal_server_api_token_v1_message_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

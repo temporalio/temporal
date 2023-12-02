@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -61,6 +62,7 @@ type operationContext struct {
 	namespace      *namespace.Namespace
 	metricsHandler metrics.Handler
 	logger         log.Logger
+	auth           *authorization.Interceptor
 }
 
 // Panic handler and metrics recording function.
@@ -81,6 +83,29 @@ func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
 
 	c.metricsHandler.Counter(metrics.NexusRequests.GetMetricName()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.GetMetricName(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+}
+
+func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
+	return &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: c.namespace.ID().String(),
+		TaskQueue:   &taskqueue.TaskQueue{Name: c.taskQueue, Kind: enums.TASK_QUEUE_KIND_NORMAL},
+		Request:     req,
+	}
+}
+
+func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) error {
+	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
+		APIName:   c.apiName,
+		Namespace: c.namespace.Name().String(),
+		Request:   request,
+	})
+	if err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
+		return adaptAuthorizeError(err)
+	}
+	// TODO: Redirect if current cluster is passive for this namespace.
+	// TODO: Apply other relevant interceptors.
+	return nil
 }
 
 // Key to extract a nexusContext object from a context.Context.
@@ -104,7 +129,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	if !ok {
 		return nil, errors.New("no nexus context set on context") //nolint:goerr113
 	}
-	oc := operationContext{nexusContext: nc}
+	oc := operationContext{nexusContext: nc, auth: h.auth}
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
 		metrics.NexusMethodTag(method),
@@ -124,15 +149,6 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	return &oc, nil
 }
 
-func adaptAuthorizeError(err error) error {
-	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
-	var permissionDeniedError *serviceerror.PermissionDenied
-	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied: %s", permissionDeniedError.Reason)
-	}
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied")
-}
-
 // StartOperation implements the nexus.Handler interface.
 func (h *nexusHandler) StartOperation(ctx context.Context, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (result nexus.HandlerStartOperationResult[any], retErr error) {
 	oc, err := h.getOperationContext(ctx, "StartOperation")
@@ -146,27 +162,15 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		Callback:  options.CallbackURL,
 		RequestId: options.RequestID,
 	}
-	request := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: oc.namespace.ID().String(),
-		TaskQueue:   &taskqueue.TaskQueue{Name: oc.taskQueue, Kind: enums.TASK_QUEUE_KIND_NORMAL},
-		Request: &nexuspb.Request{
-			Header: options.Header,
-			Variant: &nexuspb.Request_StartOperation{
-				StartOperation: &startOperationRequest,
-			},
+	request := oc.matchingRequest(&nexuspb.Request{
+		Header: options.Header,
+		Variant: &nexuspb.Request_StartOperation{
+			StartOperation: &startOperationRequest,
 		},
-	}
-
-	err = h.auth.Authorize(ctx, oc.claims, &authorization.CallTarget{
-		APIName:   oc.apiName,
-		Namespace: oc.namespace.Name().String(),
-		Request:   request,
 	})
-	if err != nil {
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
-		return nil, adaptAuthorizeError(err)
+	if err := oc.interceptRequest(ctx, request); err != nil {
+		return nil, err
 	}
-	// TODO: Redirect if current cluster is passive for this namespace.
 
 	// Transform nexus Content to temporal Payload with common/nexus PayloadSerializer.
 	if err = input.Consume(&startOperationRequest.Payload); err != nil {
@@ -174,8 +178,14 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
+	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
+	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
 		return nil, err
 	}
 	// Convert to standard Nexus SDK response.
@@ -183,7 +193,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
 		return nil, &nexus.HandlerError{
-			Type:    nexus.HandlerErrorType(t.HandlerError.GetErrorType()),
+			Type:    convertNexusHandlerError(nexus.HandlerErrorType(t.HandlerError.GetErrorType())),
 			Failure: commonnexus.ProtoFailureToNexusFailure(t.HandlerError.GetFailure()),
 		}
 	case *matchingservice.DispatchNexusTaskResponse_Response:
@@ -206,5 +216,73 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 			}
 		}
 	}
-	return nil, errors.New("unhandled response outcome") //nolint:goerr113
+	return nil, fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
+}
+func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
+	oc, err := h.getOperationContext(ctx, "CancelOperation")
+	if err != nil {
+		return err
+	}
+	defer oc.capturePanicAndRecordMetrics(&retErr)
+
+	request := oc.matchingRequest(&nexuspb.Request{
+		Header: options.Header,
+		Variant: &nexuspb.Request_CancelOperation{
+			CancelOperation: &nexuspb.CancelOperationRequest{
+				Operation:   operation,
+				OperationId: id,
+			},
+		},
+	})
+	if err := oc.interceptRequest(ctx, request); err != nil {
+		return err
+	}
+
+	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
+	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
+	// RPC.
+	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
+	if err != nil {
+		if common.IsContextDeadlineExceededErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_timeout"))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
+		return err
+	}
+	// Convert to standard Nexus SDK response.
+	switch t := response.GetOutcome().(type) {
+	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("handler_error"))
+		return &nexus.HandlerError{
+			Type:    convertNexusHandlerError(nexus.HandlerErrorType(t.HandlerError.GetErrorType())),
+			Failure: commonnexus.ProtoFailureToNexusFailure(t.HandlerError.GetFailure()),
+		}
+	case *matchingservice.DispatchNexusTaskResponse_Response:
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.NexusOutcomeTag("success"))
+		return nil
+	}
+	return fmt.Errorf("unhandled response outcome: %T", response.GetOutcome()) //nolint:goerr113
+}
+
+// convertNexusHandlerError converts any 5xx user handler error to a downsream error.
+func convertNexusHandlerError(t nexus.HandlerErrorType) nexus.HandlerErrorType {
+	switch t {
+	case nexus.HandlerErrorTypeDownstreamTimeout,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeForbidden,
+		nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
+		return t
+	}
+	return nexus.HandlerErrorTypeDownstreamError
+}
+
+func adaptAuthorizeError(err error) error {
+	// Authorize err is either an explicitly set reason, or a generic "Request unauthorized." message.
+	var permissionDeniedError *serviceerror.PermissionDenied
+	if errors.As(err, &permissionDeniedError) && permissionDeniedError.Reason != "" {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied: %s", permissionDeniedError.Reason)
+	}
+	return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied")
 }
