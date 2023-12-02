@@ -694,7 +694,7 @@ func CheckEventBlobSizeLimit(
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 
-	metricsHandler.Histogram(metrics.EventBlobSize.Name(), metrics.EventBlobSize.Unit()).Record(int64(actualSize))
+	metrics.EventBlobSize.With(metricsHandler).Record(int64(actualSize))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
