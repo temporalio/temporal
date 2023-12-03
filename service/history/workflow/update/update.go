@@ -365,6 +365,7 @@ func (u *Update) onAcceptanceMsg(
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
 ) error {
+	acpt.AcceptedRequestSequencingEventId = 0
 	if err := u.checkState(acpt, stateRequested); err != nil {
 		return err
 	}
