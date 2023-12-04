@@ -37,6 +37,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+var ErrTLSConfig = errors.New("unable to config TLS")
+
 // Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
 
 func NewEmptyTLSConfig() *tls.Config {
@@ -106,15 +108,15 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 		return nil, nil
 	}
 	if temporalTls.CertData != "" && temporalTls.CertFile != "" {
-		return nil, errors.New("only one of certData or certFile properties should be specified")
+		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of certData or certFile properties should be specified")
 	}
 
 	if temporalTls.KeyData != "" && temporalTls.KeyFile != "" {
-		return nil, errors.New("only one of keyData or keyFile properties should be specified")
+		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of keyData or keyFile properties should be specified")
 	}
 
 	if temporalTls.CaData != "" && temporalTls.CaFile != "" {
-		return nil, errors.New("only one of caData or caFile properties should be specified")
+		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of caData or caFile properties should be specified")
 	}
 
 	tlsConfig := &tls.Config{
@@ -125,71 +127,52 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	}
 
 	// Load CA cert
+	caCertPool, err := parseCAs(temporalTls)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig.RootCAs = caCertPool
+
+	// Load client cert
+	clientCert, err := parseClientCert(temporalTls)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.Certificates = []tls.Certificate{*clientCert}
+
+	return tlsConfig, nil
+}
+
+func parseCAs(temporalTls *TLS) (*x509.CertPool, error) {
 	var caBytes []byte
 	var err error
 	if temporalTls.CaFile != "" {
 		caBytes, err = os.ReadFile(temporalTls.CaFile)
 		if err != nil {
-			return nil, fmt.Errorf("unable to read client ca file: %w", err)
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to read client ca file", err)
 		}
 	} else if temporalTls.CaData != "" {
 		caBytes, err = base64.StdEncoding.DecodeString(temporalTls.CaData)
 		if err != nil {
-			return nil, fmt.Errorf("unable to decode client ca data: %w", err)
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to decode client ca data", err)
 		}
 	}
 	if len(caBytes) > 0 {
 		caCertPool := x509.NewCertPool()
 		caCerts, err := parseCertsFromPEM(caBytes)
 		if len(caCerts) == 0 {
-			return nil, errors.New("unable to parse certs as PEM")
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to parse certs as PEM", err)
 		}
 		for _, cert := range caCerts {
 			caCertPool.AddCert(cert)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("unable to load decoded CA Cert as PEM: %w", err)
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to load decoded CA Cert as PEM", err)
 		}
-		tlsConfig.RootCAs = caCertPool
+		return caCertPool, nil
 	}
-
-	// Load client cert
-	var certBytes []byte
-	var keyBytes []byte
-	if temporalTls.CertFile != "" {
-		certBytes, err = os.ReadFile(temporalTls.CertFile)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read client certificate file: %w", err)
-		}
-	} else if temporalTls.CertData != "" {
-		certBytes, err = base64.StdEncoding.DecodeString(temporalTls.CertData)
-		if err != nil {
-			return nil, fmt.Errorf("unable to decode client certificate: %w", err)
-		}
-	}
-
-	if temporalTls.KeyFile != "" {
-		keyBytes, err = os.ReadFile(temporalTls.KeyFile)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read client certificate private key file: %w", err)
-		}
-	} else if temporalTls.KeyData != "" {
-		keyBytes, err = base64.StdEncoding.DecodeString(temporalTls.KeyData)
-		if err != nil {
-			return nil, fmt.Errorf("unable to decode client certificate private key: %w", err)
-		}
-	}
-
-	if len(certBytes) > 0 {
-		clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("unable to generate x509 key pair: %w", err)
-		}
-
-		tlsConfig.Certificates = []tls.Certificate{clientCert}
-	}
-
-	return tlsConfig, nil
+	return nil, nil
 }
 
 func parseCertsFromPEM(pemCerts []byte) ([]*x509.Certificate, error) {
@@ -205,6 +188,45 @@ func parseCertsFromPEM(pemCerts []byte) ([]*x509.Certificate, error) {
 
 		certBytes := block.Bytes
 		return x509.ParseCertificates(certBytes)
+	}
+	return nil, nil
+}
+
+func parseClientCert(temporalTls *TLS) (*tls.Certificate, error) {
+	var certBytes []byte
+	var keyBytes []byte
+	var err error
+	if temporalTls.CertFile != "" {
+		certBytes, err = os.ReadFile(temporalTls.CertFile)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to read client certificate file", err)
+		}
+	} else if temporalTls.CertData != "" {
+		certBytes, err = base64.StdEncoding.DecodeString(temporalTls.CertData)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to decode client certificate", err)
+		}
+	}
+
+	if temporalTls.KeyFile != "" {
+		keyBytes, err = os.ReadFile(temporalTls.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to read client certificate private key file", err)
+		}
+	} else if temporalTls.KeyData != "" {
+		keyBytes, err = base64.StdEncoding.DecodeString(temporalTls.KeyData)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to decode client certificate private key", err)
+		}
+	}
+
+	if len(certBytes) > 0 {
+		clientCert, err := tls.X509KeyPair(certBytes, keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (%w)", ErrTLSConfig, "unable to generate x509 key pair", err)
+		}
+
+		return &clientCert, nil
 	}
 	return nil, nil
 }
