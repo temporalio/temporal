@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -44,16 +42,20 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/interceptor"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
 type nexusContext struct {
-	requestStartTime time.Time
-	apiName          string
-	namespaceName    string
-	taskQueue        string
-	claims           *authorization.Claims
+	requestStartTime               time.Time
+	apiName                        string
+	namespaceName                  string
+	taskQueue                      string
+	claims                         *authorization.Claims
+	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
@@ -103,6 +105,11 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("unauthorized"))
 		return adaptAuthorizeError(err)
 	}
+
+	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
+		return convertGRPCError(err)
+	}
+
 	// TODO: Redirect if current cluster is passive for this namespace.
 	// TODO: Apply other relevant interceptors.
 	return nil
@@ -285,4 +292,38 @@ func adaptAuthorizeError(err error) error {
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, "permission denied")
+}
+
+type grpcStatusGetter interface {
+	Status() *status.Status
+}
+
+// Roughly taken from https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
+// and
+// https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
+func convertGRPCError(err error) error {
+	st, ok := err.(grpcStatusGetter)
+	if !ok {
+		return err
+	}
+
+	switch st.Status().Code() {
+	case codes.AlreadyExists, codes.Canceled, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, err.Error())
+	case codes.Aborted, codes.Unavailable:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, err.Error())
+	case codes.DataLoss, codes.Internal, codes.Unknown:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, err.Error())
+	case codes.Unauthenticated:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, err.Error())
+	case codes.PermissionDenied:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, err.Error())
+	case codes.NotFound:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, err.Error())
+	case codes.ResourceExhausted:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, err.Error())
+	case codes.Unimplemented:
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, err.Error())
+	}
+	return err
 }

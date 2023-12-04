@@ -642,6 +642,9 @@ func NexusHTTPHandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	authInterceptor *authorization.Interceptor,
+	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
+	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	logger log.Logger,
 ) *NexusHTTPHandler {
 	return NewNexusHTTPHandler(
@@ -650,6 +653,7 @@ func NexusHTTPHandlerProvider(
 		metricsHandler,
 		namespaceRegistry,
 		authInterceptor,
+		namespaceValidatorInterceptor,
 		logger,
 	)
 }
