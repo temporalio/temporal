@@ -164,7 +164,7 @@ type (
 
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
-		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure, calculator BackoffIntervalCalculator) (enumspb.RetryState, error)
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()

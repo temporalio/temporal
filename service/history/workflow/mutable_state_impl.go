@@ -199,6 +199,26 @@ type (
 		logger          log.Logger
 		metricsHandler  metrics.Handler
 	}
+	BackoffIntervalCalculator interface {
+		Calculate(
+			time.Time,
+			int32,
+			int32,
+			*durationpb.Duration,
+			*durationpb.Duration,
+			*timestamppb.Timestamp,
+			float64,
+		) (time.Duration, enumspb.RetryState)
+	}
+	BackoffIntervalCalculatorFunc func(
+		time.Time,
+		int32,
+		int32,
+		*durationpb.Duration,
+		*durationpb.Duration,
+		*timestamppb.Timestamp,
+		float64,
+	) (time.Duration, enumspb.RetryState)
 )
 
 var _ MutableState = (*MutableStateImpl)(nil)
@@ -4216,63 +4236,31 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
 	failure *failurepb.Failure,
+	backoffCalculator BackoffIntervalCalculator,
 ) (enumspb.RetryState, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	if !ai.HasRetryPolicy {
-		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	retryableActivity, state := NewRetryableActivity(ai, failure, ms.timeSource, backoffCalculator)
+	if state != enumspb.RETRY_STATE_IN_PROGRESS {
+		return state, nil
 	}
-
-	if ai.CancelRequested {
-		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-
-	originalSize := 0
+	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
+	// info and if prev found it points to the same activity info as ai, so updating ai will cause
+	// size of prev change.
+	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-
-	now := ms.timeSource.Now()
-
-	backoffInterval, retryState := getBackoffInterval(
-		now,
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		ai.RetryMaximumInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		failure,
-		ai.RetryNonRetryableErrorTypes,
-	)
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-		return retryState, nil
-	}
-
-	// a retry is needed, update activity info for next retry
-	ai.Version = ms.GetCurrentVersion()
-	ai.Attempt++
-	ai.ScheduledTime = timestamppb.New(now.Add(backoffInterval)) // update to next schedule time
-	ai.StartedEventId = common.EmptyEventID
-	ai.RequestId = ""
-	ai.StartedTime = nil
-	ai.TimerTaskStatus = TimerTaskStatusNone
-	ai.RetryLastWorkerIdentity = ai.StartedIdentity
-	ai.RetryLastFailure = ms.truncateRetryableActivityFailure(failure)
-
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(
-		ai.ScheduledEventId,
-	); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-
+	ai = retryableActivity.UpdateActivityInfo(ai, ms.GetCurrentVersion(), ms.truncateRetryableActivityFailure(failure))
+	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size() - originalSize
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
@@ -5251,4 +5239,16 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 		tag.WorkflowID(workflowID),
 		tag.WorkflowRunID(runID),
 	)
+}
+
+func (cf BackoffIntervalCalculatorFunc) Calculate(
+	now time.Time,
+	currentAttempt int32,
+	maxAttempts int32,
+	initInterval *durationpb.Duration,
+	maxInterval *durationpb.Duration,
+	expirationTime *timestamppb.Timestamp,
+	backoffCoefficient float64,
+) (time.Duration, enumspb.RetryState) {
+	return cf(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
 }

@@ -53,7 +53,7 @@ import (
 
 // TODO treat 0 as 0, not infinite
 
-var getBackoffInterval = func(
+func getBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
@@ -69,10 +69,10 @@ var getBackoffInterval = func(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
-	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
+	return NextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
 }
 
-func nextBackoffInterval(
+func NextBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -119,7 +120,7 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
-			retryState, err := mutableState.RetryActivity(ai, failure)
+			retryState, err := mutableState.RetryActivity(ai, failure, workflow.BackoffIntervalCalculatorFunc(workflow.NextBackoffInterval))
 			if err != nil {
 				return nil, err
 			}

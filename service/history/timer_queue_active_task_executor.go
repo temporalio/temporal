@@ -269,6 +269,7 @@ Loop:
 		if retryState, err = mutableState.RetryActivity(
 			activityInfo,
 			timeoutFailure,
+			workflow.BackoffIntervalCalculatorFunc(workflow.NextBackoffInterval),
 		); err != nil {
 			return err
 		} else if retryState == enumspb.RETRY_STATE_IN_PROGRESS {

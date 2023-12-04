@@ -39,6 +39,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -49,29 +52,15 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	BackoffIntervalCalculator = func(
-		time.Time,
-		int32,
-		int32,
-		*durationpb.Duration,
-		*durationpb.Duration,
-		*timestamppb.Timestamp,
-		float64,
-		*failurepb.Failure,
-		[]string,
-	) (time.Duration, enumspb.RetryState)
-
 	snapshot struct {
 		mutableStateApproximateSize int
 		activitySize                int
 	}
 
-	retrySuite struct {
+	retryActivitySuite struct {
 		suite.Suite
 
 		controller       *gomock.Controller
@@ -80,24 +69,23 @@ type (
 		mockEventsCache  *events.MockCache
 		onActivityCreate *snapshot
 
-		mutableState               *MutableStateImpl
-		logger                     log.Logger
-		testScope                  tally.TestScope
-		originalGetBackoffInterval BackoffIntervalCalculator
-		backoffCalculatorStub      getBackoffIntervalStub
-		activity                   *persistencespb.ActivityInfo
-		failure                    *failurepb.Failure
-		timeSource                 TimeSourceStub
+		mutableState    *MutableStateImpl
+		nextBackoffStub nextBackoffIntervalStub
+		logger          log.Logger
+		testScope       tally.TestScope
+		activity        *persistencespb.ActivityInfo
+		failure         *failurepb.Failure
+		timeSource      *commonclock.EventTimeSource
 	}
 )
 
 func TestMutableStateRetryActivitySuite(t *testing.T) {
-	s := new(retrySuite)
+	s := new(retryActivitySuite)
 
 	suite.Run(t, s)
 }
 
-func (s *retrySuite) SetupSuite() {
+func (s *retryActivitySuite) SetupSuite() {
 	s.mockConfig = tests.NewDynamicConfig()
 	// set the checksum probabilities to 100% for exercising during test
 	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
@@ -105,15 +93,16 @@ func (s *retrySuite) SetupSuite() {
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 
-	s.originalGetBackoffInterval = getBackoffInterval
-	getBackoffInterval = s.backoffCalculatorStub.getBackoffInterval
+	// s.originalNextBackoffInterval = NextBackoffInterval
+	// NextBackoffInterval = s.nextBackoffStub.nextBackoffInterval
+	s.timeSource = commonclock.NewEventTimeSource()
 }
 
-func (s *retrySuite) TearDownSuite() {
-	getBackoffInterval = s.originalGetBackoffInterval
+func (s *retryActivitySuite) TearDownSuite() {
+	// nextBackoffInterval = s.originalNextBackoffInterval
 }
 
-func (s *retrySuite) SetupTest() {
+func (s *retryActivitySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = events.NewMockCache(s.controller)
@@ -134,7 +123,7 @@ func (s *retrySuite) SetupTest() {
 	s.mutableState = NewMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, time.Now().UTC())
 	s.activity = s.makeActivityAndPutIntoFailingState()
 	s.failure = s.activityFailure()
-	s.backoffCalculatorStub.onNextCallExpect(
+	s.nextBackoffStub.onNextCallExpect(
 		s.timeSource.Now(),
 		s.activity.Attempt,
 		s.activity.RetryMaximumAttempts,
@@ -142,21 +131,19 @@ func (s *retrySuite) SetupTest() {
 		s.activity.RetryMaximumInterval,
 		s.activity.RetryExpirationTime,
 		s.activity.RetryBackoffCoefficient,
-		s.failure,
-		s.activity.RetryNonRetryableErrorTypes,
 	)
 }
 
-func (s *retrySuite) TearDownTest() {
+func (s *retryActivitySuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *retrySuite) TestRetryActivity_when_activity_has_no_retry_policy_should_fail() {
+func (s *retryActivitySuite) TestRetryActivity_when_activity_has_no_retry_policy_should_fail() {
 	s.activity.HasRetryPolicy = false
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, state)
@@ -164,11 +151,11 @@ func (s *retrySuite) TestRetryActivity_when_activity_has_no_retry_policy_should_
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
-func (s *retrySuite) TestRetryActivity_when_activity_has_pending_cancel_request_should_fail() {
+func (s *retryActivitySuite) TestRetryActivity_when_activity_has_pending_cancel_request_should_fail() {
 	s.activity.CancelRequested = true
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_CANCEL_REQUESTED, state)
@@ -176,49 +163,49 @@ func (s *retrySuite) TestRetryActivity_when_activity_has_pending_cancel_request_
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
-func (s *retrySuite) TestRetryActivity_should_be_scheduled_when_next_backoff_interval_can_be_calculated() {
+func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_backoff_interval_can_be_calculated() {
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
-	ts := TimeSourceStub{}
+	ts := s.timeSource
 	s.mutableState.timeSource = ts
 
-	s.backoffCalculatorStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	_, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
+	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 	s.NoError(err)
 	s.Equal(s.onActivityCreate.mutableStateApproximateSize-s.onActivityCreate.activitySize+s.activity.Size(), s.mutableState.approximateSize)
 	s.Equal(s.activity.Version, s.mutableState.currentVersion)
 
 	s.Equal(ts.Now().Add(1*time.Second).UTC(), s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
-	s.Equal(s.backoffCalculatorStub.expected, s.backoffCalculatorStub.recorded)
+	s.Equal(s.nextBackoffStub.expected, s.nextBackoffStub.recorded)
 	s.assertTruncateFailureCalled()
 }
 
-func (s *retrySuite) TestRetryActivity_should_fail_when_no_next_backoff_interval() {
+func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_should_fail() {
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	s.mutableState.taskGenerator = taskGeneratorMock
+	s.nextBackoffStub.onNextCallReturn(backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT)
 
-	s.backoffCalculatorStub.onNextCallReturn(backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
 	s.NoError(err)
-	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state)
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "wrong state")
 	s.assertActivityWasNotScheduled(s.activity, "which retries for too long")
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
-func (s *retrySuite) TestRetryActivity_should_fail_when_task_can_not_be_generated() {
+func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_should_fail() {
 	e := errors.New("can't generate task")
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId).Return(e)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
-	ts := TimeSourceStub{}
-	s.mutableState.timeSource = ts
+	// ts := s.timeSource
+	// s.mutableState.timeSource = ts
 
-	s.backoffCalculatorStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	state, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
+	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 	s.Error(err, e.Error())
 	s.Equal(
 		enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR,
@@ -229,10 +216,10 @@ func (s *retrySuite) TestRetryActivity_should_fail_when_task_can_not_be_generate
 	s.assertActivityWasNotScheduled(s.activity, "with failing task generator")
 }
 
-func (s *retrySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {
+func (s *retryActivitySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {
 	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.activityFailure())
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
 
 	s.Error(ErrWorkflowFinished, err.Error(), "when workflow finished should get error stating it")
 	s.Equal(enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, state)
@@ -240,16 +227,31 @@ func (s *retrySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail(
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
-const getBackoffIntervalParametersFormat = "now(%v):currentAttempt(%v):maxAttempts(%v):initInterval(%v):maxInterval(%v):expirationTime(%v):backoffCoefficient(%v):failure(%v):nonRetryable(%v)"
+func (s *retryActivitySuite) TestRetryActivity_when_failure_in_list_of_not_retryable_should_fail() {
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
 
-type getBackoffIntervalStub struct {
+	s.activity.RetryNonRetryableErrorTypes = []string{"application-failure-type"}
+	s.onActivityCreate.activitySize = s.activity.Size()
+
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, BackoffIntervalCalculatorFunc(s.nextBackoffStub.nextBackoffInterval))
+
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, state, "wrong state want NON_RETRYABLE_FAILURE got %v", state)
+	s.assertActivityWasNotScheduled(s.activity, "which retries for too long")
+	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
+}
+
+const nextBackoffIntervalParametersFormat = "now(%v):currentAttempt(%v):maxAttempts(%v):initInterval(%v):maxInterval(%v):expirationTime(%v):backoffCoefficient(%v)"
+
+type nextBackoffIntervalStub struct {
 	expected string
 	recorded string
 	duration time.Duration
 	state    enumspb.RetryState
 }
 
-func (nbis *getBackoffIntervalStub) getBackoffInterval(
+func (nbis *nextBackoffIntervalStub) nextBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
@@ -257,11 +259,9 @@ func (nbis *getBackoffIntervalStub) getBackoffInterval(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
-	failure *failurepb.Failure,
-	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 	nbis.recorded = fmt.Sprintf(
-		getBackoffIntervalParametersFormat,
+		nextBackoffIntervalParametersFormat,
 		now,
 		currentAttempt,
 		maxAttempts,
@@ -269,12 +269,11 @@ func (nbis *getBackoffIntervalStub) getBackoffInterval(
 		maxInterval,
 		expirationTime,
 		backoffCoefficient,
-		failure,
-		nonRetryableTypes)
+	)
 	return nbis.duration, nbis.state
 }
 
-func (nbis *getBackoffIntervalStub) onNextCallExpect(
+func (nbis *nextBackoffIntervalStub) onNextCallExpect(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
@@ -282,11 +281,9 @@ func (nbis *getBackoffIntervalStub) onNextCallExpect(
 	maxInterval *durationpb.Duration,
 	expirationTime *timestamppb.Timestamp,
 	backoffCoefficient float64,
-	failure *failurepb.Failure,
-	nonRetryableTypes []string,
 ) {
 	nbis.expected = fmt.Sprintf(
-		getBackoffIntervalParametersFormat,
+		nextBackoffIntervalParametersFormat,
 		now,
 		currentAttempt,
 		maxAttempts,
@@ -294,49 +291,33 @@ func (nbis *getBackoffIntervalStub) onNextCallExpect(
 		maxInterval,
 		expirationTime,
 		backoffCoefficient,
-		failure,
-		nonRetryableTypes,
 	)
 }
 
-func (nbis *getBackoffIntervalStub) onNextCallReturn(duration time.Duration, state enumspb.RetryState) {
+func (nbis *nextBackoffIntervalStub) onNextCallReturn(duration time.Duration, state enumspb.RetryState) {
 	nbis.duration = duration
 	nbis.state = state
 }
 
-type TimeSourceStub struct {
-}
-
-func (ts TimeSourceStub) Now() time.Time {
-	const layout = "Jan 2, 2006 at 3:04pm (MST)"
-	const timeString = "Nov 30, 2023 at 12:07pm (GMT)"
-	result, _ := time.Parse(layout, timeString)
-	return result
-}
-
-func (ts TimeSourceStub) AfterFunc(_ time.Duration, _ func()) commonclock.Timer {
-	return nil
-}
-
-func (s *retrySuite) assertActivityWasNotScheduled(ai *persistencespb.ActivityInfo, kind string) {
+func (s *retryActivitySuite) assertActivityWasNotScheduled(ai *persistencespb.ActivityInfo, kind string) {
 	s.T().Helper()
 	s.Equal(s.onActivityCreate.mutableStateApproximateSize, s.mutableState.approximateSize, "mutable state size should not change when activity not restarted")
 	s.NotContains(s.mutableState.syncActivityTasks, ai.ScheduledEventId, "activity %s was scheduled", kind)
 	s.NotContains(s.mutableState.updateActivityInfos, ai.ScheduledEventId, "activity with no restart policy was marked for update")
 }
 
-func (s *retrySuite) assertNoChange(ai *persistencespb.ActivityInfo, msg string) {
+func (s *retryActivitySuite) assertNoChange(ai *persistencespb.ActivityInfo, msg string) {
 	s.T().Helper()
 	s.Equal(s.onActivityCreate.activitySize, ai.Size(), msg)
 }
 
-func (s *retrySuite) assertTruncateFailureCalled() {
+func (s *retryActivitySuite) assertTruncateFailureCalled() {
 	s.T().Helper()
 	s.IsType(&failurepb.Failure{}, s.failure, "original failure should be of type Failure")
 	s.IsType(&failurepb.Failure_ServerFailureInfo{}, s.activity.RetryLastFailure.FailureInfo, "after truncation failure should be of type Failure_ServerFailureInfo")
 }
 
-func (s *retrySuite) makeActivityAndPutIntoFailingState() *persistencespb.ActivityInfo {
+func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencespb.ActivityInfo {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	workflowTaskCompletedEventID := int64(4)
 	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
@@ -370,7 +351,7 @@ func (s *retrySuite) makeActivityAndPutIntoFailingState() *persistencespb.Activi
 	return activityInfo
 }
 
-func (s *retrySuite) activityFailure() *failurepb.Failure {
+func (s *retryActivitySuite) activityFailure() *failurepb.Failure {
 	failureSizeErrorLimit := s.mockConfig.MutableStateActivityFailureSizeLimitError(
 		s.mutableState.namespaceEntry.Name().String(),
 	)
