@@ -1178,6 +1178,10 @@ func (s *workflowSuite) TestTriggerImmediate() {
 }
 
 func (s *workflowSuite) TestBackfill() {
+	if currentTweakablePolicies.Version != InclusiveBackfillStartTime {
+		s.T().Skip()
+	}
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
