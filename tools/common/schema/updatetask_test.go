@@ -25,6 +25,8 @@
 package schema
 
 import (
+	"embed"
+	dbschemas "go.temporal.io/server/schema"
 	"os"
 	"testing"
 
@@ -95,6 +97,27 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 	ans, err = readSchemaDir(s.versionsDir, "2.5.2", "", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v2.7.17", "v3.5", "v10.2"}, ans)
+}
+
+func (s *UpdateTaskTestSuite) TestReadSchemaDirEFS() {
+	var efs *embed.FS
+	efs = dbschemas.Assets()
+	versionsDir := "mysql/v57/temporal/versioned"
+	versions := []string{"v1.0", "v1.1", "v1.2", "v1.3", "v1.4", "v1.5", "v1.6", "v1.7", "v1.8", "v1.9", "v1.10", "v1.11"}
+
+	ans, err := readSchemaDirEFS(versionsDir, "1.0", "1.1", s.logger, efs)
+	s.NoError(err)
+	s.Equal([]string{"v1.1"}, ans)
+
+	ans, err = readSchemaDirEFS(versionsDir, "0.4", "1.11", s.logger, efs)
+	s.NoError(err)
+	s.Equal(versions, ans)
+
+	ans, err = readSchemaDirEFS(versionsDir, "0.5", "1.9", s.logger, efs)
+	s.NoError(err)
+	s.Equal([]string{"v1.0", "v1.1", "v1.2", "v1.3", "v1.4", "v1.5", "v1.6", "v1.7", "v1.8", "v1.9"}, ans)
+
+	// Not running the tests with "no later versions" because they will break when we add more versions to the schema dir
 }
 
 func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_ReturnsError() {
