@@ -107,6 +107,11 @@ func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 	config.TargetVersion = "v1.2"
 	s.assertValidateUpdateSucceeds(config)
 	s.Equal("1.2", config.TargetVersion)
+
+	config.SchemaName = "mysql/v57/temporal"
+	s.assertValidateUpdateFails(config)
+	config.SchemaDir = ""
+	s.assertValidateUpdateSucceeds(config)
 }
 
 func (s *HandlerTestSuite) assertValidateSetupSucceeds(input *SetupConfig) {
