@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/schema"
+	dbschemas "go.temporal.io/server/schema"
 )
 
 type (
@@ -121,7 +121,7 @@ func (task *UpdateTask) Run() error {
 		return err
 	}
 
-	task.logger.Info("UpdateSchemeTask done")
+	task.logger.Info("UpdateSchemaTask done")
 
 	return nil
 }
@@ -194,7 +194,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var efs *embed.FS
 	dir := config.SchemaDir
 	if len(config.SchemaName) > 0 {
-		efs = schema.Assets()
+		efs = dbschemas.Assets()
 		dir = config.SchemaName + "/versioned"
 	}
 
