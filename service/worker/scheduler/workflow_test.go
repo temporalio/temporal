@@ -1178,10 +1178,6 @@ func (s *workflowSuite) TestTriggerImmediate() {
 }
 
 func (s *workflowSuite) TestBackfill() {
-	if currentTweakablePolicies.Version != InclusiveBackfillStartTime {
-		s.T().Skip()
-	}
-
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1250,6 +1246,11 @@ func (s *workflowSuite) TestBackfill() {
 }
 
 func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
+	// TODO: remove once default version is InclusiveBackfillStartTime
+	currentVersion := currentTweakablePolicies.Version
+	currentTweakablePolicies.Version = InclusiveBackfillStartTime
+	defer func() { currentTweakablePolicies.Version = currentVersion }()
+
 	backfillTime := timestamppb.New(time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC))
 
 	s.runAcrossContinue(
