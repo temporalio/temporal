@@ -199,17 +199,6 @@ type (
 		logger          log.Logger
 		metricsHandler  metrics.Handler
 	}
-	BackoffIntervalCalculator interface {
-		Calculate(
-			time.Time,
-			int32,
-			int32,
-			*durationpb.Duration,
-			*durationpb.Duration,
-			*timestamppb.Timestamp,
-			float64,
-		) (time.Duration, enumspb.RetryState)
-	}
 	BackoffIntervalCalculatorFunc func(
 		time.Time,
 		int32,
@@ -218,6 +207,7 @@ type (
 		*durationpb.Duration,
 		*timestamppb.Timestamp,
 		float64,
+		BackoffCalculatorAlgorithmFunc,
 	) (time.Duration, enumspb.RetryState)
 )
 
@@ -4236,7 +4226,7 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
 	failure *failurepb.Failure,
-	backoffCalculator BackoffIntervalCalculator,
+	backoffCalculator BackoffIntervalCalculatorFunc,
 ) (enumspb.RetryState, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
@@ -5239,16 +5229,4 @@ func (ms *MutableStateImpl) logDataInconsistency() {
 		tag.WorkflowID(workflowID),
 		tag.WorkflowRunID(runID),
 	)
-}
-
-func (cf BackoffIntervalCalculatorFunc) Calculate(
-	now time.Time,
-	currentAttempt int32,
-	maxAttempts int32,
-	initInterval *durationpb.Duration,
-	maxInterval *durationpb.Duration,
-	expirationTime *timestamppb.Timestamp,
-	backoffCoefficient float64,
-) (time.Duration, enumspb.RetryState) {
-	return cf(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient)
 }

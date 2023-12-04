@@ -120,7 +120,7 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
-			retryState, err := mutableState.RetryActivity(ai, failure, workflow.BackoffIntervalCalculatorFunc(workflow.NextBackoffInterval))
+			retryState, err := mutableState.RetryActivity(ai, failure, workflow.NextBackoffInterval)
 			if err != nil {
 				return nil, err
 			}
