@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *functionalSuite) TestStartWorkflowExecution() {
+func (s *FunctionalSuite) TestStartWorkflowExecution() {
 	id := "functional-start-workflow-test"
 	wt := "functional-start-workflow-test-type"
 	tl := "functional-start-workflow-test-taskqueue"
@@ -105,7 +105,7 @@ func (s *functionalSuite) TestStartWorkflowExecution() {
 	s.Nil(we2)
 }
 
-func (s *functionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
+func (s *FunctionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 	id := "functional-start-workflow-terminate-if-running-test"
 	wt := "functional-start-workflow-terminate-if-running-test-type"
 	tl := "functional-start-workflow-terminate-if-running-test-taskqueue"
@@ -152,7 +152,7 @@ func (s *functionalSuite) TestStartWorkflowExecution_TerminateIfRunning() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
+func (s *FunctionalSuite) TestStartWorkflowExecutionWithDelay() {
 	id := "functional-start-workflow-with-delay-test"
 	wt := "functional-start-workflow-with-delay-test-type"
 	tl := "functional-start-workflow-with-delay-test-taskqueue"
@@ -215,7 +215,7 @@ func (s *functionalSuite) TestStartWorkflowExecutionWithDelay() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *functionalSuite) TestTerminateWorkflow() {
+func (s *FunctionalSuite) TestTerminateWorkflow() {
 	id := "functional-terminate-workflow-test"
 	wt := "functional-terminate-workflow-test-type"
 	tl := "functional-terminate-workflow-test-taskqueue"
@@ -367,7 +367,7 @@ StartNewExecutionLoop:
 	s.True(newExecutionStarted)
 }
 
-func (s *functionalSuite) TestSequentialWorkflow() {
+func (s *FunctionalSuite) TestSequentialWorkflow() {
 	id := "functional-sequential-workflow-test"
 	wt := "functional-sequential-workflow-test-type"
 	tl := "functional-sequential-workflow-test-taskqueue"
@@ -468,7 +468,7 @@ func (s *functionalSuite) TestSequentialWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
+func (s *FunctionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	id := "functional-complete-workflow-task-create-new-test"
 	wt := "functional-complete-workflow-task-create-new-test-type"
 	tl := "functional-complete-workflow-task-create-new-test-taskqueue"
@@ -538,7 +538,7 @@ func (s *functionalSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 }
 
-func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
+func (s *FunctionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	id := "functional-timeouts-workflow-test"
 	wt := "functional-timeouts-workflow-test-type"
 	tl := "functional-timeouts-workflow-test-taskqueue"
@@ -655,7 +655,7 @@ func (s *functionalSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestWorkflowRetry() {
+func (s *FunctionalSuite) TestWorkflowRetry() {
 	id := "functional-wf-retry-test"
 	wt := "functional-wf-retry-type"
 	tl := "functional-wf-retry-taskqueue"
@@ -806,7 +806,7 @@ func (s *functionalSuite) TestWorkflowRetry() {
 	}
 }
 
-func (s *functionalSuite) TestWorkflowRetryFailures() {
+func (s *FunctionalSuite) TestWorkflowRetryFailures() {
 	id := "functional-wf-retry-failures-test"
 	wt := "functional-wf-retry-failures-type"
 	tl := "functional-wf-retry-failures-taskqueue"

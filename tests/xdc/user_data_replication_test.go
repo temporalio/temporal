@@ -61,17 +61,17 @@ import (
 )
 
 type (
-	userDataReplicationTestSuite struct {
+	UserDataReplicationTestSuite struct {
 		xdcBaseSuite
 	}
 )
 
 func TestUserDataReplicationTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(userDataReplicationTestSuite))
+	suite.Run(t, new(UserDataReplicationTestSuite))
 }
 
-func (s *userDataReplicationTestSuite) SetupSuite() {
+func (s *UserDataReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
@@ -86,15 +86,15 @@ func (s *userDataReplicationTestSuite) SetupSuite() {
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
 
-func (s *userDataReplicationTestSuite) SetupTest() {
+func (s *UserDataReplicationTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-func (s *userDataReplicationTestSuite) TearDownSuite() {
+func (s *UserDataReplicationTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassive() {
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -136,7 +136,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	}, 15*time.Second, 500*time.Millisecond)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -175,7 +175,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	}, 15*time.Second, 500*time.Millisecond)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
+func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -256,7 +256,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
+func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	// Advanced visibility only enabled by default in SQLite
 	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
 		s.T().Skip("Test requires advanced visibility")
@@ -405,7 +405,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
 }
 
-func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
+func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
 	// Advanced visibility only enabled by default in SQLite
 	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
 		s.T().Skip("Test requires advanced visibility")

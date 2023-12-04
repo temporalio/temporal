@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 )
 
-func (s *clientFunctionalSuite) TestAdminRebuildMutableState() {
+func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string

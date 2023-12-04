@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
+func (s *FunctionalSuite) TestExternalRequestCancelWorkflowExecution() {
 	id := "functional-request-cancel-workflow-test"
 	wt := "functional-request-cancel-workflow-test-type"
 	tl := "functional-request-cancel-workflow-test-taskqueue"
@@ -138,7 +138,7 @@ func (s *functionalSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.Equal("Cancelled", s.decodePayloadsString(cancelledEventAttributes.GetDetails()))
 }
 
-func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
+func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
 	id := "functional-cancel-workflow-command-target-running-test"
 	wt := "functional-cancel-workflow-command-target-running-test-type"
 	tl := "functional-cancel-workflow-command-target-running-test-taskqueue"
@@ -274,7 +274,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetRunnin
 	s.NoError(err)
 }
 
-func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
+func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
 	id := "functional-cancel-workflow-command-target-finished-test"
 	wt := "functional-cancel-workflow-command-target-finished-test-type"
 	tl := "functional-cancel-workflow-command-target-finished-test-taskqueue"
@@ -406,7 +406,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetFinish
 	s.NoError(err)
 }
 
-func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
+func (s *FunctionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
 	id := "functional-cancel-workflow-command-target-not-found-test"
 	wt := "functional-cancel-workflow-command-target-not-found-test-type"
 	tl := "functional-cancel-workflow-command-target-not-found-test-taskqueue"
@@ -486,7 +486,7 @@ func (s *functionalSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFou
 	s.NoError(err)
 }
 
-func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
+func (s *FunctionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	id := "functional-immediate-child-cancellation-workflow-task-failed-test"
 	wt := "functional-immediate-child-cancellation-workflow-task-failed-test-type"
 	tl := "functional-immediate-child-cancellation-workflow-task-failed-test-taskqueue"

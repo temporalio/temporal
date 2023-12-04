@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestVisibility() {
+func (s *FunctionalSuite) TestVisibility() {
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions

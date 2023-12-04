@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-type functionalTestBaseSuite struct {
+type FunctionalTestBaseSuite struct {
 	*require.Assertions
 	FunctionalTestBase
 	frontendServiceName primitives.ServiceName
@@ -43,7 +43,7 @@ type functionalTestBaseSuite struct {
 	workerServiceName   primitives.ServiceName
 }
 
-func (s *functionalTestBaseSuite) SetupSuite() {
+func (s *FunctionalTestBaseSuite) SetupSuite() {
 	s.setupSuite("testdata/cluster.yaml",
 		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
 		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
@@ -53,11 +53,11 @@ func (s *functionalTestBaseSuite) SetupSuite() {
 
 }
 
-func (s *functionalTestBaseSuite) TearDownSuite() {
+func (s *FunctionalTestBaseSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *functionalTestBaseSuite) TestWithFxOptionsForService() {
+func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {
 	// This test works by using the WithFxOptionsForService option to obtain the ServiceName from the graph, and then
 	// it verifies that the ServiceName is correct. It does this because we are targeting the fx.App for a particular
 	// service, so we'll know our fx options were provided to the right service if, when we use them to get the current
@@ -70,10 +70,10 @@ func (s *functionalTestBaseSuite) TestWithFxOptionsForService() {
 	s.Equal(primitives.WorkerService, s.workerServiceName)
 }
 
-func (s *functionalTestBaseSuite) SetupTest() {
+func (s *FunctionalTestBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
 func TestFunctionalTestBaseSuite(t *testing.T) {
-	suite.Run(t, new(functionalTestBaseSuite))
+	suite.Run(t, new(FunctionalTestBaseSuite))
 }

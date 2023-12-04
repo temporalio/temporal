@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
+func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	id := "functional-transient-workflow-task-timeout-test"
 	wt := "functional-transient-workflow-task-timeout-test-type"
 	tl := "functional-transient-workflow-task-timeout-test-taskqueue"
@@ -133,7 +133,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskTimeout() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
+func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	id := "functional-transient-workflow-task-history-size-test"
 	wt := "functional-transient-workflow-task-history-size-test-type"
 	tl := "functional-transient-workflow-task-history-size-test-taskqueue"
@@ -325,7 +325,7 @@ func (s *functionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 }
 
-func (s *functionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
+func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
 	id := "functional-no-transient-workflow-task-after-flush-buffered-events-test"
 	wt := "functional-no-transient-workflow-task-after-flush-buffered-events-test-type"
 	tl := "functional-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"

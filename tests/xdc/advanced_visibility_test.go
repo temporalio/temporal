@@ -66,7 +66,7 @@ import (
 	"go.temporal.io/server/tests"
 )
 
-type advVisCrossDCTestSuite struct {
+type AdvVisCrossDCTestSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -87,7 +87,7 @@ type advVisCrossDCTestSuite struct {
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(advVisCrossDCTestSuite))
+	suite.Run(t, new(AdvVisCrossDCTestSuite))
 }
 
 var (
@@ -102,7 +102,7 @@ var (
 	}
 )
 
-func (s *advVisCrossDCTestSuite) SetupSuite() {
+func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = tests.NewTestClusterFactory()
 
@@ -160,18 +160,18 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *advVisCrossDCTestSuite) SetupTest() {
+func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *advVisCrossDCTestSuite) TearDownSuite() {
+func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
 }
 
-func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
+func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
