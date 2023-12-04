@@ -39,16 +39,18 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/credentials"
 )
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
 type NexusHTTPHandler struct {
-	logger                 log.Logger
-	nexusHandler           http.Handler
-	preprocessErrorCounter metrics.CounterFunc
-	auth                   *authorization.Interceptor
-	enabled                func() bool
+	logger                         log.Logger
+	nexusHandler                   http.Handler
+	preprocessErrorCounter         metrics.CounterFunc
+	auth                           *authorization.Interceptor
+	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor
+	enabled                        func() bool
 }
 
 func NewNexusHTTPHandler(
@@ -57,13 +59,15 @@ func NewNexusHTTPHandler(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	authInterceptor *authorization.Interceptor,
+	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	logger log.Logger,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
-		logger:                 logger,
-		auth:                   authInterceptor,
-		enabled:                serviceConfig.EnableNexusHTTPHandler,
-		preprocessErrorCounter: metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
+		logger:                         logger,
+		auth:                           authInterceptor,
+		namespaceValidationInterceptor: namespaceValidationInterceptor,
+		enabled:                        serviceConfig.EnableNexusHTTPHandler,
+		preprocessErrorCounter:         metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:            logger,
@@ -120,6 +124,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	var err error
 	vars := mux.Vars(r)
 	nc := nexusContext{
+		namespaceValidationInterceptor: h.namespaceValidationInterceptor,
 		// This name does not map to an underlying gRPC service. This format is used for consistency with the
 		// gRPC API names on which the authorizer - the consumer of this string - may depend.
 		apiName: "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",
@@ -133,6 +138,11 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	if nc.taskQueue, err = url.PathUnescape(vars["task_queue"]); err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
 		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: "invalid URL"})
+		return
+	}
+	if err := h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
+		h.logger.Error("invalid namespace name", tag.Error(err))
+		h.writeNexusFailure(w, http.StatusBadRequest, &nexus.Failure{Message: err.Error()})
 		return
 	}
 	var tlsInfo *credentials.TLSInfo
