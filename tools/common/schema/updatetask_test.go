@@ -26,7 +26,6 @@ package schema
 
 import (
 	"embed"
-	dbschemas "go.temporal.io/server/schema"
 	"os"
 	"testing"
 
@@ -36,6 +35,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"go.temporal.io/server/common/log"
+	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tests/testutils"
 )
 
