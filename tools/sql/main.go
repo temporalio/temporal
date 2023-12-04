@@ -182,7 +182,7 @@ func BuildCLIOptions() *cli.App {
 				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagSchemaName,
-					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", embeddedSchemaNames),
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", schema.ValidSchemaNames["sql"]),
 				},
 			},
 			Action: func(c *cli.Context) {

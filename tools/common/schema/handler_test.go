@@ -112,6 +112,8 @@ func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 	s.assertValidateUpdateFails(config)
 	config.SchemaDir = ""
 	s.assertValidateUpdateSucceeds(config)
+	config.SchemaName = "foo"
+	s.assertValidateUpdateFails(config)
 }
 
 func (s *HandlerTestSuite) assertValidateSetupSucceeds(input *SetupConfig) {

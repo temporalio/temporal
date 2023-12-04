@@ -199,7 +199,7 @@ func buildCLIOptions() *cli.App {
 				},
 				cli.StringFlag{
 					Name:  schema.CLIFlagSchemaName,
-					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", embeddedSchemaNames),
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", schema.ValidSchemaNames["cassandra"]),
 				},
 			},
 			Action: func(c *cli.Context) {

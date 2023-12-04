@@ -25,6 +25,9 @@
 package schema
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log"
@@ -100,6 +103,13 @@ func validateUpdateConfig(config *UpdateConfig) error {
 	if len(config.SchemaDir) > 0 && len(config.SchemaName) > 0 {
 		return NewConfigError("either" + flag(CLIOptSchemaDir) + " or " +
 			flag(CLIOptSchemaName) + " must be specified")
+	}
+	if len(config.SchemaName) > 0 {
+		if !slices.Contains(ValidSchemaNames["sql"], config.SchemaName) &&
+			!slices.Contains(ValidSchemaNames["cassandra"], config.SchemaName) {
+			return NewConfigError(flag(CLIOptSchemaDir) + " must be one of: " +
+				fmt.Sprintf("%v or %v", ValidSchemaNames["sql"], ValidSchemaNames["cassandra"]))
+		}
 	}
 	if len(config.TargetVersion) > 0 {
 		ver, err := normalizeVersionString(config.TargetVersion)

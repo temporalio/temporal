@@ -40,8 +40,6 @@ import (
 
 const defaultNumReplicas = 1
 
-var embeddedSchemaNames = []string{"cassandra/temporal", "cassandra/visibility"}
-
 // SetupSchemaConfig contains the configuration params needed to setup schema tables
 type SetupSchemaConfig struct {
 	CQLClientConfig
