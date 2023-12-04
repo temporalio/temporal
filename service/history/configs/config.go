@@ -369,7 +369,7 @@ func NewConfig(
 		HistoryCacheMaxSize:                   dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 256000),
 		HistoryCacheTTL:                       dc.GetDurationProperty(dynamicconfig.HistoryCacheTTL, time.Hour),
 		HistoryCacheNonUserContextLockTimeout: dc.GetDurationProperty(dynamicconfig.HistoryCacheNonUserContextLockTimeout, 500*time.Millisecond),
-		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, false),
+		EnableHostLevelHistoryCache:           dc.GetBoolProperty(dynamicconfig.EnableHostHistoryCache, true),
 		HistoryShardLevelCacheMaxSize:         dc.GetIntProperty(dynamicconfig.HistoryCacheShardLevelMaxSize, 512),
 		EnableAPIGetCurrentRunIDLock:          dc.GetBoolProperty(dynamicconfig.EnableAPIGetCurrentRunIDLock, false),
 

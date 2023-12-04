@@ -42,3 +42,6 @@ frontend.workerVersioningWorkflowAPIs:
   - value: true
 frontend.accessHistoryFraction:
   - value: 1.0
+history.cacheMaxSize:
+  - value: 100
+

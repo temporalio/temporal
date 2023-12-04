@@ -660,6 +660,8 @@ var (
 	CacheFailures                                = NewCounterDef("cache_errors")
 	CacheLatency                                 = NewTimerDef("cache_latency")
 	CacheMissCounter                             = NewCounterDef("cache_miss")
+	CacheUsage                                   = NewGaugeDef("cache_usage")
+	CacheDemand                                  = NewGaugeDef("cache_demand")
 	HistoryEventNotificationQueueingLatency      = NewTimerDef("history_event_notification_queueing_latency")
 	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")

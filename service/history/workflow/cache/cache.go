@@ -28,6 +28,10 @@ package cache
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -48,6 +52,12 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+)
+
+const (
+	planningEpoch            = 500 * time.Millisecond
+	unplannedCachePercentage = 10
+	unplannedCachePartition  = "UNALLOCATED_NAMESPACE"
 )
 
 type (
@@ -77,7 +87,13 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-
+		demand                    map[string]int
+		allocation                map[string]int
+		usage                     map[string]int
+		maxSize                   int
+		mut                       sync.Mutex
+		cacheReachedLimit         bool
+		logger                    log.Logger
 		nonUserContextLockTimeout time.Duration
 	}
 
@@ -131,10 +147,17 @@ func newCache(
 	opts.TTL = ttl
 	opts.Pin = true
 
-	return &CacheImpl{
+	c := &CacheImpl{
 		Cache:                     cache.New(size, opts),
 		nonUserContextLockTimeout: nonUserContextLockTimeout,
+		demand:                    make(map[string]int),
+		allocation:                make(map[string]int),
+		usage:                     make(map[string]int),
+		maxSize:                   size,
+		mut:                       sync.Mutex{},
 	}
+	go c.planForNextEpoch()
+	return c
 }
 
 func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
@@ -227,6 +250,21 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ShardUUID:   shardContext.GetOwner(),
 	}
+	c.mut.Lock()
+	c.demand[namespaceID.String()]++
+	handler.WithTags(metrics.NamespaceTag(namespaceID.String())).Gauge(metrics.CacheDemand.GetMetricName()).Record(float64(c.demand[namespaceID.String()]))
+	partition := namespaceID.String()
+	maxAllocation, ok := c.allocation[partition]
+	if !ok {
+		partition = unplannedCachePartition
+	}
+	// TODO what to do with unallocated partitions
+	if c.usage[partition] >= maxAllocation {
+		c.cacheReachedLimit = true
+		c.mut.Unlock()
+		return nil, nil, cache.ErrCacheFull
+	}
+	c.mut.Unlock()
 	workflowCtx, cacheHit := c.Get(cacheKey).(workflow.Context)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
@@ -235,19 +273,27 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		elem, err := c.PutIfNotExist(cacheKey, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+			if errors.Is(err, cache.ErrCacheFull) {
+				c.cacheReachedLimit = true
+			}
 			return nil, nil, err
 		}
 		workflowCtx = elem.(workflow.Context)
 	}
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
-	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority)
+	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, lockPriority, handler, partition)
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {
 		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 		handler.Counter(metrics.AcquireLockFailedCounter.GetMetricName()).Record(1)
 		return nil, nil, err
 	}
+	c.mut.Lock()
+	c.usage[namespaceID.String()]++
+	shardContext.GetLogger().Info(fmt.Sprintf("PPV: Cache usage increment %v", c.usage[namespaceID.String()]))
+	handler.WithTags(metrics.NamespaceTag(namespaceID.String())).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[namespaceID.String()]))
+	c.mut.Unlock()
 
 	return workflowCtx, releaseFunc, nil
 }
@@ -290,6 +336,8 @@ func (c *CacheImpl) makeReleaseFunc(
 	context workflow.Context,
 	forceClearContext bool,
 	lockPriority workflow.LockPriority,
+	handler metrics.Handler,
+	cachePartition string,
 ) func(error) {
 
 	status := cacheNotReleased
@@ -299,6 +347,10 @@ func (c *CacheImpl) makeReleaseFunc(
 				context.Clear()
 				context.Unlock(lockPriority)
 				c.Release(cacheKey)
+				c.mut.Lock()
+				defer c.mut.Unlock()
+				c.usage[cachePartition]--
+				handler.WithTags(metrics.NamespaceTag(cachePartition)).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[cachePartition]))
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
@@ -306,6 +358,10 @@ func (c *CacheImpl) makeReleaseFunc(
 					context.Clear()
 					context.Unlock(lockPriority)
 					c.Release(cacheKey)
+					c.mut.Lock()
+					defer c.mut.Unlock()
+					c.usage[cachePartition]--
+					handler.WithTags(metrics.NamespaceTag(cachePartition)).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[cachePartition]))
 				} else {
 					isDirty := context.IsDirty()
 					if isDirty {
@@ -319,6 +375,10 @@ func (c *CacheImpl) makeReleaseFunc(
 					}
 					context.Unlock(lockPriority)
 					c.Release(cacheKey)
+					c.mut.Lock()
+					defer c.mut.Unlock()
+					c.usage[cachePartition]--
+					handler.WithTags(metrics.NamespaceTag(cachePartition)).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[cachePartition]))
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")
 					}
@@ -371,4 +431,59 @@ func (c *CacheImpl) validateWorkflowID(
 	}
 
 	return nil
+}
+
+func (c *CacheImpl) planForNextEpoch() {
+	for {
+		time.Sleep(planningEpoch)
+		c.mut.Lock()
+		// Do not make any allocations if cache is not full.
+		if !c.cacheReachedLimit {
+			c.demand = make(map[string]int)
+			c.allocation = make(map[string]int)
+			c.allocation[unplannedCachePartition] = c.maxSize
+			c.mut.Unlock()
+			continue
+		}
+
+		c.allocation = make(map[string]int)
+		namespaces := make([]string, len(c.usage))
+		for ns := range c.usage {
+			namespaces = append(namespaces, ns)
+		}
+		sort.Slice(namespaces, func(i, j int) bool { return c.usage[namespaces[i]] < c.usage[namespaces[j]] })
+		capacity := c.maxSize - c.maxSize*unplannedCachePercentage/100
+		c.allocation[unplannedCachePartition] = c.maxSize * unplannedCachePercentage
+		for capacity > 0 {
+			count := 0
+			for _, ns := range namespaces {
+				if c.allocation[ns] < c.demand[ns] {
+					count++
+				}
+			}
+			equalShare := capacity / count
+			capacity = 0
+
+			for _, ns := range namespaces {
+				if c.allocation[ns] < c.demand[ns] {
+					c.allocation[ns] += equalShare
+					if c.demand[ns] < c.allocation[ns] {
+						capacity += c.allocation[ns] - c.demand[ns]
+						c.allocation[ns] = c.demand[ns]
+					}
+				}
+			}
+		}
+		c.dumpStatsForDebug()
+		c.demand = make(map[string]int)
+		c.cacheReachedLimit = false
+		c.mut.Unlock()
+	}
+}
+
+func (c *CacheImpl) dumpStatsForDebug() {
+	fmt.Printf("Dumping MutableState Cache stats\n"+
+		"Usage: %v\n"+
+		"Allocation: %v\n"+
+		"Demand: %v\n", c.usage, c.allocation, c.demand)
 }
