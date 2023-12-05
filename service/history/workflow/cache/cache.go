@@ -156,6 +156,7 @@ func newCache(
 		maxSize:                   size,
 		mut:                       sync.Mutex{},
 	}
+	c.allocation[unplannedCachePartition] = c.maxSize
 	go c.planForNextEpoch()
 	return c
 }
@@ -257,9 +258,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	maxAllocation, ok := c.allocation[partition]
 	if !ok {
 		partition = unplannedCachePartition
+		maxAllocation = c.allocation[partition]
 	}
-	// TODO what to do with unallocated partitions
-	if c.usage[partition] >= maxAllocation {
+	if c.usage[partition]+1 >= maxAllocation {
 		c.cacheReachedLimit = true
 		c.mut.Unlock()
 		return nil, nil, cache.ErrCacheFull
@@ -290,9 +291,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		return nil, nil, err
 	}
 	c.mut.Lock()
-	c.usage[namespaceID.String()]++
-	shardContext.GetLogger().Info(fmt.Sprintf("PPV: Cache usage increment %v", c.usage[namespaceID.String()]))
-	handler.WithTags(metrics.NamespaceTag(namespaceID.String())).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[namespaceID.String()]))
+	c.usage[partition]++
+	shardContext.GetLogger().Info(fmt.Sprintf("PPV: Cache usage increment %v", c.usage[partition]))
+	handler.WithTags(metrics.NamespaceTag(namespaceID.String())).Gauge(metrics.CacheUsage.GetMetricName()).Record(float64(c.usage[partition]))
 	c.mut.Unlock()
 
 	return workflowCtx, releaseFunc, nil
@@ -448,12 +449,15 @@ func (c *CacheImpl) planForNextEpoch() {
 
 		c.allocation = make(map[string]int)
 		namespaces := make([]string, len(c.usage))
-		for ns := range c.usage {
+		for ns := range c.demand {
+			if ns == unplannedCachePartition {
+				continue
+			}
 			namespaces = append(namespaces, ns)
 		}
 		sort.Slice(namespaces, func(i, j int) bool { return c.usage[namespaces[i]] < c.usage[namespaces[j]] })
 		capacity := c.maxSize - c.maxSize*unplannedCachePercentage/100
-		c.allocation[unplannedCachePartition] = c.maxSize * unplannedCachePercentage
+		c.allocation[unplannedCachePartition] = c.maxSize * unplannedCachePercentage / 100
 		for capacity > 0 {
 			count := 0
 			for _, ns := range namespaces {
