@@ -553,7 +553,6 @@ func WorkerServiceProvider(
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
