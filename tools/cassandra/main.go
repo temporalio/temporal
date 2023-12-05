@@ -175,7 +175,7 @@ func buildCLIOptions() *cli.App {
 				cli.StringFlag{
 					Name: schema.CLIFlagSchemaName,
 					Usage: fmt.Sprintf("name of embedded schema directory with .cql file, one of: %v",
-						dbschemas.Paths("cassandra")),
+						dbschemas.PathsByDB("cassandra")),
 				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
@@ -206,7 +206,7 @@ func buildCLIOptions() *cli.App {
 				cli.StringFlag{
 					Name: schema.CLIFlagSchemaName,
 					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v",
-						dbschemas.Paths("cassandra")),
+						dbschemas.PathsByDB("cassandra")),
 				},
 			},
 			Action: func(c *cli.Context) {

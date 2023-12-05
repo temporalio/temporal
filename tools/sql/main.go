@@ -157,8 +157,8 @@ func BuildCLIOptions() *cli.App {
 				},
 				cli.StringFlag{
 					Name: schema.CLIFlagSchemaName,
-					Usage: fmt.Sprintf("name of embedded schema directory with .sql file, one of: %v or %v",
-						dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")),
+					Usage: fmt.Sprintf("name of embedded schema directory with .sql file, one of: %v",
+						dbschemas.PathsByDB("sql")),
 				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
@@ -188,8 +188,8 @@ func BuildCLIOptions() *cli.App {
 				},
 				cli.StringFlag{
 					Name: schema.CLIFlagSchemaName,
-					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v or %v",
-						dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")),
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v",
+						dbschemas.PathsByDB("mysql")),
 				},
 			},
 			Action: func(c *cli.Context) {

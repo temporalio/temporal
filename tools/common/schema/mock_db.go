@@ -24,7 +24,9 @@
 
 package schema
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type (
 	mockSQLDB struct {
