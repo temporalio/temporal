@@ -25,7 +25,9 @@
 package schema
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	dbschemas "go.temporal.io/server/schema"
 )
 
 // SetupTask represents a task
@@ -71,16 +74,24 @@ func (task *SetupTask) Run() error {
 		}
 	}
 
-	if len(config.SchemaFilePath) > 0 {
-		filePath, err := filepath.Abs(config.SchemaFilePath)
-		if err != nil {
-			return err
+	if len(config.SchemaFilePath) > 0 || len(config.SchemaName) > 0 {
+		var stmts []string
+		var err error
+		if len(config.SchemaName) > 0 {
+			efs := dbschemas.Assets()
+			schemaFilePath := config.SchemaName + "/schema" + schemaFileEnding(config.SchemaName)
+			schemaBuf, err2 := efs.ReadFile(schemaFilePath)
+			if err2 != nil {
+				return fmt.Errorf("error reading file %s: %w", schemaFilePath, err)
+			}
+			stmts, err = persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
+		} else {
+			filePath, err2 := filepath.Abs(config.SchemaFilePath)
+			if err2 != nil {
+				return err
+			}
+			stmts, err = persistence.LoadAndSplitQuery([]string{filePath})
 		}
-		stmts, err := persistence.LoadAndSplitQuery([]string{filePath})
-		if err != nil {
-			return err
-		}
-
 		task.logger.Debug("----- Creating types and tables -----")
 		for _, stmt := range stmts {
 			task.logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))

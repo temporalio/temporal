@@ -26,7 +26,9 @@ package schema
 
 import (
 	"fmt"
+	dbschemas "go.temporal.io/server/schema"
 	"slices"
+	"strings"
 
 	"github.com/urfave/cli"
 
@@ -66,6 +68,7 @@ func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
 func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
 	config := new(SetupConfig)
 	config.SchemaFilePath = cli.String(CLIOptSchemaFile)
+	config.SchemaFilePath = cli.String(CLIOptSchemaName)
 	config.InitialVersion = cli.String(CLIOptVersion)
 	config.DisableVersioning = cli.Bool(CLIOptDisableVersioning)
 	config.Overwrite = cli.Bool(CLIOptOverwrite)
@@ -77,13 +80,26 @@ func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
 }
 
 func validateSetupConfig(config *SetupConfig) error {
-	if len(config.SchemaFilePath) == 0 && config.DisableVersioning {
-		return NewConfigError("missing schemaFilePath " + flag(CLIOptSchemaFile))
+	if len(config.SchemaFilePath) == 0 && len(config.SchemaName) == 0 && config.DisableVersioning {
+		return NewConfigError("needs either " + flag(CLIOptSchemaFile) + " or " + flag(CLIOptSchemaName))
 	}
 	if (config.DisableVersioning && len(config.InitialVersion) > 0) ||
 		(!config.DisableVersioning && len(config.InitialVersion) == 0) {
-		return NewConfigError("either " + flag(CLIOptDisableVersioning) + " or " +
+		return NewConfigError("missing argument; either " + flag(CLIOptDisableVersioning) + " or " +
 			flag(CLIOptVersion) + " but not both must be specified")
+	}
+	if len(config.SchemaFilePath) > 0 && len(config.SchemaName) > 0 {
+		return NewConfigError("either" + flag(CLIOptSchemaFile) + " or " +
+			flag(CLIOptSchemaName) + " must be specified")
+	}
+	if len(config.SchemaName) > 0 {
+		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
+			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
+			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
+			return NewConfigError(flag(CLIOptSchemaName) + " must be one of: " +
+				fmt.Sprintf("%v, %v, or %v", dbschemas.Paths("mysql"),
+					dbschemas.Paths("postgresql"), dbschemas.Paths("cassandra")))
+		}
 	}
 	if !config.DisableVersioning {
 		ver, err := normalizeVersionString(config.InitialVersion)
@@ -105,10 +121,12 @@ func validateUpdateConfig(config *UpdateConfig) error {
 			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.SchemaName) > 0 {
-		if !slices.Contains(ValidSchemaNames["sql"], config.SchemaName) &&
-			!slices.Contains(ValidSchemaNames["cassandra"], config.SchemaName) {
-			return NewConfigError(flag(CLIOptSchemaDir) + " must be one of: " +
-				fmt.Sprintf("%v or %v", ValidSchemaNames["sql"], ValidSchemaNames["cassandra"]))
+		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
+			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
+			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
+			return NewConfigError(flag(CLIOptSchemaName) + " must be one of: " +
+				fmt.Sprintf("%v, %v, or %v", dbschemas.Paths("mysql"),
+					dbschemas.Paths("postgresql"), dbschemas.Paths("cassandra")))
 		}
 	}
 	if len(config.TargetVersion) > 0 {
@@ -123,4 +141,11 @@ func validateUpdateConfig(config *UpdateConfig) error {
 
 func flag(opt string) string {
 	return "(-" + opt + ")"
+}
+
+func schemaFileEnding(schemaName string) string {
+	if strings.Contains(schemaName, "cassandra") {
+		return ".cql"
+	}
+	return ".sql"
 }

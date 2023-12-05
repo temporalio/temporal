@@ -31,6 +31,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log"
+	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -154,6 +155,11 @@ func BuildCLIOptions() *cli.App {
 					Name:  schema.CLIFlagSchemaFile,
 					Usage: "path to the .sql schema file; if un-specified, will just setup versioning tables",
 				},
+				cli.StringFlag{
+					Name: schema.CLIFlagSchemaName,
+					Usage: fmt.Sprintf("name of embedded schema directory with .sql file, one of: %v or %v",
+						dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")),
+				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
 					Usage: "disable setup of schema versioning",
@@ -181,8 +187,9 @@ func BuildCLIOptions() *cli.App {
 					Usage: "path to directory containing versioned schema",
 				},
 				cli.StringFlag{
-					Name:  schema.CLIFlagSchemaName,
-					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v", schema.ValidSchemaNames["sql"]),
+					Name: schema.CLIFlagSchemaName,
+					Usage: fmt.Sprintf("name of embedded versioned schema, one of: %v or %v",
+						dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")),
 				},
 			},
 			Action: func(c *cli.Context) {

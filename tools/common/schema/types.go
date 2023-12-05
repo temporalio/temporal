@@ -48,6 +48,7 @@ type (
 	// params need by the SetupTask
 	SetupConfig struct {
 		SchemaFilePath    string
+		SchemaName        string
 		InitialVersion    string
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
@@ -185,23 +186,6 @@ const (
 )
 
 var rmspaceRegex = regexp.MustCompile(`\s+`)
-
-var ValidSchemaNames = map[string][]string{
-	"cassandra": {
-		"cassandra/temporal",
-		"cassandra/visibility",
-	},
-	"sql": {
-		"mysql/v57/temporal",
-		"mysql/v57/visibility",
-		"mysql/v8/temporal",
-		"mysql/v8/visibility",
-		"postgresql/v96/temporal",
-		"postgresql/v96/visibility",
-		"postgresql/v12/temporal",
-		"postgresql/v12/visibility",
-	},
-}
 
 // NewConfigError creates and returns an instance of ConfigError
 func NewConfigError(msg string) error {

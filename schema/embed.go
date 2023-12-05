@@ -26,11 +26,32 @@ package schema
 
 import (
 	"embed"
+	"io/fs"
 )
 
 //go:embed *
 var assets embed.FS
 
+// Assets returns a file system with the contents of the schema directory
 func Assets() *embed.FS {
 	return &assets
+}
+
+// Paths returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
+func Paths(dbSubDir string) []string {
+	efs := Assets()
+	dirs := make([]string, 0)
+	_ = fs.WalkDir(efs, dbSubDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && d.Name() != path {
+			if d.Name() == "versioned" {
+				dirs = append(dirs, path[:len(path)-len("/versioned")])
+				return fs.SkipDir
+			}
+		}
+		return nil
+	})
+	return dirs
 }
