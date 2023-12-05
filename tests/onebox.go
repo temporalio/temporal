@@ -35,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
 	"golang.org/x/exp/maps"
@@ -42,9 +43,6 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -115,6 +113,8 @@ type (
 		taskMgr                          persistence.TaskManager
 		executionManager                 persistence.ExecutionManager
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
+		abstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
+		visibilityStoreFactory           visibility.VisibilityStoreFactory
 		shutdownCh                       chan struct{}
 		shutdownWG                       sync.WaitGroup
 		clusterNo                        int // cluster number
@@ -161,6 +161,8 @@ type (
 		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
+		AbstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory           visibility.VisibilityStoreFactory
 		Logger                           log.Logger
 		ClusterNo                        int
 		ArchiverMetadata                 carchiver.ArchivalMetadata
@@ -200,6 +202,8 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		taskMgr:                          params.TaskMgr,
 		executionManager:                 params.ExecutionManager,
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
+		abstractDataStoreFactory:         params.AbstractDataStoreFactory,
+		visibilityStoreFactory:           params.VisibilityStoreFactory,
 		shutdownCh:                       make(chan struct{}),
 		clusterNo:                        params.ClusterNo,
 		esConfig:                         params.ESConfig,
@@ -443,8 +447,8 @@ func (c *temporalImpl) startFrontend(hosts map[primitives.ServiceName][]string, 
 		// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() visibility.VisibilityStoreFactory { return nil }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+		fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),
@@ -536,8 +540,8 @@ func (c *temporalImpl) startHistory(
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
-			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() visibility.VisibilityStoreFactory { return nil }),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
@@ -632,8 +636,8 @@ func (c *temporalImpl) startMatching(hosts map[primitives.ServiceName][]string, 
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() visibility.VisibilityStoreFactory { return nil }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+		fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
@@ -730,8 +734,8 @@ func (c *temporalImpl) startWorker(hosts map[primitives.ServiceName][]string, st
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() visibility.VisibilityStoreFactory { return nil }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+		fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(resource.DefaultSnTaggedLoggerProvider),

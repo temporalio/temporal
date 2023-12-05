@@ -72,6 +72,9 @@ type advVisCrossDCTestSuite struct {
 	*require.Assertions
 	protorequire.ProtoAssertions
 	suite.Suite
+
+	testClusterFactory tests.TestClusterFactory
+
 	cluster1               *tests.TestCluster
 	cluster2               *tests.TestCluster
 	logger                 log.Logger
@@ -101,6 +104,8 @@ var (
 
 func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
+	s.testClusterFactory = tests.NewTestClusterFactory()
+
 	var fileName string
 	switch tests.TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
@@ -127,11 +132,11 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
 
-	c, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[0])))
+	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[1])))
+	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 

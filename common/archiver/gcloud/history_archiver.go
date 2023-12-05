@@ -111,7 +111,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.Name()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 
 			if err.Error() != errUploadNonRetryable.Error() {

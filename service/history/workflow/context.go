@@ -1040,10 +1040,7 @@ func emitStateTransitionCount(
 	}
 
 	namespaceEntry := mutableState.GetNamespaceEntry()
-	metricsHandler.Histogram(
-		metrics.StateTransitionCount.Name(),
-		metrics.StateTransitionCount.Unit(),
-	).Record(
+	metrics.StateTransitionCount.With(metricsHandler).Record(
 		mutableState.GetExecutionInfo().StateTransitionCount,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.NamespaceStateTag(namespaceState(clusterMetadata, convert.Int64Ptr(mutableState.GetCurrentVersion()))),

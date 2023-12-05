@@ -60,6 +60,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
+		testClusterFactory TestClusterFactory
+
 		frontendClient workflowservice.WorkflowServiceClient
 		adminClient    adminservice.AdminServiceClient
 		operatorClient operatorservice.OperatorServiceClient
@@ -83,6 +85,7 @@ func dynamicConfig() map[dynamicconfig.Key]interface{} {
 
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
+	s.testClusterFactory = NewTestClusterFactory()
 
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
@@ -100,7 +103,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 	s.clusterConfig.DynamicConfigOverrides = dynamicConfig()
 
-	cluster, err := NewCluster(s.T(), s.clusterConfig, s.logger)
+	cluster, err := s.testClusterFactory.NewCluster(s.T(), s.clusterConfig, s.logger)
 	s.Require().NoError(err)
 	s.cluster = cluster
 	s.frontendClient = s.cluster.GetFrontendClient()
