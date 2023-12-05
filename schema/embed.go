@@ -26,9 +26,11 @@ package schema
 
 import (
 	"embed"
+	"io/fs"
+	"path/filepath"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"io/fs"
 )
 
 //go:embed *
@@ -50,7 +52,7 @@ func Paths(dbSubDir string) []string {
 		}
 		if d.IsDir() {
 			if d.Name() == "versioned" {
-				dirs = append(dirs, path[:len(path)-len("/versioned")])
+				dirs = append(dirs, filepath.Dir(path))
 				return fs.SkipDir
 			}
 		}

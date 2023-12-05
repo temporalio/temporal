@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
@@ -76,23 +77,24 @@ func (task *SetupTask) Run() error {
 	}
 
 	if len(config.SchemaFilePath) > 0 || len(config.SchemaName) > 0 {
-		var stmts []string
+		var schemaBuf []byte
 		var err error
+		var schemaFilePath string
 		if len(config.SchemaName) > 0 {
 			fsys := dbschemas.Assets()
-			schemaFilePath := config.SchemaName + "/schema" + schemaFileEnding(config.SchemaName)
-			schemaBuf, err2 := fs.ReadFile(fsys, schemaFilePath)
-			if err2 != nil {
-				return fmt.Errorf("error reading file %s: %w", schemaFilePath, err)
-			}
-			stmts, err = persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
+			schemaFilePath = filepath.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
+			schemaBuf, err = fs.ReadFile(fsys, schemaFilePath)
 		} else {
-			filePath, err2 := filepath.Abs(config.SchemaFilePath)
-			if err2 != nil {
+			schemaFilePath, err = filepath.Abs(config.SchemaFilePath)
+			if err != nil {
 				return err
 			}
-			stmts, err = persistence.LoadAndSplitQuery([]string{filePath})
+			schemaBuf, err = os.ReadFile(schemaFilePath)
 		}
+		if err != nil {
+			return fmt.Errorf("error reading file %s: %w", schemaFilePath, err)
+		}
+		stmts, err := persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
 		if err != nil {
 			return fmt.Errorf("error parsing query: %v", err)
 		}

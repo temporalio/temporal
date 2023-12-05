@@ -197,7 +197,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var dir string
 	if len(config.SchemaName) > 0 {
 		fsys = dbschemas.Assets()
-		dir = config.SchemaName + "/versioned"
+		dir = filepath.Join(config.SchemaName, "versioned")
 	} else {
 		fsys = os.DirFS(config.SchemaDir)
 		dir = "."
@@ -213,8 +213,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var result []changeSet
 
 	for _, vd := range verDirs {
-
-		dirPath := dir + "/" + vd
+		dirPath := filepath.Join(dir, vd)
 
 		m, e := readManifest(fsys, dirPath)
 		if e != nil {
@@ -252,9 +251,9 @@ func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
-		path := dir + "/" + file
+		path := filepath.Join(dir, file)
 		task.logger.Info("Processing schema file: " + path)
-		schemaBuf, err := fs.ReadFile(fsys, filepath.Clean(path))
+		schemaBuf, err := fs.ReadFile(fsys, path)
 		if err != nil {
 			return nil, fmt.Errorf("error reading file %s: %w", path, err)
 		}
@@ -290,8 +289,7 @@ func validateCQLStmts(stmts []string) error {
 
 // readManifest reads the json manifest at dirPath into a manifest struct.
 func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
-	filePath := dirPath + "/" + manifestFileName
-	jsonBlob, err := fs.ReadFile(fsys, filepath.Clean(filePath))
+	jsonBlob, err := fs.ReadFile(fsys, filepath.Join(dirPath, manifestFileName))
 	if err != nil {
 		return nil, err
 	}
