@@ -50,21 +50,28 @@ import (
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
 type nexusContext struct {
-	requestStartTime               time.Time
-	apiName                        string
-	namespaceName                  string
-	taskQueue                      string
-	claims                         *authorization.Claims
-	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor
+	requestStartTime                     time.Time
+	apiName                              string
+	namespaceName                        string
+	taskQueue                            string
+	claims                               *authorization.Claims
+	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
+	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
+	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
 type operationContext struct {
 	nexusContext
-	namespace      *namespace.Namespace
-	metricsHandler metrics.Handler
-	logger         log.Logger
-	auth           *authorization.Interceptor
+	namespace *namespace.Namespace
+	// "Special" metrics handler that should only be passed to interceptors, which require a different set of
+	// pre-baked tags than the "normal" metricsHandler.
+	metricsHandlerForInterceptors metrics.Handler
+	metricsHandler                metrics.Handler
+	logger                        log.Logger
+	auth                          *authorization.Interceptor
+	cleanupFunctions              []func()
 }
 
 // Panic handler and metrics recording function.
@@ -85,6 +92,10 @@ func (c *operationContext) capturePanicAndRecordMetrics(errPtr *error) {
 
 	c.metricsHandler.Counter(metrics.NexusRequests.GetMetricName()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusLatencyHistogram.GetMetricName(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
+
+	for _, fn := range c.cleanupFunctions {
+		fn()
+	}
 }
 
 func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
@@ -95,7 +106,7 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 	}
 }
 
-func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) error {
+func (c *operationContext) interceptRequest(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest, header nexus.Header) error {
 	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:   c.apiName,
 		Namespace: c.namespace.Name().String(),
@@ -108,10 +119,27 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 
 	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("invalid_namespace_state"))
-		return convertGRPCError(err)
+		return convertGRPCError(err, false)
+	}
+	// TODO: Redirect if current cluster is passive for this namespace.
+
+	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), c.apiName, c.metricsHandlerForInterceptors, request)
+	c.cleanupFunctions = append(c.cleanupFunctions, cleanup)
+	if err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_concurrency_limited"))
+		return convertGRPCError(err, false)
 	}
 
-	// TODO: Redirect if current cluster is passive for this namespace.
+	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("namespace_rate_limited"))
+		return convertGRPCError(err, true)
+	}
+
+	if err := c.rateLimitInterceptor.Allow(c.apiName, header); err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOutcomeTag("global_rate_limited"))
+		return convertGRPCError(err, true)
+	}
+
 	// TODO: Apply other relevant interceptors.
 	return nil
 }
@@ -137,13 +165,16 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 	if !ok {
 		return nil, errors.New("no nexus context set on context") //nolint:goerr113
 	}
-	oc := operationContext{nexusContext: nc, auth: h.auth}
+	oc := operationContext{nexusContext: nc, auth: h.auth, cleanupFunctions: make([]func(), 0)}
+
+	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(metrics.OperationTag(nc.apiName), metrics.NamespaceTag(nc.namespaceName))
 	oc.metricsHandler = h.metricsHandler.WithTags(
 		metrics.NamespaceTag(nc.namespaceName),
 		metrics.NexusMethodTag(method),
 		// default to internal error unless overridden by handler
 		metrics.NexusOutcomeTag("internal_error"),
 	)
+
 	var err error
 	if oc.namespace, err = h.namespaceRegistry.GetNamespace(namespace.Name(nc.namespaceName)); err != nil {
 		oc.metricsHandler.Counter(metrics.NexusRequests.GetMetricName()).Record(
@@ -176,7 +207,7 @@ func (h *nexusHandler) StartOperation(ctx context.Context, operation string, inp
 			StartOperation: &startOperationRequest,
 		},
 	})
-	if err := oc.interceptRequest(ctx, request); err != nil {
+	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		return nil, err
 	}
 
@@ -242,7 +273,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, operation, id string
 			},
 		},
 	})
-	if err := oc.interceptRequest(ctx, request); err != nil {
+	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		return err
 	}
 
@@ -302,29 +333,34 @@ type grpcStatusGetter interface {
 // Roughly taken from https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
 // and
 // https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
-func convertGRPCError(err error) error {
+func convertGRPCError(err error, exposeDetails bool) error {
 	st, ok := err.(grpcStatusGetter)
 	if !ok {
 		return err
 	}
 
+	errMessage := "Internal error"
+	if exposeDetails {
+		errMessage = err.Error()
+	}
+
 	switch st.Status().Code() {
 	case codes.AlreadyExists, codes.Canceled, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, errMessage)
 	case codes.Aborted, codes.Unavailable:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
 	case codes.DataLoss, codes.Internal, codes.Unknown:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
 	case codes.Unauthenticated:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
 	case codes.PermissionDenied:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeForbidden, errMessage)
 	case codes.NotFound:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
 	case codes.ResourceExhausted:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, errMessage)
 	case codes.Unimplemented:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, err.Error())
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, errMessage)
 	}
 	return err
 }

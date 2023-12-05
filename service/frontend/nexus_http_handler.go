@@ -45,12 +45,15 @@ import (
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
 type NexusHTTPHandler struct {
-	logger                         log.Logger
-	nexusHandler                   http.Handler
-	preprocessErrorCounter         metrics.CounterFunc
-	auth                           *authorization.Interceptor
-	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor
-	enabled                        func() bool
+	logger                               log.Logger
+	nexusHandler                         http.Handler
+	preprocessErrorCounter               metrics.CounterFunc
+	auth                                 *authorization.Interceptor
+	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
+	namespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
+	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	enabled                              func() bool
 }
 
 func NewNexusHTTPHandler(
@@ -60,14 +63,20 @@ func NewNexusHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	authInterceptor *authorization.Interceptor,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
+	namespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
-		logger:                         logger,
-		auth:                           authInterceptor,
-		namespaceValidationInterceptor: namespaceValidationInterceptor,
-		enabled:                        serviceConfig.EnableNexusHTTPHandler,
-		preprocessErrorCounter:         metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
+		logger:                               logger,
+		auth:                                 authInterceptor,
+		namespaceValidationInterceptor:       namespaceValidationInterceptor,
+		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
+		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
+		rateLimitInterceptor:                 rateLimitInterceptor,
+		enabled:                              serviceConfig.EnableNexusHTTPHandler,
+		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.GetMetricName()).Record,
 		nexusHandler: nexus.NewHTTPHandler(nexus.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:            logger,
@@ -124,7 +133,10 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	var err error
 	vars := mux.Vars(r)
 	nc := nexusContext{
-		namespaceValidationInterceptor: h.namespaceValidationInterceptor,
+		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
+		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
+		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
+		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		// This name does not map to an underlying gRPC service. This format is used for consistency with the
 		// gRPC API names on which the authorizer - the consumer of this string - may depend.
 		apiName: "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask",

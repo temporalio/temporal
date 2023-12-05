@@ -38,10 +38,11 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
-type mockAuthorizer struct {
-}
+type mockAuthorizer struct{}
 
 // Authorize implements authorization.Authorizer.
 func (mockAuthorizer) Authorize(ctx context.Context, caller *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
@@ -50,17 +51,47 @@ func (mockAuthorizer) Authorize(ctx context.Context, caller *authorization.Claim
 
 var _ authorization.Authorizer = mockAuthorizer{}
 
-func newOperationContext() *operationContext {
+type mockRateLimiter struct {
+	allow bool
+}
+
+// Allow implements quotas.RequestRateLimiter.
+func (r mockRateLimiter) Allow(now time.Time, request quotas.Request) bool {
+	return r.allow
+}
+
+// Reserve implements quotas.RequestRateLimiter.
+func (mockRateLimiter) Reserve(now time.Time, request quotas.Request) quotas.Reservation {
+	panic("unimplemented for test")
+}
+
+// Wait implements quotas.RequestRateLimiter.
+func (mockRateLimiter) Wait(ctx context.Context, request quotas.Request) error {
+	panic("unimplemented for test")
+}
+
+var _ quotas.RequestRateLimiter = mockRateLimiter{}
+
+type contextOptions struct {
+	namespaceState          enumspb.NamespaceState
+	quota                   int
+	namespaceRateLimitAllow bool
+	rateLimitAllow          bool
+}
+
+func newOperationContext(options contextOptions) *operationContext {
 	oc := &operationContext{}
 	oc.logger = log.NewTestLogger()
 	mh := metricstest.NewCaptureHandler()
+	oc.metricsHandlerForInterceptors = mh
 	oc.metricsHandler = mh
+	oc.apiName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
 	oc.namespace = namespace.FromPersistentState(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:    uuid.NewString(),
 				Name:  "test",
-				State: enumspb.NAMESPACE_STATE_DELETED,
+				State: options.namespaceState,
 			},
 			Config: &persistencespb.NamespaceConfig{
 				CustomSearchAttributeAliases: make(map[string]string),
@@ -68,6 +99,18 @@ func newOperationContext() *operationContext {
 		},
 	})
 	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, nil, "", "")
+	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
+		nil,
+		nil,
+		oc.logger,
+		func(ns string) int { return options.quota },
+		func(ns string) int { return options.quota },
+		map[string]int{
+			oc.apiName: 1,
+		},
+	)
+	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(nil, mockRateLimiter{options.namespaceRateLimitAllow}, make(map[string]int))
+	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(mockRateLimiter{options.rateLimitAllow}, make(map[string]int))
 	return oc
 }
 
@@ -75,12 +118,17 @@ func TestNexusInterceptRequeset_InvalidNamespaceState_ResultsInBadRequest(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var err error
-	oc := newOperationContext()
-	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{})
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_DELETED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "Namespace has invalid state: Unspecified. Must be Registered or Deprecated.", handlerError.Failure.Message)
+	require.Equal(t, "Internal error", handlerError.Failure.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -88,4 +136,76 @@ func TestNexusInterceptRequeset_InvalidNamespaceState_ResultsInBadRequest(t *tes
 	snap := capture.Snapshot()
 	require.Equal(t, 1, len(snap["test"]))
 	require.Equal(t, map[string]string{"outcome": "invalid_namespace_state"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequeset_NamespaceConcurrencyLimited_ResultsInResourceExhausted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   0,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "Internal error", handlerError.Failure.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "namespace_concurrency_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequeset_NamespaceRateLimited_ResultsInResourceExhausted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: false,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "namespace rate limit exceeded", handlerError.Failure.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "namespace_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequeset_GlobalRateLimited_ResultsInResourceExhausted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          false,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "service rate limit exceeded", handlerError.Failure.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Equal(t, 1, len(snap["test"]))
+	require.Equal(t, map[string]string{"outcome": "global_rate_limited"}, snap["test"][0].Tags)
 }
