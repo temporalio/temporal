@@ -107,16 +107,9 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	if temporalTls == nil || !temporalTls.Enabled {
 		return nil, nil
 	}
-	if temporalTls.CertData != "" && temporalTls.CertFile != "" {
-		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of certData or certFile properties should be specified")
-	}
-
-	if temporalTls.KeyData != "" && temporalTls.KeyFile != "" {
-		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of keyData or keyFile properties should be specified")
-	}
-
-	if temporalTls.CaData != "" && temporalTls.CaFile != "" {
-		return nil, fmt.Errorf("%w: %s", ErrTLSConfig, "only one of caData or caFile properties should be specified")
+	err := validateTemporalTls(temporalTls)
+	if err != nil {
+		return nil, err
 	}
 
 	tlsConfig := &tls.Config{
@@ -131,17 +124,41 @@ func NewTLSConfig(temporalTls *TLS) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	tlsConfig.RootCAs = caCertPool
+	if caCertPool != nil {
+		tlsConfig.RootCAs = caCertPool
+	}
 
 	// Load client cert
 	clientCert, err := parseClientCert(temporalTls)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfig.Certificates = []tls.Certificate{*clientCert}
+	if clientCert != nil {
+		tlsConfig.Certificates = []tls.Certificate{*clientCert}
+	}
 
 	return tlsConfig, nil
+}
+
+func validateTemporalTls(temporalTls *TLS) error {
+	if temporalTls.CertData != "" && temporalTls.CertFile != "" {
+		return fmt.Errorf("%w: %s", ErrTLSConfig, "only one of certData or certFile properties should be specified")
+	}
+
+	if temporalTls.KeyData != "" && temporalTls.KeyFile != "" {
+		return fmt.Errorf("%w: %s", ErrTLSConfig, "only one of keyData or keyFile properties should be specified")
+	}
+
+	certProvided := temporalTls.CertData != "" || temporalTls.CertFile != ""
+	keyProvided := temporalTls.KeyData != "" || temporalTls.KeyFile != ""
+	if certProvided && !keyProvided {
+		return fmt.Errorf("%w: %s", ErrTLSConfig, "keyData or keyFile must be provided")
+	}
+
+	if temporalTls.CaData != "" && temporalTls.CaFile != "" {
+		return fmt.Errorf("%w: %s", ErrTLSConfig, "only one of caData or caFile properties should be specified")
+	}
+	return nil
 }
 
 func parseCAs(temporalTls *TLS) (*x509.CertPool, error) {

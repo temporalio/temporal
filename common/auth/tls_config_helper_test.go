@@ -27,8 +27,6 @@ package auth
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -49,28 +47,25 @@ const invalidBase64Key = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQk
 // test if the input is valid
 func Test_NewTLSConfig(t *testing.T) {
 	tests := map[string]struct {
-		cfg           *TLS
-		cfgErr        error
-		connectionErr string
+		cfg    *TLS
+		cfgErr string
 	}{
 		"emptyConfig": {
-			cfg:    &TLS{},
-			cfgErr: nil,
+			cfg: &TLS{},
 		},
 		"caData_good": {
 			cfg: &TLS{
 				Enabled: true,
 				CaData:  validBase64CaData,
 			},
-			cfgErr: nil,
 		},
 		"caData_badBase64": {
 			cfg:    &TLS{Enabled: true, CaData: "this isn't base64"},
-			cfgErr: base64.CorruptInputError(4),
+			cfgErr: "illegal base64 data at input byte",
 		},
 		"caData_badPEM": {
 			cfg:    &TLS{Enabled: true, CaData: "dGhpcyBpc24ndCBhIFBFTSBjZXJ0"},
-			cfgErr: errors.New("unable to parse certs as PEM"),
+			cfgErr: "unable to parse certs as PEM",
 		},
 		"clientCert_badbase64cert": {
 			cfg: &TLS{
@@ -78,7 +73,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CertData: "this ain't base64",
 				KeyData:  validBase64Key,
 			},
-			cfgErr: base64.CorruptInputError(4),
+			cfgErr: "illegal base64 data at input byte",
 		},
 		"clientCert_badbase64key": {
 			cfg: &TLS{
@@ -86,7 +81,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CertData: validBase64Certificate,
 				KeyData:  "this ain't base64",
 			},
-			cfgErr: base64.CorruptInputError(4),
+			cfgErr: "illegal base64 data at input byte",
 		},
 		"clientCert_missingprivatekey": {
 			cfg: &TLS{
@@ -94,7 +89,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CertData: validBase64Certificate,
 				KeyData:  "",
 			},
-			cfgErr: fmt.Errorf("unable to generate x509 key pair: %w", errors.New("tls: failed to find any PEM data in key input")),
+			cfgErr: "unable to config TLS: keyData or keyFile must be provided",
 		},
 		"clientCert_duplicate_cert": {
 			cfg: &TLS{
@@ -102,7 +97,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CertData: validBase64Certificate,
 				CertFile: "/a/b/c",
 			},
-			cfgErr: errors.New("only one of certData or certFile properties should be specified"),
+			cfgErr: "only one of certData or certFile properties should be specified",
 		},
 		"clientCert_duplicate_key": {
 			cfg: &TLS{
@@ -110,7 +105,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				KeyData: validBase64Key,
 				KeyFile: "/a/b/c",
 			},
-			cfgErr: errors.New("only one of keyData or keyFile properties should be specified"),
+			cfgErr: "only one of keyData or keyFile properties should be specified",
 		},
 		"clientCert_duplicate_ca": {
 			cfg: &TLS{
@@ -118,7 +113,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CaData:  validBase64CaData,
 				CaFile:  "/a/b/c",
 			},
-			cfgErr: errors.New("only one of caData or caFile properties should be specified"),
+			cfgErr: "only one of caData or caFile properties should be specified",
 		},
 	}
 
@@ -126,8 +121,10 @@ func Test_NewTLSConfig(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			_, err := NewTLSConfig(tc.cfg)
-			if !errors.Is(err, tc.cfgErr) {
-				assert.Equal(t, tc.cfgErr, err)
+			if tc.cfgErr != "" {
+				assert.ErrorContains(t, err, tc.cfgErr)
+			} else {
+				assert.Nil(t, err)
 			}
 
 			ctrl.Finish()
