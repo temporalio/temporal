@@ -30,8 +30,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,17 +41,16 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/common/primitives"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -58,6 +59,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
@@ -118,8 +120,18 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
-	clusterConfig.DynamicConfigOverrides = s.dynamicConfigOverrides
+	if clusterConfig.DynamicConfigOverrides == nil {
+		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+	}
+	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryScannerEnabled:    false,
+		dynamicconfig.TaskQueueScannerEnabled:  false,
+		dynamicconfig.ExecutionsScannerEnabled: false,
+		dynamicconfig.BuildIdScavengerEnabled:  false,
+	})
+	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
+	clusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
@@ -261,7 +273,7 @@ func (s *FunctionalTestBase) registerNamespace(
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
-		WorkflowExecutionRetentionPeriod: &retention,
+		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             historyArchivalState,
 		HistoryArchivalUri:               historyArchivalURI,
 		VisibilityArchivalState:          visibilityArchivalState,
@@ -444,8 +456,9 @@ func (s *FunctionalTestBase) formatHistory(history *historypb.History) string {
 	return ""
 }
 
-func (s *FunctionalTestBase) structToMap(strct any) map[string]any {
+var publicRgx = regexp.MustCompile("^[A-Z]")
 
+func (s *FunctionalTestBase) structToMap(strct any) map[string]any {
 	strctV := reflect.ValueOf(strct)
 	strctT := strctV.Type()
 
@@ -453,8 +466,12 @@ func (s *FunctionalTestBase) structToMap(strct any) map[string]any {
 
 	for i := 0; i < strctV.NumField(); i++ {
 		field := strctV.Field(i)
-		var fieldData any
+		// Skip unexported members
+		if !publicRgx.MatchString(strctT.Field(i).Name) {
+			continue
+		}
 
+		var fieldData any
 		if field.Kind() == reflect.Pointer && field.IsNil() {
 			continue
 		} else if field.Kind() == reflect.Pointer && field.Elem().Kind() == reflect.Struct {
@@ -537,8 +554,8 @@ func (s *FunctionalTestBase) parseHistory(expectedHistory string) (string, map[i
 			s.FailNowf("", "Wrong EventID sequence after EventID %d on line %d", prevEventID, lineNum+1)
 		}
 		prevEventID = eventID
-		eventType, ok := enumspb.EventType_value[fields[1]]
-		if !ok {
+		eventType, err := enumspb.EventTypeFromString(fields[1])
+		if err != nil {
 			s.FailNowf("", "Unknown event type %s for EventID=%d", fields[1], lineNum+1)
 		}
 		h.Events = append(h.Events, &historypb.HistoryEvent{

@@ -39,6 +39,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -73,20 +75,20 @@ type (
 		ScheduledEventID    int64
 		StartedEventID      int64
 		RequestID           string
-		WorkflowTaskTimeout *time.Duration
+		WorkflowTaskTimeout time.Duration
 		// This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent.
 		TaskQueue *taskqueuepb.TaskQueue
 		Attempt   int32
 		// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 		// use these Timestamp to create scheduled/started events.
 		// Also used for recording latency metrics
-		ScheduledTime *time.Time
-		StartedTime   *time.Time
+		ScheduledTime time.Time
+		StartedTime   time.Time
 		// OriginalScheduledTime is to record the first scheduled workflow task during workflow task heartbeat.
 		// Client may to heartbeat workflow task by RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
 		// In this case, OriginalScheduledTime won't change. Then when time.Now().UTC()-OriginalScheduledTime exceeds
 		// some threshold, server can interrupt the heartbeat by enforcing to time out the workflow task.
-		OriginalScheduledTime *time.Time
+		OriginalScheduledTime time.Time
 
 		// Indicate type of the current workflow task (normal, transient, or speculative).
 		Type enumsspb.WorkflowTaskType
@@ -126,7 +128,7 @@ type (
 		AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
+		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
@@ -149,8 +151,8 @@ type (
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionStartedEventWithOptions(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
 
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
@@ -175,7 +177,7 @@ type (
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
-		GetWorkflowCloseTime(ctx context.Context) (*time.Time, error)
+		GetWorkflowCloseTime(ctx context.Context) (time.Time, error)
 		GetWorkflowTaskByID(scheduledEventID int64) *WorkflowTaskInfo
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
@@ -223,10 +225,10 @@ type (
 		GetApproximatePersistedSize() int
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
-		SetStickyTaskQueue(name string, scheduleToStartTimeout *time.Duration)
+		SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration)
 		ClearStickyTaskQueue()
 		IsStickyTaskQueueSet() bool
-		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *time.Duration)
+		TaskQueueScheduleToStartTimeout(name string) (*taskqueuepb.TaskQueue, *durationpb.Duration)
 
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
@@ -248,7 +250,7 @@ type (
 		ReplicateChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskFailedEvent() error
-		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *time.Duration, int32, *time.Time, *time.Time, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
+		ReplicateWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		ReplicateWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64) (*WorkflowTaskInfo, error)
 		ReplicateWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ReplicateExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
@@ -271,14 +273,14 @@ type (
 		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(*clockspb.VectorClock, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
-		SetHistoryTree(ctx context.Context, executionTimeout *time.Duration, runTimeout *time.Duration, treeID string) error
+		SetHistoryTree(ctx context.Context, executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error
 		SetBaseWorkflow(
 			baseRunID string,
 			baseRunLowestCommonAncestorEventID int64,
@@ -313,6 +315,6 @@ type (
 		// Input backoffDuration is current backoff for next run.
 		// If current backoff comply with minimal ContinueAsNew interval requirement, current backoff will be returned.
 		// Current backoff could be nil which means it does not have a backoff.
-		ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration
+		ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration
 	}
 )

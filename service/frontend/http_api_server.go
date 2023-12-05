@@ -34,18 +34,18 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/status"
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"go.temporal.io/api/proxy"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
+	"github.com/gorilla/mux"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -83,6 +83,8 @@ var (
 )
 
 // NewHTTPAPIServer creates an [HTTPAPIServer].
+//
+// routes registered with additionalRouteRegistrationFuncs take precedence over the auto generated grpc proxy routes.
 func NewHTTPAPIServer(
 	serviceConfig *Config,
 	rpcConfig config.RPC,
@@ -91,6 +93,7 @@ func NewHTTPAPIServer(
 	handler Handler,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
+	additionalRouteRegistrationFuncs []func(*mux.Router),
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -138,7 +141,7 @@ func NewHTTPAPIServer(
 	}
 
 	// Set Temporal service error handler
-	opts = append(opts, runtime.WithProtoErrorHandler(h.errorHandler))
+	opts = append(opts, runtime.WithErrorHandler(h.errorHandler))
 
 	// Match headers w/ default
 	h.matchAdditionalHeaders = map[string]bool{}
@@ -168,8 +171,17 @@ func NewHTTPAPIServer(
 	if err != nil {
 		return nil, fmt.Errorf("failed registering HTTP API handler: %w", err)
 	}
-	// Set the handler as our function that wraps serve mux
-	h.server.Handler = http.HandlerFunc(h.serveHTTP)
+
+	// Instantiate a router to support additional route prefixes.
+	r := mux.NewRouter().UseEncodedPath()
+	for _, f := range additionalRouteRegistrationFuncs {
+		f(r)
+	}
+
+	// Set the / handler as our function that wraps serve mux.
+	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	// Register the router as the HTTP server handler.
+	h.server.Handler = r
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
@@ -280,7 +292,7 @@ func (h *HTTPAPIServer) errorHandler(
 	// this time.
 
 	s := serviceerror.ToStatus(err)
-	w.Header().Set("Content-Type", marshaler.ContentType())
+	w.Header().Set("Content-Type", marshaler.ContentType(struct{}{}))
 
 	buf, merr := marshaler.Marshal(s.Proto())
 	if merr != nil {
@@ -296,18 +308,20 @@ func (h *HTTPAPIServer) errorHandler(
 }
 
 func (h *HTTPAPIServer) newMarshaler(indent string, disablePayloadShorthand bool) runtime.Marshaler {
-	marshalOpts := proxy.JSONPBMarshalerOptions{
-		Indent:                  indent,
-		DisablePayloadShorthand: disablePayloadShorthand,
-	}
-	unmarshalOpts := proxy.JSONPBUnmarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
-	if m, err := proxy.NewJSONPBMarshaler(marshalOpts); err != nil {
-		panic(err)
-	} else if u, err := proxy.NewJSONPBUnmarshaler(unmarshalOpts); err != nil {
-		panic(err)
-	} else {
-		return proxy.NewGRPCGatewayJSONPBMarshaler(m, u)
-	}
+	return newProtoJsonMarshaler(indent)
+	// TODO: reintroduce shorthand JSON marshaling here
+	// marshalOpts := proxy.JSONPBMarshalerOptions{
+	// 	Indent:                  indent,
+	// 	DisablePayloadShorthand: disablePayloadShorthand,
+	// }
+	// unmarshalOpts := proxy.JSONPBUnmarshalerOptions{DisablePayloadShorthand: disablePayloadShorthand}
+	// if m, err := proxy.NewJSONPBMarshaler(marshalOpts); err != nil {
+	// 	panic(err)
+	// } else if u, err := proxy.NewJSONPBUnmarshaler(unmarshalOpts); err != nil {
+	// 	panic(err)
+	// } else {
+	// 	return proxy.NewGRPCGatewayJSONPBMarshaler(m, u)
+	// }
 }
 
 func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) {

@@ -540,7 +540,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			Version: recordVersion,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
@@ -579,7 +579,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 		serviceerror.NewNotFound("expected empty result"),
 	)
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
@@ -686,7 +686,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 			Version: recordVersion,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        16,
 			ClusterId:                clusterId,
@@ -815,7 +815,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 		serviceerror.NewNotFound("expected empty result"),
 	)
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
@@ -854,7 +854,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 		serviceerror.NewNotFound("expected empty result"),
 	)
 	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			ClusterId:                clusterId,
@@ -887,7 +887,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
 				HistoryShardCount:        0,
 				ClusterId:                clusterId,
@@ -926,7 +926,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
 				HistoryShardCount:        0,
 				ClusterId:                clusterId,
@@ -956,7 +956,7 @@ func (s *adminHandlerSuite) Test_ListClusters_Success() {
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
-					ClusterMetadata: persistencespb.ClusterMetadata{ClusterName: "test"},
+					ClusterMetadata: &persistencespb.ClusterMetadata{ClusterName: "test"},
 				},
 			}}, nil)
 
@@ -1602,5 +1602,35 @@ func (s *adminHandlerSuite) TestAddDLQTasks_Ok() {
 func (s *adminHandlerSuite) TestAddDLQTasks_Err() {
 	s.mockHistoryClient.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
 	_, err := s.handler.AddTasks(context.Background(), &adminservice.AddTasksRequest{})
+	s.ErrorIs(err, assert.AnError)
+}
+
+func (s *adminHandlerSuite) TestListQueues_Ok() {
+	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), &historyservice.ListQueuesRequest{
+		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+		PageSize:      0,
+		NextPageToken: nil,
+	}).Return(&historyservice.ListQueuesResponse{
+		Queues: []*historyservice.ListQueuesResponse_QueueInfo{
+			{
+				QueueName:    "testQueue",
+				MessageCount: 100,
+			},
+		},
+	}, nil)
+	resp, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{
+		QueueType:     int32(persistence.QueueTypeHistoryDLQ),
+		PageSize:      0,
+		NextPageToken: nil,
+	})
+	s.NoError(err)
+	s.Equal("testQueue", resp.Queues[0].QueueName)
+	s.Equal(int64(100), resp.Queues[0].MessageCount)
+
+}
+
+func (s *adminHandlerSuite) TestListQueues_Err() {
+	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
+	_, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{})
 	s.ErrorIs(err, assert.AnError)
 }

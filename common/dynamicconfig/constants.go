@@ -359,6 +359,8 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendEnableNexusHTTPHandler enables serving Nexus HTTP requests in the frontend.
+	FrontendEnableNexusHTTPHandler = "frontend.enableNexusHTTPHandler"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
 	// FrontendMaxExecutionCountBatchOperationPerNamespace is the max execution count batch operation supports per namespace
@@ -554,6 +556,8 @@ const (
 	// Only inspected when an instance first creates a history client, so changes
 	// to this require a restart to take effect.
 	HistoryClientOwnershipCachingEnabled = "history.clientOwnershipCachingEnabled"
+	// ShardIOConcurrency controls the concurrency of persistence operations in shard context
+	ShardIOConcurrency = "history.shardIOConcurrency"
 	// StandbyClusterDelay is the artificial delay added to standby cluster's view of active cluster's time
 	StandbyClusterDelay = "history.standbyClusterDelay"
 	// StandbyTaskMissingEventsResendDelay is the amount of time standby cluster's will wait (if events are missing)

@@ -38,6 +38,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/atomic"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -489,8 +490,8 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 			WorkflowId:       uuid.New(),
 			RunId:            uuid.New(),
 			ScheduledEventId: rand.Int63(),
-			CreateTime:       &rt1,
-			ExpiryTime:       &rt2,
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
 		},
 		TaskId: rand.Int63(),
 	}

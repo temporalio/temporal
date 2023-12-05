@@ -47,10 +47,10 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -106,6 +106,7 @@ var (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
+		workflowservice.UnsafeWorkflowServiceServer
 		status int32
 
 		tokenSerializer                 common.TaskTokenSerializer
@@ -345,7 +346,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
 		return nil, err
 	}
 
@@ -1674,7 +1675,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.GetWorkflowStartDelay()); err != nil {
+	if err := wh.validateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
 		return nil, err
 	}
 
@@ -1822,15 +1823,15 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
+	if request.StartTimeFilter.EarliestTime == nil || request.StartTimeFilter.EarliestTime.AsTime().IsZero() {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
+	if request.StartTimeFilter.LatestTime == nil || request.StartTimeFilter.LatestTime.AsTime().IsZero() {
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
@@ -1850,8 +1851,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespaceName,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
+		EarliestStartTime: request.StartTimeFilter.EarliestTime.AsTime(),
+		LatestStartTime:   request.StartTimeFilter.LatestTime.AsTime(),
 	}
 
 	var persistenceResp *manager.ListWorkflowExecutionsResponse
@@ -1905,15 +1906,15 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
-		request.GetStartTimeFilter().EarliestTime = &minTime
+	if request.StartTimeFilter.EarliestTime == nil || request.StartTimeFilter.EarliestTime.AsTime().IsZero() {
+		request.StartTimeFilter.EarliestTime = timestamppb.New(minTime)
 	}
 
-	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
-		request.GetStartTimeFilter().LatestTime = &maxTime
+	if request.StartTimeFilter.LatestTime == nil || request.StartTimeFilter.GetLatestTime().AsTime().IsZero() {
+		request.StartTimeFilter.LatestTime = timestamppb.New(maxTime)
 	}
 
-	if timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).After(timestamp.TimeValue(request.StartTimeFilter.GetLatestTime())) {
+	if request.StartTimeFilter.EarliestTime.AsTime().After(request.StartTimeFilter.LatestTime.AsTime()) {
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
@@ -2093,7 +2094,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	// special handling of ExecutionTime for cron or retry
 	for _, execution := range archiverResponse.Executions {
-		if timestamp.TimeValue(execution.GetExecutionTime()).IsZero() {
+		if execution.ExecutionTime == nil || execution.ExecutionTime.AsTime().IsZero() {
 			execution.ExecutionTime = execution.GetStartTime()
 		}
 	}
@@ -3189,7 +3190,6 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	if request.GetWaitPolicy() == nil {
 		request.WaitPolicy = &updatepb.WaitPolicy{}
 	}
-	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
 
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3467,7 +3467,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Executions:      request.GetExecutions(),
 		Reason:          request.GetReason(),
 		BatchType:       operationType,
-		RPS:             float64(request.GetMaxOperationsPerSecond()),
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
@@ -3729,16 +3728,158 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}, nil
 }
 
-func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *workflowservice.PollNexusTaskQueueRequest) (_ *workflowservice.PollNexusTaskQueueResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	callTime := time.Now().UTC()
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	wh.logger.Debug("Received PollNexusTaskQueue")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollNexusTaskQueue", wh.throttledLogger); err != nil {
+		return nil, err
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
+		return nil, err
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollNexusTaskQueueResponse{}, nil
+	}
+
+	pollerID := uuid.New()
+	matchingResponse, err := wh.matchingClient.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		Request:     request,
+	})
+	if err != nil {
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_NEXUS, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			return &workflowservice.PollNexusTaskQueueResponse{}, nil
+		}
+
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
+		}
+
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
+
+		return nil, err
+	}
+
+	return matchingResponse.GetResponse(), nil
 }
 
-func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
+	if err != nil {
+		return nil, err
+	}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskCompleted(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
-func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *workflowservice.RespondNexusTaskFailedRequest) (_ *workflowservice.RespondNexusTaskFailedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
+	if err != nil {
+		return nil, err
+	}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	matchingRequest := &matchingservice.RespondNexusTaskFailedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskFailed(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskFailedResponse{}, nil
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
@@ -3981,15 +4122,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
 		return errInvalidWorkflowExecutionTimeoutSeconds
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowRunTimeout); err != nil {
 		return errInvalidWorkflowRunTimeoutSeconds
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
+	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
@@ -3998,7 +4139,7 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 
 func (wh *WorkflowHandler) validateWorkflowStartDelay(
 	cronSchedule string,
-	startDelay *time.Duration,
+	startDelay *durationpb.Duration,
 ) error {
 	if len(cronSchedule) > 0 && startDelay != nil {
 		return errCronAndStartDelaySet
@@ -4158,10 +4299,10 @@ func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return newRequest, nil
 }
 
 func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
@@ -4173,10 +4314,10 @@ func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchA
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 	newRequest.SearchAttributes = unaliasedSas
-	return &newRequest, nil
+	return newRequest, nil
 }
 
 func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
@@ -4189,12 +4330,12 @@ func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request 
 		return request, nil
 	}
 
-	// Shallow copy request and replace SearchAttributes fields only.
-	newRequest := *request
+	// Copy request and replace SearchAttributes fields only.
+	newRequest := common.CloneProto(request)
 
 	if unaliasedSas != nil {
 		newRequest.SearchAttributes = unaliasedSas
 	}
 
-	return &newRequest, nil
+	return newRequest, nil
 }

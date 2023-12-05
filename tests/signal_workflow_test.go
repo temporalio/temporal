@@ -40,14 +40,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/consts"
 )
 
 func (s *functionalSuite) TestSignalWorkflow() {
@@ -87,8 +88,8 @@ func (s *functionalSuite) TestSignalWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -117,10 +118,10 @@ func (s *functionalSuite) TestSignalWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -188,9 +189,9 @@ func (s *functionalSuite) TestSignalWorkflow() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
-	s.Equal(header, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
+	s.ProtoEqual(header, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
 
 	// Send another signal without RunID
 	signalName = "another signal"
@@ -214,7 +215,7 @@ func (s *functionalSuite) TestSignalWorkflow() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	// Terminate workflow execution
@@ -263,8 +264,8 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -293,10 +294,10 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -368,7 +369,7 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 	s.Equal(1, numOfSignaledEvent)
 
@@ -404,8 +405,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -420,8 +421,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -449,10 +450,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -506,10 +507,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -602,8 +603,8 @@ CheckHistoryLoopForSignalSent:
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
-	s.Equal(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
@@ -626,8 +627,8 @@ func (s *functionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSpec,
 	}
@@ -702,8 +703,8 @@ func (s *functionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -814,8 +815,8 @@ func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(3 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(3 * time.Second),
 		Identity:            identity,
 	})
 	s.NoError(err)
@@ -903,8 +904,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -919,8 +920,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -945,10 +946,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1001,10 +1002,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -1096,7 +1097,7 @@ CheckHistoryLoopForSignalSent:
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
@@ -1118,8 +1119,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1144,10 +1145,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1243,8 +1244,8 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -1269,10 +1270,10 @@ func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1374,8 +1375,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1405,10 +1406,10 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if previousStartedEventID > 0 {
@@ -1479,8 +1480,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 		TaskQueue:             taskQueue,
 		Input:                 nil,
 		Header:                header,
-		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 		SignalName:            signalName,
 		SignalInput:           signalInput,
 		Identity:              identity,
@@ -1498,7 +1499,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	// Terminate workflow execution
@@ -1534,10 +1535,10 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 	s.True(startedEvent != nil)
-	s.Equal(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.ProtoEqual(header, startedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 
 	// Send signal to not existed workflow
 	id = "functional-signal-with-start-workflow-test-non-exist"
@@ -1559,7 +1560,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 	s.False(workflowComplete)
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	// Assert visibility is correct
@@ -1567,8 +1568,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1604,8 +1605,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 		Namespace:       s.namespace,
 		MaximumPageSize: 100,
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: id,
@@ -1635,8 +1636,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1662,10 +1663,10 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -1714,8 +1715,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		WorkflowType:          workflowType,
 		TaskQueue:             taskQueue,
 		Input:                 nil,
-		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:   durationpb.New(1 * time.Second),
 		SignalName:            signalName,
 		SignalInput:           signalInput,
 		Identity:              identity,
@@ -1810,12 +1811,12 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		SignalName:          signalName,
 		SignalInput:         signalInput,
 		Identity:            identity,
-		WorkflowStartDelay:  &startDelay,
+		WorkflowStartDelay:  durationpb.New(startDelay),
 	}
 
 	reqStartTime := time.Now()
@@ -1860,7 +1861,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 	s.NotNil(signalEvent)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
-	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.ProtoEqual(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 
 	descResp, descErr := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1890,8 +1891,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -1941,8 +1942,8 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 		WorkflowType:             &commonpb.WorkflowType{Name: wt},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:                    nil,
-		WorkflowRunTimeout:       timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		SignalName:               signalName,
 		SignalInput:              signalInput,
 		SkipGenerateWorkflowTask: true,

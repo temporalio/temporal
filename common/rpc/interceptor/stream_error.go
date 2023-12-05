@@ -28,10 +28,10 @@ import (
 	"context"
 	"io"
 
-	"github.com/gogo/status"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -88,7 +88,7 @@ func errorConvert(err error) error {
 	}
 }
 
-// FromStatus converts gogo gRPC Status to service error.
+// FromStatus converts gRPC Status to service error.
 func FromStatus(st *status.Status) error {
 	if st == nil {
 		return nil

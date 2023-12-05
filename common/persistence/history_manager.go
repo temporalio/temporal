@@ -120,12 +120,13 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
-		ForkBranchInfo: forkBranch,
-		TreeInfo:       treeInfoBlob,
-		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    newBranchInfo.BranchId,
-		Info:           request.Info,
-		ShardID:        request.ShardID,
+		ForkBranchToken: request.ForkBranchToken,
+		ForkBranchInfo:  forkBranch,
+		TreeInfo:        treeInfoBlob,
+		ForkNodeID:      request.ForkNodeID,
+		NewBranchID:     newBranchInfo.BranchId,
+		Info:            request.Info,
+		ShardID:         request.ShardID,
 	}
 
 	err = m.persistence.ForkHistoryBranch(ctx, req)
@@ -228,7 +229,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to parse history branch info: %w", err)
 	}
 	treeID := branch.TreeId
 	branchID := branch.BranchId
@@ -250,7 +251,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	for doContinue := true; doContinue; doContinue = len(pageToken) > 0 {
 		token, err := m.deserializeToken(pageToken, minNodeID-1, defaultLastTransactionID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to deserialize token: %w", err)
 		}
 
 		nodes, token, err := m.readRawHistoryBranch(
@@ -265,7 +266,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			true,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to read raw history branch: %w", err)
 		}
 
 		branchID := branchAncestors[token.CurrentRangeIndex].BranchId
@@ -284,7 +285,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 		pageToken, err = m.serializeToken(token, false)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to serialize token: %w", err)
 		}
 	}
 
@@ -306,7 +307,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			NodeID:        node.nodeID,
 			TransactionID: node.transactionID,
 		}); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to delete history nodes: %w", err)
 		}
 	}
 
@@ -528,7 +529,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
-// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
@@ -541,7 +542,7 @@ func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 }
 
 // ReadHistoryBranch returns history node data for a branch
-// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
@@ -554,7 +555,7 @@ func (m *executionManagerImpl) ReadHistoryBranch(
 }
 
 // ReadRawHistoryBranch returns raw history binary data for a branch
-// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
 // NOTE: this API should only be used by 3+DC
 func (m *executionManagerImpl) ReadRawHistoryBranch(
 	ctx context.Context,
@@ -580,7 +581,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 }
 
 // ReadHistoryBranchReverse returns history node data for a branch
-// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchReverse(
 	ctx context.Context,
 	request *ReadHistoryBranchReverseRequest,

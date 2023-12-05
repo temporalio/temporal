@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/multierr"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -66,9 +67,9 @@ type (
 
 		// visibility archival
 		WorkflowTypeName string
-		StartTime        *time.Time
-		ExecutionTime    *time.Time
-		CloseTime        *time.Time
+		StartTime        *timestamppb.Timestamp
+		ExecutionTime    *timestamppb.Timestamp
+		CloseTime        *timestamppb.Timestamp
 		Status           enumspb.WorkflowExecutionStatus
 		HistoryLength    int64
 		Memo             *commonpb.Memo

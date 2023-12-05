@@ -31,6 +31,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -356,8 +357,8 @@ func (p *executionPersistenceClient) RegisterHistoryTaskReader(
 	ctx context.Context,
 	request *RegisterHistoryTaskReaderRequest,
 ) error {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
+	// hint methods won't go through incomingServiceStore rate limiter
+	// so also not emitting any incomingServiceStore request/error metrics
 	return p.persistence.RegisterHistoryTaskReader(ctx, request)
 }
 
@@ -365,8 +366,8 @@ func (p *executionPersistenceClient) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
 ) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
+	// hint methods won't go through incomingServiceStore rate limiter
+	// so also not emitting any incomingServiceStore request/error metrics
 	p.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
@@ -374,8 +375,8 @@ func (p *executionPersistenceClient) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
 ) {
-	// hint methods won't go through persistence rate limiter
-	// so also not emitting any persistence request/error metrics
+	// hint methods won't go through incomingServiceStore rate limiter
+	// so also not emitting any incomingServiceStore request/error metrics
 	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
@@ -998,7 +999,7 @@ func (p *queuePersistenceClient) Init(
 
 func (p *queuePersistenceClient) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
@@ -1063,7 +1064,7 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 
 func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (_ int64, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
@@ -1278,56 +1279,56 @@ func (p *nexusServicePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServicePersistenceClient) GetNexusService(
+func (p *nexusServicePersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
-	request *GetNexusServiceRequest,
-) (_ *GetNexusServiceResponse, retErr error) {
+	request *GetNexusIncomingServiceRequest,
+) (_ *GetNexusIncomingServiceResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceGetNexusServiceScope, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceGetNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.GetNexusService(ctx, request)
+	return p.persistence.GetNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServicePersistenceClient) ListNexusServices(
+func (p *nexusServicePersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
-	request *ListNexusServicesRequest,
-) (_ *ListNexusServicesResponse, retErr error) {
+	request *ListNexusIncomingServicesRequest,
+) (_ *ListNexusIncomingServicesResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceListNexusServicesScope, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceListNexusIncomingServicesScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.ListNexusServices(ctx, request)
+	return p.persistence.ListNexusIncomingServices(ctx, request)
 }
 
-func (p *nexusServicePersistenceClient) CreateOrUpdateNexusService(
+func (p *nexusServicePersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *CreateOrUpdateNexusServiceRequest,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceCreateOrUpdateNexusServiceScope, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceCreateOrUpdateNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.CreateOrUpdateNexusService(ctx, request)
+	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServicePersistenceClient) DeleteNexusService(
+func (p *nexusServicePersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *DeleteNexusServiceRequest,
+	request *DeleteNexusIncomingServiceRequest,
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(CallerSegmentMissing, caller, time.Since(startTime), retErr)
-		p.recordRequestMetrics(metrics.PersistenceDeleteNexusServiceScope, caller, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceDeleteNexusIncomingServiceScope, caller, time.Since(startTime), retErr)
 	}()
-	return p.persistence.DeleteNexusService(ctx, request)
+	return p.persistence.DeleteNexusIncomingService(ctx, request)
 }
 
 func (p *metricEmitter) recordRequestMetrics(operation string, caller string, latency time.Duration, err error) {

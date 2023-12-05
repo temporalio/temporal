@@ -41,6 +41,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -48,7 +50,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -101,10 +102,10 @@ var (
 		Kind: enumspb.TaskQueueKind(rand.Int31n(int32(len(enumspb.TaskQueueKind_name)))),
 	}
 	testRetryPolicy = &commonpb.RetryPolicy{
-		InitialInterval:        timestamp.DurationPtr(time.Duration(rand.Int63())),
+		InitialInterval:        durationpb.New(time.Duration(rand.Int63())),
 		BackoffCoefficient:     rand.Float64(),
 		MaximumAttempts:        rand.Int31(),
-		MaximumInterval:        timestamp.DurationPtr(time.Duration(rand.Int63())),
+		MaximumInterval:        durationpb.New(time.Duration(rand.Int63())),
 		NonRetryableErrorTypes: []string{"test non retryable error type"},
 	}
 	testCronSchedule = "12 * * * *"
@@ -165,13 +166,13 @@ func (s *historyBuilderSuite) TearDownTest() {
 /* workflow */
 func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	attempt := rand.Int31()
-	workflowExecutionExpirationTime := timestamp.TimePtr(time.Unix(0, rand.Int63()))
+	workflowExecutionExpirationTime := timestamppb.New(time.Unix(0, rand.Int63()))
 	continueAsNewInitiator := enumspb.ContinueAsNewInitiator(rand.Int31n(int32(len(enumspb.ContinueAsNewInitiator_name))))
-	firstWorkflowTaskBackoff := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	firstWorkflowTaskBackoff := durationpb.New(time.Duration(rand.Int63()))
 
-	workflowExecutionTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowRunTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowTaskStartToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	workflowExecutionTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowRunTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowTaskStartToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
 
 	resetPoints := &workflowpb.ResetPoints{}
 	prevRunID := uuid.New()
@@ -229,7 +230,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -298,7 +299,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
@@ -328,7 +329,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
@@ -360,7 +361,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMarkerRecord() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{
@@ -388,7 +389,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
@@ -413,7 +414,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMemo() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
@@ -439,7 +440,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
@@ -468,7 +469,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
@@ -491,7 +492,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTimeout() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
@@ -515,7 +516,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionCanceledEventAttributes{
@@ -538,7 +539,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
@@ -554,9 +555,9 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 	workflowTaskCompletionEventID := rand.Int63()
 	initiator := enumspb.ContinueAsNewInitiator(rand.Int31n(int32(len(enumspb.ContinueAsNewInitiator_name))))
-	firstWorkflowTaskBackoff := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowRunTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowTaskStartToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	firstWorkflowTaskBackoff := durationpb.New(time.Duration(rand.Int63()))
+	workflowRunTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowTaskStartToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
 
 	attributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 		WorkflowType:         testWorkflowType,
@@ -583,7 +584,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
@@ -615,7 +616,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 	attempt := rand.Int31()
 	event := s.historyBuilder.AddWorkflowTaskScheduledEvent(
 		testTaskQueue,
-		&startToCloseTimeout,
+		durationpb.New(startToCloseTimeout),
 		attempt,
 		s.now,
 	)
@@ -623,13 +624,13 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 				TaskQueue:           testTaskQueue,
-				StartToCloseTimeout: &startToCloseTimeout,
+				StartToCloseTimeout: durationpb.New(startToCloseTimeout),
 				Attempt:             attempt,
 			},
 		},
@@ -650,7 +651,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
@@ -684,7 +685,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -724,7 +725,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
@@ -756,7 +757,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{
@@ -775,10 +776,10 @@ func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
 func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	workflowTaskCompletionEventID := rand.Int63()
 	activityID := "random activity ID"
-	scheduleToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	scheduleToStartTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	startToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	heartbeatTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	scheduleToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
+	scheduleToStartTimeout := durationpb.New(time.Duration(rand.Int63()))
+	startToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
+	heartbeatTimeout := durationpb.New(time.Duration(rand.Int63()))
 	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             activityID,
 		ActivityType:           testActivityType,
@@ -799,7 +800,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
@@ -834,7 +835,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
@@ -860,7 +861,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelRequested() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{
@@ -885,7 +886,7 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
@@ -914,7 +915,7 @@ func (s *historyBuilderSuite) TestActivityTaskFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
@@ -943,7 +944,7 @@ func (s *historyBuilderSuite) TestActivityTaskTimeout() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
@@ -972,7 +973,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
@@ -993,7 +994,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelled() {
 func (s *historyBuilderSuite) TestTimerStarted() {
 	workflowTaskCompletionEventID := rand.Int63()
 	timerID := "random timer ID"
-	startToFireTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	startToFireTimeout := durationpb.New(time.Duration(rand.Int63()))
 	attributes := &commandpb.StartTimerCommandAttributes{
 		TimerId:            timerID,
 		StartToFireTimeout: startToFireTimeout,
@@ -1006,7 +1007,7 @@ func (s *historyBuilderSuite) TestTimerStarted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
@@ -1030,7 +1031,7 @@ func (s *historyBuilderSuite) TestTimerFired() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_TimerFiredEventAttributes{
@@ -1056,7 +1057,7 @@ func (s *historyBuilderSuite) TestTimerCancelled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_TIMER_CANCELED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_TimerCanceledEventAttributes{
@@ -1093,7 +1094,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
@@ -1125,7 +1126,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess(
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{
@@ -1159,7 +1160,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionFailed()
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{
@@ -1207,7 +1208,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{
@@ -1244,7 +1245,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{
@@ -1281,7 +1282,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{
@@ -1306,9 +1307,9 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 /* child workflow */
 func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	workflowTaskCompletionEventID := rand.Int63()
-	workflowExecutionTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowRunTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
-	workflowTaskStartToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
+	workflowExecutionTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowRunTimeout := durationpb.New(time.Duration(rand.Int63()))
+	workflowTaskStartToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
 	parentClosePolicy := enumspb.ParentClosePolicy(rand.Int31n(int32(len(enumspb.ParentClosePolicy_name))))
 	workflowIdReusePolicy := enumspb.WorkflowIdReusePolicy(rand.Int31n(int32(len(enumspb.WorkflowIdReusePolicy_name))))
 	control := "random control"
@@ -1340,7 +1341,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -1385,7 +1386,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
@@ -1423,7 +1424,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{
@@ -1461,7 +1462,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
@@ -1502,7 +1503,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
@@ -1543,7 +1544,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
@@ -1582,7 +1583,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
@@ -1620,7 +1621,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
-		EventTime: timestamp.TimePtr(s.now),
+		EventTime: timestamppb.New(s.now),
 		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{

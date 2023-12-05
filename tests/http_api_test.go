@@ -32,21 +32,40 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/query/v1"
+	"go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
-	"google.golang.org/grpc/metadata"
 )
 
 type SomeJSONStruct struct {
 	SomeField string `json:"someField"`
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
-	if s.httpAPIAddress == "" {
-		s.T().Skip("HTTP API server not enabled")
+func jsonPayload(data string) *common.Payloads {
+	return &common.Payloads{
+		Payloads: []*common.Payload{{
+			Metadata: map[string][]byte{
+				converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
+			},
+			Data: []byte(data),
+		}},
 	}
+}
+
+func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
+	startWFRequestBody, queryBody, signalBody func() string,
+	verifyQueryResult, verifyHistory func(*clientFunctionalSuite, []byte)) {
 	// Create basic workflow that can answer queries, get signals, etc
 	workflowFn := func(ctx workflow.Context, arg *SomeJSONStruct) (*SomeJSONStruct, error) {
 		// Query that just returns query arg
@@ -80,11 +99,7 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
 
 	// Start
 	workflowID := s.randomizeStr("wf")
-	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{
-		"workflowType": { "name": "http-basic-workflow" },
-		"taskQueue": { "name": "`+s.taskQueue+`" },
-		"input": [{ "someField": "workflow-arg" }]
-	}`)
+	_, respBody := s.httpPost(http.StatusOK, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, startWFRequestBody())
 	var startResp struct {
 		RunID string `json:"runId"`
 	}
@@ -106,12 +121,7 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
 	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
-	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, `{
-		"workflowType": { "name": "http-basic-workflow" },
-		"taskQueue": { "name": "`+s.taskQueue+`" },
-		"input": [{ "someField": "workflow-arg" }],
-		"requestId": "`+s.randomizeStr("req")+`"
-	}`)
+	_, respBody = s.httpPost(http.StatusConflict, "/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID, startWFRequestBody())
 	var errResp struct {
 		Message string `json:"message"`
 		Details []struct {
@@ -126,19 +136,15 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
 	_, respBody = s.httpPost(
 		http.StatusOK,
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/query/some-query",
-		`{ "query": { "queryArgs": [{ "someField": "query-arg" }] } }`,
+		queryBody(),
 	)
-	var queryResp struct {
-		QueryResult json.RawMessage `json:"queryResult"`
-	}
-	s.Require().NoError(json.Unmarshal(respBody, &queryResp))
-	s.Require().JSONEq(`[{ "someField": "query-arg" }]`, string(queryResp.QueryResult))
+	verifyQueryResult(s, respBody)
 
 	// Signal which also completes the workflow
 	s.httpPost(
 		http.StatusOK,
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/signal/some-signal",
-		`{ "input": [{ "someField": "signal-arg" }] }`,
+		signalBody(),
 	)
 
 	// Confirm workflow complete
@@ -147,23 +153,109 @@ func (s *clientFunctionalSuite) TestHTTPAPIBasics() {
 		// Our version of gRPC gateway only supports integer enums in queries :-(
 		"/api/v1/namespaces/"+s.namespace+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
 	)
-	var histResp struct {
-		History struct {
-			Events []struct {
-				EventType                                 string `json:"eventType"`
-				WorkflowExecutionCompletedEventAttributes struct {
-					Result json.RawMessage `json:"result"`
-				} `json:"workflowExecutionCompletedEventAttributes"`
-			} `json:"events"`
-		} `json:"history"`
-	}
-	s.Require().NoError(json.Unmarshal(respBody, &histResp))
-	s.Require().Equal("WorkflowExecutionCompleted", histResp.History.Events[0].EventType)
-	s.Require().JSONEq(
-		`[{ "someField": "workflow-arg" }]`,
-		string(histResp.History.Events[0].WorkflowExecutionCompletedEventAttributes.Result),
-	)
+	verifyHistory(s, respBody)
+}
 
+func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
+	// These are callbacks because the worker needs to be initialized so we can get the task queue
+	reqBody := func() string {
+		requestBody, err := protojson.Marshal(&workflowservice.StartWorkflowExecutionRequest{
+			WorkflowType: &common.WorkflowType{Name: "http-basic-workflow"},
+			TaskQueue:    &taskqueue.TaskQueue{Name: s.taskQueue},
+			Input:        jsonPayload(`{ "someField": "workflow-arg" }`),
+		})
+		s.Require().NoError(err)
+		return string(requestBody)
+	}
+	queryBody := func() string {
+		queryBody, err := protojson.Marshal(&workflowservice.QueryWorkflowRequest{
+			Query: &query.WorkflowQuery{
+				QueryArgs: jsonPayload(`{ "someField": "query-arg" }`),
+			},
+		})
+		s.Require().NoError(err)
+		return string(queryBody)
+	}
+	signalBody := func() string {
+		signalBody, err := protojson.Marshal(&workflowservice.SignalWorkflowExecutionRequest{
+			Input: jsonPayload(`{ "someField": "signal-arg" }`),
+		})
+		s.Require().NoError(err)
+		return string(signalBody)
+	}
+	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+		var queryResp workflowservice.QueryWorkflowResponse
+		s.Require().NoError(protojson.Unmarshal(respBody, &queryResp))
+		s.Require().Len(queryResp.QueryResult.Payloads, 1)
+		var payload SomeJSONStruct
+		conv := converter.NewJSONPayloadConverter()
+		s.Require().NoError(conv.FromPayload(queryResp.QueryResult.Payloads[0], &payload))
+		s.Require().Equal("query-arg", payload.SomeField)
+	}
+	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+		var histResp workflowservice.GetWorkflowExecutionHistoryResponse
+		s.Require().NoError(protojson.Unmarshal(respBody, &histResp))
+		s.Require().Len(histResp.History.Events, 1)
+		s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, histResp.History.Events[0].EventType)
+
+		event := histResp.History.Events[0].GetWorkflowExecutionCompletedEventAttributes()
+		var payload SomeJSONStruct
+		conv := converter.NewJSONPayloadConverter()
+		s.Require().Len(event.Result.Payloads, 1)
+		s.Require().NoError(conv.FromPayload(event.Result.Payloads[0], &payload))
+		s.Require().Equal("workflow-arg", payload.SomeField)
+	}
+	s.runHTTPAPIBasicsTest(reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
+}
+
+func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
+	if s.httpAPIAddress == "" {
+		s.T().Skip("HTTP API server not enabled")
+	}
+
+	s.T().Skip("Shorthand payload format is temporarily disabled")
+	reqBody := func() string {
+		return `{
+				"workflowType": { "name": "http-basic-workflow" },
+                "taskQueue": { "name": "` + s.taskQueue + `" },
+                "input": [{ "someField": "workflow-arg" }]
+		}`
+	}
+	queryBody := func() string {
+		return `{ "query": { "queryArgs": [{ "someField": "query-arg" }] } }`
+	}
+	signalBody := func() string {
+		return `{ "input": [{ "someField": "signal-arg" }] }`
+	}
+	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+		var queryResp struct {
+			QueryResult json.RawMessage `json:"queryResult"`
+		}
+		s.Require().NoError(json.Unmarshal(respBody, &queryResp))
+		s.Require().JSONEq(`[{ "someField": "query-arg" }]`, string(queryResp.QueryResult))
+	}
+	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+		var histResp struct {
+			History struct {
+				Events []struct {
+					EventType                                 string `json:"eventType"`
+					WorkflowExecutionCompletedEventAttributes struct {
+						Result json.RawMessage `json:"result"`
+					} `json:"workflowExecutionCompletedEventAttributes"`
+				} `json:"events"`
+			} `json:"history"`
+		}
+		s.Require().NoError(json.Unmarshal(respBody, &histResp))
+		s.Require().Equal("WorkflowExecutionCompleted", histResp.History.Events[0].EventType)
+		s.Require().JSONEq(
+			`[{ "someField": "workflow-arg" }]`,
+			string(histResp.History.Events[0].WorkflowExecutionCompletedEventAttributes.Result),
+		)
+	}
+	s.runHTTPAPIBasicsTest(reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
 }
 
 func (s *clientFunctionalSuite) TestHTTPAPIHeaders() {

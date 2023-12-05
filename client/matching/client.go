@@ -79,7 +79,7 @@ func (c *clientImpl) AddActivityTask(
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		namespace.ID(request.GetNamespaceId()),
-		*request.GetTaskQueue(),
+		request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedSource(),
 	)
@@ -103,7 +103,7 @@ func (c *clientImpl) AddWorkflowTask(
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		namespace.ID(request.GetNamespaceId()),
-		*request.GetTaskQueue(),
+		request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
 	)
@@ -127,7 +127,7 @@ func (c *clientImpl) PollActivityTaskQueue(
 	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	pollerToken := c.loadBalancer.PickReadPartition(
 		namespace.ID(request.GetNamespaceId()),
-		*request.PollRequest.GetTaskQueue(),
+		request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedSource(),
 	)
@@ -153,7 +153,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	pollerToken := c.loadBalancer.PickReadPartition(
 		namespace.ID(request.GetNamespaceId()),
-		*request.PollRequest.GetTaskQueue(),
+		request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
 	)
@@ -176,7 +176,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
 		namespace.ID(request.GetNamespaceId()),
-		*request.GetTaskQueue(),
+		request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
 	)

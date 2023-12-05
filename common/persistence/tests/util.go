@@ -33,6 +33,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -290,12 +292,10 @@ func RandomVersionHistory(
 	}
 }
 
-func RandomTime() *time.Time {
-	time := time.Unix(0, rand.Int63())
-	return &time
+func RandomTime() *timestamppb.Timestamp {
+	return timestamppb.New(time.Unix(0, rand.Int63()))
 }
 
-func RandomDuration() *time.Duration {
-	duration := time.Duration(rand.Int63())
-	return &duration
+func RandomDuration() *durationpb.Duration {
+	return durationpb.New(time.Duration(rand.Int63()))
 }

@@ -34,9 +34,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -46,7 +49,7 @@ import (
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 
-// QueueType is an enum that represents various queue types in persistence
+// QueueType is an enum that represents various queue types in incomingServiceStore
 type QueueType int32
 
 // Queue types used in queue table
@@ -109,7 +112,7 @@ const numItemsInGarbageInfo = 3
 const ScheduledTaskMinPrecision = time.Millisecond
 
 type (
-	// InvalidPersistenceRequestError represents invalid request to persistence
+	// InvalidPersistenceRequestError represents invalid request to incomingServiceStore
 	InvalidPersistenceRequestError struct {
 		Msg string
 	}
@@ -404,7 +407,7 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// RegisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
 	// that a new queue reader is created by queue processing logic
 	RegisterHistoryTaskReaderRequest struct {
 		ShardID      int32
@@ -413,11 +416,11 @@ type (
 		ReaderID     int64
 	}
 
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// UnregisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
 	// that queue processing logic is done using an existing queue reader
 	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
 
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
+	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying incomingServiceStore implementation
 	// that a certain queue reader's process and the fact that it won't try to load tasks with
 	// key less than InclusiveMinPendingTaskKey
 	UpdateHistoryTaskReaderProgressRequest struct {
@@ -953,7 +956,7 @@ type (
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
 		BranchInfo *persistencespb.HistoryBranch
-		ForkTime   *time.Time
+		ForkTime   *timestamppb.Timestamp
 		Info       string
 	}
 
@@ -997,13 +1000,13 @@ type (
 
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
 	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
@@ -1055,28 +1058,28 @@ type (
 		MaxRecordsPruned int
 	}
 
-	//
-	GetNexusServiceRequest struct {
+	// TODO: document me
+	GetNexusIncomingServiceRequest struct {
 	}
 
-	//
-	GetNexusServiceResponse struct {
+	// TODO: document me
+	GetNexusIncomingServiceResponse struct {
 	}
 
-	//
-	ListNexusServicesRequest struct {
+	// TODO: document me
+	ListNexusIncomingServicesRequest struct {
 	}
 
-	//
-	ListNexusServicesResponse struct {
+	// TODO: document me
+	ListNexusIncomingServicesResponse struct {
 	}
 
-	//
-	CreateOrUpdateNexusServiceRequest struct {
+	// TODO: document me
+	CreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
-	//
-	DeleteNexusServiceRequest struct {
+	// TODO: document me
+	DeleteNexusIncomingServiceRequest struct {
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1116,7 +1119,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementation regarding history task readers
+		// Hints for incomingServiceStore implementation regarding history task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -1228,14 +1231,14 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	//
+	// TODO: document me
 	NexusServiceManager interface {
 		Closeable
 		GetName() string
-		GetNexusService(ctx context.Context, request *GetNexusServiceRequest) (*GetNexusServiceResponse, error)
-		ListNexusServices(ctx context.Context, request *ListNexusServicesRequest) (*ListNexusServicesResponse, error)
-		CreateOrUpdateNexusService(ctx context.Context, request *CreateOrUpdateNexusServiceRequest) error
-		DeleteNexusService(ctx context.Context, request *DeleteNexusServiceRequest) error
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*GetNexusIncomingServiceResponse, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
@@ -1251,6 +1254,7 @@ type (
 		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
 		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
 		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+		ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error)
 	}
 
 	HistoryTaskQueueManagerImpl struct {
@@ -1325,6 +1329,17 @@ type (
 
 	DeleteTasksResponse struct {
 		MessagesDeleted int64
+	}
+
+	ListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ListQueuesResponse struct {
+		Queues        []QueueInfo
+		NextPageToken []byte
 	}
 )
 

@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -129,13 +129,15 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errForwarderSlowDown
 	}
 
-	var expirationDuration time.Duration
-	expirationTime := timestamp.TimeValue(task.event.Data.ExpiryTime)
-	if !expirationTime.IsZero() {
-		expirationDuration = time.Until(expirationTime)
-		if expirationDuration <= 0 {
+	var expirationDuration *durationpb.Duration
+	var expirationTime time.Time
+	if task.event.Data.ExpiryTime != nil {
+		expirationTime = task.event.Data.ExpiryTime.AsTime()
+		remaining := time.Until(expirationTime)
+		if remaining <= 0 {
 			return nil
 		}
+		expirationDuration = durationpb.New(remaining)
 	}
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
@@ -149,7 +151,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &expirationDuration,
+			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
 			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
@@ -164,7 +166,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
-			ScheduleToStartTimeout: &expirationDuration,
+			ScheduleToStartTimeout: expirationDuration,
 			ForwardedSource:        fwdr.taskQueueID.FullName(),
 			VersionDirective:       task.event.Data.GetVersionDirective(),
 		})
@@ -200,6 +202,31 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		QueryRequest:     task.query.request.QueryRequest,
 		ForwardedSource:  fwdr.taskQueueID.FullName(),
 		VersionDirective: task.query.request.VersionDirective,
+	})
+
+	return resp, fwdr.handleErr(err)
+}
+
+// ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
+func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	if fwdr.taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, errTaskQueueKind
+	}
+
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	target, err := fwdr.taskQueueID.Parent(degree)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := fwdr.client.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: task.nexus.request.GetNamespaceId(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: target.FullName(),
+			Kind: fwdr.taskQueueKind,
+		},
+		Request:         task.nexus.request.Request,
+		ForwardedSource: fwdr.taskQueueID.FullName(),
 	})
 
 	return resp, fwdr.handleErr(err)

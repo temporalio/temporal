@@ -26,6 +26,7 @@ package client
 
 import (
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -225,7 +226,7 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 }
 
 func (f *factoryImpl) NewNexusServiceManager() (p.NexusServiceManager, error) {
-	store, err := f.dataStoreFactory.NewNexusServiceStore()
+	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
 	if err != nil {
 		return nil, err
 	}

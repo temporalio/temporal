@@ -33,6 +33,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/tests/testutils"
 
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -218,7 +218,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -286,7 +286,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId:   common.FirstEventID,
-						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
 					},
 				},
@@ -323,12 +323,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -337,7 +337,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -582,13 +582,13 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
-	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
+	now := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	s.historyBatchesV1 = []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   1,
 				},
 			},
@@ -600,12 +600,12 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -614,7 +614,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 			},

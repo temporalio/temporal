@@ -29,6 +29,7 @@ import (
 	"io"
 
 	"github.com/urfave/cli/v2"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -202,4 +203,8 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 	}
 	fmt.Println("Successfully merged all messages.")
 	return nil
+}
+
+func (ac *DLQV1Service) ListQueues(c *cli.Context) error {
+	return serviceerror.NewUnimplemented("ListQueues is not implemented for DLQ v1")
 }

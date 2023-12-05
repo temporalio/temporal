@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/incomingServiceStore=data_interfaces.go
 
 package persistence
 
@@ -33,6 +33,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -46,7 +47,7 @@ const (
 type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
-	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
+	// The intention is to let different incomingServiceStore implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
@@ -131,7 +132,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
+		// Hints for incomingServiceStore implementaion regarding hisotry task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -172,13 +173,13 @@ type (
 	Queue interface {
 		Closeable
 		Init(ctx context.Context, blob *commonpb.DataBlob) error
-		EnqueueMessage(ctx context.Context, blob commonpb.DataBlob) error
+		EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) error
 		ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(ctx context.Context, messageID int64) error
 		UpdateAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 
-		EnqueueMessageToDLQ(ctx context.Context, blob commonpb.DataBlob) (int64, error)
+		EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
@@ -186,14 +187,14 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	//
-	NexusServiceStore interface {
+	// TODO: document me
+	NexusIncomingServiceStore interface {
 		Closeable
 		GetName() string
-		GetNexusService(ctx context.Context, name string) (*InternalGetNexusServiceResponse, error)
-		ListNexusServices(ctx context.Context, req *InternalListNexusServicesRequest) (*InternalListNexusServicesResponse, error)
-		CreateOrUpdateNexusService(ctx context.Context, req *InternalCreateOrUpdateNexusServiceRequest) error
-		DeleteNexusService(ctx context.Context, name string) error
+		GetNexusIncomingService(ctx context.Context, name string) (*InternalGetNexusIncomingServiceResponse, error)
+		ListNexusIncomingServices(ctx context.Context, req *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, req *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, name string) error
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -240,7 +241,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 	}
 
 	InternalGetTaskQueueRequest struct {
@@ -267,7 +268,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 
 		PrevRangeID int64
 	}
@@ -304,7 +305,7 @@ type (
 
 	InternalCreateTask struct {
 		TaskId     int64
-		ExpiryTime *time.Time
+		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
 	}
 
@@ -341,7 +342,7 @@ type (
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
-	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
+	// InternalCreateWorkflowExecutionResponse is the response from incomingServiceStore for create new workflow execution
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
@@ -401,7 +402,7 @@ type (
 
 	InternalHistoryTask struct {
 		Key  tasks.Key
-		Blob commonpb.DataBlob
+		Blob *commonpb.DataBlob
 	}
 
 	// InternalAddHistoryTasksRequest is used to write new tasks
@@ -544,6 +545,8 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
+		// The base branch token
+		ForkBranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -631,7 +634,7 @@ type (
 	}
 
 	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
-	// Only used by persistence layer
+	// Only used by incomingServiceStore layer
 	InternalGetAllHistoryTreeBranchesResponse struct {
 		// pagination token
 		NextPageToken []byte
@@ -648,7 +651,7 @@ type (
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
-	// Only used by persistence layer
+	// Only used by incomingServiceStore layer
 	InternalGetHistoryTreeResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
@@ -737,23 +740,23 @@ type (
 		RecordExpiry time.Time
 	}
 
-	//
-	InternalGetNexusServiceResponse struct {
+	// TODO: document me
+	InternalGetNexusIncomingServiceResponse struct {
 	}
 
-	//
-	InternalListNexusServicesRequest struct {
+	// TODO: document me
+	InternalListNexusIncomingServicesRequest struct {
 		PageSize     int32
 		PageToken    []byte
 		TableVersion int64
 	}
 
-	//
-	InternalListNexusServicesResponse struct {
+	// TODO: document me
+	InternalListNexusIncomingServicesResponse struct {
 	}
 
-	//
-	InternalCreateOrUpdateNexusServiceRequest struct {
+	// TODO: document me
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
@@ -789,6 +792,10 @@ type (
 			ctx context.Context,
 			request *InternalRangeDeleteMessagesRequest,
 		) (*InternalRangeDeleteMessagesResponse, error)
+		ListQueues(
+			ctx context.Context,
+			request *InternalListQueuesRequest,
+		) (*InternalListQueuesResponse, error)
 	}
 
 	QueueV2Type int
@@ -799,13 +806,13 @@ type (
 
 	QueueV2Message struct {
 		MetaData MessageMetadata
-		Data     commonpb.DataBlob
+		Data     *commonpb.DataBlob
 	}
 
 	InternalEnqueueMessageRequest struct {
 		QueueType QueueV2Type
 		QueueName string
-		Blob      commonpb.DataBlob
+		Blob      *commonpb.DataBlob
 	}
 
 	InternalEnqueueMessageResponse struct {
@@ -842,5 +849,21 @@ type (
 
 	InternalRangeDeleteMessagesResponse struct {
 		MessagesDeleted int64
+	}
+
+	InternalListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	QueueInfo struct {
+		QueueName    string
+		MessageCount int64
+	}
+
+	InternalListQueuesResponse struct {
+		Queues        []QueueInfo
+		NextPageToken []byte
 	}
 )

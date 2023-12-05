@@ -140,7 +140,7 @@ func (f corruptQueue) ReadMessages(
 	return &persistence.InternalReadMessagesResponse{
 		Messages: []persistence.QueueV2Message{
 			{
-				Data: commonpb.DataBlob{
+				Data: &commonpb.DataBlob{
 					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 					Data:         []byte("some bytes that cannot be deserialized into a task"),
 				},
@@ -162,7 +162,7 @@ func TestHistoryTaskQueueManager_ReadTasks_ErrDeserializeRawHistoryTask(t *testi
 	})
 	assert.ErrorContains(t, err, persistence.ErrMsgDeserializeRawHistoryTask,
 		"ReadTasks should return ErrMsgDeserializeRawHistoryTask when the raw task cannot be deserialized"+
-			" due to an error in the persistence layer")
+			" due to an error in the incomingServiceStore layer")
 }
 
 func TestHistoryTaskQueueManager_ReadTasks_NonPositivePageSize(t *testing.T) {

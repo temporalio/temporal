@@ -369,6 +369,20 @@ func (c *metricClient) ListHistoryTasks(
 	return c.client.ListHistoryTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) ListQueues(
+	ctx context.Context,
+	request *adminservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ListQueuesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientListQueues")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListQueues(ctx, request, opts...)
+}
+
 func (c *metricClient) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,

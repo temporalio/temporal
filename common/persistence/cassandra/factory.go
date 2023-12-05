@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -121,8 +122,8 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	return NewQueueV2Store(f.session, f.logger), nil
 }
 
-// NewNexusServiceStore returns a new NexusServiceStore
-func (f *Factory) NewNexusServiceStore() (p.NexusServiceStore, error) {
+// NewNexusIncomingServiceStore returns a new NexusIncomingServiceStore
+func (f *Factory) NewNexusIncomingServiceStore() (p.NexusIncomingServiceStore, error) {
 	return NewNexusServiceStore(f.session, f.logger), nil
 }
 

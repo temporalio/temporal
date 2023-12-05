@@ -27,9 +27,9 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -205,7 +205,7 @@ func (adh *AdminHandler) deleteWorkflowExecution(
 
 	var warnings []string
 	var branchTokens [][]byte
-	var startTime, closeTime *time.Time
+	var startTime, closeTime *timestamppb.Timestamp
 	cassVisBackend := adh.visibilityMgr.HasStoreName(cassandra.CassandraPersistenceName)
 
 	resp, err := adh.persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{

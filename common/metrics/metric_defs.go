@@ -40,6 +40,8 @@ const (
 	visibilityPluginNameTagName = "visibility_plugin_name"
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
+	nexusMethodTagName          = "method"
+	nexusOutcomeTagName         = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 )
@@ -279,14 +281,14 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
-	// PersistenceGetNexusServiceScope tracks GetNexusService calls made by service to persistence layer
-	PersistenceGetNexusServiceScope = "GetNexusService"
-	// PersistenceListNexusServicesScope tracks ListNexusService calls made by service to persistence layer
-	PersistenceListNexusServicesScope = "ListNexusServices"
-	// PersistenceCreateOrUpdateNexusServiceScope tracks CreateOrUpdateNexusService calls made by service to persistence layer
-	PersistenceCreateOrUpdateNexusServiceScope = "CreateOrUpdateNexusService"
-	// PersistenceDeleteNexusServiceScope tracks DeleteNexusService calls made by service to persistence layer
-	PersistenceDeleteNexusServiceScope = "DeleteNexusService"
+	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
+	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
+	// PersistenceListNexusIncomingServicesScope tracks ListNexusService calls made by service to persistence layer
+	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
+	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusIncomingServiceScope = "CreateOrUpdateNexusIncomingService"
+	// PersistenceDeleteNexusIncomingServiceScope tracks DeleteNexusIncomingService calls made by service to persistence layer
+	PersistenceDeleteNexusIncomingServiceScope = "DeleteNexusIncomingService"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"
@@ -468,6 +470,8 @@ const (
 	MatchingPollWorkflowTaskQueueScope = "PollWorkflowTaskQueue"
 	// MatchingPollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope = "PollActivityTaskQueue"
+	// MatchingPollNexusTaskQueueScope tracks PollNexusTaskQueue API calls received by service
+	MatchingPollNexusTaskQueueScope = "PollNexusTaskQueue"
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
 	MatchingAddActivityTaskScope = "AddActivityTask"
 	// MatchingAddWorkflowTaskScope tracks AddWorkflowTask API calls received by service
@@ -478,8 +482,12 @@ const (
 	MatchingEngineScope = "MatchingEngine"
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
 	MatchingQueryWorkflowScope = "QueryWorkflow"
-	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
+	// MatchingRespondQueryTaskCompletedScope tracks RespondQueryTaskCompleted API calls received by service
 	MatchingRespondQueryTaskCompletedScope = "RespondQueryTaskCompleted"
+	// MatchingRespondNexusTaskCompletedScope tracks RespondNexusTaskCompleted API calls received by service
+	MatchingRespondNexusTaskCompletedScope = "RespondNexusTaskCompleted"
+	// MatchingRespondNexusTaskFailedScope tracks RespondNexusTaskFailed API calls received by service
+	MatchingRespondNexusTaskFailedScope = "RespondNexusTaskFailed"
 )
 
 // Worker Scope
@@ -614,8 +622,10 @@ var (
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	LockRequests                             = NewCounterDef("lock_requests")
-	LockFailures                             = NewCounterDef("lock_failures")
 	LockLatency                              = NewTimerDef("lock_latency")
+	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
+	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
+	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
 	ClientRequests                           = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
@@ -659,6 +669,18 @@ var (
 	HTTPServiceRequests                      = NewCounterDef(
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
+	)
+	NexusRequests = NewCounterDef(
+		"nexus_requests",
+		WithDescription("The number of Nexus requests received by the service."),
+	)
+	NexusRequestPreProcessErrors = NewCounterDef(
+		"nexus_request_preprocess_errors",
+		WithDescription("The number of Nexus requests for which pre-processing failed."),
+	)
+	NexusLatencyHistogram = NewCounterDef(
+		"nexus_latency",
+		WithDescription("Latency histogram of Nexus requests."),
 	)
 
 	// History
@@ -919,12 +941,17 @@ var (
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
 	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
+	DLQWrites                                      = NewCounterDef(
+		"dlq_writes",
+		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
+	)
 
 	// Deadlock detector latency metrics
 	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
 	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
 	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
 	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
@@ -939,6 +966,7 @@ var (
 	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
+	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
 	SyncThrottlePerTaskQueueCounter           = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter         = NewCounterDef("buffer_throttle_count")
 	ExpiredTasksPerTaskQueueCounter           = NewCounterDef("tasks_expired")

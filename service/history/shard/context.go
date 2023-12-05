@@ -85,8 +85,7 @@ type (
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
 
-		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
-		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
+		GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
 		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
 		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
@@ -104,7 +103,7 @@ type (
 
 		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
-		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
 
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
@@ -116,7 +115,7 @@ type (
 		GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime time.Time, closeTime time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
 
 		UnloadForOwnershipLost()
 	}

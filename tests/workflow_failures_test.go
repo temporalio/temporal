@@ -40,11 +40,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func (s *functionalSuite) TestWorkflowTimeout() {
@@ -62,8 +63,8 @@ func (s *functionalSuite) TestWorkflowTimeout() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
 
@@ -101,8 +102,8 @@ GetHistoryLoop:
 	s.True(workflowComplete)
 
 	startFilter := &filterpb.StartTimeFilter{
-		EarliestTime: &startTime,
-		LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+		EarliestTime: timestamppb.New(startTime),
+		LatestTime:   timestamppb.New(time.Now().UTC()),
 	}
 
 	closedCount := 0
@@ -143,8 +144,8 @@ func (s *functionalSuite) TestWorkflowTaskFailed() {
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -199,10 +200,10 @@ func (s *functionalSuite) TestWorkflowTaskFailed() {
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Second),
+					StartToCloseTimeout:    durationpb.New(50 * time.Second),
+					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		} else if failureCount > 0 {
@@ -217,7 +218,7 @@ func (s *functionalSuite) TestWorkflowTaskFailed() {
 			len(history.Events)))
 		lastWorkflowTaskEvent := history.Events[startedEventID-1]
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
-		lastWorkflowTaskTime = timestamp.TimeValue(lastWorkflowTaskEvent.GetEventTime())
+		lastWorkflowTaskTime = lastWorkflowTaskEvent.GetEventTime().AsTime()
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -315,8 +316,8 @@ func (s *functionalSuite) TestWorkflowTaskFailed() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	s.Logger.Info(fmt.Sprintf("Last workflow task time: %v, Last Workflow task history timestamp: %v, Complete timestamp: %v",
 		lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime(), lastEvent.GetEventTime()))
-	s.Equal(lastWorkflowTaskTime, timestamp.TimeValue(lastWorkflowTaskStartedEvent.GetEventTime()))
-	s.True(timestamp.TimeValue(lastEvent.GetEventTime()).Sub(lastWorkflowTaskTime) >= time.Second)
+	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
+	s.True(lastEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
 
 	s.Equal(2, len(events)-lastIdx-1)
 	workflowTaskCompletedEvent := events[lastIdx+1]
@@ -338,7 +339,7 @@ func (s *functionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
-		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
 		Identity:           identity,
 	}
 

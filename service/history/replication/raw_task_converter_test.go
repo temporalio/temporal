@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -50,7 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -62,6 +63,7 @@ type (
 	rawTaskConverterSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller       *gomock.Controller
 		shardContext     *shard.ContextTest
@@ -101,6 +103,7 @@ func (s *rawTaskConverterSuite) TearDownSuite() {
 
 func (s *rawTaskConverterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.shardContext = shard.NewTestContext(
@@ -155,7 +158,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -189,7 +192,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -224,7 +227,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -260,7 +263,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -300,7 +303,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
 		ScheduledEventId:        activityScheduledEventID,
-		ScheduledTime:           &activityScheduledTime,
+		ScheduledTime:           timestamppb.New(activityScheduledTime),
 		StartedEventId:          activityStartedEventID,
 		StartedTime:             nil,
 		LastHeartbeatUpdateTime: nil,
@@ -317,7 +320,8 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
-	s.Equal(&replicationspb.ReplicationTask{
+	s.NotNil(result)
+	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -327,7 +331,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				RunId:              s.runID,
 				Version:            activityVersion,
 				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      &activityScheduledTime,
+				ScheduledTime:      timestamppb.New(activityScheduledTime),
 				StartedEventId:     activityStartedEventID,
 				StartedTime:        nil,
 				LastHeartbeatTime:  nil,
@@ -339,7 +343,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				VersionHistory:     versionHistory,
 			},
 		},
-		VisibilityTime: timestamp.TimePtr(task.VisibilityTimestamp),
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
 }
@@ -364,7 +368,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -406,10 +410,10 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
 		ScheduledEventId:        activityScheduledEventID,
-		ScheduledTime:           &activityScheduledTime,
+		ScheduledTime:           timestamppb.New(activityScheduledTime),
 		StartedEventId:          activityStartedEventID,
-		StartedTime:             &activityStartedTime,
-		LastHeartbeatUpdateTime: &activityHeartbeatTime,
+		StartedTime:             timestamppb.New(activityStartedTime),
+		LastHeartbeatUpdateTime: timestamppb.New(activityHeartbeatTime),
 		LastHeartbeatDetails:    activityDetails,
 		Attempt:                 activityAttempt,
 		RetryLastFailure:        activityLastFailure,
@@ -423,7 +427,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
-	s.Equal(&replicationspb.ReplicationTask{
+	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
@@ -433,10 +437,10 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				RunId:              s.runID,
 				Version:            activityVersion,
 				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      &activityScheduledTime,
+				ScheduledTime:      timestamppb.New(activityScheduledTime),
 				StartedEventId:     activityStartedEventID,
-				StartedTime:        &activityStartedTime,
-				LastHeartbeatTime:  &activityHeartbeatTime,
+				StartedTime:        timestamppb.New(activityStartedTime),
+				LastHeartbeatTime:  timestamppb.New(activityHeartbeatTime),
 				Details:            activityDetails,
 				Attempt:            activityAttempt,
 				LastFailure:        activityLastFailure,
@@ -445,7 +449,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 				VersionHistory:     versionHistory,
 			},
 		},
-		VisibilityTime: timestamp.TimePtr(task.VisibilityTimestamp),
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
 }
@@ -468,7 +472,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -501,7 +505,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -521,7 +525,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 
 	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
-	s.Equal(&replicationspb.ReplicationTask{
+	s.ProtoEqual(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		SourceTaskId: task.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
@@ -537,7 +541,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 				},
 			},
 		},
-		VisibilityTime: &task.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
 }
@@ -567,7 +571,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WorkflowMissin
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -629,7 +633,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -676,7 +680,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.newRunID,
 		},
@@ -716,7 +720,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 				NewRunEvents:        newEvents,
 			},
 		},
-		VisibilityTime: &task.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
 }
@@ -769,7 +773,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 		gomock.Any(),
 		s.shardContext,
 		namespace.ID(s.namespaceID),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
 		},
@@ -809,7 +813,7 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithoutNewRun(
 				NewRunEvents:        nil,
 			},
 		},
-		VisibilityTime: &task.VisibilityTimestamp,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
 }

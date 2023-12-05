@@ -1010,7 +1010,10 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequestBase, visibilityTaskKey string) (map[string]interface{}, error) {
+func (s *visibilityStore) generateESDoc(
+	request *store.InternalVisibilityRequestBase,
+	visibilityTaskKey string,
+) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
 		searchattribute.VisibilityTaskKey: visibilityTaskKey,
 		searchattribute.NamespaceID:       request.NamespaceID,
@@ -1021,6 +1024,13 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		searchattribute.ExecutionTime:     request.ExecutionTime,
 		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
+	}
+
+	if request.ParentWorkflowID != nil {
+		doc[searchattribute.ParentWorkflowID] = *request.ParentWorkflowID
+	}
+	if request.ParentRunID != nil {
+		doc[searchattribute.ParentRunID] = *request.ParentRunID
 	}
 
 	if len(request.Memo.GetData()) > 0 {
@@ -1136,13 +1146,21 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 		case searchattribute.TaskQueue:
 			record.TaskQueue = fieldValueParsed.(string)
 		case searchattribute.ExecutionStatus:
-			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[fieldValueParsed.(string)])
+			status, err := enumspb.WorkflowExecutionStatusFromString(fieldValueParsed.(string))
+			if err != nil {
+				return nil, logParseError(fieldName, fieldValueParsed.(string), err, docID)
+			}
+			record.Status = status
 		case searchattribute.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
 		case searchattribute.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
 		case searchattribute.HistorySizeBytes:
 			record.HistorySizeBytes = fieldValueParsed.(int64)
+		case searchattribute.ParentWorkflowID:
+			record.ParentWorkflowID = fieldValueParsed.(string)
+		case searchattribute.ParentRunID:
+			record.ParentRunID = fieldValueParsed.(string)
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {

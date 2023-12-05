@@ -412,7 +412,7 @@ func TestModule(t *testing.T) {
 								},
 								Payload: &commonspb.HistoryTask{
 									ShardId: 1,
-									Blob:    &blob,
+									Blob:    blob,
 								},
 							},
 						},

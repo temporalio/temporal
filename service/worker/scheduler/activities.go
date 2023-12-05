@@ -38,13 +38,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -104,7 +104,7 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 
 	return &schedspb.StartWorkflowResponse{
 		RunId:         res.RunId,
-		RealStartTime: timestamp.TimePtr(now),
+		RealStartTime: timestamppb.New(now),
 	}, nil
 }
 

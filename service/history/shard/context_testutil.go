@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/golang/mock/gomock"
+	"golang.org/x/sync/semaphore"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -60,6 +61,7 @@ func NewTestContextWithTimeSource(
 ) *ContextTest {
 	result := NewTestContext(ctrl, shardInfo, config)
 	result.timeSource = timeSource
+	result.taskKeyManager.generator.timeSource = timeSource
 	result.Resource.TimeSource = timeSource
 	return result
 }
@@ -89,14 +91,11 @@ func NewTestContext(
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 
-		state:                              contextStateAcquired,
-		engineFuture:                       future.NewFuture[Engine](),
-		shardInfo:                          shardInfo,
-		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
-		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
-		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
-		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
-		handoverNamespaces:                 make(map[namespace.Name]*namespaceHandOverInfo),
+		state:              contextStateAcquired,
+		engineFuture:       future.NewFuture[Engine](),
+		shardInfo:          shardInfo,
+		remoteClusterInfos: make(map[string]*remoteClusterInfo),
+		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
 
 		clusterMetadata:         resourceTest.ClusterMetadata,
 		timeSource:              resourceTest.TimeSource,
@@ -110,7 +109,18 @@ func NewTestContext(
 		archivalMetadata:        resourceTest.GetArchivalMetadata(),
 		hostInfoProvider:        hostInfoProvider,
 		taskCategoryRegistry:    tasks.NewDefaultTaskCategoryRegistry(),
+		ioSemaphore:             semaphore.NewWeighted(1),
 	}
+	shard.taskKeyManager = newTaskKeyManager(
+		shard.taskCategoryRegistry,
+		shard.timeSource,
+		config,
+		shard.GetLogger(),
+		func() error {
+			return shard.renewRangeLocked(false)
+		},
+	)
+	shard.taskKeyManager.setRangeID(shardInfo.RangeId)
 	return &ContextTest{
 		Resource:        resourceTest,
 		ContextImpl:     shard,
