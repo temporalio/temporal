@@ -41,8 +41,8 @@ func Assets() fs.FS {
 	return assets
 }
 
-// Paths returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
-func Paths(dbSubDir string) []string {
+// PathsByDir returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
+func PathsByDir(dbSubDir string) []string {
 	logger := log.NewCLILogger()
 	efs := Assets()
 	dirs := make([]string, 0)
@@ -62,4 +62,11 @@ func Paths(dbSubDir string) []string {
 		logger.Error("error walking embedded schema file system tree, could not generate valid paths", tag.Error(err))
 	}
 	return dirs
+}
+
+func PathsByDB(dbName string) []string {
+	if dbName == "sql" {
+		return append(PathsByDir("mysql"), PathsByDir("postgresql")...)
+	}
+	return PathsByDir(dbName)
 }

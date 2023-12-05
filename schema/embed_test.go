@@ -31,13 +31,13 @@ import (
 )
 
 func TestSchemaDirs(t *testing.T) {
-	dirs := Paths("cassandra")
+	dirs := PathsByDir("cassandra")
 	requireContains(t, []string{
 		"cassandra/temporal",
 		"cassandra/visibility",
 	}, dirs)
 
-	dirs = Paths("mysql")
+	dirs = PathsByDir("mysql")
 	requireContains(t, []string{
 		"mysql/v57/temporal",
 		"mysql/v57/visibility",
@@ -45,7 +45,7 @@ func TestSchemaDirs(t *testing.T) {
 		"mysql/v8/visibility",
 	}, dirs)
 
-	dirs = Paths("postgresql")
+	dirs = PathsByDir("postgresql")
 	requireContains(t, []string{
 		"postgresql/v12/temporal",
 		"postgresql/v12/visibility",

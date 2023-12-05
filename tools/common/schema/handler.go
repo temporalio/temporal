@@ -93,11 +93,9 @@ func validateSetupConfig(config *SetupConfig, db DB) error {
 			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.SchemaName) > 0 {
-		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
-			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
-			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
+		if !slices.Contains(dbschemas.PathsByDB(db.Name()), config.SchemaName) {
 			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
-				flag(CLIOptSchemaName), validSchemaNames(db.Name())))
+				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Name())))
 		}
 	}
 	if !config.DisableVersioning {
@@ -120,11 +118,9 @@ func validateUpdateConfig(config *UpdateConfig, db DB) error {
 			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.SchemaName) > 0 {
-		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
-			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
-			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
+		if !slices.Contains(dbschemas.PathsByDB(db.Name()), config.SchemaName) {
 			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
-				flag(CLIOptSchemaName), validSchemaNames(db.Name())))
+				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Name())))
 		}
 	}
 	if len(config.TargetVersion) > 0 {
@@ -146,11 +142,4 @@ func schemaFileEnding(schemaName string) string {
 		return ".cql"
 	}
 	return ".sql"
-}
-
-func validSchemaNames(dbName string) []string {
-	if dbName == "sql" {
-		return append(dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")...)
-	}
-	return dbschemas.Paths(dbName)
 }
