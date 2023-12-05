@@ -71,8 +71,8 @@ type (
 		WriteSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, desc string) error
 		// Close gracefully closes the client object
 		Close()
-		// Name gives the name of the type of db (e.g. "cassandra", "sql")
-		Name() string
+		// Type gives the type of db (e.g. "cassandra", "sql")
+		Type() string
 	}
 )
 

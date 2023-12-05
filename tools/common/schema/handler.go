@@ -93,9 +93,9 @@ func validateSetupConfig(config *SetupConfig, db DB) error {
 			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.SchemaName) > 0 {
-		if !slices.Contains(dbschemas.PathsByDB(db.Name()), config.SchemaName) {
+		if !slices.Contains(dbschemas.PathsByDB(db.Type()), config.SchemaName) {
 			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
-				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Name())))
+				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Type())))
 		}
 	}
 	if !config.DisableVersioning {
@@ -118,9 +118,9 @@ func validateUpdateConfig(config *UpdateConfig, db DB) error {
 			flag(CLIOptSchemaName) + " must be specified")
 	}
 	if len(config.SchemaName) > 0 {
-		if !slices.Contains(dbschemas.PathsByDB(db.Name()), config.SchemaName) {
+		if !slices.Contains(dbschemas.PathsByDB(db.Type()), config.SchemaName) {
 			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
-				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Name())))
+				flag(CLIOptSchemaName), dbschemas.PathsByDB(db.Type())))
 		}
 	}
 	if len(config.TargetVersion) > 0 {
