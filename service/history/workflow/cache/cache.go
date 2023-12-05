@@ -260,7 +260,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		partition = unplannedCachePartition
 		maxAllocation = c.allocation[partition]
 	}
-	if c.usage[partition]+1 >= maxAllocation {
+	if c.usage[partition]+1 > maxAllocation {
 		c.cacheReachedLimit = true
 		c.mut.Unlock()
 		return nil, nil, cache.ErrCacheFull
