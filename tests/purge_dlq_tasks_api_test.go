@@ -45,7 +45,7 @@ import (
 )
 
 type (
-	purgeDLQTasksSuite struct {
+	PurgeDLQTasksSuite struct {
 		*require.Assertions
 		FunctionalTestBase
 		dlq              *faultyDLQ
@@ -81,7 +81,7 @@ func (q *faultyDLQ) DeleteTasks(
 	return q.HistoryTaskQueueManager.DeleteTasks(ctx, request)
 }
 
-func (s *purgeDLQTasksSuite) SetupSuite() {
+func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.setupSuite(
 		"testdata/cluster.yaml",
@@ -97,19 +97,19 @@ func (s *purgeDLQTasksSuite) SetupSuite() {
 	)
 }
 
-func (s *purgeDLQTasksSuite) TearDownSuite() {
+func (s *PurgeDLQTasksSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *purgeDLQTasksSuite) SetupTest() {
+func (s *PurgeDLQTasksSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
-	suite.Run(t, new(purgeDLQTasksSuite))
+	suite.Run(t, new(PurgeDLQTasksSuite))
 }
 
-func (s *purgeDLQTasksSuite) TestPurgeDLQTasks() {
+func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 	for _, tc := range []purgeDLQTasksTestCase{
 		{
 			name: "HappyPath",
@@ -219,7 +219,7 @@ func (s *purgeDLQTasksSuite) TestPurgeDLQTasks() {
 	}
 }
 
-func (s *purgeDLQTasksSuite) defaultDlqTestParams() purgeDLQTasksTestParams {
+func (s *PurgeDLQTasksSuite) defaultDlqTestParams() purgeDLQTasksTestParams {
 	queueKey := persistencetest.GetQueueKey(s.T())
 
 	return purgeDLQTasksTestParams{
@@ -229,7 +229,7 @@ func (s *purgeDLQTasksSuite) defaultDlqTestParams() purgeDLQTasksTestParams {
 	}
 }
 
-func (s *purgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persistence.QueueKey, task *tasks.WorkflowTask) {
+func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persistence.QueueKey, task *tasks.WorkflowTask) {
 	_, err := s.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
 		QueueKey: queueKey,
 	})

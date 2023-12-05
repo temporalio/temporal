@@ -77,7 +77,7 @@ const (
 	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
-type advancedVisibilitySuite struct {
+type AdvancedVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -93,7 +93,7 @@ type advancedVisibilitySuite struct {
 }
 
 // This cluster use customized threshold for history config
-func (s *advancedVisibilitySuite) SetupSuite() {
+func (s *AdvancedVisibilitySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.VisibilityDisableOrderByClause:             false,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
@@ -142,12 +142,12 @@ func (s *advancedVisibilitySuite) SetupSuite() {
 	s.sysSDKClient = sysSDKClient
 }
 
-func (s *advancedVisibilitySuite) TearDownSuite() {
+func (s *AdvancedVisibilitySuite) TearDownSuite() {
 	s.sdkClient.Close()
 	s.tearDownSuite()
 }
 
-func (s *advancedVisibilitySuite) SetupTest() {
+func (s *AdvancedVisibilitySuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
@@ -157,10 +157,10 @@ func (s *advancedVisibilitySuite) SetupTest() {
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(advancedVisibilitySuite))
+	suite.Run(t, new(AdvancedVisibilitySuite))
 }
 
-func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
+func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	id := "es-functional-start-workflow-test"
 	wt := "es-functional-start-workflow-test-type"
 	tl := "es-functional-start-workflow-test-taskqueue"
@@ -211,7 +211,7 @@ func (s *advancedVisibilitySuite) TestListOpenWorkflow() {
 	s.True(len(attrType) > 0)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow() {
 	id := "es-functional-list-workflow-test"
 	wt := "es-functional-list-workflow-test-type"
 	tl := "es-functional-list-workflow-test-taskqueue"
@@ -224,7 +224,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 	id := "es-functional-list-workflow-execution-time-test"
 	wt := "es-functional-list-workflow-execution-time-test-type"
 	tl := "es-functional-list-workflow-execution-time-test-taskqueue"
@@ -266,7 +266,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	id := "es-functional-list-workflow-by-search-attr-test"
 	wt := "es-functional-list-workflow-by-search-attr-test-type"
 	tl := "es-functional-list-workflow-by-search-attr-test-taskqueue"
@@ -351,7 +351,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	}
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_PageToken() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken() {
 	id := "es-functional-list-workflow-token-test"
 	wt := "es-functional-list-workflow-token-test-type"
 	tl := "es-functional-list-workflow-token-test-taskqueue"
@@ -363,7 +363,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_PageToken() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_SearchAfter() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	id := "es-functional-list-workflow-searchAfter-test"
 	wt := "es-functional-list-workflow-searchAfter-test-type"
 	tl := "es-functional-list-workflow-searchAfter-test-taskqueue"
@@ -375,7 +375,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	id := "es-functional-list-workflow-or-query-test"
 	wt := "es-functional-list-workflow-or-query-test-type"
 	tl := "es-functional-list-workflow-or-query-test-taskqueue"
@@ -482,7 +482,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	s.Equal(3, searchVal)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	id := "es-functional-list-workflow-keyword-query-test"
 	wt := "es-functional-list-workflow-keyword-query-test-type"
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
@@ -570,7 +570,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 0)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_LikeQuery() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_LikeQuery() {
 	if !s.isElasticsearchEnabled {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -642,7 +642,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_LikeQuery() {
 	s.Equal(executionCount, 1)
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	id := "es-functional-list-workflow-string-query-test"
 	wt := "es-functional-list-workflow-string-query-test-type"
 	tl := "es-functional-list-workflow-string-query-test-taskqueue"
@@ -759,7 +759,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_StringQuery() {
 }
 
 // To test last page search trigger max window size error
-func (s *advancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	id := "es-functional-list-workflow-max-window-size-test"
 	wt := "es-functional-list-workflow-max-window-size-test-type"
 	tl := "es-functional-list-workflow-max-window-size-test-taskqueue"
@@ -804,7 +804,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	s.Nil(resp.GetNextPageToken())
 }
 
-func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
+func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	if !s.isElasticsearchEnabled {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -953,7 +953,7 @@ func (s *advancedVisibilitySuite) TestListWorkflow_OrderBy() {
 }
 
 //nolint:revive // isScan is a control flag
-func (s *advancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
+func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSize int,
 	startRequest *workflowservice.StartWorkflowExecutionRequest, wid, wType string, isScan bool) {
 
 	// start enough number of workflows
@@ -1040,7 +1040,7 @@ func (s *advancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 }
 
 //nolint:revive // isScan is a control flag
-func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
+func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -1084,7 +1084,7 @@ func (s *advancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	}
 }
 
-func (s *advancedVisibilitySuite) TestScanWorkflow() {
+func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
 	if !s.isElasticsearchEnabled {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -1116,7 +1116,7 @@ func (s *advancedVisibilitySuite) TestScanWorkflow() {
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
-func (s *advancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
+func (s *AdvancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
 	if !s.isElasticsearchEnabled {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -1140,7 +1140,7 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
-func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
+func (s *AdvancedVisibilitySuite) TestScanWorkflow_PageToken() {
 	if !s.isElasticsearchEnabled {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -1170,7 +1170,7 @@ func (s *advancedVisibilitySuite) TestScanWorkflow_PageToken() {
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, true)
 }
 
-func (s *advancedVisibilitySuite) TestCountWorkflow() {
+func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 	id := "es-functional-count-workflow-test"
 	wt := "es-functional-count-workflow-test-type"
 	tl := "es-functional-count-workflow-test-taskqueue"
@@ -1210,7 +1210,7 @@ func (s *advancedVisibilitySuite) TestCountWorkflow() {
 	s.Equal(int64(0), resp.GetCount())
 }
 
-func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
+func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	id := "es-functional-count-groupby-workflow-test"
 	wt := "es-functional-count-groupby-workflow-test-type"
 	tl := "es-functional-count-groupby-workflow-test-taskqueue"
@@ -1291,7 +1291,7 @@ func (s *advancedVisibilitySuite) TestCountGroupByWorkflow() {
 	s.Contains(err.Error(), "'group by' clause supports only a single field")
 }
 
-func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
+func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
 	identity := "worker1"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -1309,7 +1309,7 @@ func (s *advancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 	return request
 }
 
-func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() {
+func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() {
 	id := "es-functional-upsert-workflow-search-attributes-test"
 	wt := "es-functional-upsert-workflow-search-attributes-test-type"
 	tl := "es-functional-upsert-workflow-search-attributes-test-taskqueue"
@@ -1607,7 +1607,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	}
 }
 
-func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
+func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	id := "es-functional-modify-workflow-properties-test"
 	wt := "es-functional-modify-workflow-properties-test-type"
 	tl := "es-functional-modify-workflow-properties-test-taskqueue"
@@ -1823,7 +1823,7 @@ func (s *advancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.ProtoEqual(expectedMemo, descResp.WorkflowExecutionInfo.Memo)
 }
 
-func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
+func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
 	verified := false
 	for i := 0; i < numOfRetry; i++ {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
@@ -1873,7 +1873,7 @@ func (s *advancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 	s.True(verified)
 }
 
-func (s *advancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
+func (s *AdvancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
 		"CustomTextField":               "another string",
 		"CustomIntField":                123,
@@ -1884,7 +1884,7 @@ func (s *advancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttri
 	return searchAttributes
 }
 
-func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
+func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	id := "es-functional-upsert-workflow-failed-test"
 	wt := "es-functional-upsert-workflow-failed-test-type"
 	tl := "es-functional-upsert-workflow-failed-test-taskqueue"
@@ -1962,7 +1962,7 @@ func (s *advancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	s.NotNil(failedEventAttr.GetFailure())
 }
 
-func (s *advancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
+func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	var (
 		ctx         = NewContext()
 		id          = s.randomizeStr(s.T().Name())
@@ -2050,7 +2050,7 @@ func (s *advancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	s.Nil(wfInfo.GetParentExecution())
 }
 
-func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
+func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
 	if s.testClusterConfig.Persistence.StoreType == config.StoreTypeSQL {
 		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
 		return
@@ -2068,7 +2068,7 @@ func (s *advancedVisibilitySuite) Test_LongWorkflowID() {
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
 	ctx := NewContext()
 	id := s.randomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
@@ -2169,7 +2169,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	}
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -2334,7 +2334,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -2419,7 +2419,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -2488,7 +2488,7 @@ func (s *advancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	ctx := NewContext()
 	tq1 := s.T().Name()
 	tq2 := s.T().Name() + "-2"
@@ -2611,7 +2611,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
 	ctx := NewContext()
 	buildId := s.T().Name() + "v0"
 
@@ -2627,7 +2627,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 	}}, reachabilityResponse.BuildIdReachability)
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
 	ctx := NewContext()
 	tq := s.T().Name()
 	v0 := s.T().Name() + "v0"
@@ -2661,7 +2661,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 	checkReachability()
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
@@ -2671,7 +2671,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
 	s.Require().ErrorAs(err, &invalidArgument)
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
@@ -2682,7 +2682,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
 	s.Require().ErrorAs(err, &invalidArgument)
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
 	ctx := NewContext()
 
 	_, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
@@ -2693,7 +2693,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNames
 	s.Require().ErrorAs(err, &invalidArgument)
 }
 
-func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue() {
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue() {
 	ctx := NewContext()
 	tq := s.T().Name()
 
@@ -2749,7 +2749,7 @@ func (s *advancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 }
 
-func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
+func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	ctx := NewContext()
 	tq := s.T().Name()
 	v0 := s.T().Name() + "-v0"
@@ -2798,7 +2798,7 @@ func (s *advancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
 }
 
-func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
+func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
 	s.Require().Eventually(func() bool {
 		reachabilityResponse, err := s.engine.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 			Namespace:    s.namespace,
@@ -2828,7 +2828,7 @@ func (s *advancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 	}, 15*time.Second, 100*time.Millisecond)
 }
 
-func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
+func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
 	description, err := s.engine.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		Execution: execution,
@@ -2844,7 +2844,7 @@ func (s *advancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 	return buildIDs
 }
 
-func (s *advancedVisibilitySuite) updateMaxResultWindow() {
+func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 	esConfig := s.testClusterConfig.ESConfig
 
 	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)

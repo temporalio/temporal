@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestContinueAsNewWorkflow() {
+func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	id := "functional-continue-as-new-workflow-test"
 	wt := "functional-continue-as-new-workflow-test-type"
 	tl := "functional-continue-as-new-workflow-test-taskqueue"
@@ -155,7 +155,7 @@ func (s *functionalSuite) TestContinueAsNewWorkflow() {
 	s.Equal("Keyword", string(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 }
 
-func (s *functionalSuite) TestContinueAsNewRun_Timeout() {
+func (s *FunctionalSuite) TestContinueAsNewRun_Timeout() {
 	id := "functional-continue-as-new-workflow-timeout-test"
 	wt := "functional-continue-as-new-workflow-timeout-test-type"
 	tl := "functional-continue-as-new-workflow-timeout-test-taskqueue"
@@ -256,7 +256,7 @@ GetHistoryLoop:
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
+func (s *FunctionalSuite) TestWorkflowContinueAsNew_TaskID() {
 	id := "functional-wf-continue-as-new-task-id-test"
 	wt := "functional-wf-continue-as-new-task-id-type"
 	tl := "functional-wf-continue-as-new-task-id-taskqueue"
@@ -346,7 +346,7 @@ func (s *functionalSuite) TestWorkflowContinueAsNew_TaskID() {
 
 type (
 	ParentWithChildContinueAsNew struct {
-		suite *functionalSuite
+		suite *FunctionalSuite
 
 		parentID           string
 		parentType         string
@@ -366,7 +366,7 @@ type (
 	}
 )
 
-func newParentWithChildContinueAsNew(s *functionalSuite,
+func newParentWithChildContinueAsNew(s *FunctionalSuite,
 	parentID, parentType, childID, childType string,
 	closePolicy enumspb.ParentClosePolicy) *ParentWithChildContinueAsNew {
 	workflow := &ParentWithChildContinueAsNew{
@@ -466,7 +466,7 @@ func (w *ParentWithChildContinueAsNew) workflow(
 	return nil, nil
 }
 
-func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
+func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNew() {
 	parentID := "functional-child-workflow-with-continue-as-new-test-parent"
 	childID := "functional-child-workflow-with-continue-as-new-test-child"
 	wtParent := "functional-child-workflow-with-continue-as-new-test-parent-type"
@@ -549,7 +549,7 @@ func (s *functionalSuite) TestChildWorkflowWithContinueAsNew() {
 	})
 }
 
-func (s *functionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
+func (s *FunctionalSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
 	parentID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent"
 	childID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child"
 	wtParent := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent-type"

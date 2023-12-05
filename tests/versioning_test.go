@@ -59,7 +59,7 @@ import (
 	"go.temporal.io/server/common/tqname"
 )
 
-type versioningIntegSuite struct {
+type VersioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -74,7 +74,7 @@ const (
 	numPollers = 4
 )
 
-func (s *versioningIntegSuite) SetupSuite() {
+func (s *VersioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
@@ -95,11 +95,11 @@ func (s *versioningIntegSuite) SetupSuite() {
 	s.setupSuite("testdata/cluster.yaml")
 }
 
-func (s *versioningIntegSuite) TearDownSuite() {
+func (s *VersioningIntegSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *versioningIntegSuite) SetupTest() {
+func (s *VersioningIntegSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
@@ -113,16 +113,16 @@ func (s *versioningIntegSuite) SetupTest() {
 	s.sdkClient = sdkClient
 }
 
-func (s *versioningIntegSuite) TearDownTest() {
+func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
 func TestVersioningFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(versioningIntegSuite))
+	suite.Run(t, new(VersioningIntegSuite))
 }
 
-func (s *versioningIntegSuite) TestBasicVersionUpdate() {
+func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "functional-versioning-basic"
 
@@ -138,7 +138,7 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	s.Equal(foo, getCurrentDefault(res2))
 }
 
-func (s *versioningIntegSuite) TestSeriesOfUpdates() {
+func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := NewContext()
 	tq := "functional-versioning-series"
 
@@ -158,7 +158,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	s.Equal(s.prefixed("foo-2"), res.GetMajorVersionSets()[2].GetBuildIds()[0])
 }
 
-func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
+func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
 	tq := "functional-versioning-compat-not-found"
 
@@ -177,7 +177,7 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
+func (s *VersioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	ctx := NewContext()
 	tq := "functional-versioning-persists"
 
@@ -195,7 +195,7 @@ func (s *versioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 	s.Equal(s.prefixed("foo"), getCurrentDefault(res))
 }
 
-func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
+func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 	ctx := NewContext()
 	tq := "functional-versioning-propagate"
 
@@ -212,7 +212,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagate() {
 	}
 }
 
-func (s *versioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
+func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	ctx := NewContext()
 	buildId := fmt.Sprintf("b-%s", s.T().Name())
 	// Map a 3 task queues to this build id and verify success
@@ -242,7 +242,7 @@ func (s *versioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	s.Equal("Exceeded max task queues allowed to be mapped to a single build id: 3", failedPreconditionError.Message)
 }
 
-func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
+func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	dc := s.testCluster.host.dcClient
 	for _, forceForward := range []bool{false, true} {
 		for _, forceAsync := range []bool{false, true} {
@@ -279,11 +279,11 @@ func (s *versioningIntegSuite) testWithMatchingBehavior(subtest func()) {
 	}
 }
 
-func (s *versioningIntegSuite) TestDispatchNewWorkflow() {
+func (s *VersioningIntegSuite) TestDispatchNewWorkflow() {
 	s.testWithMatchingBehavior(s.dispatchNewWorkflow)
 }
 
-func (s *versioningIntegSuite) dispatchNewWorkflow() {
+func (s *VersioningIntegSuite) dispatchNewWorkflow() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
@@ -313,11 +313,11 @@ func (s *versioningIntegSuite) dispatchNewWorkflow() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchNotUsingVersioning() {
+func (s *VersioningIntegSuite) TestDispatchNotUsingVersioning() {
 	s.testWithMatchingBehavior(s.dispatchNotUsingVersioning)
 }
 
-func (s *versioningIntegSuite) dispatchNotUsingVersioning() {
+func (s *VersioningIntegSuite) dispatchNotUsingVersioning() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
@@ -358,11 +358,11 @@ func (s *versioningIntegSuite) dispatchNotUsingVersioning() {
 	s.Equal("done with versioning!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
+func (s *VersioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
 	s.testWithMatchingBehavior(s.dispatchNewWorkflowStartWorkerFirst)
 }
 
-func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
+func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
@@ -396,7 +396,7 @@ func (s *versioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned() {
+func (s *VersioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned() {
 	// force one partition so that we can unload the task queue
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -471,11 +471,11 @@ func (s *versioningIntegSuite) TestDisableUserData_DefaultTasksBecomeUnversioned
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
+func (s *VersioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 	s.testWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
 }
 
-func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
+func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
@@ -512,15 +512,15 @@ func (s *versioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchUpgradeStopOld() {
+func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
 	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(true) })
 }
 
-func (s *versioningIntegSuite) TestDispatchUpgradeWait() {
+func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
 	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false) })
 }
 
-func (s *versioningIntegSuite) dispatchUpgrade(stopOld bool) {
+func (s *VersioningIntegSuite) dispatchUpgrade(stopOld bool) {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -602,19 +602,19 @@ const (
 	timeoutActivity
 )
 
-func (s *versioningIntegSuite) TestDispatchActivity() {
+func (s *VersioningIntegSuite) TestDispatchActivity() {
 	s.testWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity) })
 }
 
-func (s *versioningIntegSuite) TestDispatchActivityFail() {
+func (s *VersioningIntegSuite) TestDispatchActivityFail() {
 	s.testWithMatchingBehavior(func() { s.dispatchActivity(failActivity) })
 }
 
-func (s *versioningIntegSuite) TestDispatchActivityTimeout() {
+func (s *VersioningIntegSuite) TestDispatchActivityTimeout() {
 	s.testWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity) })
 }
 
-func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
+func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 	// This also implicitly tests that a workflow stays on a compatible version set if a new
 	// incompatible set is registered, because wf2 just panics. It further tests that
 	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
@@ -722,11 +722,11 @@ func (s *versioningIntegSuite) dispatchActivity(failMode activityFailMode) {
 	s.Equal("v1v2", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchActivityCompatible() {
+func (s *VersioningIntegSuite) TestDispatchActivityCompatible() {
 	s.testWithMatchingBehavior(s.dispatchActivityCompatible)
 }
 
-func (s *versioningIntegSuite) dispatchActivityCompatible() {
+func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -796,7 +796,7 @@ func (s *versioningIntegSuite) dispatchActivityCompatible() {
 	s.Equal("v1.1", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchActivityEager() {
+func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.EnableActivityEagerExecution, true)
 
@@ -869,7 +869,7 @@ func (s *versioningIntegSuite) TestDispatchActivityEager() {
 	s.Require().Equal("compatible", completionResponse.ActivityTasks[0].ActivityId)
 }
 
-func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
+func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
@@ -924,11 +924,11 @@ func (s *versioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	s.Error(run.Get(ctx, &out))
 }
 
-func (s *versioningIntegSuite) TestDispatchChildWorkflow() {
+func (s *VersioningIntegSuite) TestDispatchChildWorkflow() {
 	s.testWithMatchingBehavior(s.dispatchChildWorkflow)
 }
 
-func (s *versioningIntegSuite) dispatchChildWorkflow() {
+func (s *VersioningIntegSuite) dispatchChildWorkflow() {
 	// This also implicitly tests that a workflow stays on a compatible version set if a new
 	// incompatible set is registered, because wf2 just panics. It further tests that
 	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
@@ -1004,11 +1004,11 @@ func (s *versioningIntegSuite) dispatchChildWorkflow() {
 	s.Equal("v1v2", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
+func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
 	s.testWithMatchingBehavior(s.dispatchChildWorkflowUpgrade)
 }
 
-func (s *versioningIntegSuite) dispatchChildWorkflowUpgrade() {
+func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -1074,7 +1074,7 @@ func (s *versioningIntegSuite) dispatchChildWorkflowUpgrade() {
 	s.Equal("v1.1", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
+func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
@@ -1128,11 +1128,11 @@ func (s *versioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.Error(run.Get(ctx, &out))
 }
 
-func (s *versioningIntegSuite) TestDispatchQuery() {
+func (s *VersioningIntegSuite) TestDispatchQuery() {
 	s.testWithMatchingBehavior(s.dispatchQuery)
 }
 
-func (s *versioningIntegSuite) dispatchQuery() {
+func (s *VersioningIntegSuite) dispatchQuery() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -1245,11 +1245,11 @@ func (s *versioningIntegSuite) dispatchQuery() {
 	s.Equal("v2", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchContinueAsNew() {
+func (s *VersioningIntegSuite) TestDispatchContinueAsNew() {
 	s.testWithMatchingBehavior(s.dispatchContinueAsNew)
 }
 
-func (s *versioningIntegSuite) dispatchContinueAsNew() {
+func (s *VersioningIntegSuite) dispatchContinueAsNew() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -1359,11 +1359,11 @@ func (s *versioningIntegSuite) dispatchContinueAsNew() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchRetry() {
+func (s *VersioningIntegSuite) TestDispatchRetry() {
 	s.testWithMatchingBehavior(s.dispatchRetry)
 }
 
-func (s *versioningIntegSuite) dispatchRetry() {
+func (s *VersioningIntegSuite) dispatchRetry() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -1473,11 +1473,11 @@ func (s *versioningIntegSuite) dispatchRetry() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDispatchCron() {
+func (s *VersioningIntegSuite) TestDispatchCron() {
 	s.testWithMatchingBehavior(s.dispatchCron)
 }
 
-func (s *versioningIntegSuite) dispatchCron() {
+func (s *VersioningIntegSuite) dispatchCron() {
 	tq := s.randomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
@@ -1557,7 +1557,7 @@ func (s *versioningIntegSuite) dispatchCron() {
 	s.GreaterOrEqual(runs2.Load(), int32(3))
 }
 
-func (s *versioningIntegSuite) TestDisableUserData() {
+func (s *VersioningIntegSuite) TestDisableUserData() {
 	tq := s.T().Name()
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1595,7 +1595,7 @@ func (s *versioningIntegSuite) TestDisableUserData() {
 	s.Require().ErrorAs(err, &failedPreconditionError)
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
+func (s *VersioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
 	tq := s.T().Name()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1621,7 +1621,7 @@ func (s *versioningIntegSuite) TestDisableUserData_UnversionedWorkflowRuns() {
 	s.Equal("ok", out)
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
+func (s *VersioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 	// force one partition so that we can unload the task queue
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -1677,7 +1677,7 @@ func (s *versioningIntegSuite) TestDisableUserData_WorkflowGetsStuck() {
 	s.Require().Equal(int32(1), runs.Load())
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_QueryFails() {
+func (s *VersioningIntegSuite) TestDisableUserData_QueryFails() {
 	// force one partition so that we can unload the task queue
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -1726,7 +1726,7 @@ func (s *versioningIntegSuite) TestDisableUserData_QueryFails() {
 	s.Equal(int32(0), runs.Load())
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_DLQ() {
+func (s *VersioningIntegSuite) TestDisableUserData_DLQ() {
 	// force one partition so we can unload easily
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -1790,7 +1790,7 @@ func (s *versioningIntegSuite) TestDisableUserData_DLQ() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDisableUserData_DLQ_WithUnload() {
+func (s *VersioningIntegSuite) TestDisableUserData_DLQ_WithUnload() {
 	// force one partition so we can unload easily
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -1872,7 +1872,7 @@ func (s *versioningIntegSuite) TestDisableUserData_DLQ_WithUnload() {
 	s.Equal("done!", out)
 }
 
-func (s *versioningIntegSuite) TestDescribeTaskQueue() {
+func (s *VersioningIntegSuite) TestDescribeTaskQueue() {
 	// force one partition since DescribeTaskQueue only goes to the root
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
@@ -1940,7 +1940,7 @@ func (s *versioningIntegSuite) TestDescribeTaskQueue() {
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
-func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
+func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	dc := s.testCluster.host.dcClient
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	dc.OverrideValue(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
@@ -2022,12 +2022,12 @@ func (s *versioningIntegSuite) TestDescribeWorkflowExecution() {
 }
 
 // Add a per test prefix to avoid hitting the namespace limit of mapped task queue per build id
-func (s *versioningIntegSuite) prefixed(buildId string) string {
+func (s *VersioningIntegSuite) prefixed(buildId string) string {
 	return fmt.Sprintf("t%x:%s", 0xffff&farm.Hash32([]byte(s.T().Name())), buildId)
 }
 
 // addNewDefaultBuildId updates build id info on a task queue with a new build id in a new default set.
-func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
+func (s *VersioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, newBuildId string) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
@@ -2040,7 +2040,7 @@ func (s *versioningIntegSuite) addNewDefaultBuildId(ctx context.Context, tq, new
 }
 
 // addCompatibleBuildId updates build id info on a task queue with a new compatible build id.
-func (s *versioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
+func (s *VersioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, newBuildId, existing string, makeSetDefault bool) {
 	res, err := s.engine.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.namespace,
 		TaskQueue: tq,
@@ -2057,7 +2057,7 @@ func (s *versioningIntegSuite) addCompatibleBuildId(ctx context.Context, tq, new
 }
 
 // waitForPropagation waits for all partitions of tq to mention newBuildId in their versioning data (in any position).
-func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBuildId string) {
+func (s *VersioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBuildId string) {
 	v, ok := s.testCluster.host.dcClient.getRawValue(dynamicconfig.MatchingNumTaskqueueReadPartitions)
 	s.True(ok, "versioning tests require setting explicit number of partitions")
 	partCount, ok := v.(int)
@@ -2096,7 +2096,7 @@ func (s *versioningIntegSuite) waitForPropagation(ctx context.Context, tq, newBu
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *versioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
+func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
 	s.T().Helper()
 	select {
 	case <-ch:
@@ -2105,7 +2105,7 @@ func (s *versioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 	}
 }
 
-func (s *versioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
+func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 	_, err := s.testCluster.GetMatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   s.getNamespaceID(s.namespace),
 		TaskQueue:     tq,
@@ -2114,7 +2114,7 @@ func (s *versioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 	s.Require().NoError(err)
 }
 
-func (s *versioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
+func (s *VersioningIntegSuite) getStickyQueueName(ctx context.Context, id string) string {
 	ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: id},

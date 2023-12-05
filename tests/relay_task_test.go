@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (s *functionalSuite) TestRelayWorkflowTaskTimeout() {
+func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	id := "functional-relay-workflow-task-timeout-test"
 	wt := "functional-relay-workflow-task-timeout-test-type"
 	tl := "functional-relay-workflow-task-timeout-test-taskqueue"

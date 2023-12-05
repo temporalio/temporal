@@ -54,32 +54,32 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
-type rawHistorySuite struct {
+type RawHistorySuite struct {
 	*require.Assertions
 	FunctionalTestBase
 }
 
-func (s *rawHistorySuite) SetupSuite() {
+func (s *RawHistorySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.SendRawWorkflowHistory: true,
 	}
 	s.setupSuite("testdata/cluster.yaml")
 }
 
-func (s *rawHistorySuite) TearDownSuite() {
+func (s *RawHistorySuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *rawHistorySuite) SetupTest() {
+func (s *RawHistorySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
 func TestRawHistorySuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(rawHistorySuite))
+	suite.Run(t, new(RawHistorySuite))
 }
 
-func (s *functionalSuite) TestGetWorkflowExecutionHistory_All() {
+func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-all"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-all-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-all-taskqueue"
@@ -245,7 +245,7 @@ func (s *functionalSuite) TestGetWorkflowExecutionHistory_All() {
 	s.Equal(11, len(allEvents))
 }
 
-func (s *functionalSuite) TestGetWorkflowExecutionHistory_Close() {
+func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"
@@ -404,7 +404,7 @@ func (s *functionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	s.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
-func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
+func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	workflowID := "functional-poll-for-workflow-raw-history-events-long-poll-test-all"
 	workflowTypeName := "functional-poll-for-workflow-raw-history-events-long-poll-test-all-type"
 	taskqueueName := "functional-poll-for-workflow-raw-history-events-long-poll-test-all-taskqueue"
@@ -606,7 +606,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	s.Equal(11, len(allEvents))
 }
 
-func (s *clientFunctionalSuite) TestGetHistoryReverse() {
+func (s *ClientFunctionalSuite) TestGetHistoryReverse() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -674,7 +674,7 @@ func (s *clientFunctionalSuite) TestGetHistoryReverse() {
 	s.Equal(eventDefaultOrder, events)
 }
 
-func (s *clientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
+func (s *ClientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}

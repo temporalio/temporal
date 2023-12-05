@@ -49,7 +49,7 @@ type RunIdGetter interface {
 }
 type startFunc func() (RunIdGetter, error)
 
-func (s *functionalSuite) TestStartWithMemo() {
+func (s *FunctionalSuite) TestStartWithMemo() {
 	id := "functional-start-with-memo-test"
 	wt := "functional-start-with-memo-test-type"
 	tl := "functional-start-with-memo-test-taskqueue"
@@ -80,7 +80,7 @@ func (s *functionalSuite) TestStartWithMemo() {
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo)
 }
 
-func (s *functionalSuite) TestSignalWithStartWithMemo() {
+func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
 	id := "functional-signal-with-start-with-memo-test"
 	wt := "functional-signal-with-start-with-memo-test-type"
 	tl := "functional-signal-with-start-with-memo-test-taskqueue"
@@ -116,7 +116,7 @@ func (s *functionalSuite) TestSignalWithStartWithMemo() {
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
-func (s *functionalSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo) {
+func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo) {
 	identity := "worker1"
 
 	we, err0 := startFn()

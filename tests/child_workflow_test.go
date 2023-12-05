@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestChildWorkflowExecution() {
+func (s *FunctionalSuite) TestChildWorkflowExecution() {
 	parentID := "functional-child-workflow-test-parent"
 	childID := "functional-child-workflow-test-child"
 	wtParent := "functional-child-workflow-test-parent-type"
@@ -236,7 +236,7 @@ func (s *functionalSuite) TestChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *functionalSuite) TestCronChildWorkflowExecution() {
+func (s *FunctionalSuite) TestCronChildWorkflowExecution() {
 	parentID := "functional-cron-child-workflow-test-parent"
 	childID := "functional-cron-child-workflow-test-child"
 	wtParent := "functional-cron-child-workflow-test-parent-type"
@@ -427,7 +427,7 @@ func (s *functionalSuite) TestCronChildWorkflowExecution() {
 	}
 }
 
-func (s *functionalSuite) TestRetryChildWorkflowExecution() {
+func (s *FunctionalSuite) TestRetryChildWorkflowExecution() {
 	parentID := "functional-retry-child-workflow-test-parent"
 	childID := "functional-retry-child-workflow-test-child"
 	wtParent := "functional-retry-child-workflow-test-parent-type"
@@ -600,7 +600,7 @@ func (s *functionalSuite) TestRetryChildWorkflowExecution() {
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
-func (s *functionalSuite) TestRetryFailChildWorkflowExecution() {
+func (s *FunctionalSuite) TestRetryFailChildWorkflowExecution() {
 	parentID := "functional-retry-fail-child-workflow-test-parent"
 	childID := "functional-retry-fail-child-workflow-test-child"
 	wtParent := "functional-retry-fail-child-workflow-test-parent-type"

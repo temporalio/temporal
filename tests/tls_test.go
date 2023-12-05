@@ -41,26 +41,26 @@ import (
 	"go.temporal.io/server/common/rpc"
 )
 
-type tlsFunctionalSuite struct {
+type TLSFunctionalSuite struct {
 	FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(tlsFunctionalSuite))
+	suite.Run(t, new(TLSFunctionalSuite))
 }
 
-func (s *tlsFunctionalSuite) SetupSuite() {
+func (s *TLSFunctionalSuite) SetupSuite() {
 	s.setupSuite("testdata/tls_cluster.yaml")
 
 }
 
-func (s *tlsFunctionalSuite) TearDownSuite() {
+func (s *TLSFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *tlsFunctionalSuite) SetupTest() {
+func (s *TLSFunctionalSuite) SetupTest() {
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
@@ -74,11 +74,11 @@ func (s *tlsFunctionalSuite) SetupTest() {
 	}
 }
 
-func (s *tlsFunctionalSuite) TearDownTest() {
+func (s *TLSFunctionalSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *tlsFunctionalSuite) TestGRPCMTLS() {
+func (s *TLSFunctionalSuite) TestGRPCMTLS() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 
@@ -94,7 +94,7 @@ func (s *tlsFunctionalSuite) TestGRPCMTLS() {
 	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *tlsFunctionalSuite) TestHTTPMTLS() {
+func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -126,7 +126,7 @@ func (s *tlsFunctionalSuite) TestHTTPMTLS() {
 	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *tlsFunctionalSuite) trackAuthInfoByCall() *sync.Map {
+func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
 	s.testCluster.host.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
