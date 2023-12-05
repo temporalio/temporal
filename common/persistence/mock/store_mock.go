@@ -1384,7 +1384,7 @@ func (mr *MockQueueMockRecorder) UpdateDLQAckLevel(ctx, metadata interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQAckLevel", reflect.TypeOf((*MockQueue)(nil).UpdateDLQAckLevel), ctx, metadata)
 }
 
-// MockNexusServiceStore is a mock of NexusIncomingServiceStore interface.
+// MockNexusServiceStore is a mock of NexusServiceStore interface.
 type MockNexusServiceStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockNexusServiceStoreMockRecorder

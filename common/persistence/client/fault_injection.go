@@ -89,7 +89,7 @@ type (
 	}
 
 	FaultInjectionNexusServiceStore struct {
-		baseNexusServiceStore persistence.NexusIncomingServiceStore
+		baseNexusServiceStore persistence.NexusServiceStore
 		ErrorGenerator        ErrorGenerator
 	}
 )
@@ -301,7 +301,7 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 	return d.ClusterMDStore, nil
 }
 
-func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusIncomingServiceStore, error) {
+func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusServiceStore, error) {
 	if d.NexusServiceStore == nil {
 		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
 		if err != nil {
@@ -1255,7 +1255,7 @@ func (s *FaultInjectionShardStore) UpdateRate(rate float64) {
 
 func NewFaultInjectionNexusServiceStore(
 	rate float64,
-	baseNexusServiceStore persistence.NexusIncomingServiceStore,
+	baseNexusServiceStore persistence.NexusServiceStore,
 ) (*FaultInjectionNexusServiceStore, error) {
 	errorGenerator := newErrorGenerator(rate, defaultErrors)
 	return &FaultInjectionNexusServiceStore{

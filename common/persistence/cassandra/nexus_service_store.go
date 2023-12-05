@@ -44,7 +44,7 @@ type (
 func NewNexusServiceStore(
 	session gocql.Session,
 	logger log.Logger,
-) p.NexusIncomingServiceStore {
+) p.NexusServiceStore {
 	return &NexusServiceStore{
 		session: session,
 		logger:  logger,

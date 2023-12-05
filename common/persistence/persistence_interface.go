@@ -188,7 +188,7 @@ type (
 	}
 
 	// TODO: document me
-	NexusIncomingServiceStore interface {
+	NexusServiceStore interface {
 		Closeable
 		GetName() string
 		GetNexusIncomingService(ctx context.Context, name string) (*InternalGetNexusIncomingServiceResponse, error)

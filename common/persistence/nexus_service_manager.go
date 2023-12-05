@@ -32,14 +32,14 @@ import (
 
 type (
 	nexusServiceManagerImpl struct {
-		incomingServiceStore NexusIncomingServiceStore
+		incomingServiceStore NexusServiceStore
 	}
 )
 
 var _ NexusServiceManager = (*nexusServiceManagerImpl)(nil)
 
 func NewNexusServiceManager(
-	incomingServiceStore NexusIncomingServiceStore,
+	incomingServiceStore NexusServiceStore,
 ) NexusServiceManager {
 	return &nexusServiceManagerImpl{
 		incomingServiceStore: incomingServiceStore,
