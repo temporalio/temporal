@@ -28,15 +28,12 @@ package tests
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -115,11 +112,6 @@ func (s *VersioningIntegSuite) SetupTest() {
 
 func (s *VersioningIntegSuite) TearDownTest() {
 	s.sdkClient.Close()
-}
-
-func TestVersioningFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(VersioningIntegSuite))
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {

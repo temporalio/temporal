@@ -26,10 +26,8 @@ package tests
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -71,11 +69,6 @@ type (
 		logger        log.Logger
 	}
 )
-
-func TestNamespaceSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, &namespaceTestSuite{})
-}
 
 func dynamicConfig() map[dynamicconfig.Key]interface{} {
 	return map[dynamicconfig.Key]interface{}{

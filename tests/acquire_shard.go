@@ -27,10 +27,7 @@ package tests
 import (
 	"context"
 	"strings"
-	"testing"
 	"time"
-
-	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -103,12 +100,6 @@ func (r *logRecorder) record(msg string, tags ...tag.Tag) {
 	}
 }
 
-// TestAcquireShard_OwnershipLostErrorSuite tests what happens when acquire shard returns an ownership lost error.
-func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
-	s := new(OwnershipLostErrorSuite)
-	suite.Run(t, s)
-}
-
 // OwnershipLostErrorSuite is the test suite for testing what happens when acquire shard returns an ownership lost
 // error.
 type OwnershipLostErrorSuite struct {
@@ -152,12 +143,6 @@ func (s *OwnershipLostErrorSuite) TestDoesNotRetry() {
 	}
 }
 
-// TestAcquireShard_DeadlineExceededErrorSuite tests what happens when acquire shard returns a deadline exceeded error
-func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
-	s := new(DeadlineExceededErrorSuite)
-	suite.Run(t, s)
-}
-
 // DeadlineExceededErrorSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded.
 type DeadlineExceededErrorSuite struct {
 	AcquireShardFunctionalSuite
@@ -195,14 +180,6 @@ func (s *DeadlineExceededErrorSuite) TestDoesRetry() {
 			s.FailNow("timed out waiting for retry")
 		}
 	}
-}
-
-// TestAcquireShard_EventualSuccess verifies that we eventually succeed in acquiring the shard when we get a deadline
-// exceeded error followed by a successful acquire shard call.
-// To make this test deterministic, we set the seed to in the config file to a fixed value.
-func TestAcquireShard_EventualSuccess(t *testing.T) {
-	s := new(EventualSuccessSuite)
-	suite.Run(t, s)
 }
 
 // EventualSuccessSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded error

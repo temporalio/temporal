@@ -26,13 +26,10 @@ package tests
 
 import (
 	"context"
-	"flag"
 	"net/http"
 	"sync"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
@@ -44,11 +41,6 @@ import (
 type TLSFunctionalSuite struct {
 	FunctionalTestBase
 	sdkClient sdkclient.Client
-}
-
-func TestTLSFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(TLSFunctionalSuite))
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {

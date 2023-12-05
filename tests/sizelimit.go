@@ -27,13 +27,10 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -70,11 +67,6 @@ func (s *SizeLimitFunctionalSuite) TearDownSuite() {
 func (s *SizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-}
-
-func TestSizeLimitFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(SizeLimitFunctionalSuite))
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {

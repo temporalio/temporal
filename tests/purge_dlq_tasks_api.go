@@ -26,11 +26,9 @@ package tests
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
@@ -103,10 +101,6 @@ func (s *PurgeDLQTasksSuite) TearDownSuite() {
 
 func (s *PurgeDLQTasksSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-}
-
-func TestPurgeDLQTasksSuite(t *testing.T) {
-	suite.Run(t, new(PurgeDLQTasksSuite))
 }
 
 func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {

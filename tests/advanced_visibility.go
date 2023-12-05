@@ -28,16 +28,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -153,11 +150,6 @@ func (s *AdvancedVisibilitySuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
-}
-
-func TestAdvancedVisibilitySuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(AdvancedVisibilitySuite))
 }
 
 func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {

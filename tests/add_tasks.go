@@ -28,12 +28,10 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -167,10 +165,6 @@ func (s *AddTasksSuite) TearDownSuite() {
 
 func (s *AddTasksSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-}
-
-func TestAddTasksSuite(t *testing.T) {
-	suite.Run(t, new(AddTasksSuite))
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {

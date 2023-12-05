@@ -28,8 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"flag"
-	"testing"
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
@@ -39,7 +37,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -72,11 +69,6 @@ func (s *RawHistorySuite) TearDownSuite() {
 
 func (s *RawHistorySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-}
-
-func TestRawHistorySuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(RawHistorySuite))
 }
 
 func (s *FunctionalSuite) TestGetWorkflowExecutionHistory_All() {

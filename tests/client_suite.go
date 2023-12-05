@@ -29,18 +29,15 @@ import (
 	"context"
 	"encoding/gob"
 	"errors"
-	"flag"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -84,11 +81,6 @@ var (
 	ErrEncodingIsNotSet       = errors.New("payload encoding metadata is not set")
 	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
 )
-
-func TestClientFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(ClientFunctionalSuite))
-}
 
 func (s *ClientFunctionalSuite) SetupSuite() {
 	// these limits are higher in production, but our tests would take too long if we set them that high

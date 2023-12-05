@@ -27,15 +27,12 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"strconv"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -49,7 +46,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -78,16 +74,6 @@ func (s *ArchivalSuite) TearDownSuite() {
 func (s *ArchivalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-}
-
-func TestArchivalSuite(t *testing.T) {
-	flag.Parse()
-	s := new(ArchivalSuite)
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.RetentionTimerJitterDuration:  time.Second,
-		dynamicconfig.ArchivalProcessorArchiveDelay: time.Duration(0),
-	}
-	suite.Run(t, s)
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {

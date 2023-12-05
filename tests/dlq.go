@@ -28,18 +28,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/atomic"
 	"go.uber.org/fx"
@@ -187,11 +184,6 @@ func (s *DLQSuite) SetupTest() {
 
 func (s *DLQSuite) setAssertions() {
 	s.Assertions = require.New(s.T())
-}
-
-func TestDLQSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(DLQSuite))
 }
 
 func (s *DLQSuite) TestReadArtificialDLQTasks() {

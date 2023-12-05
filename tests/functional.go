@@ -25,13 +25,10 @@
 package tests
 
 import (
-	"flag"
 	"reflect"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
@@ -70,11 +67,6 @@ func (s *FunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
-}
-
-func TestFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(FunctionalSuite))
 }
 
 func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,

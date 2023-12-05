@@ -26,16 +26,13 @@ package tests
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"strings"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -85,11 +82,6 @@ type (
 		dataConverter converter.DataConverter
 	}
 )
-
-func TestScheduleFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(ScheduleFunctionalSuite))
-}
 
 func (s *ScheduleFunctionalSuite) SetupSuite() {
 	switch TestFlags.PersistenceDriver {
