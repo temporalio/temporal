@@ -120,7 +120,7 @@ type (
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
 
 		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor
+		CustomInterceptors     []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
 		Authorizer             authorization.Authorizer
 		ClaimMapper            authorization.ClaimMapper
 		AudienceGetter         authorization.JWTAudienceMapper
@@ -345,7 +345,7 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor
+		CustomInterceptors         []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
@@ -489,7 +489,9 @@ func genericFrontendServiceProvider(
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(fx.Annotate(
+			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
+			fx.ParamTags(`group:"frontendInterceptors"`))),
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper {
 			switch serviceName {
