@@ -275,6 +275,8 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 			if errors.Is(err, cache.ErrCacheFull) {
+				c.mut.Lock()
+				defer c.mut.Unlock()
 				c.cacheReachedLimit = true
 			}
 			return nil, nil, err
