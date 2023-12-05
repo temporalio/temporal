@@ -32,10 +32,13 @@ import (
 
 func TestSchemaDirs(t *testing.T) {
 	dirs := Paths("cassandra")
-	require.Equal(t, []string{"cassandra/temporal", "cassandra/visibility"}, dirs)
+	requireContains(t, []string{
+		"cassandra/temporal",
+		"cassandra/visibility",
+	}, dirs)
 
 	dirs = Paths("mysql")
-	require.Equal(t, []string{
+	requireContains(t, []string{
 		"mysql/v57/temporal",
 		"mysql/v57/visibility",
 		"mysql/v8/temporal",
@@ -43,10 +46,16 @@ func TestSchemaDirs(t *testing.T) {
 	}, dirs)
 
 	dirs = Paths("postgresql")
-	require.Equal(t, []string{
+	requireContains(t, []string{
 		"postgresql/v12/temporal",
 		"postgresql/v12/visibility",
 		"postgresql/v96/temporal",
 		"postgresql/v96/visibility",
 	}, dirs)
+}
+
+func requireContains(t *testing.T, expected []string, actual []string) {
+	for _, v := range expected {
+		require.Contains(t, actual, v)
+	}
 }

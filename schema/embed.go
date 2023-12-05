@@ -26,6 +26,8 @@ package schema
 
 import (
 	"embed"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"io/fs"
 )
 
@@ -39,9 +41,10 @@ func Assets() fs.FS {
 
 // Paths returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
 func Paths(dbSubDir string) []string {
+	logger := log.NewCLILogger()
 	efs := Assets()
 	dirs := make([]string, 0)
-	_ = fs.WalkDir(efs, dbSubDir, func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(efs, dbSubDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -53,5 +56,8 @@ func Paths(dbSubDir string) []string {
 		}
 		return nil
 	})
+	if err != nil {
+		logger.Error("error walking embedded schema file system tree, could not generate valid paths", tag.Error(err))
+	}
 	return dirs
 }
