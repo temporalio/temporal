@@ -1,8 +1,9 @@
 package schema
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSchemaDirs(t *testing.T) {

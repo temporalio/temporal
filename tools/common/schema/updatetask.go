@@ -203,7 +203,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 		dir = "."
 	}
 
-	verDirs, err := readSchemaDirFS(fsys, dir, currVer, config.TargetVersion, task.logger)
+	verDirs, err := readSchemaDir(fsys, dir, currVer, config.TargetVersion, task.logger)
 	if err != nil {
 		return nil, fmt.Errorf("error listing schema dir:%v", err.Error())
 	}
@@ -216,7 +216,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 
 		dirPath := dir + "/" + vd
 
-		m, e := readManifestFS(fsys, dirPath)
+		m, e := readManifest(fsys, dirPath)
 		if e != nil {
 			return nil, fmt.Errorf("error processing manifest for version %v:%v", vd, e.Error())
 		}
@@ -289,12 +289,7 @@ func validateCQLStmts(stmts []string) error {
 }
 
 // readManifest reads the json manifest at dirPath into a manifest struct.
-func readManifest(dirPath string) (*manifest, error) {
-	return readManifestFS(os.DirFS(dirPath), ".")
-}
-
-// readManifestFS reads the json manifest at dirPath into a manifest struct.
-func readManifestFS(fsys fs.FS, dirPath string) (*manifest, error) {
+func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
 	filePath := dirPath + "/" + manifestFileName
 	jsonBlob, err := fs.ReadFile(fsys, filepath.Clean(filePath))
 	if err != nil {
@@ -415,14 +410,7 @@ func sortAndFilterVersions(versions []string, startVerExcl string, endVerIncl st
 // readSchemaDir returns a sorted list of subdir names that hold
 // the schema changes for versions in the range startVer < ver <= endVer
 // when endVer is empty this method returns all subdir names that are greater than startVer
-func readSchemaDir(dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
-	return readSchemaDirFS(os.DirFS(dir), ".", startVer, endVer, logger)
-}
-
-// readSchemaDirFS returns a sorted list of subdir names that hold
-// the schema changes for versions in the range startVer < ver <= endVer
-// when endVer is empty this method returns all subdir names that are greater than startVer
-func readSchemaDirFS(fsys fs.FS, dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
+func readSchemaDir(fsys fs.FS, dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
 	subDirs, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, err
