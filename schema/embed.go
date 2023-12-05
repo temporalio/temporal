@@ -48,7 +48,7 @@ func Paths(dbSubDir string) []string {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && d.Name() != path {
+		if d.IsDir() {
 			if d.Name() == "versioned" {
 				dirs = append(dirs, path[:len(path)-len("/versioned")])
 				return fs.SkipDir
