@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
@@ -78,9 +79,9 @@ func (task *SetupTask) Run() error {
 		var stmts []string
 		var err error
 		if len(config.SchemaName) > 0 {
-			efs := dbschemas.Assets()
+			fsys := dbschemas.Assets()
 			schemaFilePath := config.SchemaName + "/schema" + schemaFileEnding(config.SchemaName)
-			schemaBuf, err2 := efs.ReadFile(schemaFilePath)
+			schemaBuf, err2 := fs.ReadFile(fsys, schemaFilePath)
 			if err2 != nil {
 				return fmt.Errorf("error reading file %s: %w", schemaFilePath, err)
 			}
@@ -91,6 +92,9 @@ func (task *SetupTask) Run() error {
 				return err
 			}
 			stmts, err = persistence.LoadAndSplitQuery([]string{filePath})
+		}
+		if err != nil {
+			return fmt.Errorf("error parsing query: %v", err)
 		}
 		task.logger.Debug("----- Creating types and tables -----")
 		for _, stmt := range stmts {

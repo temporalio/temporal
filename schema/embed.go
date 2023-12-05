@@ -33,8 +33,8 @@ import (
 var assets embed.FS
 
 // Assets returns a file system with the contents of the schema directory
-func Assets() *embed.FS {
-	return &assets
+func Assets() fs.FS {
+	return assets
 }
 
 // Paths returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
