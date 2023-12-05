@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -69,6 +70,7 @@ type (
 const (
 	defaultTimeout = 30 // Timeout in seconds
 	systemKeyspace = "system"
+	dbType         = "cassandra"
 )
 
 const (
@@ -318,4 +320,9 @@ func (client *cqlClient) waitSchemaAgreement() error {
 	ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
 	defer cancel()
 	return client.session.AwaitSchemaAgreement(ctx)
+}
+
+// Type gives the type of db
+func (client *cqlClient) Type() string {
+	return dbType
 }
