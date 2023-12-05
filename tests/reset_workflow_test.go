@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestResetWorkflow() {
+func (s *FunctionalSuite) TestResetWorkflow() {
 	id := "functional-reset-workflow-test"
 	wt := "functional-reset-workflow-test-type"
 	tq := "functional-reset-workflow-test-taskqueue"
@@ -201,7 +201,7 @@ func (s *functionalSuite) TestResetWorkflow() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestResetWorkflow_ReapplyAll() {
+func (s *FunctionalSuite) TestResetWorkflow_ReapplyAll() {
 	workflowID := "functional-reset-workflow-test-reapply-all"
 	workflowTypeName := "functional-reset-workflow-test-reapply-all-type"
 	taskQueueName := "functional-reset-workflow-test-reapply-all-taskqueue"
@@ -209,7 +209,7 @@ func (s *functionalSuite) TestResetWorkflow_ReapplyAll() {
 	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *functionalSuite) TestResetWorkflow_ReapplyNone() {
+func (s *FunctionalSuite) TestResetWorkflow_ReapplyNone() {
 	workflowID := "functional-reset-workflow-test-reapply-none"
 	workflowTypeName := "functional-reset-workflow-test-reapply-none-type"
 	taskQueueName := "functional-reset-workflow-test-reapply-none-taskqueue"
@@ -217,7 +217,7 @@ func (s *functionalSuite) TestResetWorkflow_ReapplyNone() {
 	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
-func (s *functionalSuite) testResetWorkflowReapply(
+func (s *FunctionalSuite) testResetWorkflowReapply(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -349,7 +349,7 @@ func (s *functionalSuite) testResetWorkflowReapply(
 
 }
 
-func (s *functionalSuite) TestResetWorkflow_ReapplyBufferAll() {
+func (s *FunctionalSuite) TestResetWorkflow_ReapplyBufferAll() {
 	workflowID := "functional-reset-workflow-test-reapply-buffer-all"
 	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-all-type"
 	taskQueueName := "functional-reset-workflow-test-reapply-buffer-all-taskqueue"
@@ -357,7 +357,7 @@ func (s *functionalSuite) TestResetWorkflow_ReapplyBufferAll() {
 	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
-func (s *functionalSuite) TestResetWorkflow_ReapplyBufferNone() {
+func (s *FunctionalSuite) TestResetWorkflow_ReapplyBufferNone() {
 	workflowID := "functional-reset-workflow-test-reapply-buffer-none"
 	workflowTypeName := "functional-reset-workflow-test-reapply-buffer-none-type"
 	taskQueueName := "functional-reset-workflow-test-reapply-buffer-none-taskqueue"
@@ -365,7 +365,7 @@ func (s *functionalSuite) TestResetWorkflow_ReapplyBufferNone() {
 	s.testResetWorkflowReapplyBuffer(workflowID, workflowTypeName, taskQueueName, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
-func (s *functionalSuite) testResetWorkflowReapplyBuffer(
+func (s *FunctionalSuite) testResetWorkflowReapplyBuffer(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,
@@ -494,28 +494,28 @@ func (s *functionalSuite) testResetWorkflowReapplyBuffer(
 
 }
 
-func (s *functionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
+func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Schedule() {
 	workflowID := "functional-reset-workflow-test-schedule"
 	workflowTypeName := "functional-reset-workflow-test-schedule-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 3)
 }
 
-func (s *functionalSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
+func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
 	workflowID := "functional-reset-workflow-test-schedule-to-start"
 	workflowTypeName := "functional-reset-workflow-test-schedule-to-start-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-to-start-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 4)
 }
 
-func (s *functionalSuite) TestResetWorkflow_WorkflowTask_Start() {
+func (s *FunctionalSuite) TestResetWorkflow_WorkflowTask_Start() {
 	workflowID := "functional-reset-workflow-test-start"
 	workflowTypeName := "functional-reset-workflow-test-start-type"
 	taskQueueName := "functional-reset-workflow-test-start-taskqueue"
 	s.testResetWorkflowRangeScheduleToStart(workflowID, workflowTypeName, taskQueueName, 5)
 }
 
-func (s *functionalSuite) testResetWorkflowRangeScheduleToStart(
+func (s *FunctionalSuite) testResetWorkflowRangeScheduleToStart(
 	workflowID string,
 	workflowTypeName string,
 	taskQueueName string,

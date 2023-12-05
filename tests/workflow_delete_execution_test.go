@@ -40,7 +40,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
+func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	id := "functional-delete-workflow-completed-test"
 	wt := "functional-delete-workflow-completed-test-type"
 	tl := "functional-delete-workflow-completed-test-taskqueue"
@@ -176,7 +176,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Competed() {
 	}
 }
 
-func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
+func (s *FunctionalSuite) Test_DeleteWorkflowExecution_Running() {
 	id := "functional-delete-workflow-running-test"
 	wt := "functional-delete-workflow-running-test-type"
 	tl := "functional-delete-workflow-running-test-taskqueue"
@@ -288,7 +288,7 @@ func (s *functionalSuite) Test_DeleteWorkflowExecution_Running() {
 	}
 }
 
-func (s *functionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
+func (s *FunctionalSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 	id := "functional-delete-workflow-running-with-terminate-test"
 	wt := "functional-delete-workflow-running-with-terminate-test-type"
 	tl := "functional-delete-workflow-running-with-terminate-test-taskqueue"

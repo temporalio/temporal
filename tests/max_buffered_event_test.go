@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *clientFunctionalSuite) TestMaxBufferedEventsLimit() {
+func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 	/*
 		This test starts a workflow, and block its workflow task, then sending
 		signals to it which will be buffered. The default max buffered event
@@ -124,7 +124,7 @@ func (s *clientFunctionalSuite) TestMaxBufferedEventsLimit() {
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
 }
 
-func (s *clientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
+func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
 	/*
 			This test starts a workflow, and block its workflow task, then sending
 			signals to it which will be buffered. The default max mutable state

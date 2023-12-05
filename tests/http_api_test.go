@@ -63,10 +63,10 @@ func jsonPayload(data string) *common.Payloads {
 	}
 }
 
-func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
+func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	contentType string,
 	startWFRequestBody, queryBody, signalBody func() string,
-	verifyQueryResult, verifyHistory func(*clientFunctionalSuite, []byte)) {
+	verifyQueryResult, verifyHistory func(*ClientFunctionalSuite, []byte)) {
 	// Create basic workflow that can answer queries, get signals, etc
 	workflowFn := func(ctx workflow.Context, arg *SomeJSONStruct) (*SomeJSONStruct, error) {
 		// Query that just returns query arg
@@ -160,23 +160,23 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest(
 	verifyHistory(s, respBody)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
+func (s *ClientFunctionalSuite) TestHTTPAPIBasics_Protojson() {
 	s.runHTTPAPIBasicsTest_Protojson("application/json+no-payload-shorthand", false)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics_ProtojsonPretty() {
+func (s *ClientFunctionalSuite) TestHTTPAPIBasics_ProtojsonPretty() {
 	s.runHTTPAPIBasicsTest_Protojson("application/json+pretty+no-payload-shorthand", true)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
+func (s *ClientFunctionalSuite) TestHTTPAPIBasics_Shorthand() {
 	s.runHTTPAPIBasicsTest_Shorthand("application/json", false)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIBasics_ShorthandPretty() {
+func (s *ClientFunctionalSuite) TestHTTPAPIBasics_ShorthandPretty() {
 	s.runHTTPAPIBasicsTest_Shorthand("application/json+pretty", true)
 }
 
-func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pretty bool) {
+func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pretty bool) {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -206,7 +206,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType strin
 		s.Require().NoError(err)
 		return string(signalBody)
 	}
-	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+	verifyQueryResult := func(s *ClientFunctionalSuite, respBody []byte) {
 		s.T().Log(string(respBody))
 		if pretty {
 			// This is lazy but it'll work
@@ -220,7 +220,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType strin
 		s.Require().NoError(conv.FromPayload(queryResp.QueryResult.Payloads[0], &payload))
 		s.Require().Equal("query-arg", payload.SomeField)
 	}
-	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+	verifyHistory := func(s *ClientFunctionalSuite, respBody []byte) {
 		s.T().Log(string(respBody))
 		if pretty {
 			// This is lazy but it'll work
@@ -241,7 +241,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType strin
 	s.runHTTPAPIBasicsTest(contentType, reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
 }
 
-func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pretty bool) {
+func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pretty bool) {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -259,7 +259,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType strin
 	signalBody := func() string {
 		return `{ "input": [{ "someField": "signal-arg" }] }`
 	}
-	verifyQueryResult := func(s *clientFunctionalSuite, respBody []byte) {
+	verifyQueryResult := func(s *ClientFunctionalSuite, respBody []byte) {
 		if pretty {
 			// This is lazy but it'll work
 			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
@@ -270,7 +270,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType strin
 		s.Require().NoError(json.Unmarshal(respBody, &queryResp))
 		s.Require().JSONEq(`[{ "someField": "query-arg" }]`, string(queryResp.QueryResult))
 	}
-	verifyHistory := func(s *clientFunctionalSuite, respBody []byte) {
+	verifyHistory := func(s *ClientFunctionalSuite, respBody []byte) {
 		if pretty {
 			// This is lazy but it'll work
 			s.Require().Contains(respBody, byte('\n'), "Response body should have been prettified")
@@ -295,7 +295,7 @@ func (s *clientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType strin
 	s.runHTTPAPIBasicsTest(contentType, reqBody, queryBody, signalBody, verifyQueryResult, verifyHistory)
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIHeaders() {
+func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -348,7 +348,7 @@ func (s *clientFunctionalSuite) TestHTTPAPIHeaders() {
 	s.Require().Equal(headers.ServerVersion, listWorkflowMetadata[headers.ClientVersionHeaderName][0])
 }
 
-func (s *clientFunctionalSuite) TestHTTPAPIPretty() {
+func (s *ClientFunctionalSuite) TestHTTPAPIPretty() {
 	if s.httpAPIAddress == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
@@ -360,7 +360,7 @@ func (s *clientFunctionalSuite) TestHTTPAPIPretty() {
 	s.Require().Contains(b, byte('\n'))
 }
 
-func (s *clientFunctionalSuite) httpGet(expectedStatus int, url, contentType string) (*http.Response, []byte) {
+func (s *ClientFunctionalSuite) httpGet(expectedStatus int, url, contentType string) (*http.Response, []byte) {
 	req, err := http.NewRequest("GET", url, nil)
 	s.Require().NoError(err)
 	req.Header.Add("Accept", contentType)
@@ -369,7 +369,7 @@ func (s *clientFunctionalSuite) httpGet(expectedStatus int, url, contentType str
 	return s.httpRequest(expectedStatus, req)
 }
 
-func (s *clientFunctionalSuite) httpPost(expectedStatus int, url, contentType, jsonBody string) (*http.Response, []byte) {
+func (s *ClientFunctionalSuite) httpPost(expectedStatus int, url, contentType, jsonBody string) (*http.Response, []byte) {
 	req, err := http.NewRequest("POST", url, strings.NewReader(jsonBody))
 	s.Require().NoError(err)
 	req.Header.Add("Accept", contentType)
@@ -378,7 +378,7 @@ func (s *clientFunctionalSuite) httpPost(expectedStatus int, url, contentType, j
 	return s.httpRequest(expectedStatus, req)
 }
 
-func (s *clientFunctionalSuite) httpRequest(expectedStatus int, req *http.Request) (*http.Response, []byte) {
+func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Request) (*http.Response, []byte) {
 	if req.URL.Scheme == "" {
 		req.URL.Scheme = "http"
 	}

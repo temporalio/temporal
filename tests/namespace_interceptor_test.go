@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestServerRejectsInvalidRequests() {
+func (s *FunctionalSuite) TestServerRejectsInvalidRequests() {
 	sut := newSystemUnderTestConnector(s)
 
 	customersNamespace := namespace.Name(s.namespace)
@@ -58,7 +58,7 @@ func (s *functionalSuite) TestServerRejectsInvalidRequests() {
 }
 
 type sutConnector struct {
-	suite           *functionalSuite
+	suite           *FunctionalSuite
 	identity        string
 	taskQueue       *taskqueuepb.TaskQueue
 	stickyTaskQueue *taskqueuepb.TaskQueue
@@ -66,7 +66,7 @@ type sutConnector struct {
 	taskToken       []byte
 }
 
-func newSystemUnderTestConnector(s *functionalSuite) *sutConnector {
+func newSystemUnderTestConnector(s *FunctionalSuite) *sutConnector {
 	id := uuid.New()
 	return &sutConnector{
 		suite:           s,

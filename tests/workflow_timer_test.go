@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestCancelTimer() {
+func (s *FunctionalSuite) TestCancelTimer() {
 	id := "functional-cancel-timer-test"
 	wt := "functional-cancel-timer-test-type"
 	tl := "functional-cancel-timer-test-taskqueue"
@@ -171,7 +171,7 @@ func (s *functionalSuite) TestCancelTimer() {
 	}
 }
 
-func (s *functionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
+func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	id := "functional-cancel-timer-fired-and-buffered-test"
 	wt := "functional-cancel-timer-fired-and-buffered-test-type"
 	tl := "functional-cancel-timer-fired-and-buffered-test-taskqueue"

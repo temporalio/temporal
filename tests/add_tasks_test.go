@@ -56,8 +56,8 @@ import (
 // retried.
 
 type (
-	// addTasksSuite is a separate suite because we need to override the history service's executable wrapper.
-	addTasksSuite struct {
+	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
+	AddTasksSuite struct {
 		FunctionalTestBase
 		*require.Assertions
 		shardController *faultyShardController
@@ -71,22 +71,22 @@ type (
 	}
 	faultyShardController struct {
 		shard.Controller
-		s *addTasksSuite
+		s *AddTasksSuite
 	}
 	faultyShardContext struct {
 		shard.Context
-		suite *addTasksSuite
+		suite *AddTasksSuite
 	}
 	// executorWrapper is used to wrap any [queues.Executable] that the history service makes so that we can intercept
 	// workflow tasks.
 	executorWrapper struct {
-		s *addTasksSuite
+		s *AddTasksSuite
 	}
 	// noopExecutor skips any workflow task which meets the criteria specified in shouldExecute and records them to
 	// the tasks channel.
 	noopExecutor struct {
 		base  queues.Executor
-		suite *addTasksSuite
+		suite *AddTasksSuite
 	}
 )
 
@@ -135,7 +135,7 @@ func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 }
 
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
-func (s *addTasksSuite) SetupSuite() {
+func (s *AddTasksSuite) SetupSuite() {
 	// We do this here and in SetupTest because we need assertions in the SetupSuite method as well as the individual
 	// tests, but this is called before SetupTest, and the s.T() value will change when SetupTest is called.
 	s.Assertions = require.New(s.T())
@@ -160,20 +160,20 @@ func (s *addTasksSuite) SetupSuite() {
 	s.sdkClient = s.newSDKClient()
 }
 
-func (s *addTasksSuite) TearDownSuite() {
+func (s *AddTasksSuite) TearDownSuite() {
 	s.sdkClient.Close()
 	s.tearDownSuite()
 }
 
-func (s *addTasksSuite) SetupTest() {
+func (s *AddTasksSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
 func TestAddTasksSuite(t *testing.T) {
-	suite.Run(t, new(addTasksSuite))
+	suite.Run(t, new(AddTasksSuite))
 }
 
-func (s *addTasksSuite) TestAddTasks_Ok() {
+func (s *AddTasksSuite) TestAddTasks_Ok() {
 	for _, tc := range []struct {
 		name               string
 		shouldCallAddTasks bool
@@ -253,7 +253,7 @@ func (s *addTasksSuite) TestAddTasks_Ok() {
 	}
 }
 
-func (s *addTasksSuite) TestAddTasks_ErrGetShardByID() {
+func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
@@ -261,7 +261,7 @@ func (s *addTasksSuite) TestAddTasks_ErrGetShardByID() {
 	s.Contains(strings.ToLower(err.Error()), "shard id")
 }
 
-func (s *addTasksSuite) TestAddTasks_GetEngineErr() {
+func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	defer func() {
 		s.getEngineErr.Store(nil)
 	}()
@@ -273,7 +273,7 @@ func (s *addTasksSuite) TestAddTasks_GetEngineErr() {
 	s.ErrorContains(err, s.getEngineErr.Load().Error())
 }
 
-func (s *addTasksSuite) newSDKClient() sdkclient.Client {
+func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 	client, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,

@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
+func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 	id := "functional-wf-cron-failed-infinite-test"
 	wt := "functional-wf-cron-failed-infinite-type"
 	tl := "functional-wf-cron-failed-infinite-taskqueue"
@@ -133,7 +133,7 @@ func (s *functionalSuite) TestCronWorkflow_Failed_Infinite() {
 	s.True(seeRetry)
 }
 
-func (s *functionalSuite) TestCronWorkflow() {
+func (s *FunctionalSuite) TestCronWorkflow() {
 	id := "functional-wf-cron-test"
 	wt := "functional-wf-cron-type"
 	tl := "functional-wf-cron-taskqueue"
@@ -365,7 +365,7 @@ func (s *functionalSuite) TestCronWorkflow() {
 	}
 }
 
-func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
+func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	// Run a cron workflow that completes in (almost) all the possible ways:
 	// Run 1: succeeds
 	// Run 2: fails
@@ -559,7 +559,7 @@ func (s *clientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	s.Equal("test is over", attrs4.GetReason())
 }
 
-func (s *clientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListOpenWorkflow(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -580,7 +580,7 @@ func (s *clientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time,
 	panic("unreached")
 }
 
-func (s *clientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *ClientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	for i := 0; i < 20; i++ {
 		resp, err := s.sdkClient.ListClosedWorkflow(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{

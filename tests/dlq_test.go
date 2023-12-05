@@ -69,7 +69,7 @@ import (
 )
 
 type (
-	dlqSuite struct {
+	DLQSuite struct {
 		FunctionalTestBase
 		*require.Assertions
 		dlq              persistence.HistoryTaskQueueManager
@@ -94,18 +94,18 @@ type (
 		expectedNumMessages int
 	}
 	testExecutorWrapper struct {
-		suite *dlqSuite
+		suite *DLQSuite
 	}
 	testExecutor struct {
 		base  queues.Executor
-		suite *dlqSuite
+		suite *DLQSuite
 	}
 	testDLQWriter struct {
-		suite *dlqSuite
+		suite *DLQSuite
 		queues.QueueWriter
 	}
 	testTaskQueueManager struct {
-		suite *dlqSuite
+		suite *DLQSuite
 		persistence.HistoryTaskQueueManager
 	}
 )
@@ -115,7 +115,7 @@ const (
 	taskQueue   = "dlq-test-task-queue"
 )
 
-func (s *dlqSuite) SetupSuite() {
+func (s *DLQSuite) SetupSuite() {
 	s.setAssertions()
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.HistoryTaskDLQEnabled: true,
@@ -170,7 +170,7 @@ func (s *dlqSuite) SetupSuite() {
 	s.NoError(s.worker.Start())
 }
 
-func (s *dlqSuite) TearDownSuite() {
+func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
 	s.tearDownSuite()
 }
@@ -179,22 +179,22 @@ func myWorkflow(workflow.Context) (string, error) {
 	return "hello", nil
 }
 
-func (s *dlqSuite) SetupTest() {
+func (s *DLQSuite) SetupTest() {
 	s.setAssertions()
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)
 }
 
-func (s *dlqSuite) setAssertions() {
+func (s *DLQSuite) setAssertions() {
 	s.Assertions = require.New(s.T())
 }
 
 func TestDLQSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(dlqSuite))
+	suite.Run(t, new(DLQSuite))
 }
 
-func (s *dlqSuite) TestReadArtificialDLQTasks() {
+func (s *DLQSuite) TestReadArtificialDLQTasks() {
 	ctx := context.Background()
 
 	namespaceID := "test-namespace"
@@ -312,7 +312,7 @@ func (s *dlqSuite) TestReadArtificialDLQTasks() {
 // above test is more for testing specific CLI flags when reading from the DLQ. After the workflow task is added to the
 // DLQ, this test then purges the DLQ and verifies that the task was deleted.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
-func (s *dlqSuite) TestPurgeRealWorkflow() {
+func (s *DLQSuite) TestPurgeRealWorkflow() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -343,7 +343,7 @@ func (s *dlqSuite) TestPurgeRealWorkflow() {
 // causes the workflow tasks to be added to the DLQ. This tests the end-to-end functionality of the DLQ, whereas the
 // above test is more for testing specific CLI flags when reading from the DLQ.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
-func (s *dlqSuite) TestMergeRealWorkflow() {
+func (s *DLQSuite) TestMergeRealWorkflow() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -387,7 +387,7 @@ func (s *dlqSuite) TestMergeRealWorkflow() {
 	s.Equal(false, cancelResponse.Canceled)
 }
 
-func (s *dlqSuite) TestCancelRunningMerge() {
+func (s *DLQSuite) TestCancelRunningMerge() {
 	s.deleteBlockCh = make(chan interface{})
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
@@ -407,7 +407,7 @@ func (s *dlqSuite) TestCancelRunningMerge() {
 	s.purgeMessages(ctx, dlqMessageID)
 }
 
-func (s *dlqSuite) TestListQueues() {
+func (s *DLQSuite) TestListQueues() {
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
@@ -466,7 +466,7 @@ func (s *dlqSuite) TestListQueues() {
 	s.True(found1, "unable to find %v in %v", &qi1, queueInfos)
 }
 
-func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
+func (s *DLQSuite) validateWorkflowRun(ctx context.Context, run sdkclient.WorkflowRun) {
 	var result string
 	err := run.Get(ctx, &result)
 	s.NoError(err)
@@ -475,7 +475,7 @@ func (s *dlqSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 
 // executeDoomedWorkflow runs a workflow that is guaranteed to produce a workflow task that will be added to the DLQ. It
 // then returns the sdk workflow run and the message ID of the DLQ message for the failed workflow task.
-func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
+func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
 	// Execute a workflow.
 	// Use a random workflow ID to ensure that we don't have any collisions with other runs.
 	run := s.executeWorkflow(ctx, s.failingWorkflowIDPrefix.Load()+uuid.New())
@@ -494,7 +494,7 @@ func (s *dlqSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.Workflo
 	return run, dlqMessageID
 }
 
-func (s *dlqSuite) verifyRunIsInDLQ(
+func (s *DLQSuite) verifyRunIsInDLQ(
 	ctx context.Context,
 	run sdkclient.WorkflowRun,
 ) tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
@@ -509,7 +509,7 @@ func (s *dlqSuite) verifyRunIsInDLQ(
 }
 
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
-func (s *dlqSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
+func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
@@ -525,7 +525,7 @@ func (s *dlqSuite) executeWorkflow(ctx context.Context, workflowID string) sdkcl
 }
 
 // purgeMessages from the DLQ up to and including the specified message ID, blocking until the purge workflow completes.
-func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) []byte {
+func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64) []byte {
 	args := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -552,7 +552,7 @@ func (s *dlqSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, blocking until the merge workflow completes.
-func (s *dlqSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte {
+func (s *DLQSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte {
 	tokenBytes := s.mergeMessagesWithoutBlocking(ctx, maxMessageID)
 	var token adminservice.DLQJobToken
 	s.NoError(token.Unmarshal(tokenBytes))
@@ -564,7 +564,7 @@ func (s *dlqSuite) mergeMessages(ctx context.Context, maxMessageID int64) []byte
 }
 
 // mergeMessages from the DLQ up to and including the specified message ID, returns immediately after running tdbg command.
-func (s *dlqSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageID int64) []byte {
+func (s *DLQSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageID int64) []byte {
 	args := []string{
 		"tdbg",
 		"--" + tdbg.FlagYes,
@@ -585,7 +585,7 @@ func (s *dlqSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 }
 
 // readDLQTasks from the transfer task DLQ for this cluster and return them.
-func (s *dlqSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
+func (s *DLQSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	file := testutils.CreateTemp(s.T(), "", "*")
 	args := []string{
 		"tdbg",
@@ -602,7 +602,7 @@ func (s *dlqSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*pers
 }
 
 // Calls describe dlq job and verify the output
-func (s *dlqSuite) describeJob(ctx context.Context, token []byte) *adminservice.DescribeDLQJobResponse {
+func (s *DLQSuite) describeJob(ctx context.Context, token []byte) *adminservice.DescribeDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -622,7 +622,7 @@ func (s *dlqSuite) describeJob(ctx context.Context, token []byte) *adminservice.
 }
 
 // Calls delete dlq job and verify the output
-func (s *dlqSuite) cancelJob(ctx context.Context, token []byte) *adminservice.CancelDLQJobResponse {
+func (s *DLQSuite) cancelJob(ctx context.Context, token []byte) *adminservice.CancelDLQJobResponse {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -643,7 +643,7 @@ func (s *dlqSuite) cancelJob(ctx context.Context, token []byte) *adminservice.Ca
 }
 
 // List all queues
-func (s *dlqSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesResponse_QueueInfo {
+func (s *DLQSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesResponse_QueueInfo {
 	args := []string{
 		"tdbg",
 		"dlq",
@@ -669,7 +669,7 @@ func (s *dlqSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesRes
 
 // verifyNumTasks verifies that the specified file contains the expected number of DLQ tasks, and that each task has the
 // expected metadata and payload.
-func (s *dlqSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
+func (s *DLQSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	dlqTasks := s.readTransferTasks(file)
 	s.Len(dlqTasks, expectedNumTasks)
 
@@ -684,7 +684,7 @@ func (s *dlqSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	}
 }
 
-func (s *dlqSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
+func (s *DLQSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persistencespb.TransferTaskInfo] {
 	dlqTasks, err := tdbgtest.ParseDLQMessages(file, func() *persistencespb.TransferTaskInfo {
 		return new(persistencespb.TransferTaskInfo)
 	})
