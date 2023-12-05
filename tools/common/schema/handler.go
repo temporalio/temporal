@@ -26,13 +26,13 @@ package schema
 
 import (
 	"fmt"
-	dbschemas "go.temporal.io/server/schema"
 	"slices"
 	"strings"
 
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log"
+	dbschemas "go.temporal.io/server/schema"
 )
 
 // Setup sets up schema tables
