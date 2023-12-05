@@ -68,7 +68,7 @@ func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
 func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
 	config := new(SetupConfig)
 	config.SchemaFilePath = cli.String(CLIOptSchemaFile)
-	config.SchemaFilePath = cli.String(CLIOptSchemaName)
+	config.SchemaName = cli.String(CLIOptSchemaName)
 	config.InitialVersion = cli.String(CLIOptVersion)
 	config.DisableVersioning = cli.Bool(CLIOptDisableVersioning)
 	config.Overwrite = cli.Bool(CLIOptOverwrite)

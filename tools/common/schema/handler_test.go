@@ -82,6 +82,13 @@ func (s *HandlerTestSuite) TestValidateSetupConfig() {
 	config.DisableVersioning = true
 	config.SchemaFilePath = "/tmp/foo.cql"
 	s.assertValidateSetupSucceeds(config)
+
+	config.SchemaName = "mysql/v57/temporal"
+	s.assertValidateSetupFails(config)
+	config.SchemaFilePath = ""
+	s.assertValidateSetupSucceeds(config)
+	config.SchemaName = "foo"
+	s.assertValidateSetupFails(config)
 }
 
 func (s *HandlerTestSuite) TestValidateUpdateConfig() {
