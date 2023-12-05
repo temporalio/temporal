@@ -1270,50 +1270,50 @@ func (p *nexusServiceRetryablePersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRetryablePersistenceClient) GetNexusService(
+func (p *nexusServiceRetryablePersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
-	request *GetNexusServiceRequest,
-) (*GetNexusServiceResponse, error) {
-	var response *GetNexusServiceResponse
+	request *GetNexusIncomingServiceRequest,
+) (*GetNexusIncomingServiceResponse, error) {
+	var response *GetNexusIncomingServiceResponse
 	op := func(ctx context.Context) error {
 		var err error
-		response, err = p.persistence.GetNexusService(ctx, request)
+		response, err = p.persistence.GetNexusIncomingService(ctx, request)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 	return response, err
 }
 
-func (p *nexusServiceRetryablePersistenceClient) ListNexusServices(
+func (p *nexusServiceRetryablePersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
-	request *ListNexusServicesRequest,
-) (*ListNexusServicesResponse, error) {
-	var response *ListNexusServicesResponse
+	request *ListNexusIncomingServicesRequest,
+) (*ListNexusIncomingServicesResponse, error) {
+	var response *ListNexusIncomingServicesResponse
 	op := func(ctx context.Context) error {
 		var err error
-		response, err = p.persistence.ListNexusServices(ctx, request)
+		response, err = p.persistence.ListNexusIncomingServices(ctx, request)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 	return response, err
 }
 
-func (p *nexusServiceRetryablePersistenceClient) CreateOrUpdateNexusService(
+func (p *nexusServiceRetryablePersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *CreateOrUpdateNexusServiceRequest,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) error {
 	op := func(ctx context.Context) error {
-		return p.persistence.CreateOrUpdateNexusService(ctx, request)
+		return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 	}
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
 
-func (p *nexusServiceRetryablePersistenceClient) DeleteNexusService(
+func (p *nexusServiceRetryablePersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *DeleteNexusServiceRequest,
+	request *DeleteNexusIncomingServiceRequest,
 ) error {
 	op := func(ctx context.Context) error {
-		return p.persistence.DeleteNexusService(ctx, request)
+		return p.persistence.DeleteNexusIncomingService(ctx, request)
 	}
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }

@@ -32,7 +32,7 @@ type (
 	// historyPagingToken is used to serialize/deserialize pagination token for ReadHistoryBranchRequest
 	historyPagingToken struct {
 		LastEventID int64
-		// the pagination token passing to persistence
+		// the pagination token passing to incomingServiceStore
 		StoreToken []byte
 		// recording which branchRange it is reading
 		CurrentRangeIndex int

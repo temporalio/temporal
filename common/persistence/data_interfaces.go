@@ -39,6 +39,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -48,7 +49,7 @@ import (
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 
-// QueueType is an enum that represents various queue types in persistence
+// QueueType is an enum that represents various queue types in incomingServiceStore
 type QueueType int32
 
 // Queue types used in queue table
@@ -111,7 +112,7 @@ const numItemsInGarbageInfo = 3
 const ScheduledTaskMinPrecision = time.Millisecond
 
 type (
-	// InvalidPersistenceRequestError represents invalid request to persistence
+	// InvalidPersistenceRequestError represents invalid request to incomingServiceStore
 	InvalidPersistenceRequestError struct {
 		Msg string
 	}
@@ -406,7 +407,7 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// RegisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
 	// that a new queue reader is created by queue processing logic
 	RegisterHistoryTaskReaderRequest struct {
 		ShardID      int32
@@ -415,11 +416,11 @@ type (
 		ReaderID     int64
 	}
 
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
+	// UnregisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
 	// that queue processing logic is done using an existing queue reader
 	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
 
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
+	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying incomingServiceStore implementation
 	// that a certain queue reader's process and the fact that it won't try to load tasks with
 	// key less than InclusiveMinPendingTaskKey
 	UpdateHistoryTaskReaderProgressRequest struct {
@@ -1058,27 +1059,27 @@ type (
 	}
 
 	// TODO: document me
-	GetNexusServiceRequest struct {
+	GetNexusIncomingServiceRequest struct {
 	}
 
 	// TODO: document me
-	GetNexusServiceResponse struct {
+	GetNexusIncomingServiceResponse struct {
 	}
 
 	// TODO: document me
-	ListNexusServicesRequest struct {
+	ListNexusIncomingServicesRequest struct {
 	}
 
 	// TODO: document me
-	ListNexusServicesResponse struct {
+	ListNexusIncomingServicesResponse struct {
 	}
 
 	// TODO: document me
-	CreateOrUpdateNexusServiceRequest struct {
+	CreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
 	// TODO: document me
-	DeleteNexusServiceRequest struct {
+	DeleteNexusIncomingServiceRequest struct {
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1118,7 +1119,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementation regarding history task readers
+		// Hints for incomingServiceStore implementation regarding history task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -1234,10 +1235,10 @@ type (
 	NexusServiceManager interface {
 		Closeable
 		GetName() string
-		GetNexusService(ctx context.Context, request *GetNexusServiceRequest) (*GetNexusServiceResponse, error)
-		ListNexusServices(ctx context.Context, request *ListNexusServicesRequest) (*ListNexusServicesResponse, error)
-		CreateOrUpdateNexusService(ctx context.Context, request *CreateOrUpdateNexusServiceRequest) error
-		DeleteNexusService(ctx context.Context, request *DeleteNexusServiceRequest) error
+		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*GetNexusIncomingServiceResponse, error)
+		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history

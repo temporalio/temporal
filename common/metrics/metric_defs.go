@@ -281,14 +281,14 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
-	// PersistenceGetNexusServiceScope tracks GetNexusService calls made by service to persistence layer
-	PersistenceGetNexusServiceScope = "GetNexusService"
-	// PersistenceListNexusServicesScope tracks ListNexusService calls made by service to persistence layer
-	PersistenceListNexusServicesScope = "ListNexusServices"
-	// PersistenceCreateOrUpdateNexusServiceScope tracks CreateOrUpdateNexusService calls made by service to persistence layer
-	PersistenceCreateOrUpdateNexusServiceScope = "CreateOrUpdateNexusService"
-	// PersistenceDeleteNexusServiceScope tracks DeleteNexusService calls made by service to persistence layer
-	PersistenceDeleteNexusServiceScope = "DeleteNexusService"
+	// PersistenceGetNexusIncomingServiceScope tracks GetNexusIncomingService calls made by service to persistence layer
+	PersistenceGetNexusIncomingServiceScope = "GetNexusIncomingService"
+	// PersistenceListNexusIncomingServicesScope tracks ListNexusService calls made by service to persistence layer
+	PersistenceListNexusIncomingServicesScope = "ListNexusIncomingServices"
+	// PersistenceCreateOrUpdateNexusIncomingServiceScope tracks CreateOrUpdateNexusIncomingService calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusIncomingServiceScope = "CreateOrUpdateNexusIncomingService"
+	// PersistenceDeleteNexusIncomingServiceScope tracks DeleteNexusIncomingService calls made by service to persistence layer
+	PersistenceDeleteNexusIncomingServiceScope = "DeleteNexusIncomingService"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"

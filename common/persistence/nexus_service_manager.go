@@ -32,52 +32,52 @@ import (
 
 type (
 	nexusServiceManagerImpl struct {
-		persistence NexusServiceStore
+		incomingServiceStore NexusIncomingServiceStore
 	}
 )
 
 var _ NexusServiceManager = (*nexusServiceManagerImpl)(nil)
 
 func NewNexusServiceManager(
-	persistence NexusServiceStore,
+	incomingServiceStore NexusIncomingServiceStore,
 ) NexusServiceManager {
 	return &nexusServiceManagerImpl{
-		persistence: persistence,
+		incomingServiceStore: incomingServiceStore,
 	}
 }
 
 func (m *nexusServiceManagerImpl) GetName() string {
-	return m.persistence.GetName()
+	return m.incomingServiceStore.GetName()
 }
 
 func (m *nexusServiceManagerImpl) Close() {
-	m.persistence.Close()
+	m.incomingServiceStore.Close()
 }
 
-func (m *nexusServiceManagerImpl) GetNexusService(
+func (m *nexusServiceManagerImpl) GetNexusIncomingService(
 	ctx context.Context,
-	request *GetNexusServiceRequest,
-) (*GetNexusServiceResponse, error) {
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.GetNexusService() is unimplemented")
+	request *GetNexusIncomingServiceRequest,
+) (*GetNexusIncomingServiceResponse, error) {
+	return nil, serviceerror.NewUnimplemented("NexusServiceManager.GetNexusIncomingService() is unimplemented")
 }
 
-func (m *nexusServiceManagerImpl) ListNexusServices(
+func (m *nexusServiceManagerImpl) ListNexusIncomingServices(
 	ctx context.Context,
-	request *ListNexusServicesRequest,
-) (*ListNexusServicesResponse, error) {
-	return nil, serviceerror.NewUnimplemented("NexusServiceManager.ListNexusServices() is unimplemented")
+	request *ListNexusIncomingServicesRequest,
+) (*ListNexusIncomingServicesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("NexusServiceManager.ListNexusIncomingServices() is unimplemented")
 }
 
-func (m *nexusServiceManagerImpl) CreateOrUpdateNexusService(
+func (m *nexusServiceManagerImpl) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *CreateOrUpdateNexusServiceRequest,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.CreateOrUpdateNexusService() is unimplemented")
+	return serviceerror.NewUnimplemented("NexusServiceManager.CreateOrUpdateNexusIncomingService() is unimplemented")
 }
 
-func (m *nexusServiceManagerImpl) DeleteNexusService(
+func (m *nexusServiceManagerImpl) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *DeleteNexusServiceRequest,
+	request *DeleteNexusIncomingServiceRequest,
 ) error {
-	return serviceerror.NewUnimplemented("NexusServiceManager.DeleteNexusService() is unimplemented")
+	return serviceerror.NewUnimplemented("NexusServiceManager.DeleteNexusIncomingService() is unimplemented")
 }

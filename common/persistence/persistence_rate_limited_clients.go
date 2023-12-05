@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -322,7 +323,7 @@ func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
 	ctx context.Context,
 	request *RegisterHistoryTaskReaderRequest,
 ) error {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
 	return p.persistence.RegisterHistoryTaskReader(ctx, request)
 }
 
@@ -330,7 +331,7 @@ func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
 ) {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
 	p.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
@@ -338,7 +339,7 @@ func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
 ) {
-	// hint methods don't actually hint DB, so don't go through persistence rate limiter
+	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
 	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
@@ -1074,44 +1075,44 @@ func (p *nexusServiceRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) GetNexusService(
+func (p *nexusServiceRateLimitedPersistenceClient) GetNexusIncomingService(
 	ctx context.Context,
-	request *GetNexusServiceRequest,
-) (*GetNexusServiceResponse, error) {
-	if ok := allow(ctx, "GetNexusService", CallerSegmentMissing, p.rateLimiter); !ok {
+	request *GetNexusIncomingServiceRequest,
+) (*GetNexusIncomingServiceResponse, error) {
+	if ok := allow(ctx, "GetNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.GetNexusService(ctx, request)
+	return p.persistence.GetNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) ListNexusServices(
+func (p *nexusServiceRateLimitedPersistenceClient) ListNexusIncomingServices(
 	ctx context.Context,
-	request *ListNexusServicesRequest,
-) (*ListNexusServicesResponse, error) {
-	if ok := allow(ctx, "ListNexusServices", CallerSegmentMissing, p.rateLimiter); !ok {
+	request *ListNexusIncomingServicesRequest,
+) (*ListNexusIncomingServicesResponse, error) {
+	if ok := allow(ctx, "ListNexusIncomingServices", CallerSegmentMissing, p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.ListNexusServices(ctx, request)
+	return p.persistence.ListNexusIncomingServices(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) CreateOrUpdateNexusService(
+func (p *nexusServiceRateLimitedPersistenceClient) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *CreateOrUpdateNexusServiceRequest,
+	request *CreateOrUpdateNexusIncomingServiceRequest,
 ) error {
-	if ok := allow(ctx, "CreateOrUpdateNexusService", CallerSegmentMissing, p.rateLimiter); !ok {
+	if ok := allow(ctx, "CreateOrUpdateNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return p.persistence.CreateOrUpdateNexusService(ctx, request)
+	return p.persistence.CreateOrUpdateNexusIncomingService(ctx, request)
 }
 
-func (p *nexusServiceRateLimitedPersistenceClient) DeleteNexusService(
+func (p *nexusServiceRateLimitedPersistenceClient) DeleteNexusIncomingService(
 	ctx context.Context,
-	request *DeleteNexusServiceRequest,
+	request *DeleteNexusIncomingServiceRequest,
 ) error {
-	if ok := allow(ctx, "DeleteNexusService", CallerSegmentMissing, p.rateLimiter); !ok {
+	if ok := allow(ctx, "DeleteNexusIncomingService", CallerSegmentMissing, p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return p.persistence.DeleteNexusService(ctx, request)
+	return p.persistence.DeleteNexusIncomingService(ctx, request)
 }
 
 func allow(
@@ -1132,7 +1133,7 @@ func allow(
 }
 
 // TODO: change the value returned so it can also be used by
-// persistence metrics client. For now, it's only used by rate
+// incomingServiceStore metrics client. For now, it's only used by rate
 // limit client, and we don't really care about the actual value
 // returned, as long as they are different from each task category.
 func ConstructHistoryTaskAPI(

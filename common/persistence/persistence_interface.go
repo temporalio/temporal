@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/incomingServiceStore=data_interfaces.go
 
 package persistence
 
@@ -47,7 +47,7 @@ const (
 type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
-	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
+	// The intention is to let different incomingServiceStore implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
@@ -132,7 +132,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
+		// Hints for incomingServiceStore implementaion regarding hisotry task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -188,13 +188,13 @@ type (
 	}
 
 	// TODO: document me
-	NexusServiceStore interface {
+	NexusIncomingServiceStore interface {
 		Closeable
 		GetName() string
-		GetNexusService(ctx context.Context, name string) (*InternalGetNexusServiceResponse, error)
-		ListNexusServices(ctx context.Context, req *InternalListNexusServicesRequest) (*InternalListNexusServicesResponse, error)
-		CreateOrUpdateNexusService(ctx context.Context, req *InternalCreateOrUpdateNexusServiceRequest) error
-		DeleteNexusService(ctx context.Context, name string) error
+		GetNexusIncomingService(ctx context.Context, name string) (*InternalGetNexusIncomingServiceResponse, error)
+		ListNexusIncomingServices(ctx context.Context, req *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, req *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		DeleteNexusIncomingService(ctx context.Context, name string) error
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -342,7 +342,7 @@ type (
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
-	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
+	// InternalCreateWorkflowExecutionResponse is the response from incomingServiceStore for create new workflow execution
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
@@ -634,7 +634,7 @@ type (
 	}
 
 	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
-	// Only used by persistence layer
+	// Only used by incomingServiceStore layer
 	InternalGetAllHistoryTreeBranchesResponse struct {
 		// pagination token
 		NextPageToken []byte
@@ -651,7 +651,7 @@ type (
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
-	// Only used by persistence layer
+	// Only used by incomingServiceStore layer
 	InternalGetHistoryTreeResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
@@ -741,22 +741,22 @@ type (
 	}
 
 	// TODO: document me
-	InternalGetNexusServiceResponse struct {
+	InternalGetNexusIncomingServiceResponse struct {
 	}
 
 	// TODO: document me
-	InternalListNexusServicesRequest struct {
+	InternalListNexusIncomingServicesRequest struct {
 		PageSize     int32
 		PageToken    []byte
 		TableVersion int64
 	}
 
 	// TODO: document me
-	InternalListNexusServicesResponse struct {
+	InternalListNexusIncomingServicesResponse struct {
 	}
 
 	// TODO: document me
-	InternalCreateOrUpdateNexusServiceRequest struct {
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we

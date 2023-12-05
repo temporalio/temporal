@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -43,7 +44,7 @@ type (
 func NewNexusServiceStore(
 	session gocql.Session,
 	logger log.Logger,
-) p.NexusServiceStore {
+) p.NexusIncomingServiceStore {
 	return &NexusServiceStore{
 		session: session,
 		logger:  logger,
@@ -60,30 +61,30 @@ func (s *NexusServiceStore) Close() {
 	}
 }
 
-func (s *NexusServiceStore) GetNexusService(
+func (s *NexusServiceStore) GetNexusIncomingService(
 	ctx context.Context,
 	name string,
-) (*p.InternalGetNexusServiceResponse, error) {
-	return nil, serviceerror.NewUnimplemented("Cassandra GetNexusService is not implemented")
+) (*p.InternalGetNexusIncomingServiceResponse, error) {
+	return nil, serviceerror.NewUnimplemented("Cassandra GetNexusIncomingService is not implemented")
 }
 
-func (s *NexusServiceStore) ListNexusServices(
+func (s *NexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
-	request *p.InternalListNexusServicesRequest,
-) (*p.InternalListNexusServicesResponse, error) {
-	return nil, serviceerror.NewUnimplemented("Cassandra ListNexusServices is not implemented")
+	request *p.InternalListNexusIncomingServicesRequest,
+) (*p.InternalListNexusIncomingServicesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("Cassandra ListNexusIncomingServices is not implemented")
 }
 
-func (s *NexusServiceStore) CreateOrUpdateNexusService(
+func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalCreateOrUpdateNexusServiceRequest,
+	request *p.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
-	return serviceerror.NewUnimplemented("Cassandra CreateOrUpdateNexusService is not implemented")
+	return serviceerror.NewUnimplemented("Cassandra CreateOrUpdateNexusIncomingService is not implemented")
 }
 
-func (s *NexusServiceStore) DeleteNexusService(
+func (s *NexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
 	name string,
 ) error {
-	return serviceerror.NewUnimplemented("Cassandra DeleteNexusService is not implemented")
+	return serviceerror.NewUnimplemented("Cassandra DeleteNexusIncomingService is not implemented")
 }

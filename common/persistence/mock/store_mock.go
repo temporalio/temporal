@@ -1384,7 +1384,7 @@ func (mr *MockQueueMockRecorder) UpdateDLQAckLevel(ctx, metadata interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQAckLevel", reflect.TypeOf((*MockQueue)(nil).UpdateDLQAckLevel), ctx, metadata)
 }
 
-// MockNexusServiceStore is a mock of NexusServiceStore interface.
+// MockNexusServiceStore is a mock of NexusIncomingServiceStore interface.
 type MockNexusServiceStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockNexusServiceStoreMockRecorder
@@ -1420,9 +1420,9 @@ func (mr *MockNexusServiceStoreMockRecorder) Close() *gomock.Call {
 }
 
 // CreateOrUpdateNexusService mocks base method.
-func (m *MockNexusServiceStore) CreateOrUpdateNexusService(ctx context.Context, req *persistence.InternalCreateOrUpdateNexusServiceRequest) error {
+func (m *MockNexusServiceStore) CreateOrUpdateNexusIncomingService(ctx context.Context, req *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdateNexusService", ctx, req)
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", ctx, req)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
@@ -1430,13 +1430,13 @@ func (m *MockNexusServiceStore) CreateOrUpdateNexusService(ctx context.Context, 
 // CreateOrUpdateNexusService indicates an expected call of CreateOrUpdateNexusService.
 func (mr *MockNexusServiceStoreMockRecorder) CreateOrUpdateNexusService(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusService", reflect.TypeOf((*MockNexusServiceStore)(nil).CreateOrUpdateNexusService), ctx, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).CreateOrUpdateNexusIncomingService), ctx, req)
 }
 
 // DeleteNexusService mocks base method.
-func (m *MockNexusServiceStore) DeleteNexusService(ctx context.Context, name string) error {
+func (m *MockNexusServiceStore) DeleteNexusIncomingService(ctx context.Context, name string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNexusService", ctx, name)
+	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, name)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
@@ -1444,7 +1444,7 @@ func (m *MockNexusServiceStore) DeleteNexusService(ctx context.Context, name str
 // DeleteNexusService indicates an expected call of DeleteNexusService.
 func (mr *MockNexusServiceStoreMockRecorder) DeleteNexusService(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusService", reflect.TypeOf((*MockNexusServiceStore)(nil).DeleteNexusService), ctx, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).DeleteNexusIncomingService), ctx, name)
 }
 
 // GetName mocks base method.
@@ -1462,10 +1462,10 @@ func (mr *MockNexusServiceStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // GetNexusService mocks base method.
-func (m *MockNexusServiceStore) GetNexusService(ctx context.Context, name string) (*persistence.InternalGetNexusServiceResponse, error) {
+func (m *MockNexusServiceStore) GetNexusIncomingService(ctx context.Context, name string) (*persistence.InternalGetNexusIncomingServiceResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusService", ctx, name)
-	ret0, _ := ret[0].(*persistence.InternalGetNexusServiceResponse)
+	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, name)
+	ret0, _ := ret[0].(*persistence.InternalGetNexusIncomingServiceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1473,14 +1473,14 @@ func (m *MockNexusServiceStore) GetNexusService(ctx context.Context, name string
 // GetNexusService indicates an expected call of GetNexusService.
 func (mr *MockNexusServiceStoreMockRecorder) GetNexusService(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusService", reflect.TypeOf((*MockNexusServiceStore)(nil).GetNexusService), ctx, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).GetNexusIncomingService), ctx, name)
 }
 
 // ListNexusServices mocks base method.
-func (m *MockNexusServiceStore) ListNexusServices(ctx context.Context, req *persistence.InternalListNexusServicesRequest) (*persistence.InternalListNexusServicesResponse, error) {
+func (m *MockNexusServiceStore) ListNexusIncomingServices(ctx context.Context, req *persistence.InternalListNexusIncomingServicesRequest) (*persistence.InternalListNexusIncomingServicesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNexusServices", ctx, req)
-	ret0, _ := ret[0].(*persistence.InternalListNexusServicesResponse)
+	ret := m.ctrl.Call(m, "ListNexusIncomingServices", ctx, req)
+	ret0, _ := ret[0].(*persistence.InternalListNexusIncomingServicesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1488,7 +1488,7 @@ func (m *MockNexusServiceStore) ListNexusServices(ctx context.Context, req *pers
 // ListNexusServices indicates an expected call of ListNexusServices.
 func (mr *MockNexusServiceStoreMockRecorder) ListNexusServices(ctx, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusServices", reflect.TypeOf((*MockNexusServiceStore)(nil).ListNexusServices), ctx, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNexusIncomingServices", reflect.TypeOf((*MockNexusServiceStore)(nil).ListNexusIncomingServices), ctx, req)
 }
 
 // MockQueueV2 is a mock of QueueV2 interface.
