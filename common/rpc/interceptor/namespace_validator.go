@@ -164,6 +164,14 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 		if request.Namespace == "" {
 			request.Namespace = namespaceEntry.Name().String()
 		}
+	case *workflowservice.RespondNexusTaskCompletedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
+	case *workflowservice.RespondNexusTaskFailedRequest:
+		if request.Namespace == "" {
+			request.Namespace = namespaceEntry.Name().String()
+		}
 	}
 }
 

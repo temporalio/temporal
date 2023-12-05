@@ -47,10 +47,8 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -3730,16 +3728,158 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}, nil
 }
 
-func (*WorkflowHandler) PollNexusTaskQueue(context.Context, *workflowservice.PollNexusTaskQueueRequest) (*workflowservice.PollNexusTaskQueueResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *workflowservice.PollNexusTaskQueueRequest) (_ *workflowservice.PollNexusTaskQueueResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	callTime := time.Now().UTC()
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	wh.logger.Debug("Received PollNexusTaskQueue")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollNexusTaskQueue", wh.throttledLogger); err != nil {
+		return nil, err
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	if err := wh.validateTaskQueue(request.TaskQueue, namespaceName); err != nil {
+		return nil, err
+	}
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
+	if err := wh.validateVersioningInfo(request.Namespace, request.WorkerVersionCapabilities, request.TaskQueue); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollNexusTaskQueueResponse{}, nil
+	}
+
+	pollerID := uuid.New()
+	matchingResponse, err := wh.matchingClient.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		Request:     request,
+	})
+	if err != nil {
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_NEXUS, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			return &workflowservice.PollNexusTaskQueueResponse{}, nil
+		}
+
+		// These errors are expected from some versioning situations. We should not log them, it'd be too noisy.
+		var newerBuild *serviceerror.NewerBuildExists      // expected when versioned poller is superceded
+		var failedPrecond *serviceerror.FailedPrecondition // expected when user data is disabled
+		if errors.As(err, &newerBuild) || errors.As(err, &failedPrecond) {
+			return nil, err
+		}
+
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
+
+		return nil, err
+	}
+
+	return matchingResponse.GetResponse(), nil
 }
 
-func (*WorkflowHandler) RespondNexusTaskCompleted(context.Context, *workflowservice.RespondNexusTaskCompletedRequest) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
+	if err != nil {
+		return nil, err
+	}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskCompleted(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
-func (*WorkflowHandler) RespondNexusTaskFailed(context.Context, *workflowservice.RespondNexusTaskFailedRequest) (*workflowservice.RespondNexusTaskFailedResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "unimplemented")
+func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *workflowservice.RespondNexusTaskFailedRequest) (_ *workflowservice.RespondNexusTaskFailedResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
+	// the token as it is a more stable identifier.
+	// There's no need to validate that the namespace in the token and the request match,
+	// NamespaceValidatorInterceptor does this for us.
+	tt, err := wh.tokenSerializer.DeserializeNexusTaskToken(request.GetTaskToken())
+	if err != nil {
+		return nil, err
+	}
+	if tt.GetTaskQueue() == "" || tt.GetTaskId() == "" {
+		return nil, errInvalidTaskToken
+	}
+	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
+	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
+	// good reason to fail at this point.
+
+	matchingRequest := &matchingservice.RespondNexusTaskFailedRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: tt.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		TaskId:  tt.GetTaskId(),
+		Request: request,
+	}
+
+	_, err = wh.matchingClient.RespondNexusTaskFailed(ctx, matchingRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RespondNexusTaskFailedResponse{}, nil
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {

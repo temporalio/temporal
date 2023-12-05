@@ -78,10 +78,12 @@ github.com/gocql/gocql
 github.com/gocql/gocql/internal/lru
 github.com/gocql/gocql/internal/murmur
 github.com/gocql/gocql/internal/streams
+github.com/gogo/googleapis/google/rpc
 github.com/gogo/protobuf/jsonpb
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/types
+github.com/gogo/status
 github.com/golang-jwt/jwt/v4
 github.com/golang/groupcache/lru
 github.com/golang/mock/gomock
@@ -127,6 +129,7 @@ github.com/googleapis/gax-go/v2/apierror
 github.com/googleapis/gax-go/v2/apierror/internal/proto
 github.com/googleapis/gax-go/v2/callctx
 github.com/googleapis/gax-go/v2/internal
+github.com/gorilla/mux
 github.com/grpc-ecosystem/go-grpc-middleware/retry
 github.com/grpc-ecosystem/go-grpc-middleware/util/backoffutils
 github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
@@ -162,6 +165,7 @@ github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 github.com/mattn/go-isatty
 github.com/matttproud/golang_protobuf_extensions/pbutil
+github.com/nexus-rpc/sdk-go/nexus
 github.com/olivere/elastic/v7
 github.com/olivere/elastic/v7/aws/v4
 github.com/olivere/elastic/v7/config

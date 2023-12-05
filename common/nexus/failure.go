@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2023 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,20 +20,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package nexus
 
 import (
-	tokenspb "go.temporal.io/server/api/token/v1"
+	"encoding/json"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
 )
 
-type (
-	// TaskTokenSerializer serializes task tokens
-	TaskTokenSerializer interface {
-		Serialize(token *tokenspb.Task) ([]byte, error)
-		Deserialize(data []byte) (*tokenspb.Task, error)
-		SerializeQueryTaskToken(token *tokenspb.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error)
-		SerializeNexusTaskToken(token *tokenspb.NexusTask) ([]byte, error)
-		DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error)
+// ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
+// Always returns a non-nil value.
+func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
+	var details json.RawMessage
+	if failure.GetDetails() != nil {
+		b, err := json.Marshal(failure.Details)
+		// This should never happen, a google.protobuf.Value is always serializable.
+		if err != nil {
+			panic(err)
+		}
+		details = json.RawMessage(b)
 	}
-)
+	return &nexus.Failure{
+		Message:  failure.GetMessage(),
+		Metadata: failure.GetMetadata(),
+		Details:  details,
+	}
+}

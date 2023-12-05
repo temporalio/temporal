@@ -68,6 +68,7 @@ type (
 	clientFunctionalSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
+		// Please never change this to assert.Assertions, tests rely on the fail fast behavior.
 		*require.Assertions
 		FunctionalTestBase
 		sdkClient                 sdkclient.Client
@@ -98,10 +99,13 @@ func (s *clientFunctionalSuite) SetupSuite() {
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
-		dynamicconfig.NumPendingActivitiesLimitError:      s.maxPendingActivities,
-		dynamicconfig.NumPendingCancelRequestsLimitError:  s.maxPendingCancelRequests,
-		dynamicconfig.NumPendingSignalsLimitError:         s.maxPendingSignals,
+		dynamicconfig.NumPendingChildExecutionsLimitError:        s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingActivitiesLimitError:             s.maxPendingActivities,
+		dynamicconfig.NumPendingCancelRequestsLimitError:         s.maxPendingCancelRequests,
+		dynamicconfig.NumPendingSignalsLimitError:                s.maxPendingSignals,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs: true,
+		dynamicconfig.FrontendEnableNexusHTTPHandler:             true,
 	}
 	s.setupSuite("testdata/client_cluster.yaml")
 }

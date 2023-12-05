@@ -185,6 +185,9 @@ type Config struct {
 
 	// AccessHistoryFraction is an interim flag across 2 minor releases and will be removed once fully enabled.
 	AccessHistoryFraction dynamicconfig.FloatPropertyFn
+
+	// EnableNexusHTTPHandler controls whether to register a handler for Nexus HTTP requests.
+	EnableNexusHTTPHandler dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -282,6 +285,8 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
 
 		AccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
+
+		EnableNexusHTTPHandler: dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusHTTPHandler, false),
 	}
 }
 
