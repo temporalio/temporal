@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"io/fs"
 	"path/filepath"
-
 	// In this context md5 is just used for versioning the current schema. It is a weak cryptographic primitive and
 	// should not be used for anything more important (password hashes etc.). Marking it as #nosec because of how it's
 	// being used.

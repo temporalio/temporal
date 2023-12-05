@@ -37,7 +37,7 @@ import (
 
 // Setup sets up schema tables
 func Setup(cli *cli.Context, db DB, logger log.Logger) error {
-	cfg, err := newSetupConfig(cli)
+	cfg, err := newSetupConfig(cli, db)
 	if err != nil {
 		return err
 	}
@@ -46,26 +46,26 @@ func Setup(cli *cli.Context, db DB, logger log.Logger) error {
 
 // Update updates the schema for the specified database
 func Update(cli *cli.Context, db DB, logger log.Logger) error {
-	cfg, err := newUpdateConfig(cli)
+	cfg, err := newUpdateConfig(cli, db)
 	if err != nil {
 		return err
 	}
 	return newUpdateSchemaTask(db, cfg, logger).Run()
 }
 
-func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
+func newUpdateConfig(cli *cli.Context, db DB) (*UpdateConfig, error) {
 	config := new(UpdateConfig)
 	config.SchemaDir = cli.String(CLIOptSchemaDir)
 	config.SchemaName = cli.String(CLIOptSchemaName)
 	config.TargetVersion = cli.String(CLIOptTargetVersion)
 
-	if err := validateUpdateConfig(config); err != nil {
+	if err := validateUpdateConfig(config, db); err != nil {
 		return nil, err
 	}
 	return config, nil
 }
 
-func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
+func newSetupConfig(cli *cli.Context, db DB) (*SetupConfig, error) {
 	config := new(SetupConfig)
 	config.SchemaFilePath = cli.String(CLIOptSchemaFile)
 	config.SchemaName = cli.String(CLIOptSchemaName)
@@ -73,13 +73,13 @@ func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
 	config.DisableVersioning = cli.Bool(CLIOptDisableVersioning)
 	config.Overwrite = cli.Bool(CLIOptOverwrite)
 
-	if err := validateSetupConfig(config); err != nil {
+	if err := validateSetupConfig(config, db); err != nil {
 		return nil, err
 	}
 	return config, nil
 }
 
-func validateSetupConfig(config *SetupConfig) error {
+func validateSetupConfig(config *SetupConfig, db DB) error {
 	if len(config.SchemaFilePath) == 0 && len(config.SchemaName) == 0 && config.DisableVersioning {
 		return NewConfigError("needs either " + flag(CLIOptSchemaFile) + " or " + flag(CLIOptSchemaName))
 	}
@@ -96,9 +96,8 @@ func validateSetupConfig(config *SetupConfig) error {
 		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
 			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
 			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
-			return NewConfigError(flag(CLIOptSchemaName) + " must be one of: " +
-				fmt.Sprintf("%v, %v, or %v", dbschemas.Paths("mysql"),
-					dbschemas.Paths("postgresql"), dbschemas.Paths("cassandra")))
+			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
+				flag(CLIOptSchemaName), validSchemaNames(db.Name())))
 		}
 	}
 	if !config.DisableVersioning {
@@ -111,7 +110,7 @@ func validateSetupConfig(config *SetupConfig) error {
 	return nil
 }
 
-func validateUpdateConfig(config *UpdateConfig) error {
+func validateUpdateConfig(config *UpdateConfig, db DB) error {
 	if len(config.SchemaDir) == 0 && len(config.SchemaName) == 0 {
 		return NewConfigError("missing argument; either" + flag(CLIOptSchemaDir) + " or " +
 			flag(CLIOptSchemaName) + " must be specified")
@@ -124,9 +123,8 @@ func validateUpdateConfig(config *UpdateConfig) error {
 		if !slices.Contains(dbschemas.Paths("mysql"), config.SchemaName) &&
 			!slices.Contains(dbschemas.Paths("postgresql"), config.SchemaName) &&
 			!slices.Contains(dbschemas.Paths("cassandra"), config.SchemaName) {
-			return NewConfigError(flag(CLIOptSchemaName) + " must be one of: " +
-				fmt.Sprintf("%v, %v, or %v", dbschemas.Paths("mysql"),
-					dbschemas.Paths("postgresql"), dbschemas.Paths("cassandra")))
+			return NewConfigError(fmt.Sprintf("%s must be one of: %v",
+				flag(CLIOptSchemaName), validSchemaNames(db.Name())))
 		}
 	}
 	if len(config.TargetVersion) > 0 {
@@ -148,4 +146,11 @@ func schemaFileEnding(schemaName string) string {
 		return ".cql"
 	}
 	return ".sql"
+}
+
+func validSchemaNames(dbName string) []string {
+	if dbName == "sql" {
+		return append(dbschemas.Paths("mysql"), dbschemas.Paths("postgresql")...)
+	}
+	return dbschemas.Paths(dbName)
 }

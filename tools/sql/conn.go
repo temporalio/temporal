@@ -40,6 +40,8 @@ type (
 	}
 )
 
+const dbName = "sql"
+
 var _ schema.DB = (*Connection)(nil)
 
 // NewConnection creates a new connection to database
@@ -122,4 +124,9 @@ func (c *Connection) Close() {
 			panic("cannot close connection")
 		}
 	}
+}
+
+// Name gives the name of the type of db
+func (c *Connection) Name() string {
+	return dbName
 }

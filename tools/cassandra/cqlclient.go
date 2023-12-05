@@ -69,6 +69,7 @@ type (
 const (
 	defaultTimeout = 30 // Timeout in seconds
 	systemKeyspace = "system"
+	dbName         = "cassandra"
 )
 
 const (
@@ -318,4 +319,9 @@ func (client *cqlClient) waitSchemaAgreement() error {
 	ctx, cancel := context.WithTimeout(context.Background(), client.timeout)
 	defer cancel()
 	return client.session.AwaitSchemaAgreement(ctx)
+}
+
+// Name gives the name of the type of db
+func (client *cqlClient) Name() string {
+	return dbName
 }
