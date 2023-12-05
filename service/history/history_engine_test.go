@@ -5827,6 +5827,223 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID(
 	s.NoError(err)
 }
 
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflowID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidRunID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      "runID",
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{},
+		NextPageToken:     []byte{},
+		Size:              0,
+	}, nil)
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   10,
+				NextPageToken:     nil,
+			},
+		})
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_SameStartIDAndEndID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{},
+		NextPageToken:     []byte{},
+		Size:              0,
+	}, nil)
+	resp, err := engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      10,
+				StartEventVersion: 100,
+				EndEventId:        common.EmptyEventID,
+				EndEventVersion:   common.EmptyVersion,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Nil(resp.Response.NextPageToken)
+	s.NoError(err)
+}
+
 func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartAndEnd() {
 	inputStartEventID := int64(1)
 	inputStartVersion := int64(10)

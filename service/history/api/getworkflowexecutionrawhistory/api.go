@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package getworkflowexecutionrawhistoryv2
+package getworkflowexecutionrawhistory
 
 import (
 	"context"
@@ -53,8 +53,12 @@ func Invoke(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
-	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
-) (_ *historyservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
+) (_ *historyservice.GetWorkflowExecutionRawHistoryResponse, retError error) {
+	err := validateGetWorkflowExecutionRawHistoryRequest(request)
+	if err != nil {
+		return nil, err
+	}
 	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -79,7 +83,7 @@ func Invoke(
 			return nil, err
 		}
 
-		targetVersionHistory, err = SetRequestDefaultValueAndGetTargetVersionHistory(
+		targetVersionHistory, err = setRequestDefaultValueAndGetTargetVersionHistory(
 			request,
 			response.GetVersionHistories(),
 		)
@@ -87,7 +91,7 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = api.GeneratePaginationTokenV2Request(request, response.GetVersionHistories())
+		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
 	} else {
 		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
 		if err != nil {
@@ -97,7 +101,7 @@ func Invoke(
 		if versionHistories == nil {
 			return nil, consts.ErrInvalidVersionHistories
 		}
-		targetVersionHistory, err = SetRequestDefaultValueAndGetTargetVersionHistory(
+		targetVersionHistory, err = setRequestDefaultValueAndGetTargetVersionHistory(
 			request,
 			versionHistories,
 		)
@@ -106,23 +110,13 @@ func Invoke(
 		}
 	}
 
-	if err := api.ValidatePaginationTokenV2Request(
+	if err := api.ValidatePaginationToken(
 		request,
 		pageToken,
 	); err != nil {
 		return nil, err
 	}
 
-	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
-		// API is exclusive-exclusive. Return empty response here.
-		return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
-			Response: &adminservice.GetWorkflowExecutionRawHistoryV2Response{
-				HistoryBatches: []*commonpb.DataBlob{},
-				NextPageToken:  nil, // no further pagination
-				VersionHistory: targetVersionHistory,
-			},
-		}, nil
-	}
 	pageSize := int(req.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
 		ns.ID().String(),
@@ -131,10 +125,10 @@ func Invoke(
 	)
 	rawHistoryResponse, err := shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
-		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
-		// ReadRawHistoryBranch is inclusive exclusive.
-		MinEventID:    pageToken.GetStartEventId() + 1,
-		MaxEventID:    pageToken.GetEndEventId(),
+		// GetWorkflowExecutionRawHistory is inclusive/inclusive.
+		// ReadRawHistoryBranch is inclusive/exclusive.
+		MinEventID:    pageToken.GetStartEventId(),
+		MaxEventID:    pageToken.GetEndEventId() + 1,
 		PageSize:      pageSize,
 		NextPageToken: pageToken.PersistenceToken,
 		ShardID:       shardID,
@@ -143,8 +137,8 @@ func Invoke(
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
-			return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
-				Response: &adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			return &historyservice.GetWorkflowExecutionRawHistoryResponse{
+				Response: &adminservice.GetWorkflowExecutionRawHistoryResponse{
 					HistoryBatches: []*commonpb.DataBlob{},
 					NextPageToken:  nil, // no further pagination
 					VersionHistory: targetVersionHistory,
@@ -156,15 +150,15 @@ func Invoke(
 
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
-	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryScope))
 	metricsHandler.Histogram(metrics.HistorySize.Name(), metrics.HistorySize.Unit()).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
-		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
+		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryScope),
 	)
 
 	result :=
-		&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+		&adminservice.GetWorkflowExecutionRawHistoryResponse{
 			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 			VersionHistory: targetVersionHistory,
 			HistoryNodeIds: rawHistoryResponse.NodeIDs,
@@ -178,13 +172,13 @@ func Invoke(
 		}
 	}
 
-	return &historyservice.GetWorkflowExecutionRawHistoryV2Response{
+	return &historyservice.GetWorkflowExecutionRawHistoryResponse{
 		Response: result,
 	}, nil
 }
 
-func validateGetWorkflowExecutionRawHistoryV2Request(
-	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+func validateGetWorkflowExecutionRawHistoryRequest(
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
 ) error {
 
 	req := request.Request
@@ -192,9 +186,7 @@ func validateGetWorkflowExecutionRawHistoryV2Request(
 	if execution.GetWorkflowId() == "" {
 		return consts.ErrWorkflowIDNotSet
 	}
-	// TODO currently, this API is only going to be used by re-send history events
-	// to remote cluster if kafka is lossy again, in the future, this API can be used
-	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
+
 	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
 		return consts.ErrInvalidRunID
 	}
@@ -214,8 +206,8 @@ func validateGetWorkflowExecutionRawHistoryV2Request(
 	return nil
 }
 
-func SetRequestDefaultValueAndGetTargetVersionHistory(
-	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
+func setRequestDefaultValueAndGetTargetVersionHistory(
+	request *historyservice.GetWorkflowExecutionRawHistoryRequest,
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
 
@@ -234,16 +226,14 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if req.GetStartEventId() == common.EmptyVersion || req.GetStartEventVersion() == common.EmptyVersion {
+	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
-		// As the API is exclusive-exclusive, use first event id - 1 here
-		req.StartEventId = common.FirstEventID - 1
+		req.StartEventId = common.FirstEventID
 		req.StartEventVersion = firstItem.GetVersion()
 	}
 	if req.GetEndEventId() == common.EmptyEventID || req.GetEndEventVersion() == common.EmptyVersion {
 		// If end event is not set, get the events until the end event
-		// As the API is exclusive-exclusive, use end event id + 1 here
-		req.EndEventId = lastItem.GetEventId() + 1
+		req.EndEventId = lastItem.GetEventId()
 		req.EndEventVersion = lastItem.GetVersion()
 	}
 
@@ -252,7 +242,7 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 	}
 
 	// get branch based on the end event if end event is defined in the request
-	if req.GetEndEventId() == lastItem.GetEventId()+1 &&
+	if req.GetEndEventId() == lastItem.GetEventId() &&
 		req.GetEndEventVersion() == lastItem.GetVersion() {
 		// this is a special case, target branch remains the same
 	} else {
@@ -271,7 +261,7 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 	startItem := versionhistory.NewVersionHistoryItem(req.GetStartEventId(), req.GetStartEventVersion())
 	// If the request start event is defined. The start event may be on a different branch as current branch.
 	// We need to find the LCA of the start event and the current branch.
-	if req.GetStartEventId() == common.FirstEventID-1 &&
+	if req.GetStartEventId() == common.FirstEventID &&
 		req.GetStartEventVersion() == firstItem.GetVersion() {
 		// this is a special case, start event is on the same branch as target branch
 	} else {

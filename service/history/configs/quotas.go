@@ -90,6 +90,7 @@ var (
 		"StreamWorkflowReplicationMessages":      1,
 		"GetWorkflowExecutionHistory":            1,
 		"GetWorkflowExecutionHistoryReverse":     1,
+		"GetWorkflowExecutionRawHistory":         1,
 		"GetWorkflowExecutionRawHistoryV2":       1,
 		"ForceDeleteWorkflowExecution":           1,
 		"GetDLQTasks":                            1,

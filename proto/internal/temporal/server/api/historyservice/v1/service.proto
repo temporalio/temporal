@@ -317,6 +317,9 @@ service HistoryService {
     rpc GetWorkflowExecutionRawHistoryV2(GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
     }
 
+    rpc GetWorkflowExecutionRawHistory(GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
+    }
+
     rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
     }
 
