@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -94,26 +95,6 @@ func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
 	return tlsInfo.State.VerifiedChains[0][0]
 }
 
-// HeaderGetter is an interface for getting a single header value from a case insensitive key.
-type HeaderGetter interface {
-	Get(string) string
-}
-
-// Wrapper for gRPC metadata that exposes a helper to extract a single metadata value.
-type grpcHeaderGetter struct {
-	metadata metadata.MD
-}
-
-// Get a single value from the underlying gRPC metadata.
-// Returns an empty string if the metadata key is unset.
-func (h grpcHeaderGetter) Get(key string) string {
-	values := h.metadata.Get(key)
-	if len(values) == 0 {
-		return ""
-	}
-	return values[0]
-}
-
 type Interceptor struct {
 	claimMapper         ClaimMapper
 	authorizer          Authorizer
@@ -154,7 +135,7 @@ func (a *Interceptor) Intercept(
 	tlsConnection := TLSInfoFromContext(ctx)
 	md, _ := metadata.FromIncomingContext(ctx)
 
-	authInfo := a.GetAuthInfo(tlsConnection, grpcHeaderGetter{md}, func() string {
+	authInfo := a.GetAuthInfo(tlsConnection, headers.GRPCHeaderGetter{Metadata: md}, func() string {
 		if a.audienceGetter != nil {
 			return a.audienceGetter.Audience(ctx, req, info)
 		}
@@ -194,7 +175,7 @@ func (a *Interceptor) Intercept(
 // GetAuthInfo extracts auth info from TLS info and headers.
 // Returns nil if either the policy's claimMapper or authorizer are nil or when there is no auth information in the
 // provided TLS info or headers.
-func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header HeaderGetter, audienceGetter func() string) *AuthInfo {
+func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header headers.HeaderGetter, audienceGetter func() string) *AuthInfo {
 	if a.claimMapper == nil || a.authorizer == nil {
 		return nil
 	}

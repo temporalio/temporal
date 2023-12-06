@@ -61,9 +61,10 @@ var (
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
-		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
-		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
+		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+		"/temporal.api.operatorservice.v1.OperatorService/DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask":                      {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
@@ -104,13 +105,20 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if hasNamespace {
-		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
-		if len(namespaceName) > ni.maxNamespaceLength() {
-			return nil, errNamespaceTooLong
+		if err := ni.ValidateName(reqWithNamespace.GetNamespace()); err != nil {
+			return nil, err
 		}
 	}
 
 	return handler(ctx, req)
+}
+
+// ValidateName validates a namespace name (currently only a max length check).
+func (ni *NamespaceValidatorInterceptor) ValidateName(ns string) error {
+	if len(ns) > ni.maxNamespaceLength() {
+		return errNamespaceTooLong
+	}
+	return nil
 }
 
 func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
@@ -175,12 +183,7 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 	}
 }
 
-// StateValidationIntercept validates:
-// 1. Namespace is specified in task token if there is a `task_token` field.
-// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
-// 3. Namespace exists.
-// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
-// 5. Namespace is in correct state.
+// StateValidationIntercept runs ValidateState - see docstring for that method.
 func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	ctx context.Context,
 	req interface{},
@@ -192,16 +195,24 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	err = ni.checkNamespaceState(namespaceEntry, info.FullMethod)
-	if err != nil {
-		return nil, err
-	}
-	err = ni.checkReplicationState(namespaceEntry, info.FullMethod)
-	if err != nil {
+	if err := ni.ValidateState(namespaceEntry, info.FullMethod); err != nil {
 		return nil, err
 	}
 
 	return handler(ctx, req)
+}
+
+// ValidateState validates:
+// 1. Namespace is specified in task token if there is a `task_token` field.
+// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
+// 3. Namespace exists.
+// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
+// 5. Namespace is in correct state.
+func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+	if err := ni.checkNamespaceState(namespaceEntry, fullMethod); err != nil {
+		return err
+	}
+	return ni.checkReplicationState(namespaceEntry, fullMethod)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*namespace.Namespace, error) {
@@ -339,9 +350,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := SplitMethodName(fullMethod)
-
-	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
+	allowedStates, allowedStatesDefined := allowedNamespaceStates[fullMethod]
 	if !allowedStatesDefined {
 		allowedStates = defaultAllowedNamespaceStates
 	}
