@@ -920,10 +920,13 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), event.GetEventId(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
-	if !addedResetPoint {
-		return nil
+	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {
+		if err := m.ms.updateBinaryChecksumSearchAttribute(); err != nil {
+			return err
+		}
 	}
-	return m.ms.updateBinaryChecksumSearchAttribute()
+	return nil
+
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
