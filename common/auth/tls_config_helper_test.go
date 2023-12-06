@@ -124,7 +124,7 @@ func Test_NewTLSConfig(t *testing.T) {
 			if tc.cfgErr != "" {
 				assert.ErrorContains(t, err, tc.cfgErr)
 			} else {
-				assert.Nil(t, err)
+				assert.NoErr(t, err)
 			}
 
 			ctrl.Finish()
