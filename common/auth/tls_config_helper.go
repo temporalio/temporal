@@ -151,8 +151,8 @@ func validateTemporalTls(temporalTls *TLS) error {
 
 	certProvided := temporalTls.CertData != "" || temporalTls.CertFile != ""
 	keyProvided := temporalTls.KeyData != "" || temporalTls.KeyFile != ""
-	if certProvided && !keyProvided {
-		return fmt.Errorf("%w: %s", ErrTLSConfig, "keyData or keyFile must be provided")
+	if certProvided != keyProvided {
+		return fmt.Errorf("%w: %s", ErrTLSConfig, "cert or key is missing")
 	}
 
 	if temporalTls.CaData != "" && temporalTls.CaFile != "" {

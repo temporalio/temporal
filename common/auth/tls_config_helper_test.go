@@ -89,7 +89,7 @@ func Test_NewTLSConfig(t *testing.T) {
 				CertData: validBase64Certificate,
 				KeyData:  "",
 			},
-			cfgErr: "unable to config TLS: keyData or keyFile must be provided",
+			cfgErr: "unable to config TLS: cert or key is missing",
 		},
 		"clientCert_duplicate_cert": {
 			cfg: &TLS{
