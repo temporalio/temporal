@@ -124,7 +124,7 @@ func Test_NewTLSConfig(t *testing.T) {
 			if tc.cfgErr != "" {
 				assert.ErrorContains(t, err, tc.cfgErr)
 			} else {
-				assert.NoErr(t, err)
+				assert.NoError(t, err)
 			}
 
 			ctrl.Finish()
@@ -223,7 +223,7 @@ func Test_ConnectToTLSServerWithCA(t *testing.T) {
 			if tc.connectionErr != "" {
 				assert.ErrorContains(t, err, tc.connectionErr)
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				assert.Equal(t, 200, resp.StatusCode)
 			}
 
@@ -324,7 +324,7 @@ func Test_ConnectToTLSServerWithClientCertificate(t *testing.T) {
 			if tc.connectionErr != "" {
 				assert.ErrorContains(t, err, tc.connectionErr)
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				assert.Equal(t, 200, resp.StatusCode)
 			}
 
