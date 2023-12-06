@@ -94,7 +94,6 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetVisibilityManager(),
-		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
 		health.NewServer(),
 		s.mockResource.GetHistoryClient(),
@@ -168,7 +167,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			if tc.getSearchAttributesCalled {
 				s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(tc.indexName)
-				s.mockResource.SearchAttributesProvider.EXPECT().
+				s.mockResource.SearchAttributesManager.EXPECT().
 					GetSearchAttributes(tc.indexName, true).
 					Return(searchattribute.TestNameTypeMap, tc.getSearchAttributesErr)
 			}
@@ -516,7 +515,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_EmptyIndexName() {
 
 	// Elasticsearch is not configured
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
@@ -531,12 +530,12 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_Elasticsearch() {
 	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true)
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), testIndexName).Return(map[string]string{"col": "type"}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestNameTypeMap, nil)
 	resp, err := handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.NameTypeMap{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
 	s.Error(err)
 	s.Nil(resp)
@@ -562,7 +561,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 		).
 		AnyTimes()
 
-	s.mockResource.SearchAttributesProvider.EXPECT().
+	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
 		Return(searchattribute.TestNameTypeMap, nil)
 	resp, err := handler.ListSearchAttributes(
@@ -572,7 +571,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes_SQL() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockResource.SearchAttributesProvider.EXPECT().
+	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
 		Return(searchattribute.NameTypeMap{}, errors.New("random error"))
 	resp, err = handler.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{})
@@ -614,7 +613,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_EmptyIndexName() {
 	}
 
 	// Elasticsearch is not configured
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	testCases2 := []test{
 		{
 			Name: "reserved search attribute (empty index)",
@@ -677,7 +676,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_Elasticsearch() {
 	// Configure Elasticsearch: add advanced visibility store config with index name.
 	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesManager.EXPECT().GetSearchAttributes(testIndexName, true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
@@ -704,7 +703,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes_SQL() {
 
 	s.mockResource.VisibilityManager.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false).AnyTimes()
 	s.mockResource.VisibilityManager.EXPECT().GetIndexName().Return(testIndexName).AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().
+	s.mockResource.SearchAttributesManager.EXPECT().
 		GetSearchAttributes(testIndexName, true).
 		Return(searchattribute.TestNameTypeMap, nil).
 		AnyTimes()

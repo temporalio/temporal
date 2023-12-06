@@ -22,19 +22,51 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package schema
 
 import (
-	"os"
+	"embed"
+	"io/fs"
+	"path/filepath"
 
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
-	"go.temporal.io/server/tools/sql"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
-func main() {
-	if err := sql.RunTool(os.Args); err != nil {
-		os.Exit(1)
+//go:embed *
+var assets embed.FS
+
+// Assets returns a file system with the contents of the schema directory
+func Assets() fs.FS {
+	return assets
+}
+
+// PathsByDir returns a list of paths to directories within the schema subdirectory that have versioned schemas in them
+func PathsByDir(dbSubDir string) []string {
+	logger := log.NewCLILogger()
+	efs := Assets()
+	dirs := make([]string, 0)
+	err := fs.WalkDir(efs, dbSubDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "versioned" {
+				dirs = append(dirs, filepath.Dir(path))
+				return fs.SkipDir
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error("error walking embedded schema file system tree, could not generate valid paths", tag.Error(err))
 	}
+	return dirs
+}
+
+func PathsByDB(dbName string) []string {
+	if dbName == "sql" {
+		return append(PathsByDir("mysql"), PathsByDir("postgresql")...)
+	}
+	return PathsByDir(dbName)
 }

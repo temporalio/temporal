@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
+func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	id := "functional-heartbeat-test"
 	wt := "functional-heartbeat-test-type"
 	tl := "functional-heartbeat-test-taskqueue"
@@ -181,7 +181,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 }
 
-func (s *functionalSuite) TestActivityRetry() {
+func (s *FunctionalSuite) TestActivityRetry() {
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -394,7 +394,7 @@ func (s *functionalSuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
-func (s *functionalSuite) TestActivityRetry_Infinite() {
+func (s *FunctionalSuite) TestActivityRetry_Infinite() {
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -499,7 +499,7 @@ func (s *functionalSuite) TestActivityRetry_Infinite() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
+func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	id := "functional-heartbeat-timeout-test"
 	wt := "functional-heartbeat-timeout-test-type"
 	tl := "functional-heartbeat-timeout-test-taskqueue"
@@ -603,7 +603,7 @@ func (s *functionalSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
+func (s *FunctionalSuite) TestTryActivityCancellationFromWorkflow() {
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -748,7 +748,7 @@ func (s *functionalSuite) TestTryActivityCancellationFromWorkflow() {
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
-func (s *functionalSuite) TestActivityCancellationNotStarted() {
+func (s *FunctionalSuite) TestActivityCancellationNotStarted() {
 	id := "functional-activity-notstarted-cancellation-test"
 	wt := "functional-activity-notstarted-cancellation-test-type"
 	tl := "functional-activity-notstarted-cancellation-test-taskqueue"
@@ -871,7 +871,7 @@ func (s *functionalSuite) TestActivityCancellationNotStarted() {
 	s.True(err == nil || err == errNoTasks)
 }
 
-func (s *clientFunctionalSuite) TestActivityHeartbeatDetailsDuringRetry() {
+func (s *ClientFunctionalSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
 	// 1. Start workflow with single activity
 	// 2. First invocation of activity sets heartbeat details and times out.

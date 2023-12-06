@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestWorkflowTimeout() {
+func (s *FunctionalSuite) TestWorkflowTimeout() {
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -129,7 +129,7 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *functionalSuite) TestWorkflowTaskFailed() {
+func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -326,7 +326,7 @@ func (s *functionalSuite) TestWorkflowTaskFailed() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, workflowCompletedEvent.GetEventType())
 }
 
-func (s *functionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"

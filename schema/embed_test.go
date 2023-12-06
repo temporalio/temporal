@@ -22,19 +22,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package schema
 
 import (
-	"os"
+	"testing"
 
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
-	"go.temporal.io/server/tools/sql"
+	"github.com/stretchr/testify/require"
 )
 
-func main() {
-	if err := sql.RunTool(os.Args); err != nil {
-		os.Exit(1)
+func TestSchemaDirs(t *testing.T) {
+	dirs := PathsByDir("cassandra")
+	requireContains(t, []string{
+		"cassandra/temporal",
+		"cassandra/visibility",
+	}, dirs)
+
+	dirs = PathsByDir("mysql")
+	requireContains(t, []string{
+		"mysql/v57/temporal",
+		"mysql/v57/visibility",
+		"mysql/v8/temporal",
+		"mysql/v8/visibility",
+	}, dirs)
+
+	dirs = PathsByDir("postgresql")
+	requireContains(t, []string{
+		"postgresql/v12/temporal",
+		"postgresql/v12/visibility",
+		"postgresql/v96/temporal",
+		"postgresql/v96/visibility",
+	}, dirs)
+}
+
+func requireContains(t *testing.T, expected []string, actual []string) {
+	for _, v := range expected {
+		require.Contains(t, actual, v)
 	}
 }
