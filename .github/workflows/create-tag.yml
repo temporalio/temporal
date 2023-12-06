@@ -17,6 +17,9 @@ on:
         description: "Base tag to generate commit list for release notes"
         required: false
 
+permissions:
+  contents: write
+
 jobs:
   create-tag:
     name: "Create a tag"
@@ -27,30 +30,19 @@ jobs:
         shell: bash
 
     steps:
-      - name: Generate a token
-        id: generate_token
-        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
-        with:
-          app_id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
-          private_key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          token: ${{ steps.generate_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
           fetch-tags: true
 
       - name: Set up Github credentials
-        env:
-          CURRENT_REPO: ${{ github.repository }}
-          TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           git config --local user.name 'Temporal Data'
           git config --local user.email 'commander-data@temporal.io'
-          git remote set-url origin "https://x-access-token:$TOKEN@github.com/$CURRENT_REPO"
 
       - name: Get current version
         id: get_current_version
@@ -86,8 +78,7 @@ jobs:
       - name: Create draft release notes
         if: ${{ github.event.inputs.release_notes }}
         env:
-          CURRENT_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE_TAG: ${{ github.event.inputs.base_tag }}
           TAG: 'v${{ github.event.inputs.tag}}'
         run: |
@@ -116,5 +107,5 @@ jobs:
           [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
           EOF
 
-          gh repo set-default $CURRENT_REPO
+          gh repo set-default ${{ github.repository }}
           gh release create "$TAG" --verify-tag --draft --title "$TAG" -F $TEMPFILE
