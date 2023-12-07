@@ -52,6 +52,8 @@ type (
 		NewQueueV2() (p.QueueV2, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
+		// NewNexusServiceStore returns a new nexus service store
+		NewNexusServiceStore() (p.NexusServiceStore, error)
 	}
 
 	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside

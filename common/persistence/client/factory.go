@@ -26,6 +26,7 @@ package client
 
 import (
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -60,6 +61,8 @@ type (
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 		// NewHistoryTaskQueueManager returns a new manager for history task queues
 		NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, error)
+		// NewNexusServiceManager returns a new manager for nexus services
+		NewNexusServiceManager() (p.NexusServiceManager, error)
 	}
 
 	factoryImpl struct {
@@ -220,6 +223,23 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 		return nil, err
 	}
 	return p.NewHistoryTaskQueueManager(q), nil
+}
+
+func (f *factoryImpl) NewNexusServiceManager() (p.NexusServiceManager, error) {
+	store, err := f.dataStoreFactory.NewNexusServiceStore()
+	if err != nil {
+		return nil, err
+	}
+
+	result := p.NewNexusServiceManager(store)
+	if f.ratelimiter != nil {
+		result = p.NewNexusServicePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
+	}
+	if f.metricsHandler != nil && f.healthSignals != nil {
+		result = p.NewNexusServicePersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger)
+	}
+	result = p.NewNexusServicePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
+	return result, nil
 }
 
 // Close closes this factory
