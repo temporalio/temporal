@@ -1420,31 +1420,31 @@ func (mr *MockNexusServiceStoreMockRecorder) Close() *gomock.Call {
 }
 
 // CreateOrUpdateNexusIncomingService mocks base method.
-func (m *MockNexusServiceStore) CreateOrUpdateNexusIncomingService(ctx context.Context, req *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest) error {
+func (m *MockNexusServiceStore) CreateOrUpdateNexusIncomingService(ctx context.Context, request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", ctx, req)
+	ret := m.ctrl.Call(m, "CreateOrUpdateNexusIncomingService", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateOrUpdateNexusIncomingService indicates an expected call of CreateOrUpdateNexusIncomingService.
-func (mr *MockNexusServiceStoreMockRecorder) CreateOrUpdateNexusIncomingService(ctx, req interface{}) *gomock.Call {
+func (mr *MockNexusServiceStoreMockRecorder) CreateOrUpdateNexusIncomingService(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).CreateOrUpdateNexusIncomingService), ctx, req)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).CreateOrUpdateNexusIncomingService), ctx, request)
 }
 
 // DeleteNexusIncomingService mocks base method.
-func (m *MockNexusServiceStore) DeleteNexusIncomingService(ctx context.Context, name string) error {
+func (m *MockNexusServiceStore) DeleteNexusIncomingService(ctx context.Context, serviceID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, name)
+	ret := m.ctrl.Call(m, "DeleteNexusIncomingService", ctx, serviceID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteNexusIncomingService indicates an expected call of DeleteNexusIncomingService.
-func (mr *MockNexusServiceStoreMockRecorder) DeleteNexusIncomingService(ctx, name interface{}) *gomock.Call {
+func (mr *MockNexusServiceStoreMockRecorder) DeleteNexusIncomingService(ctx, serviceID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).DeleteNexusIncomingService), ctx, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).DeleteNexusIncomingService), ctx, serviceID)
 }
 
 // GetName mocks base method.
@@ -1462,18 +1462,18 @@ func (mr *MockNexusServiceStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // GetNexusIncomingService mocks base method.
-func (m *MockNexusServiceStore) GetNexusIncomingService(ctx context.Context, name string) (*persistence.InternalGetNexusIncomingServiceResponse, error) {
+func (m *MockNexusServiceStore) GetNexusIncomingService(ctx context.Context, serviceID string) (*persistence.InternalNexusIncomingService, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, name)
-	ret0, _ := ret[0].(*persistence.InternalGetNexusIncomingServiceResponse)
+	ret := m.ctrl.Call(m, "GetNexusIncomingService", ctx, serviceID)
+	ret0, _ := ret[0].(*persistence.InternalNexusIncomingService)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNexusIncomingService indicates an expected call of GetNexusIncomingService.
-func (mr *MockNexusServiceStoreMockRecorder) GetNexusIncomingService(ctx, name interface{}) *gomock.Call {
+func (mr *MockNexusServiceStoreMockRecorder) GetNexusIncomingService(ctx, serviceID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).GetNexusIncomingService), ctx, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusIncomingService", reflect.TypeOf((*MockNexusServiceStore)(nil).GetNexusIncomingService), ctx, serviceID)
 }
 
 // ListNexusIncomingServices mocks base method.

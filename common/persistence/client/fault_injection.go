@@ -1275,7 +1275,7 @@ func (n *FaultInjectionNexusServiceStore) Close() {
 func (n *FaultInjectionNexusServiceStore) GetNexusIncomingService(
 	ctx context.Context,
 	name string,
-) (*persistence.InternalGetNexusIncomingServiceResponse, error) {
+) (*persistence.InternalNexusIncomingService, error) {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}

@@ -191,10 +191,10 @@ type (
 	NexusServiceStore interface {
 		Closeable
 		GetName() string
-		GetNexusIncomingService(ctx context.Context, name string) (*InternalGetNexusIncomingServiceResponse, error)
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		GetNexusIncomingService(ctx context.Context, serviceID string) (*InternalNexusIncomingService, error)
 		ListNexusIncomingServices(ctx context.Context, req *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
-		CreateOrUpdateNexusIncomingService(ctx context.Context, req *InternalCreateOrUpdateNexusIncomingServiceRequest) error
-		DeleteNexusIncomingService(ctx context.Context, name string) error
+		DeleteNexusIncomingService(ctx context.Context, serviceID string) error
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -740,23 +740,32 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// InternalGetNexusIncomingServiceResponse is the response to GetNexusIncomingService
-	InternalGetNexusIncomingServiceResponse struct {
+	// InternalNexusIncomingService is the internal representation of an incoming Nexus service
+	InternalNexusIncomingService struct {
+		ServiceName   string
+		NamespaceID   string
+		TaskQueueName string
+		Metadata      *commonpb.DataBlob
+		Version       int64
+	}
+
+	// InternalCreateOrUpdateNexusIncomingServiceRequest is the request to CreateNexusIncomingService
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		ServiceID string
+		Service   InternalNexusIncomingService
 	}
 
 	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	InternalListNexusIncomingServicesRequest struct {
-		PageSize     int32
-		PageToken    []byte
-		TableVersion int64
+		PageSize      int
+		NextPageToken []byte
+		TableVersion  int64
 	}
 
 	// InternalListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	InternalListNexusIncomingServicesResponse struct {
-	}
-
-	// InternalCreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
-	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		NextPageToken []byte
+		Services      []InternalNexusIncomingService
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
