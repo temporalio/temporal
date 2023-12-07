@@ -529,7 +529,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
-// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
@@ -542,7 +542,7 @@ func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 }
 
 // ReadHistoryBranch returns history node data for a branch
-// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
@@ -555,7 +555,7 @@ func (m *executionManagerImpl) ReadHistoryBranch(
 }
 
 // ReadRawHistoryBranch returns raw history binary data for a branch
-// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 // NOTE: this API should only be used by 3+DC
 func (m *executionManagerImpl) ReadRawHistoryBranch(
 	ctx context.Context,
@@ -581,7 +581,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 }
 
 // ReadHistoryBranchReverse returns history node data for a branch
-// Pagination is implemented here, the actual minNodeID passing to incomingServiceStore layer is calculated along with token's LastNodeID
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchReverse(
 	ctx context.Context,
 	request *ReadHistoryBranchReverseRequest,

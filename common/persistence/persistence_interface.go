@@ -47,7 +47,7 @@ const (
 type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
-	// The intention is to let different incomingServiceStore implementation(SQL,Cassandra/etc) share some common logic
+	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
@@ -132,7 +132,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for incomingServiceStore implementaion regarding hisotry task readers
+		// Hints for persistence implementaion regarding hisotry task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -342,7 +342,7 @@ type (
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
-	// InternalCreateWorkflowExecutionResponse is the response from incomingServiceStore for create new workflow execution
+	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
@@ -634,7 +634,7 @@ type (
 	}
 
 	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
-	// Only used by incomingServiceStore layer
+	// Only used by persistence layer
 	InternalGetAllHistoryTreeBranchesResponse struct {
 		// pagination token
 		NextPageToken []byte
@@ -651,7 +651,7 @@ type (
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
-	// Only used by incomingServiceStore layer
+	// Only used by persistence layer
 	InternalGetHistoryTreeResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob

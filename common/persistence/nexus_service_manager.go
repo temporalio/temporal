@@ -32,26 +32,26 @@ import (
 
 type (
 	nexusServiceManagerImpl struct {
-		incomingServiceStore NexusServiceStore
+		persistence NexusServiceStore
 	}
 )
 
 var _ NexusServiceManager = (*nexusServiceManagerImpl)(nil)
 
 func NewNexusServiceManager(
-	incomingServiceStore NexusServiceStore,
+	persistence NexusServiceStore,
 ) NexusServiceManager {
 	return &nexusServiceManagerImpl{
-		incomingServiceStore: incomingServiceStore,
+		persistence: persistence,
 	}
 }
 
 func (m *nexusServiceManagerImpl) GetName() string {
-	return m.incomingServiceStore.GetName()
+	return m.persistence.GetName()
 }
 
 func (m *nexusServiceManagerImpl) Close() {
-	m.incomingServiceStore.Close()
+	m.persistence.Close()
 }
 
 func (m *nexusServiceManagerImpl) GetNexusIncomingService(

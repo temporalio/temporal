@@ -323,7 +323,7 @@ func (p *executionRateLimitedPersistenceClient) RegisterHistoryTaskReader(
 	ctx context.Context,
 	request *RegisterHistoryTaskReaderRequest,
 ) error {
-	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
 	return p.persistence.RegisterHistoryTaskReader(ctx, request)
 }
 
@@ -331,7 +331,7 @@ func (p *executionRateLimitedPersistenceClient) UnregisterHistoryTaskReader(
 	ctx context.Context,
 	request *UnregisterHistoryTaskReaderRequest,
 ) {
-	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
 	p.persistence.UnregisterHistoryTaskReader(ctx, request)
 }
 
@@ -339,7 +339,7 @@ func (p *executionRateLimitedPersistenceClient) UpdateHistoryTaskReaderProgress(
 	ctx context.Context,
 	request *UpdateHistoryTaskReaderProgressRequest,
 ) {
-	// hint methods don't actually hint DB, so don't go through incomingServiceStore rate limiter
+	// hint methods don't actually hint DB, so don't go through persistence rate limiter
 	p.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
 }
 
@@ -1133,7 +1133,7 @@ func allow(
 }
 
 // TODO: change the value returned so it can also be used by
-// incomingServiceStore metrics client. For now, it's only used by rate
+// persistence metrics client. For now, it's only used by rate
 // limit client, and we don't really care about the actual value
 // returned, as long as they are different from each task category.
 func ConstructHistoryTaskAPI(
