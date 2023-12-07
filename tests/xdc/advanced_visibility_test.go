@@ -318,38 +318,35 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	time.Sleep(waitForESToSettle)
 
 	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
-		verified := false
-		for i := 0; i < numOfRetry; i++ {
+		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
-			if len(resp.GetExecutions()) == 1 {
-				execution := resp.GetExecutions()[0]
-				retrievedSearchAttr := execution.SearchAttributes
-				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
-					fields := retrievedSearchAttr.GetIndexedFields()
-					searchValBytes := fields[s.testSearchAttributeKey]
-					var searchVal string
-					payload.Decode(searchValBytes, &searchVal)
-					s.Equal("another string", searchVal)
-
-					searchValBytes2 := fields["CustomIntField"]
-					var searchVal2 int
-					payload.Decode(searchValBytes2, &searchVal2)
-					s.Equal(123, searchVal2)
-
-					buildIdsBytes := fields[searchattribute.BuildIds]
-					var buildIds []string
-					err = payload.Decode(buildIdsBytes, &buildIds)
-					s.NoError(err)
-					s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
-
-					verified = true
-					break
-				}
+			if len(resp.GetExecutions()) != 1 {
+				return false
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond)
-		}
-		s.True(verified)
+			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
+			if len(fields) != 3 {
+				return false
+			}
+
+			searchValBytes := fields[s.testSearchAttributeKey]
+			var searchVal string
+			payload.Decode(searchValBytes, &searchVal)
+			s.Equal("another string", searchVal)
+
+			searchValBytes2 := fields["CustomIntField"]
+			var searchVal2 int
+			payload.Decode(searchValBytes2, &searchVal2)
+			s.Equal(123, searchVal2)
+
+			buildIdsBytes := fields[searchattribute.BuildIds]
+			var buildIds []string
+			err = payload.Decode(buildIdsBytes, &buildIds)
+			s.NoError(err)
+			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
+
+			return true
+		}, waitTimeInMs*time.Millisecond*numOfRetry, waitTimeInMs*time.Millisecond)
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
