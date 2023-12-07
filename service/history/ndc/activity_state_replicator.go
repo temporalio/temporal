@@ -176,7 +176,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		request.GetAttempt(),
 		activityInfo,
 	)
-	err = mutableState.ReplicateActivityInfo(request, refreshTask)
+	err = mutableState.ApplyActivityInfo(request, refreshTask)
 	if err != nil {
 		return err
 	}
