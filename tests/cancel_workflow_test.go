@@ -598,7 +598,7 @@ func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		}
 
 		taskFailure := workflowtaskFailedEvent.GetWorkflowTaskFailedEventAttributes().GetFailure()
-		if taskFailure.GetMessage() != "BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task." {
+		if taskFailure.GetMessage() != fmt.Sprintf("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId= Namespace=%s", childWorkflowID, s.namespace) {
 			return nil, errors.New("unexpected workflow task failure")
 		}
 
@@ -625,7 +625,7 @@ func (s *functionalSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task.", err.Error())
+	s.Equal(fmt.Sprintf("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId= Namespace=%s", childWorkflowID, s.namespace), err.Error())
 
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{
 		WorkflowId: id,

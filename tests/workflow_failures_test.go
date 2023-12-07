@@ -376,7 +376,7 @@ func (s *functionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on command.", err.Error())
+	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
 	resp, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,

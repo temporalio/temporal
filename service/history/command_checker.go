@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -278,11 +279,11 @@ func (v *commandAttrValidator) validateProtocolMessageAttributes(
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE
 
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("ProtocolMessageCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("ProtocolMessageCommandAttributes is not set on ProtocolMessageCommand.")
 	}
 
 	if attributes.MessageId == "" {
-		return failedCause, serviceerror.NewInvalidArgument("MessageID is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("MessageID is not set on ProtocolMessageCommand.")
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -297,46 +298,48 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
 
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on ScheduleActivityTaskCommand.")
+	}
+
+	activityID := attributes.GetActivityId()
+	activityType := ""
+	if attributes.ActivityType != nil {
+		activityType = attributes.ActivityType.GetName()
 	}
 
 	defaultTaskQueueName := ""
 	if _, err := v.validateTaskQueue(attributes.TaskQueue, defaultTaskQueueName); err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid TaskQueue on ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 
-	if attributes.GetActivityId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("ActivityId is not set on command.")
+	if activityID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityId is not set on ScheduleActivityTaskCommand. ActivityType=%s", activityType))
 	}
-
-	if attributes.ActivityType == nil || attributes.ActivityType.GetName() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("ActivityType is not set on command.")
+	if activityType == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityType is not set on ScheduleActivityTaskCommand. ActivityID=%s", activityID))
 	}
-
 	if err := v.validateActivityRetryPolicy(namespaceID, attributes); err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid ActivityRetryPolicy on SechduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
-
-	if len(attributes.GetActivityId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("ActivityID exceeds length limit.")
+	if len(activityID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityId on ScheduleActivityTaskCommand exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d", activityID, activityType, len(activityID), v.maxIDLengthLimit))
 	}
-
-	if len(attributes.GetActivityType().GetName()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("ActivityType exceeds length limit.")
+	if len(activityType) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityType on ScheduleActivityTaskCommand exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d", activityID, activityType, len(activityType), v.maxIDLengthLimit))
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
 	if err := timer.ValidateAndCapTimer(attributes.GetScheduleToCloseTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToCloseTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
 	if err := timer.ValidateAndCapTimer(attributes.GetScheduleToStartTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToStartTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToStartTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
 	if err := timer.ValidateAndCapTimer(attributes.GetStartToCloseTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid StartToCloseTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid StartToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
 	if err := timer.ValidateAndCapTimer(attributes.GetHeartbeatTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid HeartbeatTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid HeartbeatTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
 
 	ScheduleToCloseSet := attributes.GetScheduleToCloseTimeout().AsDuration() > 0
@@ -364,7 +367,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return failedCause, serviceerror.NewInvalidArgument("A valid StartToClose or ScheduleToCloseTimeout is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("A valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s", activityID, activityType))
 	}
 	// ensure activity timeout never larger than workflow timeout
 	if runTimeout.AsDuration() > 0 {
@@ -392,17 +395,21 @@ func (v *commandAttrValidator) validateTimerScheduleAttributes(
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_TIMER_ATTRIBUTES
+
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("StartTimerCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("StartTimerCommandAttributes is not set on StartTimerCommand.")
 	}
-	if attributes.GetTimerId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("TimerId is not set on command.")
+
+	timerID := attributes.GetTimerId()
+
+	if timerID == "" {
+		return failedCause, serviceerror.NewInvalidArgument("TimerId is not set on StartTimerCommand.")
 	}
-	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
+	if len(timerID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("TimerID on StartTimerCommand exceeds length limit. TimerId=%s Length=%d Limit=%d", timerID, len(timerID), v.maxIDLengthLimit))
 	}
 	if err := timer.ValidateAndCapTimer(attributes.GetStartToFireTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on command: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on StartTimerCommand: %v. TimerId=%s", err, timerID))
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -413,10 +420,10 @@ func (v *commandAttrValidator) validateActivityCancelAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("RequestCancelActivityTaskCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("RequestCancelActivityTaskCommandAttributes is not set on RequestCancelActivityTaskCommand.")
 	}
 	if attributes.GetScheduledEventId() <= 0 {
-		return failedCause, serviceerror.NewInvalidArgument("ScheduledEventId is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("ScheduledEventId is not set on RequestCancelActivityTaskCommand.")
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -427,13 +434,16 @@ func (v *commandAttrValidator) validateTimerCancelAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("CancelTimerCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("CancelTimerCommandAttributes is not set on CancelTimerCommand.")
 	}
-	if attributes.GetTimerId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("TimerId is not set on command.")
+
+	timerID := attributes.GetTimerId()
+
+	if timerID == "" {
+		return failedCause, serviceerror.NewInvalidArgument("TimerId is not set on CancelTimerCommand.")
 	}
-	if len(attributes.GetTimerId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("TimerId exceeds length limit.")
+	if len(timerID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("TimerId on CancelTimerCommand exceeds length limit. TimerId=%s Length=%d Limit=%d", timerID, len(timerID), v.maxIDLengthLimit))
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -444,13 +454,15 @@ func (v *commandAttrValidator) validateRecordMarkerAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("RecordMarkerCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("RecordMarkerCommandAttributes is not set on RecordMarkerCommand.")
 	}
-	if attributes.GetMarkerName() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("MarkerName is not set on command.")
+
+	markerName := attributes.GetMarkerName()
+	if markerName == "" {
+		return failedCause, serviceerror.NewInvalidArgument("MarkerName is not set on RecordMarkerCommand.")
 	}
-	if len(attributes.GetMarkerName()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("MarkerName exceeds length limit.")
+	if len(markerName) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("MarkerName on RecordMarkerCommand exceeds length limit. MarkerName=%s Length=%d Limit=%d", markerName, len(markerName), v.maxIDLengthLimit))
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -462,7 +474,7 @@ func (v *commandAttrValidator) validateCompleteWorkflowExecutionAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_COMPLETE_WORKFLOW_EXECUTION_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("CompleteWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("CompleteWorkflowExecutionCommandAttributes is not set on CompleteWorkflowExecutionCommand.")
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -473,10 +485,10 @@ func (v *commandAttrValidator) validateFailWorkflowExecutionAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("FailWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("FailWorkflowExecutionCommandAttributes is not set on FailWorkflowExecutionCommand.")
 	}
 	if attributes.GetFailure() == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Failure is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("Failure is not set on FailWorkflowExecutionCommand.")
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -487,7 +499,7 @@ func (v *commandAttrValidator) validateCancelWorkflowExecutionAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_WORKFLOW_EXECUTION_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("CancelWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("CancelWorkflowExecutionCommandAttributes is not set on CancelWorkflowExecutionCommand.")
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -508,23 +520,27 @@ func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes
 	}
 
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("RequestCancelExternalWorkflowExecutionCommandAttributes is not set on RequestCancelExternalWorkflowExecutionCommand.")
 	}
-	if attributes.GetWorkflowId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowId is not set on command.")
-	}
-	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
-	}
-	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
-	}
+
+	workflowID := attributes.GetWorkflowId()
+	ns := attributes.GetNamespace()
 	runID := attributes.GetRunId()
-	if runID != "" && uuid.Parse(runID) == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid RunId set on command.")
+
+	if workflowID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId is not set on RequestCancelExternalWorkflowExecutionCommand. Namespace=%s RunId=%s", ns, runID))
 	}
-	if _, ok := initiatedChildExecutionsInSession[attributes.GetWorkflowId()]; ok {
-		return failedCause, serviceerror.NewInvalidArgument("Start and RequestCancel for child workflow is not allowed in same workflow task.")
+	if len(ns) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Namespace on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s RunId=%s Namespace=%s Length=%d Limit=%d", workflowID, runID, ns, len(ns), v.maxIDLengthLimit))
+	}
+	if len(workflowID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on RequestCancelExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d RunId=%s Namespace=%s", workflowID, len(workflowID), v.maxIDLengthLimit, runID, ns))
+	}
+	if runID != "" && uuid.Parse(runID) == nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on RequestCancelExternalWorkflowExecutionCommand. WorkflowId=%s RunId=%s Namespace=%s", workflowID, runID, ns))
+	}
+	if _, ok := initiatedChildExecutionsInSession[workflowID]; ok {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId=%s Namespace=%s", workflowID, runID, ns))
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -545,27 +561,31 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 	}
 
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("SignalExternalWorkflowExecutionCommandAttributes is not set on SignalExternalWorkflowExecutionCommand.")
 	}
 	if attributes.Execution == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Execution is nil on command.")
-	}
-	if attributes.Execution.GetWorkflowId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowId is not set on command.")
-	}
-	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
-	}
-	if len(attributes.Execution.GetWorkflowId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
+		return failedCause, serviceerror.NewInvalidArgument("Execution is not set on SignalExternalWorkflowExecutionCommand.")
 	}
 
+	workflowID := attributes.Execution.GetWorkflowId()
+	ns := attributes.GetNamespace()
 	targetRunID := attributes.Execution.GetRunId()
+	signalName := attributes.GetSignalName()
+
+	if workflowID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId is not set on SignalExternalWorkflowExecutionCommand. Namespace=%s RunId=%s SignalName=%s", ns, targetRunID, signalName))
+	}
+	if len(ns) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Namespace on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Namespace=%s Length=%d Limit=%d RunId=%s SignalName=%s", workflowID, ns, len(ns), v.maxIDLengthLimit, targetRunID, signalName))
+	}
+	if len(workflowID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on SignalExternalWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d Namespace=%s RunId=%s SignalName=%s", workflowID, len(workflowID), v.maxIDLengthLimit, ns, targetRunID, signalName))
+	}
 	if targetRunID != "" && uuid.Parse(targetRunID) == nil {
-		return failedCause, serviceerror.NewInvalidArgument("Invalid RunId set on command.")
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid RunId set on SignalExternalWorkflowExecutionCommand. WorkflowId=%s Namespace=%s RunId=%s SignalName=%s", workflowID, ns, targetRunID, signalName))
 	}
 	if attributes.GetSignalName() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("SignalName is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("SignalName is not set on SignalExternalWorkflowExecutionCommand. WorkflowId=%s Namespace=%s RunId=%s", workflowID, ns, targetRunID))
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -578,13 +598,13 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("UpsertWorkflowSearchAttributesCommandAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
 	if attributes.SearchAttributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("SearchAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
-		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
+		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
 	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
 		return failedCause, err
@@ -599,21 +619,15 @@ func (v *commandAttrValidator) validateModifyWorkflowProperties(
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument(
-			"ModifyWorkflowPropertiesCommandAttributes is not set on command.",
-		)
+		return failedCause, serviceerror.NewInvalidArgument("ModifyWorkflowPropertiesCommandAttributes is not set on ModifyWorkflowPropertiesCommand.")
 	}
 
-	// check at least one attribute is not nil
 	if attributes.UpsertedMemo == nil {
-		return failedCause, serviceerror.NewInvalidArgument(
-			"ModifyWorkflowPropertiesCommandAttributes attributes are all nil.",
-		)
+		return failedCause, serviceerror.NewInvalidArgument("UpsertedMemo is not set on ModifyWorkflowPropertiesCommand.")
 	}
 
-	// check if UpsertedMemo is not nil, then it's not an empty map
-	if attributes.UpsertedMemo != nil && len(attributes.GetUpsertedMemo().GetFields()) == 0 {
-		return failedCause, serviceerror.NewInvalidArgument("UpsertedMemo.Fields is empty on command.")
+	if len(attributes.GetUpsertedMemo().GetFields()) == 0 {
+		return failedCause, serviceerror.NewInvalidArgument("UpsertedMemo.Fields is not set on ModifyWorkflowPropertiesCommand.")
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -627,7 +641,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("ContinueAsNewWorkflowExecutionCommandAttributes is not set on ContinueAsNewWorkflowExecutionCommand.")
 	}
 
 	// Inherit workflow type from previous execution if not provided on command
@@ -635,27 +649,28 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowType = &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName}
 	}
 
-	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	wfType := attributes.WorkflowType.GetName()
+	if len(wfType) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType on ContinueAsNewWorkflowExecutionCommand exceeds length limit. WorkflowType=%s Length=%d Limit=%d", wfType, len(wfType), v.maxIDLengthLimit))
 	}
 
 	// Inherit task queue from previous execution if not provided on command
 	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
 	if err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 	attributes.TaskQueue = taskQueue
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowRunTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue))
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowTaskTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue))
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetBackoffStartInterval()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid BackoffStartInterval: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid BackoffStartInterval on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue))
 	}
 
 	if attributes.GetWorkflowRunTimeout().AsDuration() == 0 {
@@ -671,11 +686,11 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
 
 	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 
 	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
-		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, errors.WithMessagef(err, "Invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -699,57 +714,64 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if attributes == nil {
-		return failedCause, serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on command.")
+		return failedCause, serviceerror.NewInvalidArgument("StartChildWorkflowExecutionCommandAttributes is not set on StartChildWorkflowExecutionCommand.")
 	}
 
-	if attributes.GetWorkflowId() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("Required field WorkflowId is not set on command.")
+	wfID := attributes.GetWorkflowId()
+	wfType := ""
+	if attributes.WorkflowType != nil {
+		wfType = attributes.WorkflowType.GetName()
+	}
+	ns := attributes.GetNamespace()
+
+	if wfID == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Required field WorkflowId is not set on StartChildWorkflowExecutionCommand. WorkflowType=%s Namespace=%s", wfType, ns))
 	}
 
-	if attributes.WorkflowType == nil || attributes.WorkflowType.GetName() == "" {
-		return failedCause, serviceerror.NewInvalidArgument("Required field WorkflowType is not set on command.")
+	if wfType == "" {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Required field WorkflowType is not set on StartChildWorkflowExecutionCommand. WorkflowId=%s Namespace=%s", wfID, ns))
 	}
 
-	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
+	if len(ns) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Namespace on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s WorkflowType=%s Namespace=%s Length=%d Limit=%d", wfID, wfType, ns, len(ns), v.maxIDLengthLimit))
 	}
 
-	if len(attributes.GetWorkflowId()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
+	if len(wfID) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowId on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s Length=%d Limit=%d WorkflowType=%s Namespace=%s", wfID, len(wfID), v.maxIDLengthLimit, wfType, ns))
 	}
 
-	if len(attributes.WorkflowType.GetName()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	if len(wfType) > v.maxIDLengthLimit {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowType on StartChildWorkflowExecutionCommand exceeds length limit. WorkflowId=%s WorkflowType=%s Length=%d Limit=%d Namespace=%s", wfID, wfType, len(wfType), v.maxIDLengthLimit, ns))
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowExecutionTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowExecutionTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowExecutionTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowRunTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
 	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowTaskTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout: %v.", err))
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
 	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid CronSchedule on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
-		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, errors.WithMessagef(err, "Invalid SearchAttributes on StartChildWorkflowCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command
 	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
-		return failedCause, err
+		return failedCause, errors.WithMessagef(err, "Invalid TaskQueue on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, taskQueue)
 	}
 	attributes.TaskQueue = taskQueue
 
