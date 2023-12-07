@@ -900,7 +900,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 		"expected 1 completed update + 2 accepted in mutation")
 }
 
-func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
+func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 	state := s.buildWorkflowMutableState()
 
 	var err error
