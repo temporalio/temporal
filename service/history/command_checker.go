@@ -29,7 +29,6 @@ import (
 	"strings"
 
 	"github.com/pborman/uuid"
-	"github.com/pkg/errors"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -309,7 +308,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 
 	defaultTaskQueueName := ""
 	if _, err := v.validateTaskQueue(attributes.TaskQueue, defaultTaskQueueName); err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid TaskQueue on ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return failedCause, fmt.Errorf("invalid TaskQueue on ScheduleActivityTaskCommand: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 
 	if activityID == "" {
@@ -319,7 +318,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityType is not set on ScheduleActivityTaskCommand. ActivityID=%s", activityID))
 	}
 	if err := v.validateActivityRetryPolicy(namespaceID, attributes); err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid ActivityRetryPolicy on SechduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+		return failedCause, fmt.Errorf("invalid ActivityRetryPolicy on SechduleActivityTaskCommand: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
 	}
 	if len(activityID) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("ActivityId on ScheduleActivityTaskCommand exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d", activityID, activityType, len(activityID), v.maxIDLengthLimit))
@@ -657,7 +656,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	// Inherit task queue from previous execution if not provided on command
 	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, executionInfo.TaskQueue)
 	if err != nil {
-		return failedCause, errors.WithMessagef(err, "Error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
+		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 	attributes.TaskQueue = taskQueue
 
@@ -686,11 +685,11 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
 
 	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
+		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 
 	if err = v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
-		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, errors.WithMessagef(err, "Invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, taskQueue)
 	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -757,21 +756,21 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	}
 
 	if err := v.validateWorkflowRetryPolicy(namespace.Name(attributes.GetNamespace()), attributes.RetryPolicy); err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
+		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid CronSchedule on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
+		return failedCause, fmt.Errorf("invalid CronSchedule on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String()); err != nil {
-		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, errors.WithMessagef(err, "Invalid SearchAttributes on StartChildWorkflowCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
+		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on StartChildWorkflowCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
 	// Inherit taskqueue from parent workflow execution if not provided on command
 	taskQueue, err := v.validateTaskQueue(attributes.TaskQueue, parentInfo.TaskQueue)
 	if err != nil {
-		return failedCause, errors.WithMessagef(err, "Invalid TaskQueue on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, taskQueue)
+		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, taskQueue)
 	}
 	attributes.TaskQueue = taskQueue
 
