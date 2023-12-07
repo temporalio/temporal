@@ -832,7 +832,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
+	s.mockMutableState.EXPECT().ApplyActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
@@ -929,7 +929,7 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
+	s.mockMutableState.EXPECT().ApplyActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
