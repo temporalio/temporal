@@ -1247,7 +1247,7 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
-// ReplicateActivityInfo replicate the necessary activity information
+// ApplyActivityInfo applies the necessary activity information
 func (ms *MutableStateImpl) ApplyActivityInfo(
 	request *historyservice.SyncActivityRequest,
 	resetActivityTimerTaskStatus bool,
@@ -1987,7 +1987,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 }
 
 func (ms *MutableStateImpl) ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
-	return ms.workflowTaskManager.ReplicateTransientWorkflowTaskScheduled()
+	return ms.workflowTaskManager.ApplyTransientWorkflowTaskScheduled()
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskScheduledEvent(
@@ -2000,7 +2000,7 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskScheduledEvent(
 	originalScheduledTimestamp *timestamppb.Timestamp,
 	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, workflowTaskType)
+	return ms.workflowTaskManager.ApplyWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp, workflowTaskType)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
@@ -2026,7 +2026,7 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 ) (*WorkflowTaskInfo, error) {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
+	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes)
 }
 
@@ -2232,7 +2232,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 func (ms *MutableStateImpl) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskCompletedEvent(event)
+	return ms.workflowTaskManager.ApplyWorkflowTaskCompletedEvent(event)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
@@ -2248,7 +2248,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
 func (ms *MutableStateImpl) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskTimedOutEvent(timeoutType)
+	return ms.workflowTaskManager.ApplyWorkflowTaskTimedOutEvent(timeoutType)
 }
 
 func (ms *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
@@ -2288,7 +2288,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
-	return ms.workflowTaskManager.ReplicateWorkflowTaskFailedEvent()
+	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }
 
 func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
@@ -3524,7 +3524,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 ) error {
 	attrs := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
 	if attrs == nil {
-		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateAcceptedEvent")
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateAcceptedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
@@ -3572,7 +3572,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 ) error {
 	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
 	if attrs == nil {
-		return serviceerror.NewInternal("wrong event type in call to ReplicateWorkflowExecutionUpdateCompletedEvent")
+		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateCompletedEvent")
 	}
 	if ms.executionInfo.UpdateInfos == nil {
 		ms.executionInfo.UpdateInfos = make(map[string]*updatespb.UpdateInfo, 1)
