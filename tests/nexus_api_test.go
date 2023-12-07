@@ -225,6 +225,32 @@ func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueu
 	s.Equal(int64(1), snap["nexus_requests"][0].Value)
 }
 
+func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceTooLong() {
+	taskQueue := s.randomizeStr("task-queue")
+
+	var namespace string
+	for i := 0; i < 500; i++ {
+		namespace += "namespace-is-a-very-long-string"
+	}
+
+	u := fmt.Sprintf("http://%s/api/v1/namespaces/%s/task-queues/%s/dispatch-nexus-task", s.httpAPIAddress, namespace, taskQueue)
+	client, err := nexus.NewClient(nexus.ClientOptions{ServiceBaseURL: u})
+	s.NoError(err)
+	ctx := NewContext()
+	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
+	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
+	var unexpectedResponse *nexus.UnexpectedResponseError
+	s.ErrorAs(err, &unexpectedResponse)
+	s.Equal(http.StatusBadRequest, unexpectedResponse.Response.StatusCode)
+	// I wish we'd never put periods in error messages :(
+	s.Equal("Namespace length exceeds limit.", unexpectedResponse.Failure.Message)
+
+	snap := capture.Snapshot()
+
+	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
+}
+
 func (s *clientFunctionalSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Forbidden() {
 	type testcase struct {
 		name           string
