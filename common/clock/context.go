@@ -71,25 +71,25 @@ func (ctx *ctxWithDeadline) cancel() {
 	})
 }
 
-func ContextWithDeadline(
-	ctx context.Context,
-	deadline time.Time,
-	timeSource TimeSource,
-) (context.Context, context.CancelFunc) {
-	ctxd := &ctxWithDeadline{
-		Context:  ctx,
-		deadline: deadline,
-		done:     make(chan struct{}),
-	}
-	timer := timeSource.AfterFunc(deadline.Sub(timeSource.Now()), ctxd.deadlineExceeded)
-	ctxd.timer = timer
-	return ctxd, ctxd.cancel
-}
-
-func ContextWithTimeout(
-	ctx context.Context,
-	timeout time.Duration,
-	timeSource TimeSource,
-) (context.Context, context.CancelFunc) {
-	return ContextWithDeadline(ctx, timeSource.Now().Add(timeout), timeSource)
-}
+//func ContextWithDeadline(
+//	ctx context.Context,
+//	deadline time.Time,
+//	timeSource TimeSource,
+//) (context.Context, context.CancelFunc) {
+//	ctxd := &ctxWithDeadline{
+//		Context:  ctx,
+//		deadline: deadline,
+//		done:     make(chan struct{}),
+//	}
+//	timer := timeSource.AfterFunc(deadline.Sub(timeSource.Now()), ctxd.deadlineExceeded)
+//	ctxd.timer = timer
+//	return ctxd, ctxd.cancel
+//}
+//
+//func ContextWithTimeout(
+//	ctx context.Context,
+//	timeout time.Duration,
+//	timeSource TimeSource,
+//) (context.Context, context.CancelFunc) {
+//	return ContextWithDeadline(ctx, timeSource.Now().Add(timeout), timeSource)
+//}

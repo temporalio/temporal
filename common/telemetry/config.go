@@ -237,7 +237,7 @@ func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
 			Spec: &otlpGrpcSpanExporter{
 				otlpGrpcExporter: otlpGrpcExporter{
 					Connection: grpcconn{
-						Endpoint: "localhost:4318",
+						Endpoint: "localhost:4317",
 						Insecure: true,
 					},
 				},
