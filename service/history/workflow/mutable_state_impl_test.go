@@ -134,7 +134,7 @@ func (s *mutableStateSuite) TearDownTest() {
 	s.mockShard.StopForTest()
 }
 
-func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ReplicateWorkflowTaskCompleted() {
+func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ApplyWorkflowTaskCompleted() {
 	version := int64(12)
 	runID := uuid.New()
 	s.mutableState = TestGlobalMutableState(
