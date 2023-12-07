@@ -63,6 +63,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -1628,9 +1630,10 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 
 func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 	tq := s.randomizeStr(s.T().Name())
-	v1 := "v1"
-	v2 := "v2"
-	v3 := "v3"
+	buildPrefix := uuid.New()[:6] + "-"
+	v1 := buildPrefix + "v1"
+	v2 := buildPrefix + "v2"
+	v3 := buildPrefix + "v3"
 
 	var act1count, act2count, act3count, badcount atomic.Int32
 	act1 := func() error { act1count.Add(1); return nil }
@@ -1744,9 +1747,24 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 	defer cancel()
 	s.Error(run.Get(waitCtx, nil))
 
+	// wait for it to appear in visibility
+	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
+		searchattribute.ExecutionStatus, "Running",
+		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
+	s.Eventually(func() bool {
+		resp, err := s.engine.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.namespace,
+			Query:     query,
+		})
+		return err == nil && len(resp.Executions) == 1
+	}, 10*time.Second, 500*time.Millisecond)
+
 	// reset it using v2 as the bad build id
 	_, err = s.engine.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.namespace,
+		Namespace:       s.namespace,
+		VisibilityQuery: query,
+		JobId:           uuid.New(),
+		Reason:          "test",
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				Options: &commonpb.ResetOptions{
@@ -1756,11 +1774,6 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 				},
 			},
 		},
-		Executions: []*commonpb.WorkflowExecution{
-			{WorkflowId: run.GetID(), RunId: run.GetRunID()},
-		},
-		JobId:  uuid.New(),
-		Reason: "test",
 	})
 	s.NoError(err)
 
