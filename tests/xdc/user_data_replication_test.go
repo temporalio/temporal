@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests"
@@ -257,8 +256,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	// Advanced visibility only enabled by default in SQLite
-	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
+	if !tests.UsingSQLAdvancedVisibility() {
 		s.T().Skip("Test requires advanced visibility")
 	}
 	ctx := tests.NewContext()
@@ -408,8 +406,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 }
 
 func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
-	// Advanced visibility only enabled by default in SQLite
-	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
+	if !tests.UsingSQLAdvancedVisibility() {
 		s.T().Skip("Test requires advanced visibility")
 	}
 	ctx := tests.NewContext()

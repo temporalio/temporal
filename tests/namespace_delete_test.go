@@ -49,9 +49,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -87,13 +84,12 @@ func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = NewTestClusterFactory()
 
-	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	if UsingSQLAdvancedVisibility() {
 		var err error
 		s.clusterConfig, err = GetTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-	default:
+	} else {
 		var err error
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
 		s.clusterConfig, err = GetTestClusterConfig("testdata/es_cluster.yaml")
