@@ -943,6 +943,8 @@ const (
 	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace worker
 	WorkerPerNamespaceWorkerOptions = "worker.perNamespaceWorkerOptions"
+	// WorkerPerNamespaceWorkerStartRate controls how fast per-namespace workers can be started (workers/second).
+	WorkerPerNamespaceWorkerStartRate = "worker.perNamespaceWorkerStartRate"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 	// WorkerStickyCacheSize controls the sticky cache size for SDK workers on worker nodes
