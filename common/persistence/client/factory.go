@@ -226,7 +226,7 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (p.HistoryTaskQueueManager, e
 }
 
 func (f *factoryImpl) NewNexusServiceManager() (p.NexusServiceManager, error) {
-	store, err := f.dataStoreFactory.NewNexusIncomingServiceStore()
+	store, err := f.dataStoreFactory.NewNexusServiceStore()
 	if err != nil {
 		return nil, err
 	}

@@ -187,7 +187,7 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// TODO: document me
+	// NexusServiceStore is a store for managing Nexus services
 	NexusServiceStore interface {
 		Closeable
 		GetName() string
@@ -740,22 +740,22 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// TODO: document me
+	// InternalGetNexusIncomingServiceResponse is the response to GetNexusIncomingService
 	InternalGetNexusIncomingServiceResponse struct {
 	}
 
-	// TODO: document me
+	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	InternalListNexusIncomingServicesRequest struct {
 		PageSize     int32
 		PageToken    []byte
 		TableVersion int64
 	}
 
-	// TODO: document me
+	// InternalListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	InternalListNexusIncomingServicesResponse struct {
 	}
 
-	// TODO: document me
+	// InternalCreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
 	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 

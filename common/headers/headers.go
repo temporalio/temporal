@@ -105,3 +105,19 @@ func getSingleHeaderValue(md metadata.MD, headerName string) string {
 
 	return values[0]
 }
+
+// HeaderGetter is an interface for getting a single header value from a case insensitive key.
+type HeaderGetter interface {
+	Get(string) string
+}
+
+// Wrapper for gRPC metadata that exposes a helper to extract a single metadata value.
+type GRPCHeaderGetter struct {
+	Metadata metadata.MD
+}
+
+// Get a single value from the underlying gRPC metadata.
+// Returns an empty string if the metadata key is unset.
+func (h GRPCHeaderGetter) Get(key string) string {
+	return getSingleHeaderValue(h.Metadata, key)
+}

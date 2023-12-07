@@ -301,13 +301,13 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 	return d.ClusterMDStore, nil
 }
 
-func (d *FaultInjectionDataStoreFactory) NewNexusIncomingServiceStore() (persistence.NexusServiceStore, error) {
+func (d *FaultInjectionDataStoreFactory) NewNexusServiceStore() (persistence.NexusServiceStore, error) {
 	if d.NexusServiceStore == nil {
-		baseStore, err := d.baseFactory.NewNexusIncomingServiceStore()
+		baseStore, err := d.baseFactory.NewNexusServiceStore()
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.config.Targets.DataStores[config.NexusIncomingServiceStoreName]; ok {
+		if storeConfig, ok := d.config.Targets.DataStores[config.NexusServiceStoreName]; ok {
 			d.NexusServiceStore = &FaultInjectionNexusServiceStore{
 				baseNexusServiceStore: baseStore,
 				ErrorGenerator:        NewTargetedDataStoreErrorGenerator(&storeConfig),

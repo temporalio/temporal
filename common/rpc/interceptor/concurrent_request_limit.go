@@ -89,36 +89,48 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
-	// token will default to 0
-	token := ni.tokens[methodName]
-
-	if token != 0 {
-		// for GetWorkflowExecutionHistoryRequest, we only care about long poll requests
-		longPollReq, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-		if ok && !longPollReq.WaitNewEvent {
-			// ignore non-long-poll GetHistory calls.
-			token = 0
-		}
-	}
-
-	if token != 0 {
-		nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
-		counter := ni.counter(nsName, methodName)
-		count := atomic.AddInt32(counter, int32(token))
-		defer atomic.AddInt32(counter, -int32(token))
-
-		handler := GetMetricsHandlerFromContext(ctx, ni.logger)
-		handler.Gauge(metrics.ServicePendingRequests.GetMetricName()).Record(float64(count))
-
-		// frontend.namespaceCount is applied per poller type temporarily to prevent
-		// one poller type to take all token waiting in the long poll.
-		if float64(count) > ni.quotaCalculator.GetQuota(nsName.String()) {
-			return nil, ErrNamespaceCountLimitServerBusy
-		}
+	nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
+	mh := GetMetricsHandlerFromContext(ctx, ni.logger)
+	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)
+	defer cleanup()
+	if err != nil {
+		return nil, err
 	}
 
 	return handler(ctx, req)
+}
+
+func (ni *ConcurrentRequestLimitInterceptor) Allow(
+	namespaceName namespace.Name,
+	methodName string,
+	mh metrics.Handler,
+	req any,
+) (func(), error) {
+	// token will default to 0
+	token := ni.tokens[methodName]
+
+	if token == 0 {
+		return func() {}, nil
+	}
+	// for GetWorkflowExecutionHistoryRequest, we only care about long poll requests
+	longPollReq, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
+	if ok && !longPollReq.WaitNewEvent {
+		// ignore non-long-poll GetHistory calls.
+		return func() {}, nil
+	}
+
+	counter := ni.counter(namespaceName, methodName)
+	count := atomic.AddInt32(counter, int32(token))
+	cleanup := func() { atomic.AddInt32(counter, -int32(token)) }
+
+	mh.Gauge(metrics.ServicePendingRequests.GetMetricName()).Record(float64(count))
+
+	// frontend.namespaceCount is applied per poller type temporarily to prevent
+	// one poller type to take all token waiting in the long poll.
+	if float64(count) > ni.quotaCalculator.GetQuota(namespaceName.String()) {
+		return cleanup, ErrNamespaceCountLimitServerBusy
+	}
+	return cleanup, nil
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) counter(

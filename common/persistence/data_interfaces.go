@@ -1058,27 +1058,27 @@ type (
 		MaxRecordsPruned int
 	}
 
-	// TODO: document me
+	// GetNexusIncomingServiceRequest is the request to GetNexusIncomingService
 	GetNexusIncomingServiceRequest struct {
 	}
 
-	// TODO: document me
+	// GetNexusIncomingServiceResponse is the response to GetNexusIncomingService
 	GetNexusIncomingServiceResponse struct {
 	}
 
-	// TODO: document me
+	// ListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	ListNexusIncomingServicesRequest struct {
 	}
 
-	// TODO: document me
+	// ListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	ListNexusIncomingServicesResponse struct {
 	}
 
-	// TODO: document me
+	// CreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
 	CreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
-	// TODO: document me
+	// DeleteNexusIncomingServiceRequest is the request to DeleteNexusIncomingService
 	DeleteNexusIncomingServiceRequest struct {
 	}
 
@@ -1231,7 +1231,7 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// TODO: document me
+	// NexusServiceManager is used to manage CRUD for Nexus services
 	NexusServiceManager interface {
 		Closeable
 		GetName() string

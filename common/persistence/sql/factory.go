@@ -150,8 +150,8 @@ func (f *Factory) NewQueueV2() (p.QueueV2, error) {
 	return NewQueueV2(conn, f.logger), nil
 }
 
-// NewNexusIncomingServiceStore returns a new NexusServiceStore
-func (f *Factory) NewNexusIncomingServiceStore() (p.NexusServiceStore, error) {
+// NewNexusServiceStore returns a new NexusServiceStore
+func (f *Factory) NewNexusServiceStore() (p.NexusServiceStore, error) {
 	return nil, serviceerror.NewUnimplemented("SQL NexusServiceStore has not been implemented")
 }
 
