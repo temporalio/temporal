@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
+func (s *FunctionalSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
 	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
@@ -212,7 +212,7 @@ WaitForStickyTimeoutLoop:
 	s.Equal(2, failedWorkflowTasks, "Mismatched failed workflow tasks count")
 }
 
-func (s *functionalSuite) TestStickyTaskqueueResetThenTimeout() {
+func (s *FunctionalSuite) TestStickyTaskqueueResetThenTimeout() {
 	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
 	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"

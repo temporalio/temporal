@@ -45,7 +45,7 @@ import (
 )
 
 type (
-	functionalSuite struct {
+	FunctionalSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
@@ -54,7 +54,7 @@ type (
 	}
 )
 
-func (s *functionalSuite) SetupSuite() {
+func (s *FunctionalSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.RetentionTimerJitterDuration: time.Second,
 		dynamicconfig.EnableEagerWorkflowStart:     true,
@@ -62,11 +62,11 @@ func (s *functionalSuite) SetupSuite() {
 	s.setupSuite("testdata/cluster.yaml")
 }
 
-func (s *functionalSuite) TearDownSuite() {
+func (s *FunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *functionalSuite) SetupTest() {
+func (s *FunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
@@ -74,10 +74,10 @@ func (s *functionalSuite) SetupTest() {
 
 func TestFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(functionalSuite))
+	suite.Run(t, new(FunctionalSuite))
 }
 
-func (s *functionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
@@ -90,7 +90,7 @@ func (s *functionalSuite) sendSignal(namespace string, execution *commonpb.Workf
 	return err
 }
 
-func (s *functionalSuite) closeShard(wid string) {
+func (s *FunctionalSuite) closeShard(wid string) {
 	s.T().Helper()
 
 	resp, err := s.engine.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
@@ -104,7 +104,7 @@ func (s *functionalSuite) closeShard(wid string) {
 	s.NoError(err)
 }
 
-func unmarshalAny[T proto.Message](s *functionalSuite, a *anypb.Any) T {
+func unmarshalAny[T proto.Message](s *FunctionalSuite, a *anypb.Any) T {
 	s.T().Helper()
 	pb := new(T)
 	ppb := reflect.ValueOf(pb).Elem()
@@ -115,14 +115,14 @@ func unmarshalAny[T proto.Message](s *functionalSuite, a *anypb.Any) T {
 	return *pb
 }
 
-func marshalAny(s *functionalSuite, pb proto.Message) *anypb.Any {
+func marshalAny(s *FunctionalSuite, pb proto.Message) *anypb.Any {
 	s.T().Helper()
 	a, err := anypb.New(pb)
 	s.NoError(err)
 	return a
 }
 
-func decodeString(s *functionalSuite, pls *commonpb.Payloads) string {
+func decodeString(s *FunctionalSuite, pls *commonpb.Payloads) string {
 	s.T().Helper()
 	var str string
 	err := payloads.Decode(pls, &str)

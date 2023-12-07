@@ -41,6 +41,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -2039,27 +2041,16 @@ func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	return ms.workflowTaskManager.GetTransientWorkflowTaskInfo(workflowTask, identity)
 }
 
-// add BinaryCheckSum for the first workflowTaskCompletedID for auto-reset
-func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
-	event *historypb.HistoryEvent,
-	maxResetPoints int,
-) error {
-	binChecksum := event.GetWorkflowTaskCompletedEventAttributes().GetBinaryChecksum()
-	if len(binChecksum) == 0 {
-		return nil
-	}
-	if !ms.addResetPointFromCompletion(binChecksum, event.GetEventId(), maxResetPoints) {
-		return nil
-	}
+func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 	exeInfo := ms.executionInfo
 	resetPoints := exeInfo.AutoResetPoints.Points
 	// List of all recent binary checksums associated with the workflow.
-	recentBinaryChecksums := make([]string, len(resetPoints))
-
-	for i, rp := range resetPoints {
-		recentBinaryChecksums[i] = rp.GetBinaryChecksum()
+	recentBinaryChecksums := make([]string, 0, len(resetPoints))
+	for _, rp := range resetPoints {
+		if rp.BinaryChecksum != "" {
+			recentBinaryChecksums = append(recentBinaryChecksums, rp.BinaryChecksum)
+		}
 	}
-
 	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
@@ -2067,70 +2058,59 @@ func (ms *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
+	if proto.Equal(exeInfo.SearchAttributes[searchattribute.BinaryChecksums], checksumsPayload) {
+		return nil // unchanged
+	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 // Add a reset point for current task completion if needed.
 // Returns true if the reset point was added or false if there was no need or no ability to add.
+// Note that a new reset point is added when the pair <binaryChecksum, buildId> changes.
 func (ms *MutableStateImpl) addResetPointFromCompletion(
 	binaryChecksum string,
+	buildId string,
 	eventID int64,
 	maxResetPoints int,
 ) bool {
-	if maxResetPoints < 1 {
-		// Nothing to do here
-		return false
-	}
-	exeInfo := ms.executionInfo
-	var resetPoints []*workflowpb.ResetPointInfo
-	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
-		resetPoints = ms.executionInfo.AutoResetPoints.Points
-		if len(resetPoints) >= maxResetPoints {
-			// If limit is exceeded, drop the oldest ones.
-			resetPoints = resetPoints[len(resetPoints)-maxResetPoints+1:]
-		}
-	} else {
-		resetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
-	}
-
+	resetPoints := ms.executionInfo.AutoResetPoints.GetPoints()
 	for _, rp := range resetPoints {
-		if rp.GetBinaryChecksum() == binaryChecksum {
+		if rp.GetBinaryChecksum() == binaryChecksum && rp.GetBuildId() == buildId {
 			return false
 		}
 	}
 
-	info := &workflowpb.ResetPointInfo{
+	newPoint := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binaryChecksum,
+		BuildId:                      buildId,
 		RunId:                        ms.executionState.GetRunId(),
 		FirstWorkflowTaskCompletedId: eventID,
 		CreateTime:                   timestamppb.New(ms.timeSource.Now()),
 		Resettable:                   ms.CheckResettable() == nil,
 	}
-	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
-		Points: append(resetPoints, info),
+	ms.executionInfo.AutoResetPoints = &workflowpb.ResetPoints{
+		Points: util.SliceTail(append(resetPoints, newPoint), maxResetPoints),
 	}
 	return true
 }
 
-// Similar to (the to-be-deprecated) addBinaryCheckSumIfNotExists but works on build IDs.
-func (ms *MutableStateImpl) trackBuildIdFromCompletion(
+func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(
 	version *commonpb.WorkerVersionStamp,
 	eventID int64,
-	limits WorkflowTaskCompletionLimits,
+	maxSearchAttributeValueSize int,
 ) error {
 	var toAdd []string
 	if !version.GetUseVersioning() {
 		toAdd = append(toAdd, worker_versioning.UnversionedSearchAttribute)
 	}
 	if version.GetBuildId() != "" {
-		ms.addResetPointFromCompletion(version.GetBuildId(), eventID, limits.MaxResetPoints)
 		toAdd = append(toAdd, worker_versioning.VersionStampToBuildIdSearchAttribute(version))
 	}
 	if len(toAdd) == 0 {
 		return nil
 	}
-	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, limits.MaxSearchAttributeValueSize); err != nil {
+	if changed, err := ms.addBuildIdsWithNoVisibilityTask(toAdd, maxSearchAttributeValueSize); err != nil {
 		return err
 	} else if !changed {
 		return nil
@@ -3770,24 +3750,26 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 func rolloverAutoResetPointsWithExpiringTime(
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
-	now time.Time,
+	newExecutionStartTime time.Time,
 	namespaceRetention time.Duration,
 ) *workflowpb.ResetPoints {
-
-	if resetPoints == nil || resetPoints.Points == nil {
+	if resetPoints.GetPoints() == nil {
 		return resetPoints
 	}
 	newPoints := make([]*workflowpb.ResetPointInfo, 0, len(resetPoints.Points))
-	expireTime := now.Add(namespaceRetention)
+	// For continue-as-new, new execution start time is the same as previous execution close time,
+	// so reset points from the previous run will expire at new execution start time plus retention.
+	expireTime := newExecutionStartTime.Add(namespaceRetention)
 	for _, rp := range resetPoints.Points {
+		if rp.ExpireTime != nil && rp.ExpireTime.AsTime().Before(newExecutionStartTime) {
+			continue // run is expired, don't preserve it
+		}
 		if rp.GetRunId() == prevRunID {
 			rp.ExpireTime = timestamppb.New(expireTime)
 		}
 		newPoints = append(newPoints, rp)
 	}
-	return &workflowpb.ResetPoints{
-		Points: newPoints,
-	}
+	return &workflowpb.ResetPoints{Points: newPoints}
 }
 
 func (ms *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(

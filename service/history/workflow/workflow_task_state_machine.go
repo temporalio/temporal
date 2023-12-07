@@ -911,10 +911,22 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
-	if err := m.ms.trackBuildIdFromCompletion(attrs.GetWorkerVersion(), event.GetEventId(), limits); err != nil {
+	addedResetPoint := m.ms.addResetPointFromCompletion(
+		attrs.GetBinaryChecksum(),
+		attrs.GetWorkerVersion().GetBuildId(),
+		event.GetEventId(),
+		limits.MaxResetPoints,
+	)
+	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), event.GetEventId(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
-	return m.ms.addBinaryCheckSumIfNotExists(event, limits.MaxResetPoints)
+	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {
+		if err := m.ms.updateBinaryChecksumSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(

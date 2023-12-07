@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-func (s *functionalSuite) TestSignalWorkflow() {
+func (s *FunctionalSuite) TestSignalWorkflow() {
 	id := "functional-signal-workflow-test"
 	wt := "functional-signal-workflow-test-type"
 	tl := "functional-signal-workflow-test-taskqueue"
@@ -245,7 +245,7 @@ func (s *functionalSuite) TestSignalWorkflow() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
+func (s *FunctionalSuite) TestSignalWorkflow_DuplicateRequest() {
 	id := "functional-signal-workflow-test-duplicate"
 	wt := "functional-signal-workflow-test-duplicate-type"
 	tl := "functional-signal-workflow-test-duplicate-taskqueue"
@@ -387,7 +387,7 @@ func (s *functionalSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Equal(0, numOfSignaledEvent)
 }
 
-func (s *functionalSuite) TestSignalExternalWorkflowCommand() {
+func (s *FunctionalSuite) TestSignalExternalWorkflowCommand() {
 	id := "functional-signal-external-workflow-test"
 	wt := "functional-signal-external-workflow-test-type"
 	tl := "functional-signal-external-workflow-test-taskqueue"
@@ -608,7 +608,7 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *functionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
+func (s *FunctionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	id := "functional-signal-workflow-test-cron"
 	wt := "functional-signal-workflow-test-cron-type"
 	tl := "functional-signal-workflow-test-cron-taskqueue"
@@ -685,7 +685,7 @@ func (s *functionalSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated() {
 	s.True(workflowTaskDelay > time.Second*2)
 }
 
-func (s *functionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
+func (s *FunctionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
 	id := "functional-signal-workflow-test-skip-wft"
 	wt := "functional-signal-workflow-test-skip-wft-type"
 	tl := "functional-signal-workflow-test-skip-wft-taskqueue"
@@ -800,7 +800,7 @@ func (s *functionalSuite) TestSignalWorkflow_NoWorkflowTaskCreated() {
  10 WorkflowExecutionCompleted`, historyResponse.GetHistory())
 }
 
-func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
+func (s *FunctionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	id := "functional-signal-workflow-workflow-close-attempted-test"
 	wt := "functional-signal-workflow-workflow-close-attempted-test-type"
 	tl := "functional-signal-workflow-workflow-close-attempted-test-taskqueue"
@@ -886,7 +886,7 @@ func (s *functionalSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	s.NoError(err)
 }
 
-func (s *functionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
+func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_WithoutRunID() {
 	id := "functional-signal-external-workflow-test-without-run-id"
 	wt := "functional-signal-external-workflow-test-without-run-id-type"
 	tl := "functional-signal-external-workflow-test-without-run-id-taskqueue"
@@ -1101,7 +1101,7 @@ CheckHistoryLoopForSignalSent:
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 
-func (s *functionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
+func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_UnKnownTarget() {
 	id := "functional-signal-unknown-workflow-command-test"
 	wt := "functional-signal-unknown-workflow-command-test-type"
 	tl := "functional-signal-unknown-workflow-command-test-taskqueue"
@@ -1226,7 +1226,7 @@ CheckHistoryLoopForCancelSent:
 	s.True(signalSentFailed)
 }
 
-func (s *functionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
+func (s *FunctionalSuite) TestSignalExternalWorkflowCommand_SignalSelf() {
 	id := "functional-signal-self-workflow-command-test"
 	wt := "functional-signal-self-workflow-command-test-type"
 	tl := "functional-signal-self-workflow-command-test-taskqueue"
@@ -1352,7 +1352,7 @@ CheckHistoryLoopForCancelSent:
 
 }
 
-func (s *functionalSuite) TestSignalWithStartWorkflow() {
+func (s *FunctionalSuite) TestSignalWithStartWorkflow() {
 	id := "functional-signal-with-start-workflow-test"
 	wt := "functional-signal-with-start-workflow-test-type"
 	tl := "functional-signal-with-start-workflow-test-taskqueue"
@@ -1617,7 +1617,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow() {
 	s.Equal(1, len(listClosedResp.Executions))
 }
 
-func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
+func (s *FunctionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	id := "functional-signal-with-start-workflow-id-reuse-test"
 	wt := "functional-signal-with-start-workflow-id-reuse-test-type"
 	tl := "functional-signal-with-start-workflow-id-reuse-test-taskqueue"
@@ -1792,7 +1792,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
+func (s *FunctionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	id := "functional-signal-with-start-workflow-start-delay-test"
 	wt := "functional-signal-with-start-workflow-start-delay-test-type"
 	tl := "functional-signal-with-start-workflow-start-delay-test-taskqueue"
@@ -1875,7 +1875,7 @@ func (s *functionalSuite) TestSignalWithStartWorkflow_StartDelay() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 }
 
-func (s *functionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
+func (s *FunctionalSuite) TestSignalWithStartWorkflow_NoWorkflowTaskCreated() {
 	id := "functional-signal-with-start-workflow-no-wft-test"
 	wt := "functional-signal-with-start-workflow-no-wft-test-type"
 	tl := "functional-signal-with-start-workflow-no-wft-test-taskqueue"

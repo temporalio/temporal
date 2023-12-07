@@ -75,7 +75,7 @@ worker restart/long-poll activity failure:
 */
 
 type (
-	scheduleFunctionalSuite struct {
+	ScheduleFunctionalSuite struct {
 		*require.Assertions
 		protorequire.ProtoAssertions
 		FunctionalTestBase
@@ -88,10 +88,10 @@ type (
 
 func TestScheduleFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(scheduleFunctionalSuite))
+	suite.Run(t, new(ScheduleFunctionalSuite))
 }
 
-func (s *scheduleFunctionalSuite) SetupSuite() {
+func (s *ScheduleFunctionalSuite) SetupSuite() {
 	switch TestFlags.PersistenceDriver {
 	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
 		s.setupSuite("testdata/cluster.yaml")
@@ -102,11 +102,11 @@ func (s *scheduleFunctionalSuite) SetupSuite() {
 	}
 }
 
-func (s *scheduleFunctionalSuite) TearDownSuite() {
+func (s *ScheduleFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *scheduleFunctionalSuite) SetupTest() {
+func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.dataConverter = newTestDataConverter()
@@ -126,12 +126,12 @@ func (s *scheduleFunctionalSuite) SetupTest() {
 	}
 }
 
-func (s *scheduleFunctionalSuite) TearDownTest() {
+func (s *ScheduleFunctionalSuite) TearDownTest() {
 	s.worker.Stop()
 	s.sdkClient.Close()
 }
 
-func (s *scheduleFunctionalSuite) TestBasics() {
+func (s *ScheduleFunctionalSuite) TestBasics() {
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
@@ -426,7 +426,7 @@ func (s *scheduleFunctionalSuite) TestBasics() {
 	}, 10*time.Second, 1*time.Second)
 }
 
-func (s *scheduleFunctionalSuite) TestInput() {
+func (s *ScheduleFunctionalSuite) TestInput() {
 	sid := "sched-test-input"
 	wid := "sched-test-input-wf"
 	wt := "sched-test-input-wt"
@@ -494,7 +494,7 @@ func (s *scheduleFunctionalSuite) TestInput() {
 	s.NoError(err)
 }
 
-func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
+func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
@@ -573,7 +573,7 @@ func (s *scheduleFunctionalSuite) TestLastCompletionAndError() {
 	s.NoError(err)
 }
 
-func (s *scheduleFunctionalSuite) TestRefresh() {
+func (s *ScheduleFunctionalSuite) TestRefresh() {
 	sid := "sched-test-refresh"
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
@@ -663,7 +663,7 @@ func (s *scheduleFunctionalSuite) TestRefresh() {
 	s.NoError(err)
 }
 
-func (s *scheduleFunctionalSuite) TestListBeforeRun() {
+func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	sid := "sched-test-list-before-run"
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
@@ -736,7 +736,7 @@ func (s *scheduleFunctionalSuite) TestListBeforeRun() {
 	time.Sleep(2 * time.Second)
 }
 
-func (s *scheduleFunctionalSuite) TestRateLimit() {
+func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	sid := "sched-test-rate-limit-%d"
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
@@ -815,7 +815,7 @@ func (s *scheduleFunctionalSuite) TestRateLimit() {
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
-func (s *scheduleFunctionalSuite) TestNextTimeCache() {
+func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"

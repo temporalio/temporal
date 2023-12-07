@@ -51,7 +51,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type sizeLimitFunctionalSuite struct {
+type SizeLimitFunctionalSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -59,25 +59,25 @@ type sizeLimitFunctionalSuite struct {
 }
 
 // This cluster use customized threshold for history config
-func (s *sizeLimitFunctionalSuite) SetupSuite() {
+func (s *SizeLimitFunctionalSuite) SetupSuite() {
 	s.setupSuite("testdata/sizelimit_cluster.yaml")
 }
 
-func (s *sizeLimitFunctionalSuite) TearDownSuite() {
+func (s *SizeLimitFunctionalSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *sizeLimitFunctionalSuite) SetupTest() {
+func (s *SizeLimitFunctionalSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(sizeLimitFunctionalSuite))
+	suite.Run(t, new(SizeLimitFunctionalSuite))
 }
 
-func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
+func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 	id := "functional-terminate-workflow-by-history-count-limit-test"
 	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
@@ -245,7 +245,7 @@ SignalLoop:
 	s.True(isCloseCorrect)
 }
 
-func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
+func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	id := "functional-workflow-failed-large-payload"
 	wt := "functional-workflow-failed-large-payload-type"
@@ -343,7 +343,7 @@ func (s *sizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	s.Fail("Missing signal event")
 }
 
-func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
+func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	id := "functional-terminate-workflow-by-ms-size-limit-test"
 	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
@@ -496,7 +496,7 @@ func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.True(isCloseCorrect)
 }
 
-func (s *sizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
+func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
 	id := "functional-terminate-workflow-by-history-size-limit-test"
 	wt := "functional-terminate-workflow-by-history-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-size-limit-test-taskqueue"

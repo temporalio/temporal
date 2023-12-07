@@ -81,7 +81,6 @@ type (
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
 		visibilityMgr          manager.VisibilityManager
-		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          resource.HistoryClient
@@ -97,7 +96,6 @@ type (
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
 		VisibilityMgr          manager.VisibilityManager
-		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          resource.HistoryClient
@@ -126,7 +124,6 @@ func NewOperatorHandlerImpl(
 		sdkClientFactory:       args.sdkClientFactory,
 		metricsHandler:         args.MetricsHandler,
 		visibilityMgr:          args.VisibilityMgr,
-		saProvider:             args.SaProvider,
 		saManager:              args.SaManager,
 		healthServer:           args.healthServer,
 		historyClient:          args.historyClient,
@@ -176,7 +173,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 	}
 
 	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -381,7 +378,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	}
 
 	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -489,7 +486,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	}
 
 	indexName := h.visibilityMgr.GetIndexName()
-	searchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	searchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("unable to read custom search attributes: %v", err),

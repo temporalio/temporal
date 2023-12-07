@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
+func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	id := uuid.New()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -143,7 +143,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.assertLastHistoryEvent(we, 47, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
-func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
+func (s *FunctionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
 	id := uuid.New()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -286,7 +286,7 @@ func (s *functionalSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult(
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -359,7 +359,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTask
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -432,7 +432,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -518,7 +518,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskS
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -622,7 +622,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTa
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -723,7 +723,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
+func (s *FunctionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
 	id := uuid.New()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -835,7 +835,7 @@ func (s *functionalSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTas
 	s.assertHistory(we, expectedHistory)
 }
 
-func (s *functionalSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []enumspb.EventType) {
+func (s *FunctionalSuite) assertHistory(we *commonpb.WorkflowExecution, expectedHistory []enumspb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,
@@ -851,7 +851,7 @@ func (s *functionalSuite) assertHistory(we *commonpb.WorkflowExecution, expected
 	}
 }
 
-func (s *functionalSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType enumspb.EventType) {
+func (s *FunctionalSuite) assertLastHistoryEvent(we *commonpb.WorkflowExecution, count int, eventType enumspb.EventType) {
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: we,

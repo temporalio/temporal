@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/timer"
 )
 
-func (s *functionalSuite) TestUserTimers_Sequential() {
+func (s *FunctionalSuite) TestUserTimers_Sequential() {
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"
 	tl := "functional-user-timers-sequential-test-taskqueue"
@@ -118,7 +118,7 @@ func (s *functionalSuite) TestUserTimers_Sequential() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestUserTimers_CapDuration() {
+func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 	id := "functional-user-timers-cap-duration-test"
 	wt := "functional-user-timers-cap-duration-test-type"
 	tl := "functional-user-timers-cap-duration-test-taskqueue"

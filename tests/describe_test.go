@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *functionalSuite) TestDescribeWorkflowExecution() {
+func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	id := "functional-describe-wfe-test"
 	wt := "functional-describe-wfe-test-type"
 	tq := "functional-describe-wfe-test-taskqueue"
@@ -167,7 +167,7 @@ func (s *functionalSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(11), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
 }
 
-func (s *functionalSuite) TestDescribeTaskQueue() {
+func (s *FunctionalSuite) TestDescribeTaskQueue() {
 	workflowID := "functional-get-poller-history"
 	wt := "functional-get-poller-history-type"
 	tl := "functional-get-poller-history-taskqueue"

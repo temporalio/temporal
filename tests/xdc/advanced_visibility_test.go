@@ -66,7 +66,7 @@ import (
 	"go.temporal.io/server/tests"
 )
 
-type advVisCrossDCTestSuite struct {
+type AdvVisCrossDCTestSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -87,7 +87,7 @@ type advVisCrossDCTestSuite struct {
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(advVisCrossDCTestSuite))
+	suite.Run(t, new(AdvVisCrossDCTestSuite))
 }
 
 var (
@@ -102,7 +102,7 @@ var (
 	}
 )
 
-func (s *advVisCrossDCTestSuite) SetupSuite() {
+func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = tests.NewTestClusterFactory()
 
@@ -160,18 +160,18 @@ func (s *advVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *advVisCrossDCTestSuite) SetupTest() {
+func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *advVisCrossDCTestSuite) TearDownSuite() {
+func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
 }
 
-func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
+func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -318,38 +318,35 @@ func (s *advVisCrossDCTestSuite) TestSearchAttributes() {
 	time.Sleep(waitForESToSettle)
 
 	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
-		verified := false
-		for i := 0; i < numOfRetry; i++ {
+		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)
-			if len(resp.GetExecutions()) == 1 {
-				execution := resp.GetExecutions()[0]
-				retrievedSearchAttr := execution.SearchAttributes
-				if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
-					fields := retrievedSearchAttr.GetIndexedFields()
-					searchValBytes := fields[s.testSearchAttributeKey]
-					var searchVal string
-					payload.Decode(searchValBytes, &searchVal)
-					s.Equal("another string", searchVal)
-
-					searchValBytes2 := fields["CustomIntField"]
-					var searchVal2 int
-					payload.Decode(searchValBytes2, &searchVal2)
-					s.Equal(123, searchVal2)
-
-					buildIdsBytes := fields[searchattribute.BuildIds]
-					var buildIds []string
-					err = payload.Decode(buildIdsBytes, &buildIds)
-					s.NoError(err)
-					s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
-
-					verified = true
-					break
-				}
+			if len(resp.GetExecutions()) != 1 {
+				return false
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond)
-		}
-		s.True(verified)
+			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
+			if len(fields) != 3 {
+				return false
+			}
+
+			searchValBytes := fields[s.testSearchAttributeKey]
+			var searchVal string
+			payload.Decode(searchValBytes, &searchVal)
+			s.Equal("another string", searchVal)
+
+			searchValBytes2 := fields["CustomIntField"]
+			var searchVal2 int
+			payload.Decode(searchValBytes2, &searchVal2)
+			s.Equal(123, searchVal2)
+
+			buildIdsBytes := fields[searchattribute.BuildIds]
+			var buildIds []string
+			err = payload.Decode(buildIdsBytes, &buildIds)
+			s.NoError(err)
+			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
+
+			return true
+		}, waitTimeInMs*time.Millisecond*numOfRetry, waitTimeInMs*time.Millisecond)
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{

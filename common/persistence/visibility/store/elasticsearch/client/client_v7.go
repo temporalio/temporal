@@ -27,6 +27,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,6 +39,7 @@ import (
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
 
@@ -88,7 +90,15 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		if cfg.TLS != nil && cfg.TLS.Enabled {
+			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
+			}
+			httpClient = tlsHttpClient
+		} else {
+			httpClient = http.DefaultClient
+		}
 	}
 
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
@@ -128,6 +138,19 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		esClient: client,
 		url:      cfg.URL,
 	}, nil
+}
+
+// Build Http Client with TLS
+func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
+	tlsConfig, err := auth.NewTLSConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	tlsClient := &http.Client{Transport: transport}
+
+	return tlsClient, nil
 }
 
 func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {

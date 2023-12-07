@@ -9,6 +9,16 @@ on:
       tag:
         description: "Tag for new version (1.23.4)"
         required: true
+      release_notes:
+        type: boolean
+        description: "Create draft release notes"
+        default: false
+      base_tag:
+        description: "Base tag to generate commit list for release notes"
+        required: false
+
+permissions:
+  contents: write
 
 jobs:
   create-tag:
@@ -20,29 +30,19 @@ jobs:
         shell: bash
 
     steps:
-      - name: Generate a token
-        id: generate_token
-        uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92
-        with:
-          app_id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
-          private_key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          token: ${{ steps.generate_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Github credentials
-        env:
-          CURRENT_REPO: ${{ github.repository }}
-          TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           git config --local user.name 'Temporal Data'
           git config --local user.email 'commander-data@temporal.io'
-          git remote set-url origin "https://x-access-token:$TOKEN@github.com/$CURRENT_REPO"
 
       - name: Get current version
         id: get_current_version
@@ -64,8 +64,48 @@ jobs:
 
       - name: Create and push tag
         env:
-          TAG: ${{ github.event.inputs.tag }}
+          TAG: 'v${{ github.event.inputs.tag }}'
           BRANCH: ${{ github.event.inputs.branch }}
         run: |
-          git tag "v$TAG"
-          git push origin "v$TAG"
+          if [ -z "$(git tag -l $TAG)" ]; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          elif [ "$(git rev-list -n 1 $TAG)" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::Tag already exists and it doesn't reference current HEAD of branch $BRANCH"
+            exit 1
+          fi
+
+      - name: Create draft release notes
+        if: ${{ github.event.inputs.release_notes }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_TAG: ${{ github.event.inputs.base_tag }}
+          TAG: 'v${{ github.event.inputs.tag}}'
+        run: |
+          if [ -z "$BASE_TAG" ] || [ -z "$(git tag -l $BASE_TAG)" ]; then
+            echo "::error::Base tag not specified or does not exist"
+            exit 1
+          fi
+
+          TEMPFILE=$(mktemp)
+          cat > $TEMPFILE <<- EOF
+          # Release Highlights
+          Add highlights if any.
+
+          # All Changes
+          $(git log --cherry-pick --right-only --pretty='%cd - %h - %s' --date=short ${BASE_TAG}..${TAG})
+
+          # Helpful links to get you started with Temporal
+          [Temporal Docs](https://docs.temporal.io/)
+          [Server](https://github.com/temporalio/temporal)
+          [Docker Compose](https://github.com/temporalio/docker-compose)
+          [Helm Chart](https://github.com/temporalio/helm-charts)
+
+          # Docker images for this release (use the tag \`${TAG#v}\`)
+          [Server](https://hub.docker.com/repository/docker/temporalio/server)
+          [Server With Auto Setup](https://hub.docker.com/repository/docker/temporalio/auto-setup) ([what is Auto-Setup?](https://docs.temporal.io/blog/auto-setup))
+          [Admin-Tools](https://hub.docker.com/repository/docker/temporalio/admin-tools)
+          EOF
+
+          gh repo set-default ${{ github.repository }}
+          gh release create "$TAG" --verify-tag --draft --title "$TAG" -F $TEMPFILE

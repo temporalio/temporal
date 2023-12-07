@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 )
 
-func (s *functionalSuite) TestRateLimitBufferedEvents() {
+func (s *FunctionalSuite) TestRateLimitBufferedEvents() {
 	id := "functional-rate-limit-buffered-events-test"
 	wt := "functional-rate-limit-buffered-events-test-type"
 	tl := "functional-rate-limit-buffered-events-test-taskqueue"
@@ -142,7 +142,7 @@ func (s *functionalSuite) TestRateLimitBufferedEvents() {
 	s.Equal(101, signalCount) // check that all 101 signals are received.
 }
 
-func (s *functionalSuite) TestBufferedEvents() {
+func (s *FunctionalSuite) TestBufferedEvents() {
 	id := "functional-buffered-events-test"
 	wt := "functional-buffered-events-test-type"
 	tl := "functional-buffered-events-test-taskqueue"
@@ -259,7 +259,7 @@ func (s *functionalSuite) TestBufferedEvents() {
 	s.True(workflowComplete)
 }
 
-func (s *functionalSuite) TestBufferedEventsOutOfOrder() {
+func (s *FunctionalSuite) TestBufferedEventsOutOfOrder() {
 	id := "functional-buffered-events-out-of-order-test"
 	wt := "functional-buffered-events-out-of-order-test-type"
 	tl := "functional-buffered-events-out-of-order-test-taskqueue"

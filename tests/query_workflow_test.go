@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_Sticky() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -89,7 +89,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	s.Equal(int32(1), replayCount)
 }
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -145,7 +145,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, testname, func() (string, error) {
@@ -199,7 +199,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	s.ErrorContains(err, consts.ErrWorkflowTaskNotScheduled.Error())
 }
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	// stop the worker, so the workflow won't be started before query
 	s.worker.Stop()
 
@@ -261,7 +261,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	wg.Wait()
 }
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	testname := s.T().Name()
 	var failures int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
@@ -307,7 +307,7 @@ func (s *clientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 
 }
 
-func (s *clientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+func (s *ClientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", errors.New("workflow should never execute")
