@@ -49,7 +49,7 @@ import (
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
 
-// QueueType is an enum that represents various queue types in incomingServiceStore
+// QueueType is an enum that represents various queue types in persistence
 type QueueType int32
 
 // Queue types used in queue table
@@ -112,7 +112,7 @@ const numItemsInGarbageInfo = 3
 const ScheduledTaskMinPrecision = time.Millisecond
 
 type (
-	// InvalidPersistenceRequestError represents invalid request to incomingServiceStore
+	// InvalidPersistenceRequestError represents invalid request to persistence
 	InvalidPersistenceRequestError struct {
 		Msg string
 	}
@@ -407,7 +407,7 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
+	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
 	// that a new queue reader is created by queue processing logic
 	RegisterHistoryTaskReaderRequest struct {
 		ShardID      int32
@@ -416,11 +416,11 @@ type (
 		ReaderID     int64
 	}
 
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying incomingServiceStore implementation
+	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
 	// that queue processing logic is done using an existing queue reader
 	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
 
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying incomingServiceStore implementation
+	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
 	// that a certain queue reader's process and the fact that it won't try to load tasks with
 	// key less than InclusiveMinPendingTaskKey
 	UpdateHistoryTaskReaderProgressRequest struct {
@@ -1058,27 +1058,27 @@ type (
 		MaxRecordsPruned int
 	}
 
-	// TODO: document me
+	// GetNexusIncomingServiceRequest is the request to GetNexusIncomingService
 	GetNexusIncomingServiceRequest struct {
 	}
 
-	// TODO: document me
+	// GetNexusIncomingServiceResponse is the response to GetNexusIncomingService
 	GetNexusIncomingServiceResponse struct {
 	}
 
-	// TODO: document me
+	// ListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	ListNexusIncomingServicesRequest struct {
 	}
 
-	// TODO: document me
+	// ListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	ListNexusIncomingServicesResponse struct {
 	}
 
-	// TODO: document me
+	// CreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
 	CreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
-	// TODO: document me
+	// DeleteNexusIncomingServiceRequest is the request to DeleteNexusIncomingService
 	DeleteNexusIncomingServiceRequest struct {
 	}
 
@@ -1119,7 +1119,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for incomingServiceStore implementation regarding history task readers
+		// Hints for persistence implementation regarding history task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -1231,7 +1231,7 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// TODO: document me
+	// NexusServiceManager is used to manage CRUD for Nexus services
 	NexusServiceManager interface {
 		Closeable
 		GetName() string

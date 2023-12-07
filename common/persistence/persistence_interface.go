@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/incomingServiceStore=data_interfaces.go
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
 package persistence
 
@@ -47,7 +47,7 @@ const (
 type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
-	// The intention is to let different incomingServiceStore implementation(SQL,Cassandra/etc) share some common logic
+	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
@@ -132,7 +132,7 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for incomingServiceStore implementaion regarding hisotry task readers
+		// Hints for persistence implementaion regarding hisotry task readers
 		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
 		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
 		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
@@ -187,8 +187,8 @@ type (
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
-	// TODO: document me
-	NexusIncomingServiceStore interface {
+	// NexusServiceStore is a store for managing Nexus services
+	NexusServiceStore interface {
 		Closeable
 		GetName() string
 		GetNexusIncomingService(ctx context.Context, name string) (*InternalGetNexusIncomingServiceResponse, error)
@@ -342,7 +342,7 @@ type (
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
-	// InternalCreateWorkflowExecutionResponse is the response from incomingServiceStore for create new workflow execution
+	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
@@ -634,7 +634,7 @@ type (
 	}
 
 	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
-	// Only used by incomingServiceStore layer
+	// Only used by persistence layer
 	InternalGetAllHistoryTreeBranchesResponse struct {
 		// pagination token
 		NextPageToken []byte
@@ -651,7 +651,7 @@ type (
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
-	// Only used by incomingServiceStore layer
+	// Only used by persistence layer
 	InternalGetHistoryTreeResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
@@ -740,22 +740,22 @@ type (
 		RecordExpiry time.Time
 	}
 
-	// TODO: document me
+	// InternalGetNexusIncomingServiceResponse is the response to GetNexusIncomingService
 	InternalGetNexusIncomingServiceResponse struct {
 	}
 
-	// TODO: document me
+	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	InternalListNexusIncomingServicesRequest struct {
 		PageSize     int32
 		PageToken    []byte
 		TableVersion int64
 	}
 
-	// TODO: document me
+	// InternalListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	InternalListNexusIncomingServicesResponse struct {
 	}
 
-	// TODO: document me
+	// InternalCreateOrUpdateNexusIncomingServiceRequest is the request to CreateOrUpdateNexusIncomingService
 	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 	}
 
