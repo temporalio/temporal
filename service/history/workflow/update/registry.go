@@ -33,6 +33,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -58,25 +59,24 @@ type (
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 		// TODO: isn't the return `bool` always true when the *Update != nil?
 
+		// HasOutgoingMessages returns true if the registry has any Updates that needs
+		// to be delivered to the worker.
+		HasOutgoingMessages() bool
+
 		// OutgoingMessages return all outbound messages from all Updates
 		// that need to be delivered to the worker. It also links every Update with workflow task,
 		// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
 		OutgoingMessages(workflowTaskScheduledEventID int64, workflowTaskStartedEventID int64) []*protocolpb.Message
 
-		// Unprocessed returns IDs of all updates that have outgoing messages and
-		// are waiting for workflow task with provided workflowTaskScheduledEventID to be completed.
+		// RejectUnprocessed reject all updates that are waiting for workflow task
+		// with provided workflowTaskScheduledEventID to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
-		// In this case it should return an empty slice.
-		Unprocessed(workflowTaskScheduledEventID int64) []string
+		RejectUnprocessed(ctx context.Context, workflowTaskScheduledEventID int64, workerIdentity string, eventStore EventStore) error
 
 		// TerminateUpdates terminates all existing updates in the registry
 		// and notifies update API callers with corresponding error.
 		TerminateUpdates(ctx context.Context, eventStore EventStore)
-
-		// HasOutgoing returns true if the registry has any Updates that want to
-		// sent messages to a worker.
-		HasOutgoing() bool
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
@@ -200,37 +200,53 @@ func (r *registry) TerminateUpdates(_ context.Context, _ EventStore) {
 	// In future, it should remove all existing updates and notify callers with better error.
 }
 
-func (r *registry) HasOutgoing() bool {
+// RejectUnprocessed reject all updates that are waiting for workflow task
+// with provided workflowTaskScheduledEventID to be completed.
+// This method should be called after all messages from worker are handled to make sure
+// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
+func (r *registry) RejectUnprocessed(
+	ctx context.Context,
+	workflowTaskScheduledEventID int64,
+	workerIdentity string,
+	eventStore EventStore,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, upd := range r.updates {
+		if upd.IsLinkedToWorkflowTask(workflowTaskScheduledEventID) && upd.HasOutgoingMessage() {
+			rejectionFailure := &failurepb.Failure{
+				Message: fmt.Sprintf("Update was delivered to the worker %s, but wasn't processed with workflow task %d. Probably Workflow Update is not supported by the worker.", workerIdentity, workflowTaskScheduledEventID),
+				Source:  "Server",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type:         "UnprocessedUpdate",
+					NonRetryable: true,
+				}},
+			}
+			if err := upd.reject(ctx, rejectionFailure, eventStore); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// HasOutgoingMessages returns true if the registry has any Updates that needs
+// to be delivered to the worker.
+func (r *registry) HasOutgoingMessages() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
-		if upd.hasOutgoingMessage() {
+		if upd.HasOutgoingMessage() {
 			return true
 		}
 	}
 	return false
 }
 
-// Unprocessed returns IDs of all updates that are waiting for workflow task
-// with provided workflowTaskScheduledEventID to be completed but still in stateRequested.
-// This method should be called after all messages from worker are handled to make sure
-// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
-// In this case it should return an empty slice.
-func (r *registry) Unprocessed(workflowTaskScheduledEventID int64) []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	var unprocessedUpdates []string
-	for _, upd := range r.updates {
-		if upd.workflowTaskScheduledEventID == workflowTaskScheduledEventID && upd.hasOutgoingMessage() {
-			unprocessedUpdates = append(unprocessedUpdates, upd.id)
-		}
-	}
-	return unprocessedUpdates
-}
-
-// OutgoingMessages return all outbound messages from all Updates
-// that need to be delivered to the worker. It also links every Update with workflow task,
-// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
+// OutgoingMessages create are return messages for all Updates
+// that need to be delivered to the worker. It also links every Update for which it creates message,
+// with workflow task by setting provided workflowTaskScheduledEventID.
 func (r *registry) OutgoingMessages(
 	workflowTaskScheduledEventID int64,
 	workflowTaskStartedEventID int64,
@@ -238,7 +254,6 @@ func (r *registry) OutgoingMessages(
 	// Need full write lock here because workflowTaskScheduledEventID needs to be recorded for every update.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var out []*protocolpb.Message
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
 	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this
@@ -249,10 +264,15 @@ func (r *registry) OutgoingMessages(
 	//  and events reordering in some SDKs.
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
+	var outgoingMessages []*protocolpb.Message
 	for _, upd := range r.updates {
-		upd.AppendOutgoingMessages(&out, workflowTaskScheduledEventID, sequencingEventID)
+		outgoingMessage := upd.OutgoingMessage(sequencingEventID)
+		if outgoingMessage != nil {
+			upd.LinkWorkflowTask(workflowTaskScheduledEventID)
+			outgoingMessages = append(outgoingMessages, outgoingMessage)
+		}
 	}
-	return out
+	return outgoingMessages
 }
 
 func (r *registry) Len() int {

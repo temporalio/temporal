@@ -4818,7 +4818,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_ClearM
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 
-	// Complete of the 4th WT should succeed. It accepts both updates.
+	// Complete of the 4th WT should succeed. It must accept both updates.
 	wt5Resp, err := s.engine.RespondWorkflowTaskCompleted(testCtx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.namespace,
 		TaskToken: wt4.TaskToken,
@@ -5051,4 +5051,125 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 	 12 WorkflowExecutionUpdateAccepted
 	 13 ActivityTaskScheduled
 	`, events)
+}
+
+func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
+	tv := testvars.New(s.T().Name())
+
+	tv = s.startWorkflow(tv)
+
+	update2ResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+
+	wtHandlerCalls := 0
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			// Completes first WT with empty command list.
+			return nil, nil
+		case 2:
+			s.EqualHistory(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // Speculative WT.
+  6 WorkflowTaskStarted
+`, history)
+			go func() {
+				update2ResultCh <- s.sendUpdateNoError(tv, "2")
+			}()
+			// To make sure that gets to the sever while this WT is running.
+			time.Sleep(500 * time.Millisecond)
+			return nil, nil
+		case 3:
+			s.EqualHistory(`
+  4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, history)
+			return nil, nil
+		default:
+			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	msgHandlerCalls := 0
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		msgHandlerCalls++
+		switch msgHandlerCalls {
+		case 1:
+			return nil, nil
+		case 2:
+			updRequestMsg := task.Messages[0]
+			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+
+			s.Equal(tv.String("args", "1"), decodeString(s, updRequest.GetInput().GetArgs()))
+			s.EqualValues(5, updRequestMsg.GetEventId())
+
+			// Don't process update in WT.
+			return nil, nil
+		case 3:
+			s.Len(task.Messages, 1)
+			updRequestMsg := task.Messages[0]
+			updRequest := unmarshalAny[*updatepb.Request](s, updRequestMsg.GetBody())
+
+			s.Equal(tv.String("args", "2"), decodeString(s, updRequest.GetInput().GetArgs()))
+			s.EqualValues(5, updRequestMsg.GetEventId())
+			return s.acceptCompleteUpdateMessages(tv, updRequestMsg, "2"), nil
+		default:
+			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+			return nil, nil
+		}
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Identity:            "old_worker",
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Drain first WT.
+	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	s.NoError(err)
+
+	updateResultCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
+	go func() {
+		updateResultCh <- s.sendUpdateNoError(tv, "1")
+	}()
+
+	// Process 2nd WT which ignores update message.
+	res, err := poller.PollAndProcessWorkflowTask(WithRetries(1))
+	s.NoError(err)
+	updateResp := res.NewTask
+	updateResult := <-updateResultCh
+	s.Equal("Update was delivered to the worker old_worker, but wasn't processed with workflow task 5. Probably Workflow Update is not supported by the worker.", updateResult.GetOutcome().GetFailure().GetMessage())
+	s.EqualValues(3, updateResp.ResetHistoryEventId)
+
+	// Process 3rd WT which completes 2nd update and workflow.
+	update2Resp, err := poller.HandlePartialWorkflowTask(updateResp.GetWorkflowTask(), false)
+	s.NoError(err)
+	s.NotNil(update2Resp)
+	update2Result := <-update2ResultCh
+	s.EqualValues(tv.String("success-result", "2"), decodeString(s, update2Result.GetOutcome().GetSuccess()))
+
+	s.Equal(3, wtHandlerCalls)
+	s.Equal(3, msgHandlerCalls)
+
+	events := s.getHistory(s.namespace, tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled // 1st speculative WT is not present in the history. This is 2nd speculative WT.
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionUpdateCompleted`, events)
 }

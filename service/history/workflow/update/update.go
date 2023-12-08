@@ -305,25 +305,37 @@ func (u *Update) OnMessage(
 	}
 }
 
-// AppendOutgoingMessages loads any outbound messages from this Update state
-// machine into the output slice provided. It also links the Update with workflow task,
-// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
-func (u *Update) AppendOutgoingMessages(out *[]*protocolpb.Message, workflowTaskScheduledEventID int64, sequencingID *protocolpb.Message_EventId) {
-	if u.state != stateRequested {
-		// Update only sends messages to the workflow when it is in stateRequested.
-		return
+// LinkWorkflowTask records WT ScheduledEventID in update.
+func (u *Update) LinkWorkflowTask(
+	workflowTaskScheduledEventID int64,
+) {
+	u.workflowTaskScheduledEventID = workflowTaskScheduledEventID
+}
+
+// IsLinkedToWorkflowTask checks if update is linked to specific WT with provided ScheduledEventID.
+func (u *Update) IsLinkedToWorkflowTask(
+	workflowTaskScheduledEventID int64,
+) bool {
+	return u.workflowTaskScheduledEventID == workflowTaskScheduledEventID
+}
+
+func (u *Update) HasOutgoingMessage() bool {
+	// Update only sends messages to the workflow when it is in stateRequested.
+	return u.state == stateRequested
+}
+
+// OutgoingMessage returns outbound message from this Update state machine.
+func (u *Update) OutgoingMessage(sequencingID *protocolpb.Message_EventId) *protocolpb.Message {
+	if !u.HasOutgoingMessage() {
+		return nil
 	}
 
-	u.workflowTaskScheduledEventID = workflowTaskScheduledEventID
-
-	reqMessage := &protocolpb.Message{
+	return &protocolpb.Message{
 		ProtocolInstanceId: u.id,
 		Id:                 u.outgoingMessageID(),
 		SequencingId:       sequencingID,
 		Body:               u.request,
 	}
-
-	*out = append(*out, reqMessage)
 }
 
 // outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
@@ -421,14 +433,23 @@ func (u *Update) onRejectionMsg(
 		return err
 	}
 	u.instrumentation.CountRejectionMsg()
+	return u.reject(ctx, rej.Failure, eventStore)
+}
+
+// reject an update with provided failure.
+func (u *Update) reject(
+	_ context.Context,
+	rejectionFailure *failurepb.Failure,
+	eventStore EventStore,
+) error {
 	u.setState(stateProvisionallyCompleted)
 	eventStore.OnAfterCommit(func(context.Context) {
 		u.request = nil
 		u.setState(stateCompleted)
 		outcome := updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: rej.Failure},
+			Value: &updatepb.Outcome_Failure{Failure: rejectionFailure},
 		}
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rej.Failure, nil)
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rejectionFailure, nil)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
 	})
@@ -464,15 +485,6 @@ func (u *Update) onResponseMsg(
 	})
 	eventStore.OnAfterRollback(func(context.Context) { u.setState(prevState) })
 	return nil
-}
-
-func (u *Update) hasBeenSeenByWorkflowExecution() bool {
-	const unseen = stateAdmitted | stateProvisionallyRequested | stateRequested
-	return !u.state.Matches(stateSet(unseen))
-}
-
-func (u *Update) hasOutgoingMessage() bool {
-	return u.state == stateRequested
 }
 
 func (u *Update) checkState(msg proto.Message, expected state) error {

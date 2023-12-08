@@ -587,12 +587,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
-		// If worker ignored the update request (old SDK or SDK bug), then server fails the WT.
+		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.
 		// Otherwise, this update will be delivered (and new WT created) again and again.
-		if err = workflowTaskHandler.ensureUpdatesProcessed(
+		if err = workflowTaskHandler.rejectUnprocessedUpdates(
 			ctx,
 			currentWorkflowTask.ScheduledEventID,
 			workflowTaskHeartbeating,
+			request.GetIdentity(),
 		); err != nil {
 			return nil, err
 		}
@@ -659,7 +660,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		} else if weContext.UpdateRegistry(ctx).HasOutgoing() {
+		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages() {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {

@@ -110,14 +110,14 @@ func TestHasOutgoing(t *testing.T) {
 
 	upd, _, err := reg.FindOrCreate(ctx, updateID)
 	require.NoError(t, err)
-	require.False(t, reg.HasOutgoing())
+	require.False(t, reg.HasOutgoingMessages())
 
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
 	require.NoError(t, upd.OnMessage(ctx, &req, evStore))
-	require.True(t, reg.HasOutgoing())
+	require.True(t, reg.HasOutgoingMessages())
 }
 
 func TestFindOrCreate(t *testing.T) {
@@ -258,6 +258,8 @@ func TestMessageGathering(t *testing.T) {
 
 	msgs := reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Empty(t, msgs)
+	require.False(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.False(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
 
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
@@ -267,6 +269,8 @@ func TestMessageGathering(t *testing.T) {
 
 	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Len(t, msgs, 1)
+	require.True(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.False(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
 
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
@@ -276,6 +280,8 @@ func TestMessageGathering(t *testing.T) {
 
 	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
 	require.Len(t, msgs, 2)
+	require.True(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.True(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
 
 	for _, msg := range msgs {
 		require.Equal(t, wftStartedEventID-1, msg.GetEventId())
