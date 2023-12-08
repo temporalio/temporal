@@ -17,9 +17,6 @@ on:
         description: "Base tag to generate commit list for release notes"
         required: false
 
-permissions:
-  contents: write
-
 jobs:
   create-tag:
     name: "Create a tag"
@@ -30,11 +27,18 @@ jobs:
         shell: bash
 
     steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate_token.outputs.token }}
           ref: ${{ github.event.inputs.branch }}
           fetch-depth: 0
           fetch-tags: true
@@ -78,7 +82,7 @@ jobs:
       - name: Create draft release notes
         if: ${{ github.event.inputs.release_notes }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           BASE_TAG: ${{ github.event.inputs.base_tag }}
           TAG: 'v${{ github.event.inputs.tag}}'
         run: |
