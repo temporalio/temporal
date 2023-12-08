@@ -57,9 +57,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -102,12 +99,11 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
 	}
 
-	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	if UsingSQLAdvancedVisibility() {
 		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
-	default:
+	} else {
 		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true

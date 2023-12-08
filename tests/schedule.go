@@ -49,9 +49,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -84,11 +81,10 @@ type (
 )
 
 func (s *ScheduleFunctionalSuite) SetupSuite() {
-	switch TestFlags.PersistenceDriver {
-	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+	if UsingSQLAdvancedVisibility() {
 		s.setupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
-	default:
+	} else {
 		s.setupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
