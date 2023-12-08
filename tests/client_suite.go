@@ -1661,7 +1661,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		// now do something bad in a loop.
 		// (we want something that's visible in history, not just failing workflow tasks,
 		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
-		for {
+		for i := 0; i < 1000; i++ {
 			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
 			workflow.Sleep(ctx, time.Second)
 		}
