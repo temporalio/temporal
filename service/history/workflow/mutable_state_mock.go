@@ -834,20 +834,6 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskTimedOutEvent(workflowTas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskTimedOutEvent), workflowTask)
 }
 
-// ApplyActivityInfo mocks base method.
-func (m *MockMutableState) ApplyActivityInfo(arg0 *v111.SyncActivityRequest, arg1 bool) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyActivityInfo", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ApplyActivityInfo indicates an expected call of ApplyActivityInfo.
-func (mr *MockMutableStateMockRecorder) ApplyActivityInfo(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyActivityInfo", reflect.TypeOf((*MockMutableState)(nil).ApplyActivityInfo), arg0, arg1)
-}
-
 // ApplyActivityTaskCancelRequestedEvent mocks base method.
 func (m *MockMutableState) ApplyActivityTaskCancelRequestedEvent(arg0 *v13.HistoryEvent) error {
 	m.ctrl.T.Helper()
@@ -2731,6 +2717,20 @@ func (m *MockMutableState) UpdateActivity(arg0 *v112.ActivityInfo) error {
 func (mr *MockMutableStateMockRecorder) UpdateActivity(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivity", reflect.TypeOf((*MockMutableState)(nil).UpdateActivity), arg0)
+}
+
+// UpdateActivityInfo mocks base method.
+func (m *MockMutableState) UpdateActivityInfo(arg0 *v111.SyncActivityRequest, arg1 bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityInfo", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateActivityInfo indicates an expected call of UpdateActivityInfo.
+func (mr *MockMutableStateMockRecorder) UpdateActivityInfo(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityInfo", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityInfo), arg0, arg1)
 }
 
 // UpdateActivityProgress mocks base method.

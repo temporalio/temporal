@@ -1247,8 +1247,8 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
-// ApplyActivityInfo applies the necessary activity information
-func (ms *MutableStateImpl) ApplyActivityInfo(
+// UpdateActivityInfo applies the necessary activity information
+func (ms *MutableStateImpl) UpdateActivityInfo(
 	request *historyservice.SyncActivityRequest,
 	resetActivityTimerTaskStatus bool,
 ) error {
