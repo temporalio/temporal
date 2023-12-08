@@ -397,7 +397,7 @@ func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
 		// the start time of the backfill matched the schedule's spec, it would
 		// not be executed. This new version makes it inclusive instead.
 		if s.hasMinVersion(InclusiveBackfillStartTime) {
-			startTime = startTime.Add(-1 * time.Second)
+			startTime = startTime.Add(-1 * time.Millisecond)
 		}
 
 		s.processTimeRange(
