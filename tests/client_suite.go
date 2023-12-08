@@ -38,7 +38,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/batch/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1534,7 +1533,7 @@ func (s *ClientFunctionalSuite) TestBatchSignal() {
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batch.BatchOperationSignal{
+			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal: "my-signal",
 				Input:  inputPayloads,
 			},
@@ -1597,7 +1596,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace: s.namespace,
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
-			ResetOperation: &batch.BatchOperationReset{
+			ResetOperation: &batchpb.BatchOperationReset{
 				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
 			},
 		},
