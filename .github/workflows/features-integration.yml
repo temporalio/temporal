@@ -6,6 +6,8 @@ on: # rebuild any PRs and main branch changes
     branches:
       - main
 
+permissions: read-all
+
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
