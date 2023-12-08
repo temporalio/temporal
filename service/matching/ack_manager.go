@@ -27,26 +27,42 @@ package matching
 import (
 	"sync"
 
+	"github.com/emirpasic/gods/maps/treemap"
 	"go.uber.org/atomic"
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/util"
 )
+
+func int64Comparator(a, b interface{}) int {
+	aAsserted := a.(int64)
+	bAsserted := b.(int64)
+	switch {
+	case aAsserted > bAsserted:
+		return 1
+	case aAsserted < bAsserted:
+		return -1
+	default:
+		return 0
+	}
+}
 
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
 	sync.RWMutex
-	outstandingTasks map[int64]bool // key->TaskID, value->(true for acked, false->for non acked)
-	readLevel        int64          // Maximum TaskID inserted into outstandingTasks
-	ackLevel         int64          // Maximum TaskID below which all tasks are acked
+	outstandingTasks *treemap.Map // TaskID->acked
+	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
+	ackLevel         int64        // Maximum TaskID below which all tasks are acked
 	backlogCounter   atomic.Int64
 	logger           log.Logger
 }
 
 func newAckManager(logger log.Logger) ackManager {
-	return ackManager{logger: logger, outstandingTasks: make(map[int64]bool), readLevel: -1, ackLevel: -1}
+	return ackManager{
+		logger:           logger,
+		outstandingTasks: treemap.NewWith(int64Comparator),
+		readLevel:        -1,
+		ackLevel:         -1}
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
@@ -59,10 +75,10 @@ func (m *ackManager) addTask(taskID int64) {
 			tag.ReadLevel(m.readLevel))
 	}
 	m.readLevel = taskID
-	if _, ok := m.outstandingTasks[taskID]; ok {
+	if _, found := m.outstandingTasks.Get(taskID); found {
 		m.logger.Fatal("Already present in outstanding tasks", tag.TaskID(taskID))
 	}
-	m.outstandingTasks[taskID] = false // true is for acked
+	m.outstandingTasks.Put(taskID, false)
 	m.backlogCounter.Inc()
 }
 
@@ -112,29 +128,41 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 	}
 }
 
-func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
+func (m *ackManager) completeTask(taskID int64) int64 {
 	m.Lock()
 	defer m.Unlock()
-	if completed, ok := m.outstandingTasks[taskID]; ok && !completed {
-		m.outstandingTasks[taskID] = true
-		m.backlogCounter.Dec()
+	macked, found := m.outstandingTasks.Get(taskID)
+	acked := macked.(bool)
+	if !found || acked {
+		// don't adjust ack level if nothing has changed
+		return m.ackLevel
 	}
 
-	// TODO the ack level management should be done by a dedicated coroutine
-	//  this is only a temporarily solution
+	m.outstandingTasks.Put(taskID, true)
+	m.backlogCounter.Dec()
 
-	taskIDs := maps.Keys(m.outstandingTasks)
-	util.SortSlice(taskIDs)
+	min, _ := m.outstandingTasks.Min()
+	if taskID != min {
+		return m.ackLevel
+	}
 
-	// Update ackLevel
-	for _, taskID := range taskIDs {
-		if acked := m.outstandingTasks[taskID]; acked {
-			m.ackLevel = taskID
-			delete(m.outstandingTasks, taskID)
-		} else {
-			return m.ackLevel
+	// We've acked the minimum task, so should adjust the ack level as far as we can
+	iter := m.outstandingTasks.Iterator()
+	iter.Begin()
+	// deletion invalidates the iterator
+	var toDel []int64
+	for iter.Next() {
+		acked := iter.Value().(bool)
+		if !acked {
+			break
 		}
+		m.ackLevel = iter.Key().(int64)
+		toDel = append(toDel, m.ackLevel)
 	}
+	for i := 0; i < len(toDel); i++ {
+		m.outstandingTasks.Remove(toDel[i])
+	}
+
 	return m.ackLevel
 }
 

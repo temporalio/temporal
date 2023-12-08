@@ -32,11 +32,34 @@ func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	require.Equal(t, int64(3), mgr.completeTask(2), "both tasks 2 and 3 are complete")
 }
 
-// Add 1000 tasks in order and complete them in a random order.
-// This will cause our ack level to jump as we complete them
+func BenchmarkAckManager_AddTask(b *testing.B) {
+	tasks := make([]int, 1000)
+	for i := 0; i < len(tasks); i++ {
+		tasks[i] = i
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Add 1000 tasks in order and complete them in a random order.
+		// This will cause our ack level to jump as we complete them
+		b.StopTimer()
+		mgr := newAckManager(log.NewTestLogger())
+		rand.Shuffle(len(tasks), func(i, j int) {
+			tasks[i], tasks[j] = tasks[j], tasks[i]
+		})
+		b.StartTimer()
+		for i := 0; i < len(tasks); i++ {
+			tasks[i] = i
+			mgr.addTask(int64(i))
+		}
+	}
+}
+
 func BenchmarkAckManager_CompleteTask(b *testing.B) {
 	tasks := make([]int, 1000)
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		// Add 1000 tasks in order and complete them in a random order.
+		// This will cause our ack level to jump as we complete them
 		b.StopTimer()
 		mgr := newAckManager(log.NewTestLogger())
 		for i := 0; i < len(tasks); i++ {
