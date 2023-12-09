@@ -72,7 +72,7 @@ type (
 		// with provided workflowTaskScheduledEventID to be completed.
 		// This method should be called after all messages from worker are handled to make sure
 		// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
-		RejectUnprocessed(ctx context.Context, workflowTaskScheduledEventID int64, workerIdentity string, eventStore EventStore) error
+		RejectUnprocessed(ctx context.Context, workflowTaskScheduledEventID int64, workerIdentity string, eventStore EventStore) ([]string, error)
 
 		// TerminateUpdates terminates all existing updates in the registry
 		// and notifies update API callers with corresponding error.
@@ -209,10 +209,11 @@ func (r *registry) RejectUnprocessed(
 	workflowTaskScheduledEventID int64,
 	workerIdentity string,
 	eventStore EventStore,
-) error {
+) ([]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	var rejectedUpdateIDs []string
 	for _, upd := range r.updates {
 		if upd.IsLinkedToWorkflowTask(workflowTaskScheduledEventID) && upd.HasOutgoingMessage() {
 			rejectionFailure := &failurepb.Failure{
@@ -224,11 +225,12 @@ func (r *registry) RejectUnprocessed(
 				}},
 			}
 			if err := upd.reject(ctx, rejectionFailure, eventStore); err != nil {
-				return err
+				return nil, err
 			}
+			rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 		}
 	}
-	return nil
+	return rejectedUpdateIDs, nil
 }
 
 // HasOutgoingMessages returns true if the registry has any Updates that needs

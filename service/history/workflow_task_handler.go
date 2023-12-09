@@ -37,6 +37,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/definition"
 	"google.golang.org/protobuf/proto"
 
 	"go.temporal.io/server/common/tasktoken"
@@ -215,6 +216,7 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 	ctx context.Context,
 	workflowTaskScheduledEventID int64,
 	workflowTaskHeartbeating bool,
+	wfKey definition.WorkflowKey,
 	workerIdentity string,
 ) error {
 
@@ -233,11 +235,27 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 		return nil
 	}
 
-	return handler.updateRegistry.RejectUnprocessed(
+	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
 		ctx,
 		workflowTaskScheduledEventID,
 		workerIdentity,
 		workflow.WithEffects(handler.effects, handler.mutableState))
+
+	if err != nil {
+		return err
+	}
+
+	if len(rejectedUpdateIDs) > 0 {
+		handler.logger.Warn(
+			"Workflow task completed w/o processing updates.",
+			tag.WorkflowNamespaceID(wfKey.NamespaceID),
+			tag.WorkflowID(wfKey.WorkflowID),
+			tag.WorkflowRunID(wfKey.RunID),
+			tag.WorkflowEventID(workflowTaskScheduledEventID),
+			tag.NewStringsTag("updateIDs", rejectedUpdateIDs),
+		)
+	}
+	return nil
 }
 
 //revive:disable:cyclomatic grandfathered

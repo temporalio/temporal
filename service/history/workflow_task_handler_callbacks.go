@@ -593,6 +593,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			ctx,
 			currentWorkflowTask.ScheduledEventID,
 			workflowTaskHeartbeating,
+			weContext.GetWorkflowKey(),
 			request.GetIdentity(),
 		); err != nil {
 			return nil, err
