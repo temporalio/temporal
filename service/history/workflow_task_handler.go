@@ -36,6 +36,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
 
@@ -191,13 +192,22 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		}
 	}
 
-	if handler.mutableState.IsWorkflowExecutionRunning() {
-		for _, msg := range msgs.TakeRemaining() {
-			err := handler.handleMessage(ctx, msg)
-			if err != nil || handler.stopProcessing {
-				return nil, err
-			}
+	// For every update.Acceptance and update.Respond (i.e. Completion) messages
+	// there should be a corresponding PROTOCOL_MESSAGE command. These messages are processed together
+	// with this command and, at this point, should be processed already.
+	// Therefore, remaining messages should be only update.Rejection.
+	// However, PROTOCOL_MESSAGE command is not required by server. If it is not present,
+	// update.Acceptance and update.Respond messages will be processed after all commands in order they are in request.
+	for _, msg := range msgs.TakeRemaining() {
+		err := handler.handleMessage(ctx, msg)
+		if err != nil || handler.stopProcessing {
+			return nil, err
 		}
+	}
+
+	if !handler.mutableState.IsWorkflowExecutionRunning() {
+		// Terminate all updates that were received while this WT was executing.
+		handler.updateRegistry.Terminate(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 	}
 
 	for _, postAction := range postActions {
@@ -351,6 +361,13 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE,
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
+
+		// If workflow was completed while processing this WT, then only update.Rejection messages can be processed,
+		// because they don't create new events in the history. All other updates must be terminated.
+		if !handler.mutableState.IsWorkflowExecutionRunning() && !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
+			return upd.Terminate(ctx)
+		}
+
 		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
@@ -641,8 +658,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
-
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
@@ -700,8 +715,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -805,8 +818,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
-
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
@@ -909,8 +920,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if handler.hasBufferedEvents {
 		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
-
-	handler.updateRegistry.TerminateUpdates(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 

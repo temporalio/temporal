@@ -494,6 +494,29 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
+// Terminate this update and notifies update API callers with corresponding error.
+func (u *Update) Terminate(_ context.Context, eventStore EventStore) error {
+	// TODO (alex-update): implement
+	// This method is not implemented and update API callers will just time out.
+	// In future, it should remove all existing updates and notify callers with better error.
+	u.Reject()
+
+	// u.instrumentation.CountRejectionMsg()
+	u.setState(stateProvisionallyCompleted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		u.request = nil
+		u.setState(stateCompleted)
+		outcome := updatepb.Outcome{
+			Value: &updatepb.Outcome_Failure{Failure: rej.Failure},
+		}
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rej.Failure, nil)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
+		u.onComplete()
+	})
+
+	return nil
+}
+
 func (u *Update) checkState(msg proto.Message, expected state) error {
 	return u.checkStateSet(msg, stateSet(expected))
 }

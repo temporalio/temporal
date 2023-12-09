@@ -75,9 +75,9 @@ type (
 		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
 		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
-		// TerminateUpdates terminates all existing updates in the registry
+		// Terminate all existing updates in the registry
 		// and notifies update API callers with corresponding error.
-		TerminateUpdates(ctx context.Context, eventStore EventStore)
+		Terminate(ctx context.Context, eventStore EventStore)
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
@@ -195,10 +195,13 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-func (r *registry) TerminateUpdates(_ context.Context, _ EventStore) {
+func (r *registry) Terminate(ctx context.Context, eventStore EventStore) {
 	// TODO (alex-update): implement
 	// This method is not implemented and update API callers will just timeout.
 	// In future, it should remove all existing updates and notify callers with better error.
+	for _, upd := range r.updates {
+		_ = upd.Terminate(ctx, eventStore)
+	}
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
