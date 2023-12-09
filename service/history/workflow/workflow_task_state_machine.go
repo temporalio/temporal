@@ -70,7 +70,7 @@ func newWorkflowTaskStateMachine(
 	}
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	version int64,
 	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
@@ -113,7 +113,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
+func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
 	// When workflow task fails/timeout it gets removed from mutable state, but attempt count is incremented.
 	// If attempt count was incremented and now is greater than 1, then next workflow task should be created as transient.
 	// This method will do it only if there is no other workflow task and next workflow task should be transient.
@@ -131,12 +131,12 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	//   then AddWorkflowTaskStartedEvent will handle the correction of ScheduledEventID,
 	//   and set the attempt to 1 (convert transient workflow task to normal workflow task).
 	//   2. If no failover happen during the lifetime of this transient workflow task
-	//   then ReplicateWorkflowTaskScheduledEvent will overwrite everything
+	//   then ApplyWorkflowTaskScheduledEvent will overwrite everything
 	//   including the workflow task ScheduledEventID.
 	//
 	// Regarding workflow task timeout calculation:
 	//   1. Attempt will be set to 1, so we still use default workflow task timeout.
-	//   2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
+	//   2. ApplyWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduledEventID:    m.ms.GetNextEventID(),
@@ -158,7 +158,7 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	workflowTask *WorkflowTaskInfo,
 	version int64,
 	scheduledEventID int64,
@@ -175,7 +175,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		if workflowTask == nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
 		}
-		// Transient workflow task events are not replicated but attempt count in mutable state
+		// Transient workflow task events are not applied but attempt count in mutable state
 		// can be updated from previous workflow task failed/timeout event.
 		// During replication, "active" side will send 2 batches:
 		//   1. WorkflowTaskScheduledEvent and WorkflowTaskStartedEvent
@@ -210,19 +210,19 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskCompletedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
 	return m.afterAddWorkflowTaskCompletedEvent(event, WorkflowTaskCompletionLimits{math.MaxInt32, math.MaxInt32})
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskFailedEvent() error {
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
 	m.failWorkflowTask(true)
 	return nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
@@ -265,7 +265,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		common.EmptyEventID,
 		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 	)
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -340,7 +340,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		scheduledEventID = m.ms.GetNextEventID()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskScheduledEvent(
+	workflowTask, err := m.ApplyWorkflowTaskScheduledEvent(
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		taskQueue,
@@ -482,7 +482,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		startedEventID = startedEvent.GetEventId()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(
+	workflowTask, err := m.ApplyWorkflowTaskStartedEvent(
 		workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime,
 		suggestContinueAsNew, historySizeBytes,
 	)
@@ -632,7 +632,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskFailedEvent(); err != nil {
+	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
 		return nil, err
 	}
 
@@ -689,7 +689,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -954,7 +954,7 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	// always use default timeout as it will either be completely overwritten by
 	// a replicated workflow schedule event from active cluster, or if used, it's
 	// attempt will be reset to 1.
-	// Check ReplicateTransientWorkflowTaskScheduled for details.
+	// Check ApplyTransientWorkflowTaskScheduled for details.
 
 	if defaultTimeout == nil {
 		defaultTimeout = durationpb.New(0)
