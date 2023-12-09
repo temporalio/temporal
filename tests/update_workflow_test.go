@@ -5053,7 +5053,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_SameSt
 	`, events)
 }
 
-func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
+func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer() {
 	tv := testvars.New(s.T().Name())
 
 	tv = s.startWorkflow(tv)
@@ -5087,7 +5087,12 @@ func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted`, history)
-			return nil, nil
+			commands := append(s.acceptCompleteUpdateCommands(tv, "2"),
+				&commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+				})
+			return commands, nil
 		default:
 			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
 			return nil, nil
@@ -5171,5 +5176,6 @@ func (s *functionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionUpdateAccepted
-  9 WorkflowExecutionUpdateCompleted`, events)
+  9 WorkflowExecutionUpdateCompleted
+ 10 WorkflowExecutionCompleted`, events)
 }
