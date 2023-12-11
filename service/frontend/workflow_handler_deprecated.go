@@ -500,7 +500,6 @@ func (wh *WorkflowHandler) getRawHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
-	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
 	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
@@ -515,10 +514,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		return nil, nil, err
 	}
 
-	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, data)
-	}
-
+	rawHistory := resp.HistoryEventBlobs
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.Name()).Record(1)
