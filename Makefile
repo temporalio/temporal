@@ -71,6 +71,7 @@ PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(PROTO_ROOT)/
 PROTO_OPTS = paths=source_relative:$(PROTO_OUT)
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
+PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -144,8 +145,8 @@ update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	@go install -modfile build/go.mod go.temporal.io/api/cmd/enumrewriter
 	@go install -modfile build/go.mod go.temporal.io/api/cmd/protoc-gen-go-helpers
+	@go install -modfile build/go.mod go.temporal.io/api/cmd/protogen
 
 update-proto-linters:
 	@printf $(COLOR) "Install/update proto linters..."
@@ -184,8 +185,15 @@ install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
 	git submodule update --init $(PROTO_ROOT)/api
 
-protoc: $(PROTO_OUT)
-	@./protoc.sh
+protoc: clean-proto $(PROTO_OUT)
+	@protogen \
+		-I=proto/api \
+		-I=proto/dependencies \
+		--root=proto/internal \
+		--rewrite-enum=BuildId_State:BuildId \
+		-p go-grpc_out=$(PROTO_PATHS) \
+		-p go-helpers_out=$(PROTO_PATHS)
+	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
