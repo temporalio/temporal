@@ -1294,7 +1294,7 @@ func (n *FaultInjectionNexusServiceStore) ListNexusIncomingServices(
 
 func (n *FaultInjectionNexusServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *persistence.InternalNexusIncomingService,
+	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return err
@@ -1304,12 +1304,12 @@ func (n *FaultInjectionNexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 func (n *FaultInjectionNexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	name string,
+	request *persistence.InternalDeleteNexusIncomingServiceRequest,
 ) error {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return n.baseNexusServiceStore.DeleteNexusIncomingService(ctx, name)
+	return n.baseNexusServiceStore.DeleteNexusIncomingService(ctx, request)
 }
 
 func (n *FaultInjectionNexusServiceStore) UpdateRate(rate float64) {

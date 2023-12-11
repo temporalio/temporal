@@ -51,7 +51,7 @@ const (
 const (
 	// table templates
 	templateGetTableVersion    = `SELECT version FROM nexus_incoming_services WHERE partition = ? AND type = ? AND service_id = ?`
-	templateUpdateTableVersion = `UPDATE nexus_incoming_services SET version = toTimestamp(now()) WHERE partition = ? AND type = ? AND service_id = ?`
+	templateUpdateTableVersion = `UPDATE nexus_incoming_services SET version = ? WHERE partition = ? AND type = ? AND service_id = ? IF version = ?`
 
 	// incoming service templates
 	templateCreateIncomingServiceQuery = `INSERT INTO nexus_incoming_services(partition, type, service_id, data, data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
@@ -99,32 +99,37 @@ func (s *NexusServiceStore) Close() {
 
 func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	service *p.InternalNexusIncomingService,
+	request *p.InternalCreateOrUpdateNexusIncomingServiceRequest,
 ) error {
 	batch := s.session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 
-	if service.Version == 0 {
+	if request.Service.Version == 0 {
 		batch.Query(templateCreateIncomingServiceQuery,
 			constServicesPartition,
 			rowTypeIncomingNexusService,
-			service.ServiceID,
-			service.Data.Data,
-			service.Data.EncodingType.String(),
+			request.Service.ServiceID,
+			request.Service.Data.Data,
+			request.Service.Data.EncodingType.String(),
 			0,
 		)
 	} else {
 		batch.Query(templateUpdateIncomingServiceQuery,
-			service.Data.Data,
-			service.Data.EncodingType.String(),
-			service.Version+1,
+			request.Service.Data.Data,
+			request.Service.Data.EncodingType.String(),
+			request.Service.Version+1,
 			constServicesPartition,
 			rowTypeIncomingNexusService,
-			service.ServiceID,
-			service.Version,
+			request.Service.ServiceID,
+			request.Service.Version,
 		)
 	}
 
-	batch.Query(templateUpdateTableVersion, constServicesPartition, rowTypePartitionStatus, constTableVersionServiceID)
+	batch.Query(templateUpdateTableVersion,
+		request.LastKnownTableVersion+1,
+		constServicesPartition,
+		rowTypePartitionStatus,
+		constTableVersionServiceID,
+		request.LastKnownTableVersion)
 
 	previous := make(map[string]interface{})
 	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previous)
@@ -145,10 +150,11 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		return fmt.Errorf("%w: ID=%v, version=%v, columns=(%v)",
+		return fmt.Errorf("%w: ID=%v, TableVersion=%v ServiceVersion=%v, columns=(%v)",
 			ErrCreateOrUpdateIncomingServiceFailed,
-			service.ServiceID,
-			service.Version,
+			request.Service.ServiceID,
+			request.LastKnownTableVersion,
+			request.Service.Version,
 			strings.Join(columns, ","))
 	}
 
@@ -185,21 +191,6 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	request *p.InternalListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	response := &p.InternalListNexusIncomingServicesResponse{}
-
-	currentTableVersion, err := s.getTableVersion(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	response.TableVersion = currentTableVersion
-
-	if request.LastKnownTableVersion != UnknownTableVersion && request.LastKnownTableVersion != currentTableVersion {
-		// If table has been updated during pagination, throw error to indicate caller must start over
-		return nil, fmt.Errorf("%w. Provided table version: %v Current table version: %v",
-			ErrTableVersionConflict,
-			request.LastKnownTableVersion,
-			currentTableVersion)
-	}
 
 	query := s.session.Query(templateListIncomingServicesQuery, constServicesPartition, rowTypeIncomingNexusService).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
@@ -240,22 +231,41 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusIncomingServices operation failed. Error: %v", err))
 	}
 
+	currentTableVersion, err := s.getTableVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	response.TableVersion = currentTableVersion
+
+	if request.LastKnownTableVersion != UnknownTableVersion && request.LastKnownTableVersion != currentTableVersion {
+		// If table has been updated during pagination, throw error to indicate caller must start over
+		return nil, fmt.Errorf("%w. Provided table version: %v Current table version: %v",
+			ErrTableVersionConflict,
+			request.LastKnownTableVersion,
+			currentTableVersion)
+	}
+
 	return response, nil
 }
 
 func (s *NexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
-	serviceID string,
+	request *p.InternalDeleteNexusIncomingServiceRequest,
 ) error {
 	batch := s.session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 
 	batch.Query(templateDeleteIncomingServiceQuery,
 		constServicesPartition,
 		rowTypeIncomingNexusService,
-		serviceID,
-	)
+		request.ServiceID)
 
-	batch.Query(templateUpdateTableVersion, constServicesPartition, rowTypePartitionStatus, constTableVersionServiceID)
+	batch.Query(templateUpdateTableVersion,
+		request.LastKnownTableVersion+1,
+		constServicesPartition,
+		rowTypePartitionStatus,
+		constTableVersionServiceID,
+		request.LastKnownTableVersion)
 
 	err := s.session.ExecuteBatch(batch)
 	if err != nil {

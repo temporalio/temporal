@@ -191,10 +191,10 @@ type (
 	NexusServiceStore interface {
 		Closeable
 		GetName() string
-		CreateOrUpdateNexusIncomingService(ctx context.Context, service *InternalNexusIncomingService) error
+		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
 		GetNexusIncomingService(ctx context.Context, serviceID string) (*InternalNexusIncomingService, error)
-		ListNexusIncomingServices(ctx context.Context, req *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
-		DeleteNexusIncomingService(ctx context.Context, serviceID string) error
+		ListNexusIncomingServices(ctx context.Context, request *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
+		DeleteNexusIncomingService(ctx context.Context, request *InternalDeleteNexusIncomingServiceRequest) error
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -747,6 +747,12 @@ type (
 		Data      *commonpb.DataBlob
 	}
 
+	// InternalCreateOrUpdateNexusIncomingServiceRequest is the input to CreateOrUpdateNexusIncomingService
+	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		Service               InternalNexusIncomingService
+	}
+
 	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	InternalListNexusIncomingServicesRequest struct {
 		PageSize              int
@@ -759,6 +765,12 @@ type (
 		TableVersion  int64
 		NextPageToken []byte
 		Services      []InternalNexusIncomingService
+	}
+
+	// InternalDeleteNexusIncomingServiceRequest is the input to DeleteNexusIncomingService
+	InternalDeleteNexusIncomingServiceRequest struct {
+		LastKnownTableVersion int64
+		ServiceID             string
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
