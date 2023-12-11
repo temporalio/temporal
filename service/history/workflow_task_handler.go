@@ -37,8 +37,9 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/definition"
 	"google.golang.org/protobuf/proto"
+
+	"go.temporal.io/server/common/definition"
 
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/internal/effect"
@@ -221,16 +222,22 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 ) error {
 
 	// If server decided to fail WT (instead of completing), don't reject updates.
+	// New WT will be created, and it will deliver these updates again to the worker.
+	// Worker will do full history replay, and updates should be delivered again.
 	if handler.workflowTaskFailedCause != nil {
 		return nil
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
+	// TODO (alex-update): Don't deliver these updates on the next WT.
+	//  Fix TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat test.
 	if workflowTaskHeartbeating {
 		return nil
 	}
 
-	// If worker has just completed workflow with command, then it doesn't have to have messages.
+	// If worker has just completed workflow with one of the WF completion command,
+	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug,
+	// but it's a normal behavior. Updates will be rejected with "workflow is closing" reason though.
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
