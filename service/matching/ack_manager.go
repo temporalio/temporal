@@ -138,6 +138,8 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		return m.ackLevel
 	}
 
+	// TODO the ack level management should be done by a dedicated coroutine
+	//  this is only a temporarily solution
 	m.outstandingTasks.Put(taskID, true)
 	m.backlogCounter.Dec()
 
