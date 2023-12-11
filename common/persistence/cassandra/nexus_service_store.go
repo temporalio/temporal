@@ -37,7 +37,10 @@ import (
 )
 
 const (
-	constServicesPartition = 0
+	UnknownTableVersion = 0
+
+	constServicesPartition     = 0
+	constTableVersionServiceID = 0
 )
 
 const (
@@ -46,24 +49,25 @@ const (
 )
 
 const (
-	templateCreateIncomingServiceQuery = `INSERT INTO nexus_services(` +
-		`services_partition, service_id, type, service_name, namespace_id, task_queue_name, metadata, metadata_encoding, version)` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	// table templates
+	templateGetTableVersion    = `SELECT version FROM nexus_incoming_services WHERE partition = ? AND type = ? AND service_id = ?`
+	templateUpdateTableVersion = `UPDATE nexus_incoming_services SET version = toTimestamp(now()) WHERE partition = ? AND type = ? AND service_id = ?`
 
-	templateListIncomingServicesQuery = `SELECT service_name, namespace_id, task_queue_name, metadata, metadata_encoding, version ` +
-		`FROM nexus_services ` +
-		`WHERE services_partition = ? AND type = ?`
+	// incoming service templates
+	templateCreateIncomingServiceQuery = `INSERT INTO nexus_incoming_services(partition, type, service_id, data, data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateListIncomingServicesQuery  = `SELECT data, data_encoding, version FROM nexus_incoming_services WHERE partition = ? AND type = ?`
+	templateGetIncomingServiceQuery    = templateListIncomingServicesQuery + ` AND service_id = ?`
+	templateUpdateIncomingServiceQuery = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE partition = ? AND type = ? AND service_id = ? IF version = ?`
+	templateDeleteIncomingServiceQuery = `DELETE FROM nexus_incoming_services WHERE partition = ? AND type = ? AND service_id = ?`
+)
 
-	templateGetIncomingServiceQuery = templateListIncomingServicesQuery +
-		` AND service_id = ?`
-
-	templateUpdateIncomingServiceQuery = `UPDATE nexus_services SET ` +
-		`service_name = ?, namespace_id = ?, task_queue_name = ?, metadata = ?, metadata_encoding = ?, version = ? ` +
-		`WHERE services_partition = ? AND type = ? AND service_id = ? ` +
-		`IF version = ?`
-
-	templateDeleteIncomingServiceQuery = `DELETE FROM nexus_services ` +
-		`WHERE services_partition = ? AND type = ? AND service_id = ?`
+var (
+	ErrTableVersionConflict = &p.ConditionFailedError{
+		Msg: "nexus incoming services table version mismatch",
+	}
+	ErrCreateOrUpdateIncomingServiceFailed = &p.ConditionFailedError{
+		Msg: "error creating or updating nexus incoming service",
+	}
 )
 
 type (
@@ -95,38 +99,32 @@ func (s *NexusServiceStore) Close() {
 
 func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *p.InternalCreateOrUpdateNexusIncomingServiceRequest,
+	service *p.InternalNexusIncomingService,
 ) error {
-	// TODO: setting up as a batch because soon we will need to maintain a service_name -> service_id mapping
-	// in order to populate service registry cache (similar to how namespace registry works)
 	batch := s.session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 
-	if request.Service.Version == 0 {
+	if service.Version == 0 {
 		batch.Query(templateCreateIncomingServiceQuery,
 			constServicesPartition,
-			request.ServiceID,
 			rowTypeIncomingNexusService,
-			request.Service.ServiceName,
-			request.Service.NamespaceID,
-			request.Service.TaskQueueName,
-			request.Service.Metadata.Data,
-			request.Service.Metadata.EncodingType.String(),
+			service.ServiceID,
+			service.Data.Data,
+			service.Data.EncodingType.String(),
 			0,
 		)
 	} else {
 		batch.Query(templateUpdateIncomingServiceQuery,
-			request.Service.ServiceName,
-			request.Service.NamespaceID,
-			request.Service.TaskQueueName,
-			request.Service.Metadata.Data,
-			request.Service.Metadata.EncodingType.String(),
-			request.Service.Version+1,
+			service.Data.Data,
+			service.Data.EncodingType.String(),
+			service.Version+1,
 			constServicesPartition,
 			rowTypeIncomingNexusService,
-			request.ServiceID,
-			request.Service.Version,
+			service.ServiceID,
+			service.Version,
 		)
 	}
+
+	batch.Query(templateUpdateTableVersion, constServicesPartition, rowTypePartitionStatus, constTableVersionServiceID)
 
 	previous := make(map[string]interface{})
 	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previous)
@@ -147,10 +145,11 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to create/update Nexus incoming service. name: %v, version: %v, columns: (%v)",
-				request.Service.ServiceName, request.Service.Version, strings.Join(columns, ",")),
-		}
+		return fmt.Errorf("%w: ID=%v, version=%v, columns=(%v)",
+			ErrCreateOrUpdateIncomingServiceFailed,
+			service.ServiceID,
+			service.Version,
+			strings.Join(columns, ","))
 	}
 
 	return nil
@@ -166,23 +165,18 @@ func (s *NexusServiceStore) GetNexusIncomingService(
 		serviceID,
 	).WithContext(ctx)
 
-	var serviceName string
-	var namespaceID string
-	var taskQueueName string
-	var metadataBytes []byte
-	var metadataEncoding string
 	var version int64
+	var dataBytes []byte
+	var dataEncoding string
 
-	if err := query.Scan(&serviceName, &namespaceID, &taskQueueName, &metadataBytes, &metadataEncoding, &version); err != nil {
+	if err := query.Scan(&dataBytes, &dataEncoding, &version); err != nil {
 		return nil, gocql.ConvertError("GetNexusIncomingService", err)
 	}
 
 	return &p.InternalNexusIncomingService{
-		ServiceName:   serviceName,
-		NamespaceID:   namespaceID,
-		TaskQueueName: taskQueueName,
-		Metadata:      p.NewDataBlob(metadataBytes, metadataEncoding),
-		Version:       version,
+		ServiceID: serviceID,
+		Version:   version,
+		Data:      p.NewDataBlob(dataBytes, dataEncoding),
 	}, nil
 }
 
@@ -190,30 +184,29 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *p.InternalListNexusIncomingServicesRequest,
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
+	response := &p.InternalListNexusIncomingServicesResponse{}
+
+	currentTableVersion, err := s.getTableVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	response.TableVersion = currentTableVersion
+
+	if request.LastKnownTableVersion != UnknownTableVersion && request.LastKnownTableVersion != currentTableVersion {
+		// If table has been updated during pagination, throw error to indicate caller must start over
+		return nil, fmt.Errorf("%w. Provided table version: %v Current table version: %v",
+			ErrTableVersionConflict,
+			request.LastKnownTableVersion,
+			currentTableVersion)
+	}
+
 	query := s.session.Query(templateListIncomingServicesQuery, constServicesPartition, rowTypeIncomingNexusService).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
-	response := &p.InternalListNexusIncomingServicesResponse{}
 	row := make(map[string]interface{})
-
 	for iter.MapScan(row) {
-		serviceName, err := getTypedFieldFromRow[string]("service_name", row)
-		if err != nil {
-			return nil, err
-		}
-		namespaceID, err := getTypedFieldFromRow[string]("namespace_id", row)
-		if err != nil {
-			return nil, err
-		}
-		taskQueueName, err := getTypedFieldFromRow[string]("task_queue_name", row)
-		if err != nil {
-			return nil, err
-		}
-		metadata, err := getTypedFieldFromRow[[]byte]("metadata", row)
-		if err != nil {
-			return nil, err
-		}
-		metadataEncoding, err := getTypedFieldFromRow[string]("metadata_encoding", row)
+		serviceID, err := getTypedFieldFromRow[string]("service_id", row)
 		if err != nil {
 			return nil, err
 		}
@@ -221,13 +214,19 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 		if err != nil {
 			return nil, err
 		}
+		data, err := getTypedFieldFromRow[[]byte]("data", row)
+		if err != nil {
+			return nil, err
+		}
+		dataEncoding, err := getTypedFieldFromRow[string]("data_encoding", row)
+		if err != nil {
+			return nil, err
+		}
 
 		response.Services = append(response.Services, p.InternalNexusIncomingService{
-			ServiceName:   serviceName,
-			NamespaceID:   namespaceID,
-			TaskQueueName: taskQueueName,
-			Metadata:      p.NewDataBlob(metadata, metadataEncoding),
-			Version:       version,
+			ServiceID: serviceID,
+			Version:   version,
+			Data:      p.NewDataBlob(data, dataEncoding),
 		})
 
 		row = make(map[string]interface{})
@@ -248,17 +247,35 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 	ctx context.Context,
 	serviceID string,
 ) error {
-	query := s.session.Query(templateDeleteIncomingServiceQuery,
+	batch := s.session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
+
+	batch.Query(templateDeleteIncomingServiceQuery,
 		constServicesPartition,
 		rowTypeIncomingNexusService,
 		serviceID,
-	).WithContext(ctx)
+	)
 
-	previous := make(map[string]interface{})
-	_, err := query.MapScanCAS(previous)
+	batch.Query(templateUpdateTableVersion, constServicesPartition, rowTypePartitionStatus, constTableVersionServiceID)
+
+	err := s.session.ExecuteBatch(batch)
 	if err != nil {
 		return gocql.ConvertError("DeleteNexusIncomingService", err)
 	}
 
 	return nil
+}
+
+func (s *NexusServiceStore) getTableVersion(ctx context.Context) (int64, error) {
+	query := s.session.Query(templateGetTableVersion,
+		constServicesPartition,
+		rowTypePartitionStatus,
+		constTableVersionServiceID,
+	).WithContext(ctx)
+
+	var version int64
+	if err := query.Scan(&version); err != nil {
+		return UnknownTableVersion, gocql.ConvertError("GetNexusIncomingServicesTableVersion", err)
+	}
+
+	return version, nil
 }

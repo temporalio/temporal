@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/incomingServiceStore=data_interfaces.go
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
 package persistence
 
@@ -191,7 +191,7 @@ type (
 	NexusServiceStore interface {
 		Closeable
 		GetName() string
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
+		CreateOrUpdateNexusIncomingService(ctx context.Context, service *InternalNexusIncomingService) error
 		GetNexusIncomingService(ctx context.Context, serviceID string) (*InternalNexusIncomingService, error)
 		ListNexusIncomingServices(ctx context.Context, req *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
 		DeleteNexusIncomingService(ctx context.Context, serviceID string) error
@@ -742,28 +742,21 @@ type (
 
 	// InternalNexusIncomingService is the internal representation of an incoming Nexus service
 	InternalNexusIncomingService struct {
-		ServiceName   string
-		NamespaceID   string
-		TaskQueueName string
-		Metadata      *commonpb.DataBlob
-		Version       int64
-	}
-
-	// InternalCreateOrUpdateNexusIncomingServiceRequest is the request to CreateNexusIncomingService
-	InternalCreateOrUpdateNexusIncomingServiceRequest struct {
 		ServiceID string
-		Service   InternalNexusIncomingService
+		Version   int64
+		Data      *commonpb.DataBlob
 	}
 
 	// InternalListNexusIncomingServicesRequest is the request to ListNexusIncomingServices
 	InternalListNexusIncomingServicesRequest struct {
-		PageSize      int
-		NextPageToken []byte
-		TableVersion  int64
+		PageSize              int
+		NextPageToken         []byte
+		LastKnownTableVersion int64
 	}
 
 	// InternalListNexusIncomingServicesResponse is the response to ListNexusIncomingServices
 	InternalListNexusIncomingServicesResponse struct {
+		TableVersion  int64
 		NextPageToken []byte
 		Services      []InternalNexusIncomingService
 	}

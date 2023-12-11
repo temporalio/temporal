@@ -1294,7 +1294,7 @@ func (n *FaultInjectionNexusServiceStore) ListNexusIncomingServices(
 
 func (n *FaultInjectionNexusServiceStore) CreateOrUpdateNexusIncomingService(
 	ctx context.Context,
-	request *persistence.InternalCreateOrUpdateNexusIncomingServiceRequest,
+	request *persistence.InternalNexusIncomingService,
 ) error {
 	if err := n.ErrorGenerator.Generate(); err != nil {
 		return err
