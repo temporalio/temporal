@@ -497,17 +497,12 @@ func deserializeBlob(
 	historySerializer serialization.Serializer,
 	blob *commonpb.DataBlob,
 ) ([]*historypb.HistoryEvent, error) {
-
 	if blob == nil {
 		return nil, nil
 	}
 
-	events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-		Data:         blob.Data,
-	})
-
-	return events, err
+	blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+	return historySerializer.DeserializeEvents(blob)
 }
 
 func DeserializeBlobs(
@@ -519,10 +514,8 @@ func DeserializeBlobs(
 		return eventBatches, nil
 	}
 	for _, blob := range blobs {
-		events, err := historySerializer.DeserializeEvents(&commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         blob.Data,
-		})
+		blob.EncodingType = enumspb.ENCODING_TYPE_PROTO3
+		events, err := historySerializer.DeserializeEvents(blob)
 		if err != nil {
 			return nil, err
 		}
