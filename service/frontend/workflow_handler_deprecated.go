@@ -516,10 +516,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	}
 
 	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.EncodingType,
-			Data:         data.Data,
-		})
+		rawHistory = append(rawHistory, data)
 	}
 
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
@@ -538,10 +535,7 @@ func (wh *WorkflowHandler) getRawHistory(
 			if err != nil {
 				return nil, nil, err
 			}
-			rawHistory = append(rawHistory, &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         blob.Data,
-			})
+			rawHistory = append(rawHistory, blob)
 		}
 	}
 
