@@ -192,7 +192,6 @@ type (
 		Closeable
 		GetName() string
 		CreateOrUpdateNexusIncomingService(ctx context.Context, request *InternalCreateOrUpdateNexusIncomingServiceRequest) error
-		GetNexusIncomingService(ctx context.Context, serviceID string) (*InternalNexusIncomingService, error)
 		ListNexusIncomingServices(ctx context.Context, request *InternalListNexusIncomingServicesRequest) (*InternalListNexusIncomingServicesResponse, error)
 		DeleteNexusIncomingService(ctx context.Context, request *InternalDeleteNexusIncomingServiceRequest) error
 	}

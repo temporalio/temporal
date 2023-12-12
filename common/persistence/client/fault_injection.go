@@ -1272,16 +1272,6 @@ func (n *FaultInjectionNexusServiceStore) Close() {
 	n.baseNexusServiceStore.Close()
 }
 
-func (n *FaultInjectionNexusServiceStore) GetNexusIncomingService(
-	ctx context.Context,
-	name string,
-) (*persistence.InternalNexusIncomingService, error) {
-	if err := n.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return n.baseNexusServiceStore.GetNexusIncomingService(ctx, name)
-}
-
 func (n *FaultInjectionNexusServiceStore) ListNexusIncomingServices(
 	ctx context.Context,
 	request *persistence.InternalListNexusIncomingServicesRequest,
