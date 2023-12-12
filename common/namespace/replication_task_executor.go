@@ -204,7 +204,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			recordExists = false
 		default:
 			// return the original err
-			h.logger.Error("namespace replication encountered error during NamespaceCreationReplicationTask")
+			h.logger.Error("namespace replication encountered error during NamespaceCreationReplicationTask", tag.WorkflowNamespaceID(task.Info.GetName()), tag.Error(err))
 			return err
 		}
 
