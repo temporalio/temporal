@@ -27,6 +27,7 @@ package worker
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,10 +39,12 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -102,6 +105,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 					return map[string]any{}
 				}
 			},
+			PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
 		},
 		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
 		ClusterMetadata: cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
@@ -118,7 +122,6 @@ func (s *perNsWorkerManagerSuite) TearDownTest() {
 	s.registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
 	s.serviceResolver.EXPECT().RemoveListener(gomock.Any())
 	s.manager.Stop()
-	s.controller.Finish()
 }
 
 func (s *perNsWorkerManagerSuite) TestDisabled() {
@@ -496,6 +499,51 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	// shutdown
 	wkr2.EXPECT().Stop()
 	cli2.EXPECT().Close()
+}
+
+func (s *perNsWorkerManagerSuite) TestRateLimit() {
+	mockLimiter := quotas.NewMockRateLimiter(s.controller)
+	s.manager.startLimiter = mockLimiter
+
+	// try to start 100 workers
+	// rate limiter will allow 10, then 10 more after 0.2s, then no more for 10s
+	for i := 0; i < 100; i++ {
+		res := quotas.NewMockReservation(s.controller)
+		mockLimiter.EXPECT().Reserve().Return(res)
+		switch i % 10 {
+		case 2:
+			res.EXPECT().Delay().Return(0 * time.Millisecond)
+		case 6:
+			res.EXPECT().Delay().Return(200 * time.Millisecond)
+		default:
+			res.EXPECT().Delay().Return(10 * time.Second)
+		}
+	}
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{Enabled: true}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{Enabled: false}).AnyTimes()
+	s.cmp1.EXPECT().Register(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	s.serviceResolver.EXPECT().LookupN(gomock.Any(), 1).Return([]membership.HostInfo{membership.NewHostInfoFromAddress("self")}).AnyTimes()
+	cli := mocksdk.NewMockClient(s.controller)
+	wkr := mocksdk.NewMockWorker(s.controller)
+	s.cfactory.EXPECT().NewClient(gomock.Any()).Return(cli).AnyTimes()
+	s.cfactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(wkr).AnyTimes()
+	var starts atomic.Int32
+	wkr.EXPECT().Start().Do(func() { starts.Add(1) }).AnyTimes()
+
+	for i := 0; i < 100; i++ {
+		ns := testns(fmt.Sprintf("test-%d", i), enumspb.NAMESPACE_STATE_REGISTERED)
+		s.manager.namespaceCallback(ns, false)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	s.Equal(10, int(starts.Load()), "should be 10 started immediately")
+
+	time.Sleep(200 * time.Millisecond)
+	s.Equal(20, int(starts.Load()), "should be 20 started later")
+
+	wkr.EXPECT().Stop().AnyTimes()
+	cli.EXPECT().Close().AnyTimes()
 }
 
 func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
