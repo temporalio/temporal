@@ -3455,6 +3455,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 	}
 
 	msgHandlerCalls := 0
+	var updRequestMsg *protocolpb.Message
 	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 		msgHandlerCalls++
 		switch msgHandlerCalls {
@@ -3462,10 +3463,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat()
 			return nil, nil
 		case 2:
 			s.Len(task.Messages, 1)
+			updRequestMsg = task.Messages[0]
+			s.EqualValues(5, updRequestMsg.GetEventId())
 			return nil, nil
 		case 3:
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
+			s.Empty(task.Messages)
 			return s.rejectUpdateMessages(tv, updRequestMsg, "1"), nil
 		case 4:
 			return nil, nil
@@ -5153,7 +5155,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_NewSpeculativeWorkflowTask_WorkerSk
 	s.NoError(err)
 	updateResp := res.NewTask
 	updateResult := <-updateResultCh
-	s.Equal("Update was delivered to the worker old_worker, but wasn't processed with workflow task 5. Probably Workflow Update is not supported by the worker.", updateResult.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.", updateResult.GetOutcome().GetFailure().GetMessage())
 	s.EqualValues(3, updateResp.ResetHistoryEventId)
 
 	// Process 3rd WT which completes 2nd update and workflow.

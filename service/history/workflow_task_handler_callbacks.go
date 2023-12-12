@@ -231,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -287,7 +287,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -661,7 +661,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages() {
+		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) { // If there are updates which were sent on another WT (which was lost), resend them with this new WT.
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -813,7 +813,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), workflowTaskHeartbeating)
 		if err != nil {
 			return nil, err
 		}
@@ -882,10 +882,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
+	ctx context.Context,
 	ms workflow.MutableState,
 	updateRegistry update.Registry,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
+	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
@@ -932,7 +934,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages = updateRegistry.OutgoingMessages(workflowTask.ScheduledEventID, workflowTask.StartedEventID)
+	// If there are updates in the registry which were already sent to worker but still
+	// are not processed and not rejected by server, it means that WT that was used to
+	// deliver those updates failed, got timed out, or got lost.
+	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
+	// Heartbeat WT delivers only new updates that come while this WT was running.
+	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")

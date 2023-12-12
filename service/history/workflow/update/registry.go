@@ -59,20 +59,21 @@ type (
 		Find(ctx context.Context, protocolInstanceID string) (*Update, bool)
 		// TODO: isn't the return `bool` always true when the *Update != nil?
 
-		// HasOutgoingMessages returns true if the registry has any Updates that needs
-		// to be delivered to the worker.
-		HasOutgoingMessages() bool
+		// HasOutgoingMessages returns true if the registry has any Updates
+		// for which outgoing message can be generated.
+		// If includeAlreadySent is set to true then it will return true
+		// even if update message was already sent but not processed by worker.
+		HasOutgoingMessages(includeAlreadySent bool) bool
 
-		// OutgoingMessages return all outbound messages from all Updates
-		// that need to be delivered to the worker. It also links every Update with workflow task,
-		// for which it is sending messages, by setting provided workflowTaskScheduledEventID.
-		OutgoingMessages(workflowTaskScheduledEventID int64, workflowTaskStartedEventID int64) []*protocolpb.Message
+		// Send returns messages for all Updates that need to be sent to the worker.
+		// If includeAlreadySent is set to true then messages will be created even
+		// for updates which were already sent but not processed by worker.
+		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64, eventStore EventStore) []*protocolpb.Message
 
-		// RejectUnprocessed reject all updates that are waiting for workflow task
-		// with provided workflowTaskScheduledEventID to be completed.
+		// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
 		// This method should be called after all messages from worker are handled to make sure
-		// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
-		RejectUnprocessed(ctx context.Context, workflowTaskScheduledEventID int64, workerIdentity string, eventStore EventStore) ([]string, error)
+		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
+		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
 		// TerminateUpdates terminates all existing updates in the registry
 		// and notifies update API callers with corresponding error.
@@ -200,14 +201,11 @@ func (r *registry) TerminateUpdates(_ context.Context, _ EventStore) {
 	// In future, it should remove all existing updates and notify callers with better error.
 }
 
-// RejectUnprocessed reject all updates that are waiting for workflow task
-// with provided workflowTaskScheduledEventID to be completed.
+// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
 // This method should be called after all messages from worker are handled to make sure
 // that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
 	ctx context.Context,
-	workflowTaskScheduledEventID int64,
-	workerIdentity string,
 	eventStore EventStore,
 ) ([]string, error) {
 	r.mu.Lock()
@@ -215,9 +213,9 @@ func (r *registry) RejectUnprocessed(
 
 	var rejectedUpdateIDs []string
 	for _, upd := range r.updates {
-		if upd.IsLinkedToWorkflowTask(workflowTaskScheduledEventID) && upd.HasOutgoingMessage() {
+		if upd.isSent() {
 			rejectionFailure := &failurepb.Failure{
-				Message: fmt.Sprintf("Update was delivered to the worker %s, but wasn't processed with workflow task %d. Probably Workflow Update is not supported by the worker.", workerIdentity, workflowTaskScheduledEventID),
+				Message: "Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
 				Source:  "Server",
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 					Type:         "UnprocessedUpdate",
@@ -233,27 +231,31 @@ func (r *registry) RejectUnprocessed(
 	return rejectedUpdateIDs, nil
 }
 
-// HasOutgoingMessages returns true if the registry has any Updates that needs
-// to be delivered to the worker.
-func (r *registry) HasOutgoingMessages() bool {
+// HasOutgoingMessages returns true if the registry has any Updates
+// for which outgoing message can be generated.
+// If includeAlreadySent is set to true then it will return true
+// even if update message was already sent but not processed by worker.
+func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, upd := range r.updates {
-		if upd.HasOutgoingMessage() {
+		if upd.needToSend(includeAlreadySent) {
 			return true
 		}
 	}
 	return false
 }
 
-// OutgoingMessages create are return messages for all Updates
-// that need to be delivered to the worker. It also links every Update for which it creates message,
-// with workflow task by setting provided workflowTaskScheduledEventID.
-func (r *registry) OutgoingMessages(
-	workflowTaskScheduledEventID int64,
+// Send creates and returns messages for all Updates that need to be sent to the worker.
+// If includeAlreadySent is set to true then messages will be created even
+// for updates which were already sent but not processed by worker.
+func (r *registry) Send(
+	ctx context.Context,
+	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
+	eventStore EventStore,
 ) []*protocolpb.Message {
-	// Need full write lock here because workflowTaskScheduledEventID needs to be recorded for every update.
+	// Need full write lock here because update state is changed.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -268,9 +270,8 @@ func (r *registry) OutgoingMessages(
 
 	var outgoingMessages []*protocolpb.Message
 	for _, upd := range r.updates {
-		outgoingMessage := upd.OutgoingMessage(sequencingEventID)
+		outgoingMessage := upd.send(ctx, includeAlreadySent, sequencingEventID, eventStore)
 		if outgoingMessage != nil {
-			upd.LinkWorkflowTask(workflowTaskScheduledEventID)
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
 	}

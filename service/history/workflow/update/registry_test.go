@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 
@@ -92,7 +93,7 @@ func TestFind(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestHasOutgoing(t *testing.T) {
+func TestHasOutgoingMessages(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx      = context.Background()
@@ -110,14 +111,27 @@ func TestHasOutgoing(t *testing.T) {
 
 	upd, _, err := reg.FindOrCreate(ctx, updateID)
 	require.NoError(t, err)
-	require.False(t, reg.HasOutgoingMessages())
+	require.False(t, reg.HasOutgoingMessages(false))
 
 	req := updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
 	require.NoError(t, upd.OnMessage(ctx, &req, evStore))
-	require.True(t, reg.HasOutgoingMessages())
+	require.True(t, reg.HasOutgoingMessages(false))
+
+	msg := reg.Send(ctx, false, testSequencingEventID, evStore)
+	require.Len(t, msg, 1)
+	require.False(t, reg.HasOutgoingMessages(false))
+	require.True(t, reg.HasOutgoingMessages(true))
+
+	acptReq := updatepb.Acceptance{
+		AcceptedRequest: &req,
+	}
+
+	upd.OnMessage(ctx, &acptReq, evStore)
+	require.False(t, reg.HasOutgoingMessages(false))
+	require.False(t, reg.HasOutgoingMessages(true))
 }
 
 func TestFindOrCreate(t *testing.T) {
@@ -253,13 +267,12 @@ func TestMessageGathering(t *testing.T) {
 	require.NoError(t, err)
 	upd2, _, err := reg.FindOrCreate(ctx, updateID2)
 	require.NoError(t, err)
-	wftScheduledEventID := int64(122)
-	wftStartedEventID := int64(123)
+	wftStartedEventID := int64(2208)
 
-	msgs := reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
+	msgs := reg.Send(ctx, false, wftStartedEventID, evStore)
 	require.Empty(t, msgs)
-	require.False(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
-	require.False(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.False(t, upd1.IsSent())
+	require.False(t, upd2.IsSent())
 
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
@@ -267,10 +280,20 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
+	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
 	require.Len(t, msgs, 1)
-	require.True(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
-	require.False(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.True(t, upd1.IsSent())
+	require.False(t, upd2.IsSent())
+
+	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
+	require.Len(t, msgs, 0)
+	require.True(t, upd1.IsSent())
+	require.False(t, upd2.IsSent())
+
+	msgs = reg.Send(ctx, true, wftStartedEventID, evStore)
+	require.Len(t, msgs, 1)
+	require.True(t, upd1.IsSent())
+	require.False(t, upd2.IsSent())
 
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
@@ -278,10 +301,20 @@ func TestMessageGathering(t *testing.T) {
 	}, evStore)
 	require.NoError(t, err)
 
-	msgs = reg.OutgoingMessages(wftScheduledEventID, wftStartedEventID)
+	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
+	require.Len(t, msgs, 1)
+	require.True(t, upd1.IsSent())
+	require.True(t, upd2.IsSent())
+
+	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
+	require.Len(t, msgs, 0)
+	require.True(t, upd1.IsSent())
+	require.True(t, upd2.IsSent())
+
+	msgs = reg.Send(ctx, true, wftStartedEventID, evStore)
 	require.Len(t, msgs, 2)
-	require.True(t, upd1.IsLinkedToWorkflowTask(wftScheduledEventID))
-	require.True(t, upd2.IsLinkedToWorkflowTask(wftScheduledEventID))
+	require.True(t, upd1.IsSent())
+	require.True(t, upd2.IsSent())
 
 	for _, msg := range msgs {
 		require.Equal(t, wftStartedEventID-1, msg.GetEventId())
@@ -299,7 +332,8 @@ func TestInFlightLimit(t *testing.T) {
 				func() int { return limit },
 			),
 		)
-		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
+		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -318,6 +352,17 @@ func TestInFlightLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
+	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+
+	_ = upd1.Send(ctx, false, sequencingID, evStore)
+
+	t.Run("exceed limit after send", func(t *testing.T) {
+		_, _, err = reg.FindOrCreate(ctx, "update2")
+		var resExh *serviceerror.ResourceExhausted
+		require.ErrorAs(t, err, &resExh)
+		require.Equal(t, 1, reg.Len())
+	})
+
 	rej := updatepb.Rejection{
 		RejectedRequestMessageId: "update1/request",
 		RejectedRequest:          &req,
@@ -325,7 +370,6 @@ func TestInFlightLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
 	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
 	require.Equal(t, 0, reg.Len(),
 		"completed update should have been removed from registry")
@@ -368,7 +412,8 @@ func TestTotalLimit(t *testing.T) {
 				func() int { return limit },
 			),
 		)
-		evStore = mockEventStore{Controller: effect.Immediate(ctx)}
+		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
 	)
 	upd1, existed, err := reg.FindOrCreate(ctx, "update1")
 	require.NoError(t, err)
@@ -387,6 +432,17 @@ func TestTotalLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
+	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+
+	_ = upd1.Send(ctx, false, sequencingID, evStore)
+
+	t.Run("exceed limit after send", func(t *testing.T) {
+		_, _, err = reg.FindOrCreate(ctx, "update2")
+		var failedPrecon *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecon)
+		require.Equal(t, 1, reg.Len())
+	})
+
 	rej := updatepb.Rejection{
 		RejectedRequestMessageId: "update1/request",
 		RejectedRequest:          &req,
@@ -394,7 +450,6 @@ func TestTotalLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
 	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
 
 	t.Run("try to admit next after completing previous", func(t *testing.T) {

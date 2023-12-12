@@ -229,23 +229,19 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
-	// TODO (alex-update): Don't deliver these updates on the next WT.
-	//  Fix TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbeat test.
 	if workflowTaskHeartbeating {
 		return nil
 	}
 
 	// If worker has just completed workflow with one of the WF completion command,
-	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug,
-	// but it's a normal behavior. Updates will be rejected with "workflow is closing" reason though.
+	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
+	// All unprocessed updates will be rejected with "workflow is closing" reason though.
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
 
 	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
 		ctx,
-		workflowTaskScheduledEventID,
-		workerIdentity,
 		workflow.WithEffects(handler.effects, handler.mutableState))
 
 	if err != nil {
@@ -259,7 +255,8 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringsTag("updateIDs", rejectedUpdateIDs),
+			tag.NewStringTag("worker-identity", workerIdentity),
+			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
 		)
 	}
 	return nil
