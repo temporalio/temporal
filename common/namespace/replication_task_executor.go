@@ -131,7 +131,7 @@ func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Con
 	switch err.(type) {
 	case nil:
 		if resp.Namespace.Info.Id != task.GetId() {
-			h.logger.Error("namespace replication encountered name / UUID collision during determination on whether to process task", tag.NewStringTag("namespaceID", task.Info.GetName()), tag.NewErrorTag(err))
+			h.logger.Error("namespace replication encountered name / UUID collision during determination on whether to process task", tag.WorkflowNamespaceID(task.Info.GetName()))
 			return false, ErrNameUUIDCollision
 		}
 
@@ -196,7 +196,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		switch getErr.(type) {
 		case nil:
 			if resp.Namespace.Info.Id != task.GetId() {
-				h.logger.Error("namespace replication encountered name / UUID collision during NamespaceCreationReplicationTask (first GetNamespace call)", tag.NewStringTag("namespaceID", task.Info.GetName()), tag.NewErrorTag(err), tag.NewErrorTag(getErr))
+				h.logger.Error("namespace replication encountered name / UUID collision during NamespaceCreationReplicationTask (first GetNamespace call)", tag.WorkflowNamespaceID(task.Info.GetName()), tag.NewErrorTag(err), tag.NewErrorTag(getErr))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
@@ -214,7 +214,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		switch getErr.(type) {
 		case nil:
 			if resp.Namespace.Info.Name != task.Info.GetName() {
-				h.logger.Error("namespace replication encountered name / UUID collision during NamespaceCreationReplicationTask (second GetNamespace call)", tag.NewStringTag("namespaceID", task.Info.GetName()), tag.NewErrorTag(err), tag.NewErrorTag(getErr))
+				h.logger.Error("namespace replication encountered name / UUID collision during NamespaceCreationReplicationTask (second GetNamespace call)", tag.WorkflowNamespaceID(task.Info.GetName()), tag.NewErrorTag(err), tag.NewErrorTag(getErr))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
