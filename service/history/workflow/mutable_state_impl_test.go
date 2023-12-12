@@ -1141,7 +1141,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	}
 	s.Greater(activityFailure.Size(), failureSizeErrorLimit)
 
-	retryState, err := s.mutableState.RetryActivity(activityInfo, activityFailure, NextBackoffInterval)
+	retryState, err := s.mutableState.RetryActivity(activityInfo, activityFailure, RequestedDelay{})
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 

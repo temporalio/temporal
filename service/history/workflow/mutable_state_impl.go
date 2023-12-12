@@ -199,16 +199,6 @@ type (
 		logger          log.Logger
 		metricsHandler  metrics.Handler
 	}
-	BackoffIntervalCalculatorFunc func(
-		time.Time,
-		int32,
-		int32,
-		*durationpb.Duration,
-		*durationpb.Duration,
-		*timestamppb.Timestamp,
-		float64,
-		BackoffCalculatorAlgorithmFunc,
-	) (time.Duration, enumspb.RetryState)
 )
 
 var _ MutableState = (*MutableStateImpl)(nil)
@@ -4226,15 +4216,15 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
 	failure *failurepb.Failure,
-	backoffCalculator BackoffIntervalCalculatorFunc,
+	delay RequestedDelay,
 ) (enumspb.RetryState, error) {
 
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := ms.checkMutability(opTag); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
-	retryableActivity, state := NewRetryableActivity(ai, failure, ms.timeSource, backoffCalculator)
-	if state != enumspb.RETRY_STATE_IN_PROGRESS {
+	activityVisitor := newActivityVisitor(ai, failure, ms.timeSource, delay)
+	if state := activityVisitor.State(); state != enumspb.RETRY_STATE_IN_PROGRESS {
 		return state, nil
 	}
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai.ScheduledEventId); err != nil {
@@ -4247,7 +4237,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-	ai = retryableActivity.UpdateActivityInfo(ai, ms.GetCurrentVersion(), ms.truncateRetryableActivityFailure(failure))
+	ai = activityVisitor.UpdateActivityInfo(ai, ms.GetCurrentVersion(), ms.truncateRetryableActivityFailure(failure))
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}

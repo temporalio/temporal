@@ -2572,18 +2572,18 @@ func (mr *MockMutableStateMockRecorder) RemoveSpeculativeWorkflowTaskTimeoutTask
 }
 
 // RetryActivity mocks base method.
-func (m *MockMutableState) RetryActivity(ai *v112.ActivityInfo, failure *v12.Failure, calculator BackoffIntervalCalculatorFunc) (v11.RetryState, error) {
+func (m *MockMutableState) RetryActivity(ai *v112.ActivityInfo, failure *v12.Failure, delay RequestedDelay) (v11.RetryState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryActivity", ai, failure, calculator)
+	ret := m.ctrl.Call(m, "RetryActivity", ai, failure, delay)
 	ret0, _ := ret[0].(v11.RetryState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetryActivity indicates an expected call of RetryActivity.
-func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure, calculator interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure, delay interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure, calculator)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure, delay)
 }
 
 // SetBaseWorkflow mocks base method.

@@ -27,6 +27,7 @@ package workflow
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -37,72 +38,97 @@ import (
 	"go.temporal.io/server/common/clock"
 )
 
-type RetryableActivity struct {
-	ai                *persistence.ActivityInfo
-	nextScheduledTime *timestamppb.Timestamp
-	timesource        clock.TimeSource
-	calculator        BackoffIntervalCalculatorFunc
-	algorithm         BackoffCalculatorAlgorithmFunc
+type RequestedDelay struct {
+	Interval *time.Duration
 }
 
-func NewRetryableActivity(
+type ActivityVisitor interface {
+	UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, failure *failurepb.Failure) *persistence.ActivityInfo
+	State() enumspb.RetryState
+}
+
+type nonRetryableActivityVisitor struct {
+	state enumspb.RetryState
+}
+
+type retryableActivityVisitor struct {
+	ai                *persistence.ActivityInfo
+	nextScheduledTime time.Time
+	timesource        clock.TimeSource
+	delay             RequestedDelay
+	state             enumspb.RetryState
+}
+
+func newActivityVisitor(
 	ai *persistence.ActivityInfo,
 	failure *failurepb.Failure,
 	timesource clock.TimeSource,
-	backoffCalculator BackoffIntervalCalculatorFunc,
-) (*RetryableActivity, enumspb.RetryState) {
+	delay RequestedDelay,
+) ActivityVisitor {
 	if !ai.HasRetryPolicy {
-		return nil, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
+		return &nonRetryableActivityVisitor{state: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET}
 	}
-
 	if ai.CancelRequested {
-		return nil, enumspb.RETRY_STATE_CANCEL_REQUESTED
+		return &nonRetryableActivityVisitor{state: enumspb.RETRY_STATE_CANCEL_REQUESTED}
 	}
 
 	if !isRetryable(failure, ai.RetryNonRetryableErrorTypes) {
-		return nil, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+		return &nonRetryableActivityVisitor{state: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE}
 	}
 
-	builder := &RetryableActivity{ai: ai, calculator: backoffCalculator, timesource: timesource, algorithm: makeBackoffAlgorithm(failure)}
-	state := builder.calculateSchedule()
-	return builder, state
+	now := timesource.Now()
+	backoff, retryState := nextBackoffInterval(
+		now,
+		ai.Attempt,
+		ai.RetryMaximumAttempts,
+		ai.RetryInitialInterval,
+		ai.RetryMaximumInterval,
+		ai.RetryExpirationTime,
+		ai.RetryBackoffCoefficient,
+		makeBackoffAlgorithm(delay),
+	)
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return &nonRetryableActivityVisitor{state: retryState}
+	}
+
+	nextScheduledTime := now.Add(backoff)
+	visitor := &retryableActivityVisitor{ai: ai, timesource: timesource, delay: delay, nextScheduledTime: nextScheduledTime, state: retryState}
+	return visitor
 }
 
-func (ra *RetryableActivity) UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, failure *failurepb.Failure) *persistence.ActivityInfo {
+func (nra *nonRetryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, _ int64, _ *failurepb.Failure) *persistence.ActivityInfo {
+	return ai
+}
+
+func (nra *nonRetryableActivityVisitor) State() enumspb.RetryState {
+	return nra.state
+}
+
+func (ra *retryableActivityVisitor) State() enumspb.RetryState {
+	return ra.state
+}
+
+func (ra *retryableActivityVisitor) UpdateActivityInfo(ai *persistence.ActivityInfo, version int64, failure *failurepb.Failure) *persistence.ActivityInfo {
 	ai.Attempt++
 	ai.Version = version
-	ai.ScheduledTime = ra.nextScheduledTime
+	ai.ScheduledTime = timestamppb.New(ra.nextScheduledTime)
 	ai.StartedEventId = common.EmptyEventID
 	ai.RequestId = ""
 	ai.StartedTime = nil
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
+	if ra.delay.Interval != nil {
+		ai.ActivityRequests = &commonpb.ActivityRequests{NextRetryDelay: durationpb.New(*ra.delay.Interval)}
+	}
 	return ai
 }
 
-func (ra *RetryableActivity) calculateSchedule() enumspb.RetryState {
-	now := ra.timesource.Now()
-	backoff, retryState := ra.calculator(
-		now,
-		ra.ai.Attempt,
-		ra.ai.RetryMaximumAttempts,
-		ra.ai.RetryInitialInterval,
-		ra.ai.RetryMaximumInterval,
-		ra.ai.RetryExpirationTime,
-		ra.ai.RetryBackoffCoefficient,
-		ra.algorithm,
-	)
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-		return retryState
-	}
-
-	ra.nextScheduledTime = timestamppb.New(now.Add(backoff))
-	return retryState
-}
-
-func makeBackoffAlgorithm(_ *failurepb.Failure) BackoffCalculatorAlgorithmFunc {
+func makeBackoffAlgorithm(delay RequestedDelay) BackoffCalculatorAlgorithmFunc {
 	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
+		if delay.Interval != nil {
+			return *delay.Interval
+		}
 		return ExponentialBackoffAlgorithm(duration, coefficient, currentAttempt)
 	}
 }

@@ -44,7 +44,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/backoff"
 	commonclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -96,9 +95,6 @@ func (s *retryActivitySuite) SetupSuite() {
 	s.timeSource = commonclock.NewEventTimeSource()
 }
 
-func (s *retryActivitySuite) TearDownSuite() {
-}
-
 func (s *retryActivitySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
@@ -132,7 +128,6 @@ func (s *retryActivitySuite) SetupTest() {
 }
 
 func (s *retryActivitySuite) TearDownTest() {
-	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
@@ -140,7 +135,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_activity_has_no_retry_policy
 	s.activity.HasRetryPolicy = false
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, state)
@@ -152,7 +147,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_activity_has_pending_cancel_
 	s.activity.CancelRequested = true
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 
 	s.NoError(err, "activity which has no retry policy should not be retried but it failed")
 	s.Equal(enumspb.RETRY_STATE_CANCEL_REQUESTED, state)
@@ -165,31 +160,39 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
-	ts := s.timeSource
-	s.mutableState.timeSource = ts
+	s.mutableState.timeSource = s.timeSource
 
-	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	_, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	// s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
+	second := time.Second
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{&second})
 	s.NoError(err)
 	s.Equal(s.onActivityCreate.mutableStateApproximateSize-s.onActivityCreate.activitySize+s.activity.Size(), s.mutableState.approximateSize)
 	s.Equal(s.activity.Version, s.mutableState.currentVersion)
 
-	s.Equal(ts.Now().Add(1*time.Second).UTC(), s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
-	s.Equal(s.nextBackoffStub.expected, s.nextBackoffStub.recorded)
+	s.Equal(s.timeSource.Now().Add(1*time.Second).UTC(), s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
+	// s.Equal(s.nextBackoffStub.expected, s.nextBackoffStub.recorded)
 	s.assertTruncateFailureCalled()
 }
 
 func (s *retryActivitySuite) TestRetryActivity_when_no_next_backoff_interval_should_fail() {
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	s.mutableState.taskGenerator = taskGeneratorMock
-	s.nextBackoffStub.onNextCallReturn(backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT)
+	s.mutableState.timeSource = s.timeSource
+	s.moveClockBeyondActivityExpirationTime()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "wrong state")
 	s.assertActivityWasNotScheduled(s.activity, "which retries for too long")
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
+}
+
+func (s *retryActivitySuite) moveClockBeyondActivityExpirationTime() {
+	expireAfter := s.activity.StartToCloseTimeout
+	if expireAfter != nil {
+		s.timeSource.Advance(s.activity.StartedTime.AsTime().Sub(s.timeSource.Now()) + expireAfter.AsDuration() + 1*time.Second)
+	}
 }
 
 func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_should_fail() {
@@ -199,7 +202,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 	s.Error(err, e.Error())
 	s.Equal(
 		enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR,
@@ -213,7 +216,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 func (s *retryActivitySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {
 	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 
 	s.Error(ErrWorkflowFinished, err.Error(), "when workflow finished should get error stating it")
 	s.Equal(enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, state)
@@ -228,7 +231,7 @@ func (s *retryActivitySuite) TestRetryActivity_when_failure_in_list_of_not_retry
 	s.activity.RetryNonRetryableErrorTypes = []string{"application-failure-type"}
 	s.onActivityCreate.activitySize = s.activity.Size()
 
-	state, err := s.mutableState.RetryActivity(s.activity, s.failure, s.nextBackoffStub.nextBackoffInterval)
+	state, err := s.mutableState.RetryActivity(s.activity, s.failure, RequestedDelay{})
 
 	s.NoError(err)
 	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, state, "wrong state want NON_RETRYABLE_FAILURE got %v", state)
@@ -318,9 +321,12 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
 		workflowTaskCompletedEventID,
 		&commandpb.ScheduleActivityTaskCommandAttributes{
-			ActivityId:   "5",
-			ActivityType: &commonpb.ActivityType{Name: "activity-type"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+			ActivityId:             "5",
+			ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "task-queue"},
+			ScheduleToStartTimeout: durationpb.New(100 * time.Millisecond),
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+			StartToCloseTimeout:    durationpb.New(3 * time.Second),
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: timestamp.DurationFromSeconds(1),
 			},

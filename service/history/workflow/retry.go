@@ -75,10 +75,10 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
-	return NextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
 }
 
-func NextBackoffInterval(
+func nextBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,

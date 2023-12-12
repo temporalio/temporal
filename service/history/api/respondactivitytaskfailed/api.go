@@ -120,7 +120,8 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
-			retryState, err := mutableState.RetryActivity(ai, failure, workflow.NextBackoffInterval)
+			delay := workflow.RequestedDelay{Interval: nextRetryDelayFrom(request)}
+			retryState, err := mutableState.RetryActivity(ai, failure, delay)
 			if err != nil {
 				return nil, err
 			}
@@ -152,4 +153,14 @@ func Invoke(
 		)
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
+}
+
+func nextRetryDelayFrom(request *workflowservice.RespondActivityTaskFailedRequest) *time.Duration {
+	p := request.GetActivityRequests().GetNextRetryDelay()
+	var delay *time.Duration
+	if p != nil {
+		d := p.AsDuration()
+		delay = &d
+	}
+	return delay
 }

@@ -310,6 +310,7 @@ message ActivityInfo {
     google.protobuf.Timestamp last_heartbeat_update_time = 32;
     bool use_compatible_version = 33;
     temporal.api.common.v1.ActivityType activity_type = 34;
+    temporal.api.common.v1.ActivityRequests activity_requests = 35;
 }
 
 // timer_map column

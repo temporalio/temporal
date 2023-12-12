@@ -207,7 +207,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 	t.Run("first attempt should use initial backoff", func(t *testing.T) {
 		currentAttempt := int32(1)
 		initialDelay := 5 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			currentAttempt,
 			5,
@@ -225,7 +225,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 		currentAttempt := int32(-1)
 		maxAttempts := int32(5)
 		initialDelay := 5 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			currentAttempt,
 			maxAttempts,
@@ -243,7 +243,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 		initialDelay := 2 * time.Second
 		attempt := int32(4)
 		maxAttempts := int32(5)
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			attempt,
 			maxAttempts,
@@ -259,7 +259,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 
 	t.Run("if retry exceeds max backoff interval should set it to max", func(t *testing.T) {
 		maxBackoff := 1 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			5,
 			doNotCare[int32](20),
@@ -274,7 +274,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 	})
 
 	t.Run("when max attempts is specified and current exceeds max should return no more retries", func(t *testing.T) {
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			10,
 			10,
@@ -290,7 +290,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 
 	t.Run("when max attempts is set to 0 should keep trying", func(t *testing.T) {
 		initialDelay := 2 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			10,
 			0,
@@ -306,7 +306,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 
 	t.Run("if expiration is not 0 and expected delay beyond expiration should return no more retries", func(t *testing.T) {
 		initialDelay := 2 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			10,
 			0,
@@ -322,7 +322,7 @@ func Test_nextBackoffInterval(t *testing.T) {
 
 	t.Run("if expiration is 0 should retry", func(t *testing.T) {
 		initialDelay := 2 * time.Second
-		interval, retryState := NextBackoffInterval(
+		interval, retryState := nextBackoffInterval(
 			doNotCare(now),
 			10,
 			0,
