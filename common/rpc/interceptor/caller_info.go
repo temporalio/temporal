@@ -29,6 +29,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 )
@@ -68,7 +69,7 @@ func (i *CallerInfoInterceptor) Intercept(
 	}
 	if (callerInfo.CallerType == headers.CallerTypeAPI || callerInfo.CallerType == headers.CallerTypeOperator) &&
 		callerInfo.CallOrigin == "" {
-		_, method := SplitMethodName(info.FullMethod)
+		method := api.MethodName(info.FullMethod)
 		callerInfo.CallOrigin = method
 		updateInfo = true
 	}

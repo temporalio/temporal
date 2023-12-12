@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc"
 
@@ -69,7 +70,7 @@ func (i *RateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	_, methodName := SplitMethodName(info.FullMethod)
+	methodName := api.MethodName(info.FullMethod)
 	token, ok := i.tokens[methodName]
 	if !ok {
 		token = RateLimitDefaultToken
