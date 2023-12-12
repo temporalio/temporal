@@ -2093,11 +2093,11 @@ func (s *functionalSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete_1st
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 2} // WTScheduled event which delivered update to the worker.
+  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 0} // WTScheduled event which delivered update to the worker.
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted
-  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
+  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 0} // WTScheduled event which delivered update to the worker.
  10 WorkflowTaskScheduled
  11 WorkflowTaskStarted
  12 WorkflowTaskCompleted
@@ -2250,7 +2250,7 @@ func (s *functionalSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 2} // WTScheduled event which delivered update to the worker.
+  5 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 0} // WTScheduled event which delivered update to the worker.
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
   8 WorkflowTaskCompleted // WT which had rejected update.
@@ -4302,7 +4302,7 @@ func (s *functionalSuite) TestUpdateWorkflow_CompletedSpeculativeWorkflowTask_De
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
-  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
+  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 0} // WTScheduled event which delivered update to the worker.
   9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
  10 WorkflowExecutionSignaled
  11 WorkflowTaskScheduled
