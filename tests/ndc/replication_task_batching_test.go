@@ -39,7 +39,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -76,6 +75,7 @@ type (
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
 		standByTaskID               int64
+		autoIncrementTaskID         int64
 
 		controller      *gomock.Controller
 		passtiveCluster *tests.TestCluster
@@ -121,7 +121,6 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 
 	mockActiveStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockActiveStreamClient.EXPECT().Recv().DoAndReturn(func() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
-		println("Passive is receiving!!!!")
 		return s.GetReplicationMessagesMock()
 	}).AnyTimes()
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
@@ -132,7 +131,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 		"cluster-a": mockActiveClient,
 	}
 	passiveClusterConfig.MockAdminClient = s.mockAdminClient
+
 	passiveClusterConfig.ClusterMetadata.MasterClusterName = "cluster-b"
+	delete(passiveClusterConfig.ClusterMetadata.ClusterInformation, "cluster-c") //ndc_clusters.yaml has 3 clusters, but we only need 2 for this test
+
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), passiveClusterConfig, log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.passtiveCluster = cluster
@@ -155,46 +157,49 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupTest() {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) TestAbc() {
+	versions := []int64{1, 1, 21, 31, 301, 401, 601, 501, 801, 1001, 901, 701, 1101}
 
-	workflowID := "replication-message-dlq-test" + uuid.New()
-	runID := uuid.New()
-	workflowType := "event-generator-workflow-type"
-	taskqueue := "event-generator-taskQueue"
+	for _, version := range versions {
+		workflowID := "replication-message-test" + uuid.New()
+		runID := uuid.New()
+		var historyBatch []*historypb.History
+		s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
+		for s.generator.HasNextVertex() {
+			events := s.generator.GetNextVertices()
 
-	var historyBatch []*historypb.History
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, 1)
+			historyEvents := &historypb.History{}
+			for _, event := range events {
+				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			}
+			historyBatch = append(historyBatch, historyEvents)
 
-	events := s.generator.GetNextVertices()
-	historyEvents := &historypb.History{}
-	for _, event := range events {
-		historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch(
+				s.namespaceID.String(),
+				workflowID,
+				runID,
+				historyEvents.Events,
+				nil,
+				s.eventBatchesToVersionHistory(nil, historyBatch).Items,
+			)
+
+		}
 	}
-	historyBatch = append(historyBatch, historyEvents)
 
-	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-
-	s.NotNil(historyBatch)
-	historyBatch[0].Events[1].Version = 1
-
-	s.applyEventsThroughFetcher(
-		workflowID,
-		runID,
-		workflowType,
-		taskqueue,
-		versionHistory,
-		historyBatch,
-	)
 	time.Sleep(10 * time.Second)
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
 	passiveFrontend := s.passtiveCluster.GetFrontendClient() //
+	replicationConfig := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: clusterName[0]},
+		{ClusterName: clusterName[1]},
+	}
 	_, err := passiveFrontend.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        s.namespace.String(),
 		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[1],
+		Clusters:                         replicationConfig,
+		ActiveClusterName:                clusterName[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	})
 	s.Require().NoError(err)
@@ -217,17 +222,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) GetReplicationMessagesMock() (*adm
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
 	task.SourceTaskId = taskID
 	tasks := []*replicationspb.ReplicationTask{task}
-	for len(s.standByReplicationTasksChan) > 0 {
-		task = <-s.standByReplicationTasksChan
-		taskID := atomic.AddInt64(&s.standByTaskID, 1)
-		task.SourceTaskId = taskID
-		tasks = append(tasks, task)
-	}
 
 	replicationMessage := &repicationpb.WorkflowReplicationMessages{
-		ReplicationTasks:           tasks,
-		ExclusiveHighWatermark:     100,
-		ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
+		ReplicationTasks:       tasks,
+		ExclusiveHighWatermark: taskID + 1,
 	}
 
 	return &adminservice.StreamWorkflowReplicationMessagesResponse{
@@ -237,119 +235,41 @@ func (s *NDCReplicationTaskBatchingTestSuite) GetReplicationMessagesMock() (*adm
 	}, nil
 }
 
-func (s *NDCReplicationTaskBatchingTestSuite) applyEventsThroughFetcher(
-	workflowID string,
-	runID string,
-	workflowType string,
-	taskqueue string,
-	versionHistory *historyspb.VersionHistory,
-	eventBatches []*historypb.History,
-) {
-	for _, batch := range eventBatches {
-		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
-
-		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-		replicationTask := &replicationspb.ReplicationTask{
-			TaskType:     taskType,
-			SourceTaskId: 1,
-			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
-					NamespaceId:         s.namespaceID.String(),
-					WorkflowId:          workflowID,
-					RunId:               runID,
-					VersionHistoryItems: versionHistory.GetItems(),
-					Events:              eventBlob,
-					NewRunEvents:        newRunEventBlob,
-				}},
-		}
-
-		s.standByReplicationTasksChan <- replicationTask
-		// this is to test whether dedup works
-		s.standByReplicationTasksChan <- replicationTask
+func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskFromHistoryEventBatch(
+	namespaceId string,
+	workflowId string,
+	runId string,
+	events []*historypb.HistoryEvent,
+	newRunEvents []*historypb.HistoryEvent,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
+) *replicationspb.ReplicationTask {
+	eventBlob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	var newRunEventBlob *commonpb.DataBlob
+	if newRunEvents != nil {
+		newRunEventBlob, err = s.serializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
+		s.NoError(err)
 	}
-}
-
-func (s *NDCReplicationTaskBatchingTestSuite) generateEventBlobs(
-	workflowID string,
-	runID string,
-	workflowType string,
-	taskqueue string,
-	batch *historypb.History,
-) (*commonpb.DataBlob, *commonpb.DataBlob) {
-	// TODO temporary code to generate next run first event
-	//  we should generate these as part of modeled based testing
-	lastEvent := batch.Events[len(batch.Events)-1]
-	newRunEventBlob := s.generateNewRunHistory(
-		lastEvent, s.namespace, s.namespaceID, workflowID, runID, lastEvent.GetVersion(), workflowType, taskqueue,
-	)
-	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
-	// modify the NewExecutionRunId attr
-	eventBlob, err := s.serializer.SerializeEvents(batch.Events, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
-	return eventBlob, newRunEventBlob
-}
-
-func (s *NDCReplicationTaskBatchingTestSuite) generateNewRunHistory(
-	event *historypb.HistoryEvent,
-	nsName namespace.Name,
-	nsID namespace.ID,
-	workflowID string,
-	runID string,
-	version int64,
-	workflowType string,
-	taskQueue string,
-) *commonpb.DataBlob {
-
-	// TODO temporary code to generate first event & version history
-	//  we should generate these as part of modeled based testing
-
-	if event.GetWorkflowExecutionContinuedAsNewEventAttributes() == nil {
-		return nil
+	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType: taskType,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+				NamespaceId:         namespaceId,
+				WorkflowId:          workflowId,
+				RunId:               runId,
+				VersionHistoryItems: versionHistoryItems,
+				Events:              eventBlob,
+				NewRunEvents:        newRunEventBlob,
+			}},
 	}
-
-	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = uuid.New()
-
-	newRunFirstEvent := &historypb.HistoryEvent{
-		EventId:   common.FirstEventID,
-		EventTime: timestamppb.New(time.Now().UTC()),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Version:   version,
-		TaskId:    1,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:              &commonpb.WorkflowType{Name: workflowType},
-			ParentWorkflowNamespace:   nsName.String(),
-			ParentWorkflowNamespaceId: nsID.String(),
-			ParentWorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: uuid.New(),
-				RunId:      uuid.New(),
-			},
-			ParentInitiatedEventId:          event.GetEventId(),
-			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			WorkflowRunTimeout:              durationpb.New(10 * time.Second),
-			WorkflowTaskTimeout:             durationpb.New(10 * time.Second),
-			ContinuedExecutionRunId:         runID,
-			Initiator:                       enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-			OriginalExecutionRunId:          runID,
-			Identity:                        "NDC-test",
-			FirstExecutionRunId:             runID,
-			Attempt:                         1,
-			WorkflowExecutionExpirationTime: timestamppb.New(time.Now().UTC().Add(time.Minute)),
-		}},
-	}
-
-	eventBlob, err := s.serializer.SerializeEvents([]*historypb.HistoryEvent{newRunFirstEvent}, enumspb.ENCODING_TYPE_PROTO3)
-	s.NoError(err)
-
-	return eventBlob
+	return replicationTask
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) eventBatchesToVersionHistory(
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
 ) *historyspb.VersionHistory {
-
-	// TODO temporary code to generate version history
-	//  we should generate version as part of modeled based testing
 	if versionHistory == nil {
 		versionHistory = versionhistory.NewVersionHistory(nil, nil)
 	}
