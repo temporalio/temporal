@@ -29,6 +29,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqname"
 )
@@ -84,4 +85,8 @@ func (tid *taskQueueID) String() string {
 		tid.taskType,
 		tid.namespaceID.String(),
 	)
+}
+
+func (tid *taskQueueID) routingKey() string {
+	return common.TaskQueueRoutingKey(tid.namespaceID.String(), tid.FullName(), tid.taskType)
 }

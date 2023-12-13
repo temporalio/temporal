@@ -463,6 +463,12 @@ func VerifyShardIDMapping(
 	)
 }
 
+// TaskQueueRoutingKey returns the string that should be passed to Lookup to find the owner of
+// a task queue partition.
+func TaskQueueRoutingKey(namespaceId string, fullName string, tqType enumspb.TaskQueueType) string {
+	return fmt.Sprintf("%s:%s:%d", namespaceId, fullName, tqType)
+}
+
 func PrettyPrint[T proto.Message](msgs []T, header ...string) {
 	var sb strings.Builder
 	_, _ = sb.WriteString("==========================================================================\n")
