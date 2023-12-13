@@ -39,6 +39,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/searchattribute"
 
@@ -176,7 +177,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		WorkflowId:       testWorkflowID,
 		RunId:            testRunID,
 		WorkflowTypeName: testWorkflowTypeName,
-		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
 		ExecutionTime:    nil, // workflow without backoff
 		CloseTime:        closeTimestamp,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -195,7 +196,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = visibilityArchiver.Archive(context.Background(), URI, request)
 	s.NoError(err)
 
-	expectedFilename := constructVisibilityFilename(closeTimestamp, testRunID)
+	expectedFilename := constructVisibilityFilename(closeTimestamp.AsTime(), testRunID)
 	filepath := path.Join(dir, testNamespaceID, expectedFilename)
 	s.assertFileExists(filepath)
 
@@ -659,7 +660,7 @@ func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 func (s *visibilityArchiverSuite) writeVisibilityRecordForQueryTest(record *archiverspb.VisibilityRecord) {
 	data, err := encode(record)
 	s.Require().NoError(err)
-	filename := constructVisibilityFilename(record.CloseTime, record.GetRunId())
+	filename := constructVisibilityFilename(record.CloseTime.AsTime(), record.GetRunId())
 	s.Require().NoError(os.MkdirAll(path.Join(s.testQueryDirectory, record.GetNamespaceId()), testDirMode))
 	err = writeFile(path.Join(s.testQueryDirectory, record.GetNamespaceId(), filename), data, testFileMode)
 	s.Require().NoError(err)

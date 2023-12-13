@@ -46,6 +46,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -55,7 +56,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -345,7 +345,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -409,7 +409,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId:   common.FirstEventID,
-						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
 					},
 				},
@@ -449,12 +449,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -463,7 +463,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -711,7 +711,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   1,
 						},
 					},
@@ -730,12 +730,12 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   common.FirstEventID + 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 						{
 							EventId:   common.FirstEventID + 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 					},
@@ -751,7 +751,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 					},

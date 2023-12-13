@@ -118,7 +118,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 		TaskID:              12345,
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}
@@ -163,7 +163,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		TaskID:              12345,
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}

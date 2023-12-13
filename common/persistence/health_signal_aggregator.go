@@ -173,7 +173,7 @@ func (s *HealthSignalAggregatorImpl) emitMetricsLoop() {
 				}
 
 				shardRPS := int64(float64(shardRequestCount) / emitMetricsInterval.Seconds())
-				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.GetMetricName(), metrics.PersistenceShardRPS.GetMetricUnit()).Record(shardRPS)
+				s.metricsHandler.Histogram(metrics.PersistenceShardRPS.Name(), metrics.PersistenceShardRPS.Unit()).Record(shardRPS)
 				if shardRPS > int64(s.perShardRPSWarnLimit()) {
 					s.logger.Warn("Per shard RPS warn limit exceeded", tag.ShardID(shardID), tag.RPS(shardRPS))
 				}

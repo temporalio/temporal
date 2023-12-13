@@ -90,13 +90,14 @@ func TestUpdateCurrentClusterMetadataRecord(t *testing.T) {
 		},
 	)
 	updateRecord := &persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{},
+		ClusterMetadata: &persistencespb.ClusterMetadata{},
 		Version:         1,
 	}
 	err = updateCurrentClusterMetadataRecord(
 		context.TODO(),
 		mockClusterMetadataManager,
 		cfg,
+		nil,
 		updateRecord,
 	)
 	require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestOverwriteCurrentClusterMetadataWithDBRecord(t *testing.T) {
 	require.NoError(t, err)
 
 	dbRecord := &persistence.GetClusterMetadataResponse{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			HistoryShardCount:        1024,
 			FailoverVersionIncrement: 10000,
 			IsGlobalNamespaceEnabled: true,

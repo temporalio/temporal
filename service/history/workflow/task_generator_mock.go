@@ -33,7 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	history "go.temporal.io/api/history/v1"
+	v1 "go.temporal.io/api/history/v1"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -75,7 +75,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activitySche
 }
 
 // GenerateActivityTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityTasks(event *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateActivityTasks(event *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateActivityTasks", event)
 	ret0, _ := ret[0].(error)
@@ -103,7 +103,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTimerTasks() *gomock.Ca
 }
 
 // GenerateChildWorkflowTasks mocks base method.
-func (m *MockTaskGenerator) GenerateChildWorkflowTasks(event *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateChildWorkflowTasks(event *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateChildWorkflowTasks", event)
 	ret0, _ := ret[0].(error)
@@ -117,7 +117,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateChildWorkflowTasks(event interf
 }
 
 // GenerateDelayedWorkflowTasks mocks base method.
-func (m *MockTaskGenerator) GenerateDelayedWorkflowTasks(startEvent *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateDelayedWorkflowTasks(startEvent *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateDelayedWorkflowTasks", startEvent)
 	ret0, _ := ret[0].(error)
@@ -160,7 +160,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTim
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(events []*history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(events []*v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", events)
 	ret0, _ := ret[0].(error)
@@ -190,7 +190,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks() *gomock.Call {
 }
 
 // GenerateRecordWorkflowStartedTasks mocks base method.
-func (m *MockTaskGenerator) GenerateRecordWorkflowStartedTasks(startEvent *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateRecordWorkflowStartedTasks(startEvent *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateRecordWorkflowStartedTasks", startEvent)
 	ret0, _ := ret[0].(error)
@@ -204,7 +204,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRecordWorkflowStartedTasks(star
 }
 
 // GenerateRequestCancelExternalTasks mocks base method.
-func (m *MockTaskGenerator) GenerateRequestCancelExternalTasks(event *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateRequestCancelExternalTasks(event *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateRequestCancelExternalTasks", event)
 	ret0, _ := ret[0].(error)
@@ -217,22 +217,36 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(even
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateRequestCancelExternalTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateRequestCancelExternalTasks), event)
 }
 
-// GenerateScheduleWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64, generateTimeoutTaskOnly bool) error {
+// GenerateScheduleSpeculativeWorkflowTaskTasks mocks base method.
+func (m *MockTaskGenerator) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask *WorkflowTaskInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID, generateTimeoutTaskOnly)
+	ret := m.ctrl.Call(m, "GenerateScheduleSpeculativeWorkflowTaskTasks", workflowTask)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateScheduleSpeculativeWorkflowTaskTasks indicates an expected call of GenerateScheduleSpeculativeWorkflowTaskTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleSpeculativeWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleSpeculativeWorkflowTaskTasks), workflowTask)
+}
+
+// GenerateScheduleWorkflowTaskTasks mocks base method.
+func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", workflowTaskScheduledEventID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateScheduleWorkflowTaskTasks indicates an expected call of GenerateScheduleWorkflowTaskTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID, generateTimeoutTaskOnly interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(workflowTaskScheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID, generateTimeoutTaskOnly)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), workflowTaskScheduledEventID)
 }
 
 // GenerateSignalExternalTasks mocks base method.
-func (m *MockTaskGenerator) GenerateSignalExternalTasks(event *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateSignalExternalTasks(event *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateSignalExternalTasks", event)
 	ret0, _ := ret[0].(error)
@@ -288,7 +302,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateUserTimerTasks() *gomock.Call {
 }
 
 // GenerateWorkflowCloseTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime *time.Time, deleteAfterClose bool) error {
+func (m *MockTaskGenerator) GenerateWorkflowCloseTasks(closedTime time.Time, deleteAfterClose bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateWorkflowCloseTasks", closedTime, deleteAfterClose)
 	ret0, _ := ret[0].(error)
@@ -316,7 +330,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowResetTasks() *gomock.Ca
 }
 
 // GenerateWorkflowStartTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateWorkflowStartTasks(startEvent *v1.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateWorkflowStartTasks", startEvent)
 	ret0, _ := ret[0].(error)

@@ -25,14 +25,14 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.temporal.io/server/api/errordetails/v1"
 )
 
-// FromStatus converts gogo gRPC status to service error.
+// FromStatus converts gRPC status to service error.
 func FromStatus(st *status.Status) error {
 	if st == nil || st.Code() == codes.OK {
 		return nil

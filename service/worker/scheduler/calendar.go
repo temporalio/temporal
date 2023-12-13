@@ -33,6 +33,7 @@ import (
 
 	schedpb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -326,13 +327,13 @@ func parseCronStringInterval(c string) (*schedpb.IntervalSpec, error) {
 		return nil, err
 	}
 	if phase == "" {
-		return &schedpb.IntervalSpec{Interval: timestamp.DurationPtr(intervalDuration)}, nil
+		return &schedpb.IntervalSpec{Interval: durationpb.New(intervalDuration)}, nil
 	}
 	phaseDuration, err := timestamp.ParseDuration(phase)
 	if err != nil {
 		return nil, err
 	}
-	return &schedpb.IntervalSpec{Interval: timestamp.DurationPtr(intervalDuration), Phase: timestamp.DurationPtr(phaseDuration)}, nil
+	return &schedpb.IntervalSpec{Interval: durationpb.New(intervalDuration), Phase: durationpb.New(phaseDuration)}, nil
 }
 
 func handlePredefinedCronStrings(c string) string {

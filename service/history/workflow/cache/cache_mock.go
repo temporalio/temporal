@@ -79,7 +79,7 @@ func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, shardC
 }
 
 // GetOrCreateWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution v1.WorkflowExecution, lockPriority workflow.LockPriority) (workflow.Context, ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, lockPriority workflow.LockPriority) (workflow.Context, ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, shardContext, namespaceID, execution, lockPriority)
 	ret0, _ := ret[0].(workflow.Context)

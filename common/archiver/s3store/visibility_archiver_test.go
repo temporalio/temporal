@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common/searchattribute"
 
@@ -205,7 +206,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 		WorkflowId:       testWorkflowID,
 		RunId:            testRunID,
 		WorkflowTypeName: testWorkflowTypeName,
-		StartTime:        timestamp.TimePtr(closeTimestamp.Add(-time.Hour)),
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
 		ExecutionTime:    nil, // workflow without backoff
 		CloseTime:        closeTimestamp,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -294,7 +295,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       timestamp.TimePtr(time.Unix(0, int64(1*time.Hour)).UTC()),
+		closeTime:       ptr(time.Unix(0, int64(1*time.Hour)).UTC()),
 		searchPrecision: convert.StringPtr(PrecisionHour),
 		workflowID:      convert.StringPtr(testWorkflowID),
 	}, nil)
@@ -320,7 +321,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		closeTime:       timestamp.TimePtr(time.Unix(0, 0).UTC()),
+		closeTime:       ptr(time.Unix(0, 0).UTC()),
 		searchPrecision: convert.StringPtr(PrecisionDay),
 		workflowID:      convert.StringPtr(testWorkflowID),
 	}, nil).AnyTimes()
@@ -518,8 +519,8 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 			WorkflowId:       testWorkflowID,
 			RunId:            fmt.Sprintf("%s-%d", testRunID, i),
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTime:        timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			CloseTime:        timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			StartTime:        timestamppb.New(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			CloseTime:        timestamppb.New(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			HistoryLength:    101,
 		}
@@ -536,7 +537,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 	for i, testData := range precisionTests {
 		mockParser := NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:       timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			closeTime:       ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			searchPrecision: convert.StringPtr(testData.precision),
 			workflowID:      convert.StringPtr(testWorkflowID),
 		}, nil).AnyTimes()
@@ -549,7 +550,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:       timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			startTime:       ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			searchPrecision: convert.StringPtr(testData.precision),
 			workflowID:      convert.StringPtr(testWorkflowID),
 		}, nil).AnyTimes()
@@ -562,7 +563,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:        timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			closeTime:        ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			searchPrecision:  convert.StringPtr(testData.precision),
 			workflowTypeName: convert.StringPtr(testWorkflowTypeName),
 		}, nil).AnyTimes()
@@ -575,7 +576,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:        timestamp.TimePtr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			startTime:        ptr(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
 			searchPrecision:  convert.StringPtr(testData.precision),
 			workflowTypeName: convert.StringPtr(testWorkflowTypeName),
 		}, nil).AnyTimes()

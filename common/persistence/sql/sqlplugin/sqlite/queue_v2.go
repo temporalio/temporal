@@ -41,7 +41,7 @@ const (
 	templateCreateQueueMetadataQueryV2 = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding) VALUES(:queue_type, :queue_name, :metadata_payload, :metadata_encoding)`
 	templateUpdateQueueMetadataQueryV2 = `UPDATE queues SET metadata_payload = :metadata_payload, metadata_encoding = :metadata_encoding WHERE queue_type = :queue_type and queue_name = :queue_name`
 	templateGetQueueMetadataQueryV2    = `SELECT metadata_payload, metadata_encoding from queues WHERE queue_type=? and queue_name=?`
-	templateGetNameFromQueueMetadataV2 = `SELECT queue_name from queues WHERE queue_type=? LIMIT ? OFFSET ?`
+	templateGetNameFromQueueMetadataV2 = `SELECT queue_type, queue_name, metadata_payload, metadata_encoding from queues WHERE queue_type=? LIMIT ? OFFSET ?`
 )
 
 func (sdb *db) InsertIntoQueueV2Metadata(ctx context.Context, row *sqlplugin.QueueV2MetadataRow) (sql.Result, error) {

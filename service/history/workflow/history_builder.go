@@ -36,13 +36,15 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -219,7 +221,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 
 func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeout *time.Duration,
+	startToCloseTimeout *durationpb.Duration,
 	attempt int32,
 	scheduleTime time.Time,
 ) *historypb.HistoryEvent {
@@ -1190,10 +1192,10 @@ func (b *HistoryBuilder) NumBufferedEvents() int {
 func (b *HistoryBuilder) SizeInBytesOfBufferedEvents() int {
 	size := 0
 	for _, ev := range b.dbBufferBatch {
-		size += ev.Size()
+		size += proto.Size(ev)
 	}
 	for _, ev := range b.memBufferBatch {
-		size += ev.Size()
+		size += proto.Size(ev)
 	}
 	return size
 }
@@ -1347,7 +1349,7 @@ func (b *HistoryBuilder) createNewHistoryEvent(
 	}
 
 	historyEvent := &historypb.HistoryEvent{}
-	historyEvent.EventTime = timestamp.TimePtr(time.UTC())
+	historyEvent.EventTime = timestamppb.New(time.UTC())
 	historyEvent.EventType = eventType
 	historyEvent.Version = b.version
 
@@ -1569,7 +1571,7 @@ func (b *HistoryBuilder) emitInorderedBufferedEvents(bufferedEvents []*historypb
 	}
 
 	if inorderedEventsCount > 0 && b.metricsHandler != nil {
-		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.GetMetricName()).Record(inorderedEventsCount)
+		b.metricsHandler.Counter(metrics.InorderBufferedEventsCounter.Name()).Record(inorderedEventsCount)
 	}
 }
 

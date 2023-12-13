@@ -64,7 +64,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.FrontendRoleTagValue))
-	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.ClientRequests.Name()).Record(1)
 	return handler, time.Now().UTC()
 }
 
@@ -86,7 +86,7 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("frontend client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		handler.Counter(metrics.ClientFailures.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	handler.Timer(metrics.ClientLatency.Name()).Record(time.Since(startTime))
 }

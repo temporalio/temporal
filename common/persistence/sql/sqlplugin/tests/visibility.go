@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/shuffle"
 )
 
@@ -211,7 +210,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -251,7 +250,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -268,7 +267,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -376,7 +375,7 @@ func (s *visibilitySuite) TestReplaceDeleteGet() {
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -440,8 +439,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		WorkflowID:       convert.StringPtr(workflowID),
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -501,8 +500,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		WorkflowID:       convert.StringPtr(workflowID),
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -514,7 +513,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timestamp.TimePtr(lastVisibility.StartTime)
+			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
 			selectFilter.RunID = convert.StringPtr(lastVisibility.RunID)
 		} else {
 			break
@@ -549,7 +548,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -565,8 +564,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		WorkflowID:       convert.StringPtr(workflowID),
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -606,7 +605,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				startTime,
 				executionTime,
 				status,
-				timestamp.TimePtr(closeTime),
+				timePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -625,8 +624,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		WorkflowID:       convert.StringPtr(workflowID),
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -689,8 +688,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: convert.StringPtr(workflowTypeName),
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -750,8 +749,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: convert.StringPtr(workflowTypeName),
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -763,7 +762,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timestamp.TimePtr(lastVisibility.StartTime)
+			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
 			selectFilter.RunID = convert.StringPtr(lastVisibility.RunID)
 		} else {
 			break
@@ -798,7 +797,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		startTime,
 		executionTime,
 		status,
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -814,8 +813,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: convert.StringPtr(workflowTypeName),
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -855,7 +854,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				startTime,
 				executionTime,
 				status,
-				timestamp.TimePtr(closeTime),
+				timePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -874,8 +873,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: convert.StringPtr(workflowTypeName),
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -938,8 +937,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -999,8 +998,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -1012,7 +1011,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timestamp.TimePtr(lastVisibility.StartTime)
+			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
 			selectFilter.RunID = convert.StringPtr(lastVisibility.RunID)
 		} else {
 			break
@@ -1054,7 +1053,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		startTime,
 		executionTime,
 		int32(status),
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -1070,8 +1069,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -1112,7 +1111,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 				startTime,
 				executionTime,
 				status,
-				timestamp.TimePtr(closeTime),
+				timePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -1131,8 +1130,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -1186,7 +1185,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		startTime,
 		executionTime,
 		int32(status),
-		timestamp.TimePtr(closeTime),
+		timePtr(closeTime),
 		convert.Int64Ptr(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -1202,8 +1201,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: convert.StringPtr(workflowTypeName),
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(status),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -1250,7 +1249,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 				startTime,
 				executionTime,
 				int32(status),
-				timestamp.TimePtr(closeTime),
+				timePtr(closeTime),
 				convert.Int64Ptr(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
@@ -1269,8 +1268,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 		WorkflowID:       nil,
 		RunID:            convert.StringPtr(""),
 		WorkflowTypeName: nil,
-		MinTime:          timestamp.TimePtr(minStartTime),
-		MaxTime:          timestamp.TimePtr(maxStartTime),
+		MinTime:          timePtr(minStartTime),
+		MaxTime:          timePtr(maxStartTime),
 		Status:           int32(status),
 		PageSize:         convert.IntPtr(pageSize),
 	}
@@ -1377,4 +1376,8 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 		Memo:             shuffle.Bytes(testVisibilityData),
 		Encoding:         testVisibilityEncoding,
 	}
+}
+
+func timePtr(t time.Time) *time.Time {
+	return &t
 }

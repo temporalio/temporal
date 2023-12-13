@@ -31,7 +31,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -39,6 +38,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -69,14 +70,14 @@ func newWorkflowTaskStateMachine(
 	}
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 	version int64,
 	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeout *time.Duration,
+	startToCloseTimeout *durationpb.Duration,
 	attempt int32,
-	scheduledTime *time.Time,
-	originalScheduledTimestamp *time.Time,
+	scheduledTime *timestamppb.Timestamp,
+	originalScheduledTimestamp *timestamppb.Timestamp,
 	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 
@@ -97,12 +98,12 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 		ScheduledEventID:      scheduledEventID,
 		StartedEventID:        common.EmptyEventID,
 		RequestID:             emptyUUID,
-		WorkflowTaskTimeout:   startToCloseTimeout,
+		WorkflowTaskTimeout:   startToCloseTimeout.AsDuration(),
 		TaskQueue:             taskQueue,
 		Attempt:               attempt,
-		ScheduledTime:         scheduledTime,
-		StartedTime:           nil,
-		OriginalScheduledTime: originalScheduledTimestamp,
+		ScheduledTime:         scheduledTime.AsTime(),
+		StartedTime:           time.Time{},
+		OriginalScheduledTime: originalScheduledTimestamp.AsTime(),
 		Type:                  workflowTaskType,
 		SuggestContinueAsNew:  false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
@@ -112,7 +113,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
+func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
 	// When workflow task fails/timeout it gets removed from mutable state, but attempt count is incremented.
 	// If attempt count was incremented and now is greater than 1, then next workflow task should be created as transient.
 	// This method will do it only if there is no other workflow task and next workflow task should be transient.
@@ -130,24 +131,24 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	//   then AddWorkflowTaskStartedEvent will handle the correction of ScheduledEventID,
 	//   and set the attempt to 1 (convert transient workflow task to normal workflow task).
 	//   2. If no failover happen during the lifetime of this transient workflow task
-	//   then ReplicateWorkflowTaskScheduledEvent will overwrite everything
+	//   then ApplyWorkflowTaskScheduledEvent will overwrite everything
 	//   including the workflow task ScheduledEventID.
 	//
 	// Regarding workflow task timeout calculation:
 	//   1. Attempt will be set to 1, so we still use default workflow task timeout.
-	//   2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
+	//   2. ApplyWorkflowTaskScheduledEvent will overwrite everything including WorkflowTaskTimeout.
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduledEventID:    m.ms.GetNextEventID(),
 		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout,
+		WorkflowTaskTimeout: m.ms.GetExecutionInfo().DefaultWorkflowTaskTimeout.AsDuration(),
 		// Task queue is always normal (not sticky) because transient workflow task is created only for
 		// failed/timed out workflow task and fail/timeout clears sticky task queue.
 		TaskQueue:            m.ms.CurrentTaskQueue(),
 		Attempt:              m.ms.GetExecutionInfo().WorkflowTaskAttempt,
-		ScheduledTime:        timestamp.TimePtr(m.ms.timeSource.Now()),
-		StartedTime:          timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTime:        timestamppb.New(m.ms.timeSource.Now()).AsTime(),
+		StartedTime:          time.Unix(0, 0).UTC(),
 		Type:                 enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
 		SuggestContinueAsNew: false, // reset, will be recomputed on workflow task started
 		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
@@ -157,13 +158,13 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	workflowTask *WorkflowTaskInfo,
 	version int64,
 	scheduledEventID int64,
 	startedEventID int64,
 	requestID string,
-	timestamp time.Time,
+	startedTime time.Time,
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 ) (*WorkflowTaskInfo, error) {
@@ -174,7 +175,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		if workflowTask == nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduledEventID))
 		}
-		// Transient workflow task events are not replicated but attempt count in mutable state
+		// Transient workflow task events are not applied but attempt count in mutable state
 		// can be updated from previous workflow task failed/timeout event.
 		// During replication, "active" side will send 2 batches:
 		//   1. WorkflowTaskScheduledEvent and WorkflowTaskStartedEvent
@@ -196,7 +197,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		RequestID:             requestID,
 		WorkflowTaskTimeout:   workflowTask.WorkflowTaskTimeout,
 		Attempt:               workflowTask.Attempt,
-		StartedTime:           &timestamp,
+		StartedTime:           startedTime,
 		ScheduledTime:         workflowTask.ScheduledTime,
 		TaskQueue:             workflowTask.TaskQueue,
 		OriginalScheduledTime: workflowTask.OriginalScheduledTime,
@@ -209,19 +210,19 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	return workflowTask, nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskCompletedEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
 	return m.afterAddWorkflowTaskCompletedEvent(event, WorkflowTaskCompletionLimits{math.MaxInt32, math.MaxInt32})
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskFailedEvent() error {
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
 	m.failWorkflowTask(true)
 	return nil
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
+func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
@@ -252,9 +253,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		// Create corresponding WorkflowTaskScheduled event for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
-			workflowTask.WorkflowTaskTimeout,
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
-			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+			workflowTask.ScheduledTime.UTC(),
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 	}
@@ -264,7 +265,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		common.EmptyEventID,
 		enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 	)
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -274,7 +275,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 // If bypassTaskGeneration is specified, a transfer task will not be generated.
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
-	originalScheduledTimestamp *time.Time,
+	originalScheduledTimestamp *timestamppb.Timestamp,
 	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
@@ -339,13 +340,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		scheduledEventID = m.ms.GetNextEventID()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskScheduledEvent(
+	workflowTask, err := m.ApplyWorkflowTaskScheduledEvent(
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		taskQueue,
 		startToCloseTimeout,
 		attempt,
-		&scheduleTime,
+		timestamppb.New(scheduleTime),
 		originalScheduledTimestamp,
 		workflowTaskType,
 	)
@@ -354,17 +355,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	}
 
 	// TODO merge active & passive task generation
-	// Always bypass task generation for speculative workflow task.
 	if !bypassTaskGeneration {
-		generateTimeoutTaskOnly := false
 		if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			generateTimeoutTaskOnly = true
+			err = m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask)
+		} else {
+			err = m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(scheduledEventID)
 		}
-
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEventID,
-			generateTimeoutTaskOnly,
-		); err != nil {
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -378,7 +375,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
 	workflowTaskType enumsspb.WorkflowTaskType,
 ) (*WorkflowTaskInfo, error) {
-	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamp.TimePtr(m.ms.timeSource.Now()), workflowTaskType)
+	return m.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, timestamppb.New(m.ms.timeSource.Now()), workflowTaskType)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -462,7 +459,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			// taskQueue may come directly from RecordWorkflowTaskStarted from matching, which will
 			// contain a specific partition name. We only want to record the base name here.
 			cleanTaskQueue(taskQueue),
-			workflowTask.WorkflowTaskTimeout,
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			startTime,
 		)
@@ -485,7 +482,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		startedEventID = startedEvent.GetEventId()
 	}
 
-	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(
+	workflowTask, err := m.ApplyWorkflowTaskStartedEvent(
 		workflowTask, m.ms.GetCurrentVersion(), scheduledEventID, startedEventID, requestID, startTime,
 		suggestContinueAsNew, historySizeBytes,
 	)
@@ -520,7 +517,7 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 
 	onlyUpdateRejectionMessages := true
 	for _, message := range request.Messages {
-		if !types.Is(message.GetBody(), (*updatepb.Rejection)(nil)) {
+		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
 			onlyUpdateRejectionMessages = false
 			break
 		}
@@ -548,16 +545,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for transient/speculative workflow tasks.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
-			workflowTask.WorkflowTaskTimeout,
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
-			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+			workflowTask.ScheduledTime.UTC(),
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
 			request.GetIdentity(),
-			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 		)
@@ -602,16 +599,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
-			workflowTask.WorkflowTaskTimeout,
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
-			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+			workflowTask.ScheduledTime.UTC(),
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
 			identity,
-			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 		)
@@ -635,7 +632,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskFailedEvent(); err != nil {
+	if err := m.ApplyWorkflowTaskFailedEvent(); err != nil {
 		return nil, err
 	}
 
@@ -665,16 +662,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
-			workflowTask.WorkflowTaskTimeout,
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
-			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
+			workflowTask.ScheduledTime.UTC(),
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
 			"",
-			timestamp.TimeValue(workflowTask.StartedTime),
+			workflowTask.StartedTime,
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 		)
@@ -692,7 +689,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		)
 	}
 
-	if err := m.ReplicateWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
+	if err := m.ApplyWorkflowTaskTimedOutEvent(enumspb.TIMEOUT_TYPE_START_TO_CLOSE); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -713,10 +710,10 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		ScheduledEventID:      common.EmptyEventID,
 		StartedEventID:        common.EmptyEventID,
 		RequestID:             emptyUUID,
-		WorkflowTaskTimeout:   timestamp.DurationFromSeconds(0),
-		StartedTime:           timestamp.UnixOrZeroTimePtr(0),
+		WorkflowTaskTimeout:   time.Duration(0),
+		StartedTime:           time.Unix(0, 0).UTC(),
 		TaskQueue:             nil,
-		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
+		OriginalScheduledTime: time.Unix(0, 0).UTC(),
 		Attempt:               1,
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:  false,
@@ -724,7 +721,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
-		failWorkflowTaskInfo.ScheduledTime = timestamp.TimePtr(m.ms.timeSource.Now().UTC())
+		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
 	}
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 }
@@ -736,10 +733,10 @@ func (m *workflowTaskStateMachine) deleteWorkflowTask() {
 		ScheduledEventID:    common.EmptyEventID,
 		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
-		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
+		WorkflowTaskTimeout: time.Duration(0),
 		Attempt:             1,
-		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
-		ScheduledTime:       timestamp.UnixOrZeroTimePtr(0),
+		StartedTime:         time.Unix(0, 0).UTC(),
+		ScheduledTime:       time.Unix(0, 0).UTC(),
 
 		TaskQueue: nil,
 		// Keep the last original scheduled Timestamp, so that AddWorkflowTaskScheduledEventAsHeartbeat can continue with it.
@@ -776,11 +773,16 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskScheduledEventId = workflowTask.ScheduledEventID
 	m.ms.executionInfo.WorkflowTaskStartedEventId = workflowTask.StartedEventID
 	m.ms.executionInfo.WorkflowTaskRequestId = workflowTask.RequestID
-	m.ms.executionInfo.WorkflowTaskTimeout = workflowTask.WorkflowTaskTimeout
+	m.ms.executionInfo.WorkflowTaskTimeout = durationpb.New(workflowTask.WorkflowTaskTimeout)
 	m.ms.executionInfo.WorkflowTaskAttempt = workflowTask.Attempt
-	m.ms.executionInfo.WorkflowTaskStartedTime = workflowTask.StartedTime
-	m.ms.executionInfo.WorkflowTaskScheduledTime = workflowTask.ScheduledTime
-	m.ms.executionInfo.WorkflowTaskOriginalScheduledTime = workflowTask.OriginalScheduledTime
+	if !workflowTask.StartedTime.IsZero() {
+		m.ms.executionInfo.WorkflowTaskStartedTime = timestamppb.New(workflowTask.StartedTime)
+
+	}
+	if !workflowTask.ScheduledTime.IsZero() {
+		m.ms.executionInfo.WorkflowTaskScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
+	}
+	m.ms.executionInfo.WorkflowTaskOriginalScheduledTime = timestamppb.New(workflowTask.OriginalScheduledTime)
 	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
@@ -846,13 +848,13 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 	// Create scheduled and started events which are not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.ScheduledEventID,
-		EventTime: workflowTask.ScheduledTime,
+		EventTime: timestamppb.New(workflowTask.ScheduledTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 				TaskQueue:           m.ms.CurrentTaskQueue(),
-				StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
+				StartToCloseTimeout: durationpb.New(workflowTask.WorkflowTaskTimeout),
 				Attempt:             workflowTask.Attempt,
 			},
 		},
@@ -860,7 +862,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 
 	startedEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.StartedEventID,
-		EventTime: workflowTask.StartedTime,
+		EventTime: timestamppb.New(workflowTask.StartedTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
@@ -885,12 +887,12 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 		ScheduledEventID:      m.ms.executionInfo.WorkflowTaskScheduledEventId,
 		StartedEventID:        m.ms.executionInfo.WorkflowTaskStartedEventId,
 		RequestID:             m.ms.executionInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:   m.ms.executionInfo.WorkflowTaskTimeout,
+		WorkflowTaskTimeout:   m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
 		Attempt:               m.ms.executionInfo.WorkflowTaskAttempt,
-		StartedTime:           m.ms.executionInfo.WorkflowTaskStartedTime,
-		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime,
+		StartedTime:           m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
 		TaskQueue:             m.ms.CurrentTaskQueue(),
-		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime,
+		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
 		Type:                  m.ms.executionInfo.WorkflowTaskType,
 		SuggestContinueAsNew:  m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
 		HistorySizeBytes:      m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
@@ -909,17 +911,29 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.WorkerVersionStamp = attrs.GetWorkerVersion()
-	if err := m.ms.trackBuildIdFromCompletion(attrs.GetWorkerVersion(), event.GetEventId(), limits); err != nil {
+	addedResetPoint := m.ms.addResetPointFromCompletion(
+		attrs.GetBinaryChecksum(),
+		attrs.GetWorkerVersion().GetBuildId(),
+		event.GetEventId(),
+		limits.MaxResetPoints,
+	)
+	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), event.GetEventId(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
-	return m.ms.addBinaryCheckSumIfNotExists(event, limits.MaxResetPoints)
+	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {
+		if err := m.ms.updateBinaryChecksumSearchAttribute(); err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 	attempt int32,
 ) {
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
-	m.ms.metricsHandler.Histogram(metrics.WorkflowTaskAttempt.GetMetricName(), metrics.WorkflowTaskAttempt.GetMetricUnit()).
+	m.ms.metricsHandler.Histogram(metrics.WorkflowTaskAttempt.Name(), metrics.WorkflowTaskAttempt.Unit()).
 		Record(int64(attempt), metrics.NamespaceTag(namespaceName))
 	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
 		m.ms.shard.GetThrottledLogger().Warn("Critical attempts processing workflow task",
@@ -932,18 +946,18 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 }
 
 func (m *workflowTaskStateMachine) getStartToCloseTimeout(
-	defaultTimeout *time.Duration,
+	defaultTimeout *durationpb.Duration,
 	attempt int32,
-) *time.Duration {
+) *durationpb.Duration {
 	// This util function is only for calculating active workflow task timeout.
 	// Transient workflow task in passive cluster won't call this function and
 	// always use default timeout as it will either be completely overwritten by
 	// a replicated workflow schedule event from active cluster, or if used, it's
 	// attempt will be reset to 1.
-	// Check ReplicateTransientWorkflowTaskScheduled for details.
+	// Check ApplyTransientWorkflowTaskScheduled for details.
 
 	if defaultTimeout == nil {
-		defaultTimeout = timestamp.DurationPtr(0)
+		defaultTimeout = durationpb.New(0)
 	}
 
 	if attempt <= workflowTaskRetryBackoffMinAttempts {
@@ -953,8 +967,8 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval).
 		WithMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval()).
 		WithExpirationInterval(backoff.NoInterval)
-	startToCloseTimeout := *defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
-	return &startToCloseTimeout
+	startToCloseTimeout := defaultTimeout.AsDuration() + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
+	return durationpb.New(startToCloseTimeout)
 }
 
 func (m *workflowTaskStateMachine) getHistorySizeInfo() (bool, int64) {
@@ -999,9 +1013,9 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 
 	scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 		wt.TaskQueue,
-		wt.WorkflowTaskTimeout,
+		durationpb.New(wt.WorkflowTaskTimeout),
 		wt.Attempt,
-		timestamp.TimeValue(wt.ScheduledTime),
+		wt.ScheduledTime,
 	)
 
 	if scheduledEvent.EventId != wt.ScheduledEventID {
@@ -1009,14 +1023,14 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	}
 
 	if wt.StartedEventID != common.EmptyEventID {
-		// If WT is has started then started event is written to the history and
+		// If WT is started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduledEvent.EventId,
 			wt.RequestID,
 			"", // identity is not stored in the mutable state.
-			timestamp.TimeValue(wt.StartedTime),
+			wt.StartedTime,
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
 		)
@@ -1028,9 +1042,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			return err
 		}
 	} else {
-		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledEvent.EventId,
-			true, // Only generate SCHEDULE_TO_START timeout timer task, but not a transfer task which push WT to matching because WT was already pushed to matching.
+		if err := m.ms.taskGenerator.GenerateScheduleSpeculativeWorkflowTaskTasks(
+			wt,
 		); err != nil {
 			return err
 		}
@@ -1047,7 +1060,8 @@ func cleanTaskQueue(tq *taskqueuepb.TaskQueue) *taskqueuepb.TaskQueue {
 	if err != nil {
 		return tq
 	}
-	cleanTq := *tq
+
+	cleanTq := common.CloneProto(tq)
 	cleanTq.Name = name.BaseNameString()
-	return &cleanTq
+	return cleanTq
 }

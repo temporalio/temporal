@@ -173,7 +173,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -203,7 +203,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -231,7 +231,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
@@ -255,7 +255,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	}
 
 	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shardContext, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")

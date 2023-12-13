@@ -248,7 +248,7 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 		case <-cleanupTimer.C:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.GetMetricName()).Record(
+				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.Name()).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 				)
@@ -283,7 +283,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
 
-	minAckedTaskID := r.shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 1
+	minAckedTaskID := r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 1
 	queueStates, ok := r.shard.GetQueueState(tasks.CategoryReplication)
 	if !ok {
 		queueStates = &persistencespb.QueueState{
@@ -309,12 +309,12 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	}
 
 	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(minAckedTaskID))
-	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.GetMetricName()).Record(
+	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.Name()).Record(
 		1,
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
-	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
-		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-minAckedTaskID,
+	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.Name(), metrics.ReplicationTasksLag.Unit()).Record(
+		r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID-minAckedTaskID,
 		metrics.TargetClusterTag(currentClusterName),
 		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
 	)
@@ -369,7 +369,7 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQSize() {
 			return
 		}
 		if !isEmpty {
-			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
+			r.metricsHandler.Counter(metrics.ReplicationNonEmptyDLQCount.Name()).Record(1, metrics.OperationTag(metrics.ReplicationDLQStatsScope))
 			break
 		}
 	}

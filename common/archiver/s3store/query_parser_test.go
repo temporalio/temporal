@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type queryParserSuite struct {
@@ -188,6 +187,10 @@ func (s *queryParserSuite) TestParsePrecision() {
 	}
 }
 
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func (s *queryParserSuite) TestParseCloseTime() {
 	commonQueryPart := "WorkflowId = \"random workflowID\" AND SearchPrecision = 'Day' AND "
 
@@ -200,14 +203,14 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     commonQueryPart + "CloseTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: timestamp.TimePtr(time.Unix(0, 1000).UTC()),
+				closeTime: ptr(time.Unix(0, 1000).UTC()),
 			},
 		},
 		{
 			query:     commonQueryPart + "CloseTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: timestamp.TimePtr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
+				closeTime: ptr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{
@@ -244,14 +247,14 @@ func (s *queryParserSuite) TestParseStartTime() {
 			query:     commonQueryPart + "StartTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: timestamp.TimePtr(time.Unix(0, 1000)),
+				startTime: ptr(time.Unix(0, 1000)),
 			},
 		},
 		{
 			query:     commonQueryPart + "StartTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: timestamp.TimePtr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
+				startTime: ptr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{

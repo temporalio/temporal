@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -120,9 +121,10 @@ type (
 
 		ServiceResolver        resolver.ServiceResolver
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore  visibility.VisibilityStoreFactory
 
 		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor
+		CustomInterceptors     []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
 		Authorizer             authorization.Authorizer
 		ClaimMapper            authorization.ClaimMapper
 		AudienceGetter         authorization.JWTAudienceMapper
@@ -282,6 +284,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		ServiceResolver:        so.persistenceServiceResolver,
 		CustomDataStoreFactory: so.customDataStoreFactory,
+		CustomVisibilityStore:  so.customVisibilityStoreFactory,
 
 		SearchAttributesMapper: so.searchAttributesMapper,
 		CustomInterceptors:     so.customInterceptors,
@@ -351,10 +354,11 @@ type (
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
-		CustomInterceptors         []grpc.UnaryServerInterceptor
+		CustomInterceptors         []grpc.UnaryServerInterceptor `group:"frontendInterceptors"`
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory     visibility.VisibilityStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
 		InstanceID                 resource.InstanceID `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
@@ -384,6 +388,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() persistenceClient.AbstractDataStoreFactory {
 				return params.DataStoreFactory
 			},
+			func() visibility.VisibilityStoreFactory {
+				return params.VisibilityStoreFactory
+			},
 			func() client.FactoryProvider {
 				return params.ClientFactoryProvider
 			},
@@ -395,9 +402,6 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() searchattribute.Mapper {
 				return params.SearchAttributesMapper
-			},
-			func() []grpc.UnaryServerInterceptor {
-				return params.CustomInterceptors
 			},
 			func() authorization.Authorizer {
 				return params.Authorizer
@@ -521,6 +525,9 @@ func genericFrontendServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		fx.Provide(fx.Annotate(
+			func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors },
+			fx.ParamTags(`group:"frontendInterceptors"`))),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -606,17 +613,12 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	var sqlIndexNames []string
 	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
-		indexName := ds.GetIndexName()
-		sqlIndexNames = append(sqlIndexNames, indexName)
-		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
-		indexName := ds.GetIndexName()
-		sqlIndexNames = append(sqlIndexNames, indexName)
-		initialIndexSearchAttributes[indexName] = searchattribute.GetSqlDbIndexSearchAttributes()
+		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
 	clusterMetadata := svc.ClusterMetadata
@@ -643,6 +645,7 @@ func ApplyClusterMetadataConfigProvider(
 			ctx,
 			clusterMetadataManager,
 			svc,
+			initialIndexSearchAttributes,
 			resp,
 		); updateErr != nil {
 			return svc.ClusterMetadata, svc.Persistence, updateErr
@@ -750,7 +753,7 @@ func initCurrentClusterMetadataRecord(
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		ctx,
 		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        svc.Persistence.NumHistoryShards,
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
@@ -779,6 +782,7 @@ func updateCurrentClusterMetadataRecord(
 	ctx context.Context,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	svc *config.Config,
+	initialIndexSearchAttributes map[string]*persistencespb.IndexSearchAttributes,
 	currentClusterDBRecord *persistence.GetClusterMetadataResponse,
 ) error {
 	updateDBRecord := false
@@ -799,6 +803,20 @@ func updateCurrentClusterMetadataRecord(
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {
 		currentClusterDBRecord.Tags = svc.ClusterMetadata.Tags
 		updateDBRecord = true
+	}
+
+	if len(initialIndexSearchAttributes) > 0 {
+		if currentClusterDBRecord.IndexSearchAttributes == nil {
+			currentClusterDBRecord.IndexSearchAttributes = initialIndexSearchAttributes
+			updateDBRecord = true
+		} else {
+			for indexName, initialValue := range initialIndexSearchAttributes {
+				if _, ok := currentClusterDBRecord.IndexSearchAttributes[indexName]; !ok {
+					currentClusterDBRecord.IndexSearchAttributes[indexName] = initialValue
+					updateDBRecord = true
+				}
+			}
+		}
 	}
 
 	if !updateDBRecord {

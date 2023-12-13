@@ -25,5 +25,7 @@
 package build
 
 import (
-	_ "github.com/temporalio/gogo-protobuf/gogoproto" // gogoproto is just a random package name for module.
+	_ "go.temporal.io/api/cmd/protoc-gen-go-helpers"
+	_ "go.temporal.io/api/cmd/protogen"
+	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 )

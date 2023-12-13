@@ -114,9 +114,9 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 
 func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.CacheRequests.Name()).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(startTime)) }()
 
 	validKey := e.validateKey(key)
 
@@ -128,10 +128,10 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 		}
 	}
 
-	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
+	handler.Counter(metrics.CacheMissCounter.Name()).Record(1)
 	event, err := e.getHistoryEventFromStore(ctx, key, firstEventID, branchToken)
 	if err != nil {
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		handler.Counter(metrics.CacheFailures.Name()).Record(1)
 		e.logger.Error("Cache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
@@ -150,9 +150,9 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.CacheRequests.Name()).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(startTime)) }()
 
 	if !e.validateKey(key) {
 		return
@@ -162,9 +162,9 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.CacheRequests.Name()).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(startTime)) }()
 
 	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
@@ -178,9 +178,9 @@ func (e *CacheImpl) getHistoryEventFromStore(
 ) (*historypb.HistoryEvent, error) {
 
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler.Counter(metrics.CacheRequests.Name()).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { handler.Timer(metrics.CacheLatency.Name()).Record(time.Since(startTime)) }()
 
 	response, err := e.eventsMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -196,10 +196,10 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	case *serviceerror.DataLoss:
 		// log event
 		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID.String()), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		handler.Counter(metrics.CacheFailures.Name()).Record(1)
 		return nil, err
 	default:
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		handler.Counter(metrics.CacheFailures.Name()).Record(1)
 		return nil, err
 	}
 

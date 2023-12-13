@@ -1,4 +1,4 @@
-FROM temporalio/base-ci-builder:1.10.3 AS prebuild
+FROM temporalio/base-ci-builder:1.10.7 AS prebuild
 WORKDIR /temporal
 
 # Populate some data in the go build cache to speed up subsequent builds.

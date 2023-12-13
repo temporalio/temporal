@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -44,7 +45,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -55,7 +55,8 @@ const (
 	testNextEventID               = 1800
 	testCloseFailoverVersion      = 100
 	testPageSize                  = 100
-	exampleHistoryRecord          = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
+	exampleOldHistoryRecord       = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
+	exampleNewHistoryRecord       = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"EVENT_TYPE_WORKFLOW_EXECUTION_STARTED","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
 	twoEventsExampleHistoryRecord = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}},{"eventId":2,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
 )
 
@@ -246,7 +247,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -321,7 +322,7 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId:   common.FirstEventID,
-						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
 					},
 				},
@@ -363,12 +364,12 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -377,7 +378,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -457,7 +458,27 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleNewHistoryRecord), nil)
+	historyIterator := archiver.NewMockHistoryIterator(h.controller)
+	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	request := &archiver.GetHistoryRequest{
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    testPageSize,
+	}
+
+	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
+	h.NoError(err)
+	h.Nil(response.NextPageToken)
+}
+
+func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion_OldJSON() {
+	ctx := context.Background()
+	storageWrapper := connector.NewMockClient(h.controller)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleOldHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
@@ -473,12 +494,11 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleNewHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
@@ -495,13 +515,12 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PageSize() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleNewHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleNewHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -519,13 +538,12 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_FromToken() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleNewHistoryRecord), nil)
 	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_3.history").Return([]byte(twoEventsExampleHistoryRecord), nil)
-	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleNewHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)

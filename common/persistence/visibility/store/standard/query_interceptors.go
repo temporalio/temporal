@@ -104,7 +104,11 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			statusStr := values[0].(string)
-			vi.filter.Status = enums.WorkflowExecutionStatus_value[statusStr]
+			e, err := enums.WorkflowExecutionStatusFromString(statusStr)
+			if err != nil {
+				return nil, query.NewConverterError("invalid ExecutionStatus %q", statusStr)
+			}
+			vi.filter.Status = int32(e)
 		}
 		return values, err
 	case searchattribute.StartTime:

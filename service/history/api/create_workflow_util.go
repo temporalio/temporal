@@ -26,12 +26,12 @@ package api
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -76,7 +76,7 @@ func NewWorkflowWithSignal(
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
@@ -144,8 +144,8 @@ func CreateMutableState(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
-	executionTimeout *time.Duration,
-	runTimeout *time.Duration,
+	executionTimeout *durationpb.Duration,
+	runTimeout *durationpb.Duration,
 	runID string,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
@@ -225,7 +225,7 @@ func ValidateStart(
 	}
 
 	handler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.CommandTypeTag(operation))
-	handler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(int64(workflowMemoSize))
+	handler.Histogram(metrics.MemoSize.Name(), metrics.MemoSize.Unit()).Record(int64(workflowMemoSize))
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -314,8 +314,8 @@ func OverrideStartWorkflowExecutionRequest(
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
-		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.GetMetricName()).Record(
+		request.WorkflowRunTimeout = durationpb.New(workflowRunTimeout)
+		metricsHandler.Counter(metrics.WorkflowRunTimeoutOverrideCount.Name()).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),
@@ -329,8 +329,8 @@ func OverrideStartWorkflowExecutionRequest(
 		shard.GetConfig().DefaultWorkflowTaskTimeout,
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
-		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.GetMetricName()).Record(
+		request.WorkflowTaskTimeout = durationpb.New(workflowTaskStartToCloseTimeout)
+		metricsHandler.Counter(metrics.WorkflowTaskTimeoutOverrideCount.Name()).Record(
 			1,
 			metrics.OperationTag(operation),
 			metrics.NamespaceTag(namespace),

@@ -93,6 +93,12 @@ type (
 
 	// ResetParams is the parameters for reseting workflow
 	ResetParams struct {
+		// This is a serialized commonpb.ResetOptions. We can't include it with the
+		// correct type because workflow/activity arguments are going to be serialized with the
+		// json dataconverter, which doesn't support the "oneof" field in ResetOptions.
+		ResetOptions []byte
+		resetOptions *commonpb.ResetOptions // deserialized version
+		// Deprecated fields:
 		ResetType        enumspb.ResetType
 		ResetReapplyType enumspb.ResetReapplyType
 	}
@@ -151,7 +157,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution commonpb.WorkflowExecution
+		execution *commonpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails

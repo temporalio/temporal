@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -88,6 +89,7 @@ type (
 		suite.Suite
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		VisibilityStoreFactory    visibility.VisibilityStoreFactory
 		FaultInjection            *client.FaultInjectionDataStoreFactory
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
@@ -121,7 +123,7 @@ type (
 )
 
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
-func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
+func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 	logger := log.NewTestLogger()
 	testCluster := NewTestClusterForCassandra(options, logger)
 	return NewTestBaseForCluster(testCluster, logger)
@@ -136,7 +138,7 @@ func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *ca
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
-func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
+func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
@@ -174,7 +176,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
-func NewTestBase(options *TestBaseOptions) TestBase {
+func NewTestBase(options *TestBaseOptions) *TestBase {
 	switch options.StoreType {
 	case config.StoreTypeSQL:
 		return NewTestBaseWithSQL(options)
@@ -185,8 +187,8 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
-	return TestBase{
+func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) *TestBase {
+	return &TestBase{
 		DefaultTestCluster: testCluster,
 		Logger:             logger,
 	}

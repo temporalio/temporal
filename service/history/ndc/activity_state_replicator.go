@@ -105,7 +105,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		execution,
+		&execution,
 		workflow.LockPriorityHigh,
 	)
 	if err != nil {
@@ -176,7 +176,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		request.GetAttempt(),
 		activityInfo,
 	)
-	err = mutableState.ReplicateActivityInfo(request, refreshTask)
+	err = mutableState.UpdateActivityInfo(request, refreshTask)
 	if err != nil {
 		return err
 	}
@@ -264,8 +264,9 @@ func (r *ActivityStateReplicatorImpl) testActivity(
 	// activityInfo.Version == version & activityInfo.Attempt == attempt
 
 	// last heartbeat after existing heartbeat & should update activity
-	if !timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime).IsZero() &&
-		activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+	if activityInfo.LastHeartbeatUpdateTime != nil &&
+		!activityInfo.LastHeartbeatUpdateTime.AsTime().IsZero() &&
+		activityInfo.LastHeartbeatUpdateTime.AsTime().After(lastHeartbeatTime) {
 		// this should not retry, can be caused by out of order delivery
 		return false
 	}

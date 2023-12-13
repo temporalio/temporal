@@ -76,11 +76,11 @@ func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 		return
 	}
 
-	tString, isValidT := enumspb.IndexedValueType_name[int32(t)]
+	_, isValidT := enumspb.IndexedValueType_name[int32(t)]
 	if !isValidT {
 		panic(fmt.Sprintf("unknown index value type %v", t))
 	}
-	p.Metadata[MetadataType] = []byte(tString)
+	p.Metadata[MetadataType] = []byte(enumspb.IndexedValueType(t).String())
 }
 
 // This may mutate saPtr and *saPtr

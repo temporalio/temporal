@@ -368,6 +368,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
+		e.persistenceVisibilityMgr,
 		startRequest,
 	)
 	if err != nil {
@@ -837,7 +838,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 func (e *historyEngineImpl) RebuildMutableState(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) error {
 	return e.workflowRebuilder.rebuild(
 		ctx,
@@ -852,7 +853,7 @@ func (e *historyEngineImpl) RebuildMutableState(
 func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) (retError error) {
 	return refreshworkflow.Invoke(
 		ctx,

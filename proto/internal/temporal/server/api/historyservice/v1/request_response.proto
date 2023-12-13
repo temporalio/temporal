@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,8 +27,6 @@ option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice"
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-
-import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
@@ -56,13 +56,13 @@ message StartWorkflowExecutionRequest {
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
     temporal.server.api.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
     int32 attempt = 4;
-    google.protobuf.Timestamp workflow_execution_expiration_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_execution_expiration_time = 5;
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
     // History service should use the values of continued_failure and last_completion_result
     // here, not the ones in start_request (those are moved into here in the frontend).
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
-    google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration first_workflow_task_backoff = 9;
     // For child or continued-as-new workflows, including a version here from the source
     // (parent/previous) will set the initial version stamp of this workflow.
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
@@ -96,7 +96,7 @@ message GetMutableStateResponse {
     reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11;
     reserved 12;
     bytes current_branch_token = 13;
     reserved 14;
@@ -132,7 +132,7 @@ message PollMutableStateResponse {
     reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11;
     bytes current_branch_token = 12;
     reserved 13;
     temporal.server.api.history.v1.VersionHistories version_histories = 14;
@@ -173,8 +173,8 @@ message RecordWorkflowTaskStartedResponse {
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
-    google.protobuf.Timestamp scheduled_time = 12 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 12;
+    google.protobuf.Timestamp started_time = 13;
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
@@ -196,9 +196,9 @@ message RecordActivityTaskStartedRequest {
 
 message RecordActivityTaskStartedResponse {
     temporal.api.history.v1.HistoryEvent scheduled_event = 1;
-    google.protobuf.Timestamp started_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 2;
     int32 attempt = 3;
-    google.protobuf.Timestamp current_attempt_scheduled_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp current_attempt_scheduled_time = 4;
     temporal.api.common.v1.Payloads heartbeat_details = 5;
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
@@ -443,7 +443,7 @@ message ReplicateWorkflowStateResponse {
 message SyncShardStatusRequest {
     string source_cluster = 1;
     int32 shard_id = 2;
-    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp status_time = 3;
 }
 
 message SyncShardStatusResponse {
@@ -455,10 +455,10 @@ message SyncActivityRequest {
     string run_id = 3;
     int64 version = 4;
     int64 scheduled_event_id = 5;
-    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 6;
     int64 started_event_id = 7;
-    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 8;
+    google.protobuf.Timestamp last_heartbeat_time = 9;
     temporal.api.common.v1.Payloads details = 10;
     int32 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
@@ -519,7 +519,7 @@ message RemoveTaskRequest {
     // The task category. See tasks.TaskCategoryRegistry for more.
     int32 category = 2;
     int64 task_id = 3;
-    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 4;
 }
 
 message RemoveTaskResponse {
@@ -630,11 +630,11 @@ message ShardReplicationStatus {
     // Max replication task id of current cluster
     int64 max_replication_task_id = 2;
     // Local time on this shard
-    google.protobuf.Timestamp shard_local_time = 3 [(gogoproto.stdtime) = true, deprecated = true];
+    google.protobuf.Timestamp shard_local_time = 3;
     map<string, ShardReplicationStatusPerCluster> remote_clusters = 4;
     map<string, HandoverNamespaceInfo> handover_namespaces = 5;
 
-    google.protobuf.Timestamp max_replication_task_visibility_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp max_replication_task_visibility_time = 6;
 }
 
 message HandoverNamespaceInfo {
@@ -646,7 +646,7 @@ message ShardReplicationStatusPerCluster {
     // Acked replication task id
     int64 acked_task_id = 1;
     // Acked replication task creation time
-    google.protobuf.Timestamp acked_task_visibility_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp acked_task_visibility_time = 2;
 }
 
 message RebuildMutableStateRequest {
@@ -673,8 +673,8 @@ message ImportWorkflowExecutionResponse {
 message DeleteWorkflowVisibilityRecordRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
-    google.protobuf.Timestamp workflow_start_time = 3 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp workflow_close_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_start_time = 3;
+    google.protobuf.Timestamp workflow_close_time = 4;
 }
 
 message DeleteWorkflowVisibilityRecordResponse {
@@ -784,7 +784,11 @@ message ListQueuesRequest {
 }
 
 message ListQueuesResponse {
-    repeated string queue_names = 1;
+    message QueueInfo {
+        string queue_name = 1;
+        int64 message_count = 2;
+    }
+    repeated QueueInfo queues = 1;
     bytes next_page_token = 2;
 }
 

@@ -93,12 +93,12 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 
 	for _, tc := range []struct {
 		name           string
-		taskInfo       historyspb.TransientWorkflowTaskInfo
+		taskInfo       *historyspb.TransientWorkflowTaskInfo
 		transientCount int
 	}{
 		{
 			name: "HistorySuffix",
-			taskInfo: historyspb.TransientWorkflowTaskInfo{
+			taskInfo: &historyspb.TransientWorkflowTaskInfo{
 				HistorySuffix: []*historypb.HistoryEvent{
 					{EventId: 3},
 					{EventId: 4},
@@ -119,7 +119,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 						WorkflowId: "wfid:" + s.T().Name(),
 						RunId:      "1",
 					},
-					TransientWorkflowTask: &tc.taskInfo,
+					TransientWorkflowTask: tc.taskInfo,
 				},
 				nil,
 			)
@@ -141,7 +141,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
-	we := commonpb.WorkflowExecution{
+	we := &commonpb.WorkflowExecution{
 		WorkflowId: "wid",
 		RunId:      "rid",
 	}
@@ -210,12 +210,12 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	namespaceID := namespace.ID(uuid.New())
 	namespaceName := namespace.Name("namespace")
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := &commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              namespaceName.String(),
-		Execution:              &we,
+		Execution:              we,
 		MaximumPageSize:        10,
 		NextPageToken:          nil,
 		WaitNewEvent:           true,
@@ -232,12 +232,12 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespaceName).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
 		NamespaceId:         namespaceID.String(),
-		Execution:           &we,
+		Execution:           we,
 		ExpectedNextEventId: common.EndEventID,
 		CurrentBranchToken:  nil,
 		VersionHistoryItem:  nil,
 	}).Return(&historyservice.PollMutableStateResponse{
-		Execution:           &we,
+		Execution:           we,
 		WorkflowType:        &commonpb.WorkflowType{Name: "mytype"},
 		NextEventId:         6,
 		LastFirstEventId:    5,
@@ -315,7 +315,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
 	namespaceID := namespace.ID(uuid.New())
 	namespaceName := namespace.Name("namespace")
-	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	we := &commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 
 	config := s.newConfig()
 	config.SendRawWorkflowHistory = dc.GetBoolPropertyFnFilteredByNamespace(true)
@@ -345,7 +345,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 	s.NoError(err)
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              namespaceName.String(),
-		Execution:              &we,
+		Execution:              we,
 		MaximumPageSize:        10,
 		NextPageToken:          nextPageToken,
 		WaitNewEvent:           false,

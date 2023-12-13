@@ -94,7 +94,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}
@@ -171,7 +171,7 @@ func getWorkflowExecutionContext(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	// workflowCache will automatically use short context timeout when
 	// locking workflow for all background calls, we don't need a separate context here
@@ -190,8 +190,8 @@ func getWorkflowExecutionContext(
 
 func getTaskNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
-) (namespace.ID, commonpb.WorkflowExecution) {
-	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
+) (namespace.ID, *commonpb.WorkflowExecution) {
+	return namespace.ID(task.GetNamespaceID()), &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}

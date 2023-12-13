@@ -61,7 +61,7 @@ const (
 	TemplateRangeDeleteMessagesQuery = `DELETE FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? AND message_id <= ?`
 	TemplateUpdateQueueMetadataQuery = `UPDATE queues SET metadata_payload = ?, metadata_encoding = ?, version = ? WHERE queue_type = ? AND queue_name = ? IF version = ?`
 	// We will have to ALLOW FILTERING for this query since partition key consists of both queue_type and queue_name.
-	templateGetQueueNamesQuery = `SELECT queue_name FROM queues WHERE queue_type =? ALLOW FILTERING`
+	templateGetQueueNamesQuery = `SELECT queue_name, metadata_payload, metadata_encoding, version FROM queues WHERE queue_type = ? ALLOW FILTERING`
 )
 
 var (
@@ -194,8 +194,8 @@ func (s *queueV2Store) ReadMessages(
 		if !iter.Scan(&messageID, &messagePayload, &messageEncoding) {
 			break
 		}
-		encoding, ok := enums.EncodingType_value[messageEncoding]
-		if !ok {
+		encoding, err := enums.EncodingTypeFromString(messageEncoding)
+		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(messageEncoding)
 		}
 
@@ -203,7 +203,7 @@ func (s *queueV2Store) ReadMessages(
 
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: messageID},
-			Data: commonpb.DataBlob{
+			Data: &commonpb.DataBlob{
 				EncodingType: encodingType,
 				Data:         messagePayload,
 			},
@@ -357,7 +357,7 @@ func (s *queueV2Store) tryInsert(
 	ctx context.Context,
 	queueType persistence.QueueV2Type,
 	queueName string,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 	messageID int64,
 ) error {
 	applied, err := s.session.Query(
@@ -416,7 +416,16 @@ func GetQueue(
 		}
 		return nil, gocql.ConvertError("QueueV2GetQueue", err)
 	}
+	return getQueueFromMetadata(queueType, queueName, queueBytes, queueEncodingStr, version)
+}
 
+func getQueueFromMetadata(
+	queueType persistence.QueueV2Type,
+	queueName string,
+	queueBytes []byte,
+	queueEncodingStr string,
+	version int64,
+) (*Queue, error) {
 	if queueEncodingStr != enums.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
 			"%w: invalid queue encoding type: queue with type %v and name %v has invalid encoding",
@@ -427,7 +436,7 @@ func GetQueue(
 	}
 
 	q := &persistencespb.Queue{}
-	err = q.Unmarshal(queueBytes)
+	err := q.Unmarshal(queueBytes)
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
 			enums.ENCODING_TYPE_PROTO3,
@@ -480,19 +489,40 @@ func (s *queueV2Store) ListQueues(
 		request.QueueType,
 	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
 
-	var queues []string
+	var queues []persistence.QueueInfo
 	for {
-		var queue string
-		if !iter.Scan(&queue) {
+		var (
+			queueName        string
+			metadataBytes    []byte
+			metadataEncoding string
+			version          int64
+		)
+		if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
 			break
 		}
-		queues = append(queues, queue)
+		q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
+		if err != nil {
+			return nil, err
+		}
+		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		nextMessageID, err := s.getNextMessageID(ctx, request.QueueType, queueName)
+		if err != nil {
+			return nil, err
+		}
+		messageCount := nextMessageID - partition.MinMessageId
+		queues = append(queues, persistence.QueueInfo{
+			QueueName:    queueName,
+			MessageCount: messageCount,
+		})
 	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("QueueV2ListQueues", err)
 	}
 	return &persistence.InternalListQueuesResponse{
-		QueueNames:    queues,
+		Queues:        queues,
 		NextPageToken: iter.PageState(),
 	}, nil
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -108,10 +109,9 @@ func (s *contextSuite) SetupTest() {
 }
 
 func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
-	now := s.timeSource.Now()
+	now := time.Now()
 	s.timeSource.Update(now)
-	maxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
-	s.NoError(err)
+	maxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer)
 
 	now = now.Add(time.Minute)
 	s.timeSource.Update(now)
@@ -141,25 +141,25 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 			// task timestamp is lower than both scheduled queue max read level and now
 			// should be overwritten to be later than both
 			taskTimestamp:     maxReadLevel.FireTime.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is lower than now but higher than scheduled queue max read level
 			// should still be overwritten to be later than both
 			taskTimestamp:     now.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is later than both now and scheduled queue max read level
 			// should not be overwritten
 			taskTimestamp:     now.Add(time.Minute),
-			expectedTimestamp: now.Add(time.Minute),
+			expectedTimestamp: now.Add(time.Minute).Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
 		},
 	}
 
 	for _, tc := range testCases {
 		fakeTask.SetVisibilityTime(tc.taskTimestamp)
-		err = s.mockShard.AddTasks(
+		err := s.mockShard.AddTasks(
 			context.Background(),
 			&persistence.AddHistoryTasksRequest{
 				ShardID:     s.mockShard.GetShardID(),
@@ -170,6 +170,8 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 			},
 		)
 		s.NoError(err)
+		fmt.Println(fakeTask.GetVisibilityTime())
+		fmt.Println(tc.expectedTimestamp)
 		s.True(fakeTask.GetVisibilityTime().After(now))
 		s.True(fakeTask.GetVisibilityTime().After(maxReadLevel.FireTime))
 		s.True(fakeTask.GetVisibilityTime().Equal(tc.expectedTimestamp))
@@ -200,16 +202,6 @@ func (s *contextSuite) TestAddTasks_Success() {
 	s.NoError(err)
 }
 
-func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
-	now := time.Now().Add(time.Minute)
-	s.timeSource.Update(now)
-
-	_, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark()
-	s.NoError(err)
-
-	s.True(s.mockShard.scheduledTaskMaxReadLevel.After(now))
-}
-
 func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: tests.NamespaceID.String(),
@@ -229,8 +221,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -255,8 +247,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -270,8 +262,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -284,8 +276,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -309,8 +301,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -323,8 +315,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -337,8 +329,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -350,8 +342,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -374,8 +366,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -390,8 +382,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		branchToken,
-		nil,
-		nil,
+		time.Time{},
+		time.Time{},
 		0,
 		&stage,
 	)
@@ -475,7 +467,10 @@ func (s *contextSuite) TestHandoverNamespace() {
 
 	handoverInfo, ok := handoverNS[namespaceEntry.Name().String()]
 	s.True(ok)
-	s.Equal(s.mockShard.immediateTaskExclusiveMaxReadLevel-1, handoverInfo.HandoverReplicationTaskId)
+	s.Equal(
+		s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID-1,
+		handoverInfo.HandoverReplicationTaskId,
+	)
 
 	// make shard status invalid
 	// ideally we should use s.mockShard.transition() method
@@ -492,7 +487,10 @@ func (s *contextSuite) TestHandoverNamespace() {
 
 	handoverInfo, ok = handoverNS[namespaceEntry.Name().String()]
 	s.True(ok)
-	s.Equal(s.mockShard.immediateTaskExclusiveMaxReadLevel-1, handoverInfo.HandoverReplicationTaskId)
+	s.Equal(
+		s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryReplication).TaskID-1,
+		handoverInfo.HandoverReplicationTaskId,
+	)
 
 	// delete namespace
 	s.mockShard.UpdateHandoverNamespace(namespaceEntry, true)
@@ -535,7 +533,7 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_8_4() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -572,7 +570,7 @@ func (s *contextSuite) TestUpdateGetRemoteClusterInfo_Legacy_4_8() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -613,7 +611,7 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_8_4() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }
@@ -673,7 +671,7 @@ func (s *contextSuite) TestUpdateGetRemoteReaderInfo_4_8() {
 	s.Equal(map[string]*historyservice.ShardReplicationStatusPerCluster{
 		cluster.TestAlternativeClusterName: {
 			AckedTaskId:             ackTaskID,
-			AckedTaskVisibilityTime: timestamp.TimePtr(ackTimestamp),
+			AckedTaskVisibilityTime: timestamppb.New(ackTimestamp),
 		},
 	}, remoteAckStatus)
 }

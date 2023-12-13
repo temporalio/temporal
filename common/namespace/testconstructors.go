@@ -38,10 +38,10 @@ func NewLocalNamespaceForTest(
 	targetCluster string,
 ) *Namespace {
 	return &Namespace{
-		info:              derefInfo(info),
-		config:            derefConfig(config),
+		info:              ensureInfo(info),
+		config:            ensureConfig(config),
 		isGlobalNamespace: false,
-		replicationConfig: persistencespb.NamespaceReplicationConfig{
+		replicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
 			Clusters:          []string{targetCluster},
 		},
@@ -58,10 +58,10 @@ func NewNamespaceForTest(
 	failoverVersion int64,
 ) *Namespace {
 	return &Namespace{
-		info:              derefInfo(info),
-		config:            derefConfig(config),
+		info:              ensureInfo(info),
+		config:            ensureConfig(config),
 		isGlobalNamespace: isGlobalNamespace,
-		replicationConfig: derefRepConfig(repConfig),
+		replicationConfig: ensureRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
 	}
 }
@@ -74,31 +74,31 @@ func NewGlobalNamespaceForTest(
 	failoverVersion int64,
 ) *Namespace {
 	return &Namespace{
-		info:              derefInfo(info),
-		config:            derefConfig(config),
+		info:              ensureInfo(info),
+		config:            ensureConfig(config),
 		isGlobalNamespace: true,
-		replicationConfig: derefRepConfig(repConfig),
+		replicationConfig: ensureRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
 	}
 }
 
-func derefInfo(ptr *persistencespb.NamespaceInfo) persistencespb.NamespaceInfo {
-	if ptr == nil {
-		return persistencespb.NamespaceInfo{}
+func ensureInfo(proto *persistencespb.NamespaceInfo) *persistencespb.NamespaceInfo {
+	if proto == nil {
+		return &persistencespb.NamespaceInfo{}
 	}
-	return *ptr
+	return proto
 }
 
-func derefConfig(ptr *persistencespb.NamespaceConfig) persistencespb.NamespaceConfig {
-	if ptr == nil {
-		return persistencespb.NamespaceConfig{}
+func ensureConfig(proto *persistencespb.NamespaceConfig) *persistencespb.NamespaceConfig {
+	if proto == nil {
+		return &persistencespb.NamespaceConfig{}
 	}
-	return *ptr
+	return proto
 }
 
-func derefRepConfig(ptr *persistencespb.NamespaceReplicationConfig) persistencespb.NamespaceReplicationConfig {
-	if ptr == nil {
-		return persistencespb.NamespaceReplicationConfig{}
+func ensureRepConfig(proto *persistencespb.NamespaceReplicationConfig) *persistencespb.NamespaceReplicationConfig {
+	if proto == nil {
+		return &persistencespb.NamespaceReplicationConfig{}
 	}
-	return *ptr
+	return proto
 }

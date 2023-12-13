@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -105,22 +106,22 @@ func (s *taskValidatorSuite) TeardownTest() {
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
+		validationTime: time.Unix(0, rand.Int63()).UTC(),
 	}
-	s.task.Data.CreateTime = timestamp.TimePtr(time.Unix(0, rand.Int63()))
+	s.task.Data.CreateTime = timestamppb.New(time.Unix(0, rand.Int63()))
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: *s.task.Data.CreateTime,
+		validationTime: s.task.Data.CreateTime.AsTime(),
 	}, s.taskValidator.lastValidatedTaskInfo)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
+		validationTime: time.Unix(0, rand.Int63()).UTC(),
 	}
 	s.task.Data.CreateTime = nil
 
@@ -153,37 +154,37 @@ func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
+		validationTime: time.Unix(0, rand.Int63()).UTC(),
 	}
-	s.task.Data.CreateTime = timestamp.TimePtr(time.Now().Add(-taskReaderValidationThreshold / 2))
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold / 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: *s.task.Data.CreateTime,
+		validationTime: s.task.Data.CreateTime.AsTime(),
 	}, s.taskValidator.lastValidatedTaskInfo)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
+		validationTime: time.Unix(0, rand.Int63()).UTC(),
 	}
-	s.task.Data.CreateTime = timestamp.TimePtr(time.Now().Add(-taskReaderValidationThreshold * 2))
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: *s.task.Data.CreateTime,
+		validationTime: s.task.Data.CreateTime.AsTime(),
 	}, s.taskValidator.lastValidatedTaskInfo)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()),
+		validationTime: time.Unix(0, rand.Int63()).UTC(),
 	}
 	s.task.Data.CreateTime = nil
 

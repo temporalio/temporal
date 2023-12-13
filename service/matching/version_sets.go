@@ -104,7 +104,7 @@ func gatherBuildIds(data *persistencespb.VersioningData) map[string]struct{} {
 // RemoveBuildIds removes given buildIds from versioning data.
 // Assumes that build ids are safe to remove, ex: a set default is never removed unless it is a single set member and
 // that set is not default for the queue.
-func RemoveBuildIds(clock hlc.Clock, versioningData *persistencespb.VersioningData, buildIds []string) *persistencespb.VersioningData {
+func RemoveBuildIds(clock *hlc.Clock, versioningData *persistencespb.VersioningData, buildIds []string) *persistencespb.VersioningData {
 	buildIdsMap := make(map[string]struct{}, len(buildIds))
 	for _, buildId := range buildIds {
 		buildIdsMap[buildId] = struct{}{}
@@ -118,7 +118,7 @@ func RemoveBuildIds(clock hlc.Clock, versioningData *persistencespb.VersioningDa
 				set.BuildIds[buildIdIdx] = &persistencespb.BuildId{
 					Id:                     buildId.Id,
 					State:                  persistencespb.STATE_DELETED,
-					StateUpdateTimestamp:   &clock,
+					StateUpdateTimestamp:   clock,
 					BecameDefaultTimestamp: buildId.BecameDefaultTimestamp,
 				}
 			}
@@ -193,7 +193,7 @@ func shallowCloneVersionSet(set *persistencespb.CompatibleVersionSet) *persisten
 // Deletions are performed by a background process which verifies build IDs are no longer in use and safe to delete (not yet implemented).
 //
 // Update may fail with FailedPrecondition if it would cause exceeding the supplied limits.
-func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIds int) (*persistencespb.VersioningData, error) {
+func UpdateVersionSets(clock *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest, maxSets, maxBuildIds int) (*persistencespb.VersioningData, error) {
 	if data == nil {
 		data = &persistencespb.VersioningData{VersionSets: make([]*persistencespb.CompatibleVersionSet, 0)}
 	} else {
@@ -207,7 +207,7 @@ func UpdateVersionSets(clock hlc.Clock, data *persistencespb.VersioningData, req
 }
 
 //nolint:revive // cyclomatic complexity
-func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
+func updateImpl(timestamp *hlc.Clock, data *persistencespb.VersioningData, req *workflowservice.UpdateWorkerBuildIdCompatibilityRequest) (*persistencespb.VersioningData, error) {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
 	targetSetIdx, versionInSetIdx := worker_versioning.FindBuildId(data, targetedVersion)
@@ -227,10 +227,10 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 
 		data.VersionSets = append(data.GetVersionSets(), &persistencespb.CompatibleVersionSet{
 			SetIds:   []string{hashBuildId(targetedVersion)},
-			BuildIds: []*persistencespb.BuildId{{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp}},
+			BuildIds: []*persistencespb.BuildId{{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: timestamp}},
 		})
-		makeVersionInSetDefault(data, len(data.VersionSets)-1, 0, &timestamp)
-		makeDefaultSet(data, len(data.VersionSets)-1, &timestamp)
+		makeVersionInSetDefault(data, len(data.VersionSets)-1, 0, timestamp)
+		makeDefaultSet(data, len(data.VersionSets)-1, timestamp)
 	} else if addNew := req.GetAddNewCompatibleBuildId(); addNew != nil {
 		compatVer := addNew.GetExistingCompatibleBuildId()
 		compatSetIdx, _ := worker_versioning.FindBuildId(data, compatVer)
@@ -258,10 +258,10 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 
 		// If the version doesn't exist, add it to the compatible set
 		data.VersionSets[compatSetIdx].BuildIds = append(data.VersionSets[compatSetIdx].BuildIds,
-			&persistencespb.BuildId{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: &timestamp})
-		makeVersionInSetDefault(data, compatSetIdx, lastIdx, &timestamp)
+			&persistencespb.BuildId{Id: targetedVersion, State: persistencespb.STATE_ACTIVE, StateUpdateTimestamp: timestamp})
+		makeVersionInSetDefault(data, compatSetIdx, lastIdx, timestamp)
 		if addNew.GetMakeSetDefault() {
-			makeDefaultSet(data, compatSetIdx, &timestamp)
+			makeDefaultSet(data, compatSetIdx, timestamp)
 		}
 	} else if req.GetPromoteSetByBuildId() != "" {
 		if targetSetIdx == -1 {
@@ -271,7 +271,7 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 			// Make the request idempotent
 			return data, nil
 		}
-		makeDefaultSet(data, targetSetIdx, &timestamp)
+		makeDefaultSet(data, targetSetIdx, timestamp)
 	} else if req.GetPromoteBuildIdWithinSet() != "" {
 		if targetSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
@@ -280,7 +280,7 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 			// Make the request idempotent
 			return data, nil
 		}
-		makeVersionInSetDefault(data, targetSetIdx, versionInSetIdx, &timestamp)
+		makeVersionInSetDefault(data, targetSetIdx, versionInSetIdx, timestamp)
 	} else if mergeSets := req.GetMergeSets(); mergeSets != nil {
 		if targetSetIdx == -1 {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("targeted primary version %v not found", targetedVersion))
@@ -297,7 +297,7 @@ func updateImpl(timestamp hlc.Clock, data *persistencespb.VersioningData, req *w
 		// Merge the sets together, preserving the primary set's default by making it have the most recent timestamp.
 		primarySet := data.VersionSets[targetSetIdx]
 		primaryBuildId := primarySet.BuildIds[len(primarySet.BuildIds)-1]
-		primaryBuildId.BecameDefaultTimestamp = &timestamp
+		primaryBuildId.BecameDefaultTimestamp = timestamp
 		justPrimaryData := &persistencespb.VersioningData{
 			VersionSets: []*persistencespb.CompatibleVersionSet{primarySet},
 		}
@@ -505,7 +505,7 @@ func ClearTombstones(versioningData *persistencespb.VersioningData) *persistence
 	return modifiedData
 }
 
-func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData, buildId string) *persistencespb.VersioningData {
+func PersistUnknownBuildId(clock *hlc.Clock, data *persistencespb.VersioningData, buildId string) *persistencespb.VersioningData {
 	guessedSetId := hashBuildId(buildId)
 
 	if foundSetId, _ := worker_versioning.FindBuildId(data, buildId); foundSetId >= 0 {
@@ -533,10 +533,10 @@ func PersistUnknownBuildId(clock hlc.Clock, data *persistencespb.VersioningData,
 		BuildIds: []*persistencespb.BuildId{{
 			Id:                     buildId,
 			State:                  persistencespb.STATE_ACTIVE,
-			StateUpdateTimestamp:   &clock,
-			BecameDefaultTimestamp: &clock,
+			StateUpdateTimestamp:   clock,
+			BecameDefaultTimestamp: clock,
 		}},
-		BecameDefaultTimestamp: &clock,
+		BecameDefaultTimestamp: clock,
 	})
 	return newData
 }

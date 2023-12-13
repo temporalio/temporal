@@ -30,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/proto"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -46,12 +46,14 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	ExecutionMutableStateSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		ShardID     int32
 		RangeID     int64
@@ -76,7 +78,8 @@ func NewExecutionMutableStateSuite(
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
-		Assertions: require.New(t),
+		Assertions:      require.New(t),
+		ProtoAssertions: protorequire.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
 			serializer,
@@ -1751,7 +1754,7 @@ func (s *ExecutionMutableStateSuite) AssertEqualWithDB(
 	actualMutableState.SignalRequestedIds = expectedMutableState.SignalRequestedIds
 
 	s.Equal(expectedDBRecordVersion, actualDBRecordVersion)
-	s.Equal(expectedMutableState, actualMutableState)
+	s.ProtoEqual(expectedMutableState, actualMutableState)
 }
 
 func (s *ExecutionMutableStateSuite) Accumulate(

@@ -37,6 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -55,6 +56,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -64,6 +66,7 @@ type (
 	taskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller                  *gomock.Controller
 		mockResource                *resourcetest.Test
@@ -100,6 +103,7 @@ func (s *taskProcessorSuite) TearDownSuite() {
 
 func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
 	s.config = tests.NewDynamicConfig()
@@ -154,7 +158,7 @@ func (s *taskProcessorSuite) TearDownTest() {
 }
 
 func (s *taskProcessorSuite) TestHandleSyncShardStatus_Stale() {
-	now := timestamp.TimePtr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
+	now := timestamppb.New(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
 		StatusTime: now,
 	})
@@ -191,7 +195,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 				Attempt:     attempt,
 			},
 		},
-		VisibilityTime: &now,
+		VisibilityTime: timestamppb.New(now),
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
@@ -230,7 +234,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 				VersionHistoryItems: versionHistory,
 			},
 		},
-		VisibilityTime: &now,
+		VisibilityTime: timestamppb.New(now),
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
@@ -481,7 +485,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
@@ -554,7 +558,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
@@ -580,7 +584,6 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 }
 
 func (s *taskProcessorSuite) TestPaginationFn_Error() {
-
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()
 	rxTaskBackoff := time.Duration(rand.Int63())
@@ -591,14 +594,14 @@ func (s *taskProcessorSuite) TestPaginationFn_Error() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
 		defer close(request.respChan)
-		s.Equal(requestToken, request.token)
+		s.ProtoEqual(requestToken, request.token)
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)

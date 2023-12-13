@@ -25,7 +25,6 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,7 +106,7 @@ func Test_Encode_Error(t *testing.T) {
 	}})
 
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.ErrorIs(err, ErrInvalidName)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	assert.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
@@ -221,7 +220,7 @@ func Test_Decode_Error(t *testing.T) {
 		true,
 	)
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.ErrorIs(err, ErrInvalidName)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal("val1", vals["key1"])
 	assert.Equal(int64(2), vals["key2"])
@@ -233,7 +232,7 @@ func Test_Decode_Error(t *testing.T) {
 
 	vals, err = Decode(sa, nil, true)
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidType))
+	assert.ErrorIs(err, ErrInvalidType)
 	assert.Len(vals, 3)
 	assert.Nil(vals["key1"])
 	assert.Nil(vals["key2"])

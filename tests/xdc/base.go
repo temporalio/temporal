@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
 )
@@ -52,8 +53,12 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		clusterNames []string
 		suite.Suite
+
+		testClusterFactory tests.TestClusterFactory
+
 		cluster1               *tests.TestCluster
 		cluster2               *tests.TestCluster
 		logger                 log.Logger
@@ -72,7 +77,10 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 }
 
 func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
+	s.testClusterFactory = tests.NewTestClusterFactory()
+
 	params := tests.ApplyTestClusterParams(opts)
+
 	s.clusterNames = clusterNames
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
@@ -107,11 +115,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 	}
 
-	c, err := tests.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = tests.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 
@@ -144,4 +152,5 @@ func (s *xdcBaseSuite) tearDownSuite() {
 func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }

@@ -34,11 +34,15 @@ import (
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
-	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -80,6 +84,7 @@ import (
 type (
 	matchingEngineSuite struct {
 		suite.Suite
+		*require.Assertions
 		controller            *gomock.Controller
 		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
@@ -109,6 +114,7 @@ func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
 	s.logger = log.NewTestLogger()
 	s.Lock()
 	defer s.Unlock()
@@ -849,10 +855,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(50 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(10 * time.Second),
 					}),
 			}
 			resp.StartedTime = timestamp.TimeNowPtrUtc()
@@ -880,11 +886,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(activityType, result.ActivityType)
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		s.Equal(true, validateTimeRange(*result.ScheduledTime, time.Minute))
-		s.EqualValues(time.Second*100, *result.ScheduleToCloseTimeout)
-		s.Equal(true, validateTimeRange(*result.StartedTime, time.Minute))
-		s.EqualValues(time.Second*50, *result.StartToCloseTimeout)
-		s.EqualValues(time.Second*10, *result.HeartbeatTimeout)
+		s.Equal(true, validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
+		s.EqualValues(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
+		s.Equal(true, validateTimeRange(result.StartedTime.AsTime(), time.Minute))
+		s.EqualValues(time.Second*50, result.StartToCloseTimeout.AsDuration())
+		s.EqualValues(time.Second*10, result.HeartbeatTimeout.AsDuration())
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID.String(),
@@ -979,10 +985,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
-						ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
-						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+						StartToCloseTimeout:    durationpb.New(1 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -993,7 +999,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue:         taskQueue,
 				Identity:          identity,
-				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &types.DoubleValue{Value: maxDispatch}},
+				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
 			},
 		}, metrics.NoopMetricsHandler)
 	}
@@ -1222,10 +1228,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						Header:                 activityHeader,
-						ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
-						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+						StartToCloseTimeout:    durationpb.New(1 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -1240,7 +1246,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 						TaskQueue:         taskQueue,
 						Identity:          identity,
-						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &types.DoubleValue{Value: maxDispatch}},
+						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
 					},
 				}, metrics.NoopMetricsHandler)
 				s.NoError(err)
@@ -1545,10 +1551,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
-						ScheduleToStartTimeout: timestamp.DurationPtr(600 * time.Second),
-						ScheduleToCloseTimeout: timestamp.DurationPtr(2 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(1 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(1 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(600 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+						StartToCloseTimeout:    durationpb.New(1 * time.Second),
+						HeartbeatTimeout:       durationpb.New(1 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -1789,13 +1795,14 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
 
-	task, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task, err := s.matchingEngine.pollTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
 
 	task.finish(errors.New("test error"))
 	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
-	task2, err := s.matchingEngine.getTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
+	task2, err := s.matchingEngine.pollTask(context.Background(), tlID, normalStickyInfo, &pollMetadata{})
 	s.NoError(err)
+	s.NotNil(task2)
 
 	s.NotEqual(task.event.GetTaskId(), task2.event.GetTaskId())
 	s.Equal(task.event.Data.GetWorkflowId(), task2.event.Data.GetWorkflowId())
@@ -2002,7 +2009,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 				addRequest.ScheduleToStartTimeout = timestamp.DurationFromSeconds(-5)
 			case 2:
 				// simulates creating a task which will time out in the buffer
-				addRequest.ScheduleToStartTimeout = timestamp.DurationPtr(250 * time.Millisecond)
+				addRequest.ScheduleToStartTimeout = durationpb.New(250 * time.Millisecond)
 			}
 			_, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 			s.NoError(err)
@@ -2361,7 +2368,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	})
 	s.NoError(err)
 	s.True(res.TaskQueueHasUserData)
-	s.True(hlc.Greater(*res.UserData.Data.Clock, *userData.Data.Clock))
+	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
 	s.NotNil(res.UserData.Data.VersioningData)
 }
 
@@ -2438,7 +2445,7 @@ func (s *matchingEngineSuite) TestAddWorkflowTask_ForVersionedWorkflows_Silently
 		ScheduledEventId: 7,
 		Source:           enums.TASK_SOURCE_HISTORY,
 		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
 		},
 	})
 	s.Require().NoError(err)
@@ -2462,7 +2469,7 @@ func (s *matchingEngineSuite) TestAddActivityTask_ForVersionedWorkflows_Silently
 		ScheduledEventId: 7,
 		Source:           enums.TASK_SOURCE_HISTORY,
 		VersionDirective: &taskqueue.TaskVersionDirective{
-			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}},
+			Value: &taskqueue.TaskVersionDirective_UseDefault{UseDefault: &emptypb.Empty{}},
 		},
 	})
 	s.Require().NoError(err)
@@ -2479,7 +2486,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Poll() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	_, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
+	_, err := s.matchingEngine.pollTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "unknown",
 			UseVersioning: true,
@@ -2566,7 +2573,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 
 	go func() {
 		tqId := newTestTaskQueueID(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		task, err := s.matchingEngine.getTask(ctx, tqId, normalStickyInfo, &pollMetadata{
+		task, err := s.matchingEngine.pollTask(ctx, tqId, normalStickyInfo, &pollMetadata{
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "unknown",
 				UseVersioning: true,
@@ -2637,7 +2644,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	// both are now unloaded. change versioning data to merge unknown into another set.
 	clock := hlc.Zero(1)
 	userData := &persistencespb.TaskQueueUserData{
-		Clock: &clock,
+		Clock: clock,
 		VersioningData: &persistencespb.VersioningData{
 			VersionSets: []*persistencespb.CompatibleVersionSet{
 				{
@@ -2648,7 +2655,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 						mkBuildId(unknown, clock),
 						mkBuildId(build1, clock),
 					},
-					BecameDefaultTimestamp: &clock,
+					BecameDefaultTimestamp: clock,
 				},
 			},
 		},
@@ -2664,7 +2671,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Demoted_Match() {
 	s.NoError(err)
 
 	// now poll for the task
-	task, err := s.matchingEngine.getTask(ctx, id, normalStickyInfo, &pollMetadata{
+	task, err := s.matchingEngine.pollTask(ctx, id, normalStickyInfo, &pollMetadata{
 		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       build1,
 			UseVersioning: true,
@@ -2697,10 +2704,10 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(50 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(10 * time.Second),
 					}),
 			}, nil
 		}).AnyTimes()
@@ -2739,7 +2746,7 @@ func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID i
 func newHistoryEvent(eventID int64, eventType enumspb.EventType) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{
 		EventId:   eventID,
-		EventTime: timestamp.TimePtr(time.Now().UTC()),
+		EventTime: timestamppb.New(time.Now().UTC()),
 		EventType: eventType,
 	}
 
@@ -3099,9 +3106,9 @@ func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *pe
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 	tlm.Lock()
 	defer tlm.Unlock()
-	newData := *request.UserData
+	newData := common.CloneProto(request.UserData)
 	newData.Version++
-	tlm.userData = &newData
+	tlm.userData = newData
 	return nil
 }
 

@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -108,7 +109,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               &retention,
+		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -135,7 +136,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 					Data:        data,
 				},
 				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: &retention,
+					WorkflowExecutionRetentionTtl: durationpb.New(retention),
 					HistoryArchivalState:          historyArchivalState,
 					HistoryArchivalUri:            historyArchivalURI,
 					VisibilityArchivalState:       visibilityArchivalState,
@@ -194,7 +195,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		Data:        data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               &retention,
+		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -251,7 +252,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		Data:        data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               &retention,
+		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -278,7 +279,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 					Data:        data,
 				},
 				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: &retention,
+					WorkflowExecutionRetentionTtl: durationpb.New(retention),
 					HistoryArchivalState:          historyArchivalState,
 					HistoryArchivalUri:            historyArchivalURI,
 					VisibilityArchivalState:       visibilityArchivalState,
@@ -336,7 +337,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		Data:        data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               &retention,
+		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -391,7 +392,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		Data:        data,
 	}
 	config := &persistencespb.NamespaceConfig{
-		Retention:               &retention,
+		Retention:               durationpb.New(retention),
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,
@@ -419,7 +420,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 					Data:        data,
 				},
 				Config: &namespacepb.NamespaceConfig{
-					WorkflowExecutionRetentionTtl: &retention,
+					WorkflowExecutionRetentionTtl: durationpb.New(retention),
 					HistoryArchivalState:          historyArchivalState,
 					HistoryArchivalUri:            historyArchivalURI,
 					VisibilityArchivalState:       visibilityArchivalState,

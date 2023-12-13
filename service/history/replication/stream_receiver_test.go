@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -149,7 +149,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus() {
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &repicationpb.SyncReplicationState{
 				InclusiveLowWatermark:     watermarkInfo.Watermark,
-				InclusiveLowWatermarkTime: timestamp.TimePtr(watermarkInfo.Timestamp),
+				InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
 			},
 		},
 	},
@@ -160,7 +160,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 	replicationTask := &repicationpb.ReplicationTask{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
-		VisibilityTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 	}
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
@@ -168,7 +168,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 				Messages: &repicationpb.WorkflowReplicationMessages{
 					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
 					ExclusiveHighWatermark:     rand.Int63(),
-					ExclusiveHighWatermarkTime: timestamp.TimePtr(time.Unix(0, rand.Int63())),
+					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 				},
 			},
 		},
@@ -180,7 +180,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit() {
 	s.taskTracker.EXPECT().TrackTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
-			s.Equal(*streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime, highWatermarkInfo.Timestamp)
+			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
 			s.Equal(1, len(tasks))
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
@@ -203,6 +203,14 @@ func (s *streamReceiverSuite) TestProcessMessage_Err() {
 
 	err := s.streamReceiver.processMessages(s.stream)
 	s.Error(err)
+}
+
+func (s *streamReceiverSuite) TestSendEventLoop_Panic_Captured() {
+	s.streamReceiver.sendEventLoop() // should not cause panic
+}
+
+func (s *streamReceiverSuite) TestRecvEventLoop_Panic_Captured() {
+	s.streamReceiver.recvEventLoop() // should not cause panic
 }
 
 func (s *mockStream) Send(

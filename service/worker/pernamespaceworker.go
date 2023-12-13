@@ -123,10 +123,17 @@ type (
 		StickyScheduleToStartTimeout            string // parse into time.Duration
 		StickyScheduleToStartTimeoutDuration    time.Duration
 	}
+
+	workerAllocation struct {
+		Total int
+		Local int
+	}
 )
 
 var (
 	errNoWorkerNeeded = errors.New("no worker needed") // sentinel value, not a real error
+	// errInvalidConfiguration indicates that the value provided by dynamic config is not legal
+	errInvalidConfiguration = errors.New("invalid dynamic configuration")
 )
 
 func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *perNamespaceWorkerManager {
@@ -260,24 +267,43 @@ func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	delete(wm.workers, ns.ID())
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, int, error) {
-	totalWorkers := wm.config.PerNamespaceWorkerCount(ns.Name().String())
-	// This can result in fewer than the intended number of workers if totalWorkers > 1, because
-	// multiple lookups might land on the same node. To compensate, we increase the number of
-	// pollers in that case, but it would be better to try to spread them across our nodes.
-	// TODO: implement this properly using LookupN in serviceResolver
-	multiplicity := 0
-	for i := 0; i < totalWorkers; i++ {
-		key := fmt.Sprintf("%s/%d", ns.ID().String(), i)
-		target, err := wm.serviceResolver.Lookup(key)
-		if err != nil {
-			return 0, 0, err
-		}
-		if target.Identity() == wm.self.Identity() {
-			multiplicity++
-		}
+func (wm *perNamespaceWorkerManager) getWorkerAllocation(ns *namespace.Namespace) (*workerAllocation, error) {
+	desiredWorkersCount, err := wm.getConfiguredWorkersCountFor(ns)
+	if err != nil {
+		return nil, err
 	}
-	return multiplicity, totalWorkers, nil
+	if desiredWorkersCount == 0 {
+		return &workerAllocation{0, 0}, nil
+	}
+	localCount, err := wm.getLocallyDesiredWorkersCount(ns, desiredWorkersCount)
+	if err != nil {
+		return nil, err
+	}
+	return &workerAllocation{desiredWorkersCount, localCount}, nil
+}
+
+func (wm *perNamespaceWorkerManager) getConfiguredWorkersCountFor(ns *namespace.Namespace) (int, error) {
+	totalWorkers := wm.config.PerNamespaceWorkerCount(ns.Name().String())
+	if totalWorkers < 0 {
+		err := fmt.Errorf("%w namespace %s, workers count %d", errInvalidConfiguration, ns.Name(), totalWorkers)
+		return 0, err
+	}
+	return totalWorkers, nil
+}
+
+func (wm *perNamespaceWorkerManager) getLocallyDesiredWorkersCount(ns *namespace.Namespace, desiredNumberOfWorkers int) (int, error) {
+	key := ns.ID().String()
+	availableHosts := wm.serviceResolver.LookupN(key, desiredNumberOfWorkers)
+	hostsCount := len(availableHosts)
+	if hostsCount == 0 {
+		return 0, membership.ErrInsufficientHosts
+	}
+	maxWorkersPerHost := desiredNumberOfWorkers/hostsCount + 1
+	desiredDistribution := util.RepeatSlice(availableHosts, maxWorkersPerHost)[:desiredNumberOfWorkers]
+
+	isLocal := func(info membership.HostInfo) bool { return info.Identity() == wm.self.Identity() }
+	result := len(util.FilterSlice(desiredDistribution, isLocal))
+	return result, nil
 }
 
 func (wm *perNamespaceWorkerManager) getWorkerOptions(ns *namespace.Namespace) sdkWorkerOptions {
@@ -393,18 +419,18 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	}
 
 	// check if we are responsible for this namespace at all
-	multiplicity, totalWorkers, err := w.wm.getWorkerMultiplicity(ns)
+	workerAllocation, err := w.wm.getWorkerAllocation(ns)
 	if err != nil {
 		w.logger.Error("Failed to look up hosts", tag.Error(err))
 		// TODO: add metric also
 		return err
 	}
-	if multiplicity == 0 {
+	if workerAllocation.Local == 0 {
 		// not ours, don't need a worker
 		return errNoWorkerNeeded
 	}
 	// ensure this changes if multiplicity changes
-	componentSet += fmt.Sprintf(",%d", multiplicity)
+	componentSet += fmt.Sprintf(",%d", workerAllocation.Local)
 
 	// get sdk worker options
 	dcOptions := w.wm.getWorkerOptions(ns)
@@ -424,7 +450,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(ns, enabledComponents, multiplicity, totalWorkers, dcOptions)
+	client, worker, err := w.startWorker(ns, enabledComponents, workerAllocation, dcOptions)
 	if err != nil {
 		// TODO: add metric also
 		return err
@@ -439,8 +465,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 func (w *perNamespaceWorker) startWorker(
 	ns *namespace.Namespace,
 	components []workercommon.PerNSWorkerComponent,
-	multiplicity int,
-	totalWorkers int,
+	allocation *workerAllocation,
 	dcOptions sdkWorkerOptions,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
@@ -465,19 +490,19 @@ func (w *perNamespaceWorker) startWorker(
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
-	// increase these if we're supposed to run with more multiplicity
-	sdkoptions.MaxConcurrentWorkflowTaskPollers *= multiplicity
-	sdkoptions.MaxConcurrentActivityTaskPollers *= multiplicity
-	sdkoptions.MaxConcurrentLocalActivityExecutionSize *= multiplicity
-	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize *= multiplicity
-	sdkoptions.MaxConcurrentActivityExecutionSize *= multiplicity
+	// increase these if we're supposed to run with more allocation
+	sdkoptions.MaxConcurrentWorkflowTaskPollers *= allocation.Local
+	sdkoptions.MaxConcurrentActivityTaskPollers *= allocation.Local
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize *= allocation.Local
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize *= allocation.Local
+	sdkoptions.MaxConcurrentActivityExecutionSize *= allocation.Local
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities
 	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	details := workercommon.RegistrationDetails{
-		TotalWorkers: totalWorkers,
-		Multiplicity: multiplicity,
+		TotalWorkers: allocation.Total,
+		Multiplicity: allocation.Local,
 	}
 	for _, cmp := range components {
 		cmp.Register(worker, ns, details)

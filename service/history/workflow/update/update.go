@@ -29,15 +29,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/internal/effect"
@@ -84,7 +84,7 @@ type (
 		// accessed only while holding workflow lock
 		id              string
 		state           state
-		request         *types.Any // of type *updatepb.Request, nil when not in stateRequested
+		request         *anypb.Any // of type *updatepb.Request, nil when not in stateRequested
 		acceptedEventID int64
 		onComplete      func()
 		instrumentation *instrumentation
@@ -281,12 +281,13 @@ func (u *Update) OnMessage(
 	if msg == nil {
 		return invalidArgf("Update %q received nil message", u.id)
 	}
+
 	if protocolMsg, ok := msg.(*protocolpb.Message); ok {
-		var dynbody types.DynamicAny
-		if err := types.UnmarshalAny(protocolMsg.Body, &dynbody); err != nil {
+		var err error
+		msg, err = protocolMsg.Body.UnmarshalNew()
+		if err != nil {
 			return err
 		}
-		msg = dynbody.Message
 	}
 	switch body := msg.(type) {
 	case *updatepb.Request:
@@ -344,7 +345,7 @@ func (u *Update) onRequestMsg(
 	}
 	u.instrumentation.CountRequestMsg()
 	// Marshal update request here to return InvalidArgument to the API caller if it can't be marshaled.
-	reqAny, err := types.MarshalAny(req)
+	reqAny, err := anypb.New(req)
 	if err != nil {
 		return invalidArgf("unable to marshal request: %v", err)
 	}
@@ -373,7 +374,7 @@ func (u *Update) onAcceptanceMsg(
 	u.instrumentation.CountAcceptanceMsg()
 
 	acceptedRequest := &updatepb.Request{}
-	if err := types.UnmarshalAny(u.request, acceptedRequest); err != nil {
+	if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
 		return internalErrorf("unable to unmarshal original request: %v", err)
 	}
 

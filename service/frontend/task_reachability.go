@@ -187,8 +187,8 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 			reachableByNewWorkflows = true
 		} else {
 			// If the queue became versioned just recently, consider the unversioned build id reachable.
-			queueBecameVersionedAt := util.ReduceSlice(versionSets, hlc.Clock{WallClock: math.MaxInt64}, func(c hlc.Clock, set *persistencespb.CompatibleVersionSet) hlc.Clock {
-				return hlc.Min(c, *set.BecameDefaultTimestamp)
+			queueBecameVersionedAt := util.FoldSlice(versionSets, &hlc.Clock{WallClock: math.MaxInt64}, func(c *hlc.Clock, set *persistencespb.CompatibleVersionSet) *hlc.Clock {
+				return hlc.Min(c, set.BecameDefaultTimestamp)
 			})
 			reachableByNewWorkflows = time.Since(hlc.UTC(queueBecameVersionedAt)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
 		}
@@ -216,7 +216,7 @@ func (wh *WorkflowHandler) getTaskQueueReachability(ctx context.Context, request
 		isDefaultInQueue = setIdx == len(versionSets)-1
 
 		// Allow some propagation delay of the versioning data.
-		reachableByNewWorkflows = isDefaultInQueue || time.Since(hlc.UTC(*set.BecameDefaultTimestamp)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
+		reachableByNewWorkflows = isDefaultInQueue || time.Since(hlc.UTC(set.BecameDefaultTimestamp)) < wh.config.ReachabilityQuerySetDurationSinceDefault()
 
 		var escapedBuildIds []string
 		for _, buildId := range set.GetBuildIds() {

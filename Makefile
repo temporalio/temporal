@@ -9,19 +9,19 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build-misc: print-go-version bins ci-update-tools shell-check copyright-check proto go-generate gomodtidy ensure-no-changes
+ci-build-misc: print-go-version ci-update-tools proto bins shell-check copyright-check go-generate gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto buf-lint api-linter protoc fix-proto-path goimports-proto proto-mocks copyright-proto
+proto: clean-proto buf-lint api-linter protoc goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-proto-path update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
+update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
 ########################################################################
 
-.PHONY: proto
+.PHONY: proto proto-mocks protoc
 
 ##### Arguments ######
 
@@ -31,6 +31,7 @@ GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
+TEST_ARGS ?= -race
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
 
@@ -66,8 +67,11 @@ TEST_TIMEOUT := 30m
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell go list -modfile build/go.mod -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
+PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(PROTO_ROOT)/dependencies
+PROTO_OPTS = paths=source_relative:$(PROTO_OUT)
 PROTO_OUT := api
+PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
+PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -139,8 +143,10 @@ update-gotestsum:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@go install -modfile build/go.mod go.temporal.io/api/cmd/protoc-gen-go-helpers
+	@go install -modfile build/go.mod go.temporal.io/api/cmd/protogen
 
 update-proto-linters:
 	@printf $(COLOR) "Install/update proto linters..."
@@ -179,24 +185,22 @@ install-proto-submodule:
 	@printf $(COLOR) "Install proto submodule..."
 	git submodule update --init $(PROTO_ROOT)/api
 
-protoc: $(PROTO_OUT)
-	@printf $(COLOR) "Build proto files..."
-	@# Run protoc separately for each directory because of different package names.
-	$(foreach PROTO_DIR,$(PROTO_DIRS),\
-		@protoc --fatal_warnings $(PROTO_IMPORTS) \
-		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
-			$(PROTO_DIR)*.proto \
-	$(NEWLINE))
-
-fix-proto-path:
-	@mv -f $(PROTO_OUT)/temporal/server/api/* $(PROTO_OUT) && rm -rf $(PROTO_OUT)/temporal
+protoc: clean-proto $(PROTO_OUT)
+	@protogen \
+		-I=proto/api \
+		-I=proto/dependencies \
+		--root=proto/internal \
+		--rewrite-enum=BuildId_State:BuildId \
+		-p go-grpc_out=$(PROTO_PATHS) \
+		-p go-helpers_out=$(PROTO_PATHS)
+	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
 
 # All gRPC generated service files pathes relative to PROTO_OUT.
-PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go"))
+PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
 
-proto-mocks: $(PROTO_OUT)
+proto-mocks: protoc
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		@cd $(PROTO_OUT) && \
@@ -293,28 +297,28 @@ clean-test-results:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
+	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-test: clean-test-results
 	@printf $(COLOR) "Run functional tests..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test functional-test functional-with-fault-injection-test
@@ -342,7 +346,7 @@ pre-build-functional-test-coverage: prepare-coverage-test
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@gotestsum --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
@@ -352,7 +356,7 @@ functional-test-xdc-coverage: prepare-coverage-test
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@gotestsum --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
@@ -364,7 +368,7 @@ $(SUMMARY_COVER_PROFILE):
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
-		grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
+		@grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)

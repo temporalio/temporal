@@ -43,7 +43,7 @@ import (
 type (
 	// ClusterMetadataManagerSuite runs tests that cover the ClusterMetadata read/write scenarios
 	ClusterMetadataManagerSuite struct {
-		TestBase
+		*TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
@@ -326,7 +326,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	initialResp, err := s.ClusterMetadataManager.SaveClusterMetadata(
 		s.ctx,
 		&p.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				ClusterName:              clusterNameToPersist,
 				HistoryShardCount:        historyShardsToPersist,
 				ClusterId:                clusterIdToPersist,
@@ -359,7 +359,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Case 4 - Init, data persisted
 	// Attempt to overwrite with new values
 	secondResp, err := s.ClusterMetadataManager.SaveClusterMetadata(s.ctx, &p.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:       clusterNameToPersist,
 			HistoryShardCount: int32(77),
 		}})
@@ -414,7 +414,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	initialResp, err = s.ClusterMetadataManager.SaveClusterMetadata(
 		s.ctx,
 		&p.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				ClusterName:              clusterNameToPersist,
 				HistoryShardCount:        historyShardsToPersist,
 				ClusterId:                clusterIdToPersist,
@@ -466,7 +466,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	_, err = s.ClusterMetadataManager.SaveClusterMetadata(
 		s.ctx,
 		&p.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				ClusterName:              clusterNameToPersist + "2",
 				HistoryShardCount:        historyShardsToPersist,
 				ClusterId:                clusterIdToPersist,

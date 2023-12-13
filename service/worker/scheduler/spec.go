@@ -34,6 +34,7 @@ import (
 	"github.com/dgryski/go-farm"
 	schedpb "go.temporal.io/api/schedule/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -115,9 +116,8 @@ func CleanSpec(spec *schedpb.ScheduleSpec) {
 }
 
 func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error) {
-	// make shallow copy so we can change some fields
-	specCopy := *spec
-	spec = &specCopy
+	// make copy so we can change some fields
+	spec = common.CloneProto(spec)
 
 	// parse CalendarSpecs to StructuredCalendarSpecs
 	for _, cal := range spec.Calendar {
@@ -260,14 +260,14 @@ func (cs *CompiledSpec) getNextTime(jitterSeed string, after time.Time) getNextT
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
-		after = cs.spec.StartTime.Add(-time.Second)
+		after = cs.spec.StartTime.AsTime().Add(-time.Second)
 	}
 
 	var nominal time.Time
 	for {
 		nominal = cs.rawNextTime(after)
 
-		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(*cs.spec.EndTime)) {
+		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(cs.spec.EndTime.AsTime())) {
 			return getNextTimeResult{}
 		}
 

@@ -25,9 +25,8 @@
 package namespace
 
 import (
-	"time"
-
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/persistence"
 )
@@ -52,6 +51,9 @@ func WithActiveCluster(name string) Mutation {
 func WithBadBinary(chksum string) Mutation {
 	return mutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
+			if ns.Namespace.Config.BadBinaries.Binaries == nil {
+				ns.Namespace.Config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo)
+			}
 			ns.Namespace.Config.BadBinaries.Binaries[chksum] =
 				&namespacepb.BadBinaryInfo{}
 		})
@@ -75,7 +77,7 @@ func WithGlobalFlag(b bool) Mutation {
 
 // WithRentention assigns the retention duration to a Namespace during a Clone
 // operation.
-func WithRetention(dur *time.Duration) Mutation {
+func WithRetention(dur *durationpb.Duration) Mutation {
 	return mutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
 			ns.Namespace.Config.Retention = dur
@@ -86,6 +88,9 @@ func WithRetention(dur *time.Duration) Mutation {
 func WithData(key, value string) Mutation {
 	return mutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
+			if ns.Namespace.Info.Data == nil {
+				ns.Namespace.Info.Data = make(map[string]string)
+			}
 			ns.Namespace.Info.Data[key] = value
 		})
 }

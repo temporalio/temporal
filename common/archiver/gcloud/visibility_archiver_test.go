@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
@@ -88,6 +89,7 @@ func TestVisibilityArchiverSuiteSuite(t *testing.T) {
 
 type visibilityArchiverSuite struct {
 	*require.Assertions
+	protorequire.ProtoAssertions
 	suite.Suite
 	controller                *gomock.Controller
 	container                 *archiver.VisibilityBootstrapContainer
@@ -287,11 +289,10 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.Len(response.Executions, 1)
 	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
-
 	pageSize := 2
 	ctx := context.Background()
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
@@ -331,10 +332,10 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.Len(response.Executions, 2)
 	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[1])
+	s.ProtoEqual(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
@@ -344,7 +345,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.Len(response.Executions, 1)
 	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {

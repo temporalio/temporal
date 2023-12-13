@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -298,7 +299,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if err := r.failInflightActivity(
-		*resetMutableState.GetExecutionInfo().StartTime,
+		resetMutableState.GetExecutionInfo().StartTime.AsTime(),
 		resetMutableState,
 		resetReason,
 	); err != nil {
@@ -512,7 +513,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 		case common.EmptyEventID:
 			// activity not started, noop
 			// override the activity time to now
-			ai.ScheduledTime = timestamp.TimePtr(now)
+			ai.ScheduledTime = timestamppb.New(now)
 			if err := mutableState.UpdateActivity(ai); err != nil {
 				return err
 			}
@@ -615,7 +616,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			ctx,
 			r.shardContext,
 			namespaceID,
-			commonpb.WorkflowExecution{
+			&commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

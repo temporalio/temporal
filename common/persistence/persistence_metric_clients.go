@@ -979,7 +979,7 @@ func (p *queuePersistenceClient) Init(
 
 func (p *queuePersistenceClient) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
@@ -1044,7 +1044,7 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 
 func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (_ int64, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
@@ -1253,14 +1253,14 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 
 func (p *metricEmitter) recordRequestMetrics(operation string, caller string, latency time.Duration, err error) {
 	handler := p.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller))
-	handler.Counter(metrics.PersistenceRequests.GetMetricName()).Record(1)
-	handler.Timer(metrics.PersistenceLatency.GetMetricName()).Record(latency)
+	handler.Counter(metrics.PersistenceRequests.Name()).Record(1)
+	handler.Timer(metrics.PersistenceLatency.Name()).Record(latency)
 	updateErrorMetric(handler, p.logger, operation, err)
 }
 
 func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation string, err error) {
 	if err != nil {
-		handler.Counter(metrics.PersistenceErrorWithType.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		handler.Counter(metrics.PersistenceErrorWithType.Name()).Record(1, metrics.ServiceErrorTypeTag(err))
 		switch err := err.(type) {
 		case *ShardAlreadyExistError,
 			*ShardOwnershipLostError,
@@ -1276,10 +1276,10 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			// no-op
 
 		case *serviceerror.ResourceExhausted:
-			handler.Counter(metrics.PersistenceErrResourceExhaustedCounter.GetMetricName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+			handler.Counter(metrics.PersistenceErrResourceExhaustedCounter.Name()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 		default:
 			logger.Error("Operation failed with internal error.", tag.Error(err), tag.Operation(operation))
-			handler.Counter(metrics.PersistenceFailures.GetMetricName()).Record(1)
+			handler.Counter(metrics.PersistenceFailures.Name()).Record(1)
 		}
 	}
 }
