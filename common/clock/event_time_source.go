@@ -130,13 +130,19 @@ func (t *fakeTimer) Reset(d time.Duration) bool {
 	t.timeSource.mu.Lock()
 	defer t.timeSource.mu.Unlock()
 
-	if t.done {
-		return false
+	if d < 0 {
+		d = 0
 	}
 
+	wasDone := t.done
 	t.deadline = t.timeSource.now.Add(d)
+	if t.done {
+		t.done = false
+		t.index = len(t.timeSource.timers)
+		t.timeSource.timers = append(t.timeSource.timers, t)
+	}
 	t.timeSource.fireTimers()
-	return true
+	return !wasDone
 }
 
 // Stop the timer. Returns true if the timer was active.
