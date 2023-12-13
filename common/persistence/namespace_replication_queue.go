@@ -40,12 +40,12 @@ import (
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -397,7 +397,7 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 	var minAckLevel *int64
 	for _, ackLevel := range ackLevelByCluster {
 		if minAckLevel == nil || ackLevel < *minAckLevel {
-			minAckLevel = convert.Int64Ptr(ackLevel)
+			minAckLevel = util.Ptr(ackLevel)
 		}
 	}
 	if minAckLevel == nil {

@@ -31,8 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/util"
 )
 
 type queryParserSuite struct {
@@ -61,35 +60,35 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: convert.StringPtr("random workflowID"),
+				workflowID: util.Ptr("random workflowID"),
 			},
 		},
 		{
 			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: convert.StringPtr("random workflowID"),
+				workflowID: util.Ptr("random workflowID"),
 			},
 		},
 		{
 			query:     "RunId = \"random runID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				runID: convert.StringPtr("random runID"),
+				runID: util.Ptr("random runID"),
 			},
 		},
 		{
 			query:     "WorkflowType = \"random typeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowTypeName: convert.StringPtr("random typeName"),
+				workflowTypeName: util.Ptr("random typeName"),
 			},
 		},
 		{
 			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: convert.StringPtr("random workflowID"),
+				workflowID: util.Ptr("random workflowID"),
 			},
 		},
 		{
@@ -103,9 +102,9 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowType = 'random typeName' and (WorkflowId = \"random workflowID\" and RunId='random runID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID:       convert.StringPtr("random workflowID"),
-				runID:            convert.StringPtr("random runID"),
-				workflowTypeName: convert.StringPtr("random typeName"),
+				workflowID:       util.Ptr("random workflowID"),
+				runID:            util.Ptr("random runID"),
+				workflowTypeName: util.Ptr("random typeName"),
 			},
 		},
 		{
@@ -330,7 +329,7 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: time.Time{},
 				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
-				workflowID:        convert.StringPtr("random workflowID"),
+				workflowID:        util.Ptr("random workflowID"),
 			},
 		},
 		{
@@ -339,7 +338,7 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 2000).UTC(),
 				latestCloseTime:   time.Unix(0, 9999).UTC(),
-				runID:             convert.StringPtr("random runID"),
+				runID:             util.Ptr("random runID"),
 				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},

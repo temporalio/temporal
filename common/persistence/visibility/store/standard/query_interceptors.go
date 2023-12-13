@@ -29,10 +29,10 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 
 	"go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -91,13 +91,13 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 	case searchattribute.WorkflowID:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.filter.WorkflowID = convert.StringPtr(values[0].(string))
+			vi.filter.WorkflowID = util.Ptr(values[0].(string))
 		}
 		return values, err
 	case searchattribute.WorkflowType:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.filter.WorkflowTypeName = convert.StringPtr(values[0].(string))
+			vi.filter.WorkflowTypeName = util.Ptr(values[0].(string))
 		}
 		return values, err
 	case searchattribute.ExecutionStatus:

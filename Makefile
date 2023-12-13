@@ -295,6 +295,10 @@ clean-test-results:
 	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache
 
+build-tests:
+	@printf $(COLOR) "Build tests..."
+	@go test -exec="true" -count=0 $(TEST_DIRS)
+
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	@go test $(UNIT_TEST_DIRS) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) $(TEST_ARGS) 2>&1 | tee -a test.log
