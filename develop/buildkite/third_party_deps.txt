@@ -70,6 +70,12 @@ github.com/cpuguy83/go-md2man/v2/md2man
 github.com/davecgh/go-spew/spew
 github.com/dgryski/go-farm
 github.com/dustin/go-humanize
+github.com/emirpasic/gods/containers
+github.com/emirpasic/gods/maps
+github.com/emirpasic/gods/maps/treemap
+github.com/emirpasic/gods/trees
+github.com/emirpasic/gods/trees/redblacktree
+github.com/emirpasic/gods/utils
 github.com/facebookgo/clock
 github.com/fatih/color
 github.com/go-logr/logr
