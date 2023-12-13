@@ -41,9 +41,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
@@ -51,6 +48,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testutils"
 )
 

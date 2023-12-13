@@ -36,8 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/internal/goro"
-
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 )
 
 const (

@@ -27,15 +27,14 @@ package standard
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
-
-	"go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 var allowedFilters = []string{
@@ -104,7 +103,7 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			statusStr := values[0].(string)
-			e, err := enums.WorkflowExecutionStatusFromString(statusStr)
+			e, err := enumspb.WorkflowExecutionStatusFromString(statusStr)
 			if err != nil {
 				return nil, query.NewConverterError("invalid ExecutionStatus %q", statusStr)
 			}
