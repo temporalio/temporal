@@ -28,24 +28,12 @@ import (
 	"sync"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	godsutils "github.com/emirpasic/gods/utils"
 	"go.uber.org/atomic"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
-
-func int64Comparator(a, b interface{}) int {
-	aAsserted := a.(int64)
-	bAsserted := b.(int64)
-	switch {
-	case aAsserted > bAsserted:
-		return 1
-	case aAsserted < bAsserted:
-		return -1
-	default:
-		return 0
-	}
-}
 
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
@@ -60,7 +48,7 @@ type ackManager struct {
 func newAckManager(logger log.Logger) ackManager {
 	return ackManager{
 		logger:           logger,
-		outstandingTasks: treemap.NewWith(int64Comparator),
+		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
 		ackLevel:         -1}
 }
@@ -148,12 +136,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	m.outstandingTasks.Put(taskID, true)
 	m.backlogCounter.Dec()
 
-	min, _ := m.outstandingTasks.Min()
-	if taskID != min.(int64) {
-		return m.ackLevel
-	}
-
-	// We've acked the minimum task, so should adjust the ack level as far as we can
+	// Adjust the ack level as far as we can
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {
