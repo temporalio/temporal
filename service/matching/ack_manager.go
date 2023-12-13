@@ -131,9 +131,14 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 func (m *ackManager) completeTask(taskID int64) int64 {
 	m.Lock()
 	defer m.Unlock()
+
 	macked, found := m.outstandingTasks.Get(taskID)
+	if !found {
+		return m.ackLevel
+	}
+
 	acked := macked.(bool)
-	if !found || acked {
+	if acked {
 		// don't adjust ack level if nothing has changed
 		return m.ackLevel
 	}
@@ -144,28 +149,19 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 	m.backlogCounter.Dec()
 
 	min, _ := m.outstandingTasks.Min()
-	if taskID != min {
+	if taskID != min.(int64) {
 		return m.ackLevel
 	}
 
 	// We've acked the minimum task, so should adjust the ack level as far as we can
-	iter := m.outstandingTasks.Iterator()
-	iter.Begin()
-	// deletion invalidates the iterator
-	var toDel []int64
-	for iter.Next() {
-		acked := iter.Value().(bool)
-		if !acked {
-			break
+	for {
+		min, acked := m.outstandingTasks.Min()
+		if min == nil || !acked.(bool) {
+			return m.ackLevel
 		}
-		m.ackLevel = iter.Key().(int64)
-		toDel = append(toDel, m.ackLevel)
+		m.ackLevel = min.(int64)
+		m.outstandingTasks.Remove(min)
 	}
-	for i := 0; i < len(toDel); i++ {
-		m.outstandingTasks.Remove(toDel[i])
-	}
-
-	return m.ackLevel
 }
 
 func (m *ackManager) getBacklogCountHint() int64 {
