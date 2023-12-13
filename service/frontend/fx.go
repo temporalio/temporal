@@ -79,6 +79,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
@@ -155,6 +156,7 @@ func GrpcServerOptionsProvider(
 	redirectionInterceptor *RedirectionInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
+	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
@@ -207,6 +209,7 @@ func GrpcServerOptionsProvider(
 			cfg.Global.Authorization.AuthHeaderName,
 			cfg.Global.Authorization.AuthExtraHeaderName,
 		),
+		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -595,6 +598,7 @@ func HandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -617,6 +621,7 @@ func HandlerProvider(
 		healthServer,
 		timeSource,
 		membershipMonitor,
+		healthInterceptor,
 	)
 	return wfHandler
 }

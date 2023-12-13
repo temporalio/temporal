@@ -58,7 +58,6 @@ func GetRawHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
-	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
 
 	persistenceExecutionManager := shard.GetExecutionManager()
@@ -74,12 +73,7 @@ func GetRawHistory(
 		return nil, nil, err
 	}
 
-	for _, data := range resp.HistoryEventBlobs {
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: data.EncodingType,
-			Data:         data.Data,
-		})
-	}
+	rawHistory := resp.HistoryEventBlobs
 
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
@@ -99,10 +93,7 @@ func GetRawHistory(
 			if err != nil {
 				return nil, nil, err
 			}
-			rawHistory = append(rawHistory, &commonpb.DataBlob{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         blob.Data,
-			})
+			rawHistory = append(rawHistory, blob)
 		}
 	}
 

@@ -25,6 +25,7 @@
 package temporal_test
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -32,10 +33,13 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 
@@ -56,6 +60,7 @@ func TestNewServer(t *testing.T) {
 		temporal.ForServices(temporal.DefaultServices),
 		temporal.WithConfig(cfg),
 		temporal.WithLogger(logDetector),
+		temporal.WithChainedFrontendGrpcInterceptors(getFrontendInterceptors()),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -98,6 +103,15 @@ func setTestPorts(cfg *config.Config) {
 		port++
 		v.RPC = rpc
 		cfg.Services[k] = v
+	}
+}
+
+func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		if _, ok := info.Server.(*frontend.Handler); !ok {
+			panic("Frontend gRPC interceptor provided to non-frontend handler")
+		}
+		return handler(ctx, req)
 	}
 }
 

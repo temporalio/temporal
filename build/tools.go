@@ -25,7 +25,7 @@
 package build
 
 import (
-	_ "go.temporal.io/api/cmd/enumrewriter"
 	_ "go.temporal.io/api/cmd/protoc-gen-go-helpers"
+	_ "go.temporal.io/api/cmd/protogen"
 	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 )

@@ -24,7 +24,13 @@
 
 package tests
 
-import "flag"
+import (
+	"flag"
+
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+)
 
 // TestFlags contains the feature flags for functional tests
 var TestFlags struct {
@@ -43,4 +49,13 @@ func init() {
 	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "sqlite", "driver of nosql / sql- [cassandra, mysql, postgresql, sqlite]")
 	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
 	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
+}
+
+func UsingSQLAdvancedVisibility() bool {
+	switch TestFlags.PersistenceDriver {
+	case mysql.PluginNameV8, postgresql.PluginNameV12, postgresql.PluginNameV12PGX, sqlite.PluginName:
+		return true
+	default:
+		return false
+	}
 }

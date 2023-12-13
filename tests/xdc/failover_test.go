@@ -1791,7 +1791,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 
 	// for failover transient workflow task, it is guaranteed that the transient workflow task
 	// after the failover has attempt 1
-	// for details see ReplicateTransientWorkflowTaskScheduled
+	// for details see ApplyTransientWorkflowTaskScheduled
 	_, err = poller2.PollAndProcessWorkflowTask(tests.WithExpectedAttemptCount(1))
 	s.NoError(err)
 	s.True(workflowFinished)
