@@ -169,7 +169,7 @@ func dialHelloAndGetTLSInfo(
 		s.NoError(err)
 	}
 
-	clientConn, err := rpc.Dial(hostport, cfg, logger)
+	clientConn, err := rpc.Dial(hostport, cfg, logger, nil, nil)
 	s.NoError(err)
 
 	client := helloworld.NewGreeterClient(clientConn)

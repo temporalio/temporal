@@ -67,7 +67,13 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
+func Dial(
+	hostName string,
+	tlsConfig *tls.Config,
+	logger log.Logger,
+	interceptors []grpc.UnaryClientInterceptor,
+	extraPropagateHeaders []string,
+) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -92,7 +98,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpc.WithChainUnaryInterceptor(
 			append(
 				interceptors,
-				headersInterceptor,
+				newHeadersInterceptor(extraPropagateHeaders),
 				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
 				errorInterceptor,
 			)...,
@@ -124,16 +130,18 @@ func errorInterceptor(
 	return err
 }
 
-func headersInterceptor(
-	ctx context.Context,
-	method string,
-	req, reply interface{},
-	cc *grpc.ClientConn,
-	invoker grpc.UnaryInvoker,
-	opts ...grpc.CallOption,
-) error {
-	ctx = headers.Propagate(ctx)
-	return invoker(ctx, method, req, reply, cc, opts...)
+func newHeadersInterceptor(extraHeaders []string) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		ctx = headers.Propagate(ctx, extraHeaders)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
 }
 
 func ServiceErrorInterceptor(

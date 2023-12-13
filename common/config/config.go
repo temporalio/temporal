@@ -565,8 +565,10 @@ type (
 		// Empty string for noopClaimMapper or "default" for defaultJWTClaimMapper
 		ClaimMapper string `yaml:"claimMapper"`
 		// Name of main auth header to pass to ClaimMapper (as `AuthToken`). Defaults to `authorization`.
+		// This header will be forwarded when forwarding RPCs to remote clusters.
 		AuthHeaderName string `yaml:"authHeaderName"`
 		// Name of extra auth header to pass to ClaimMapper (as `ExtraData`). Defaults to `authorization-extras`.
+		// This header will be forwarded when forwarding RPCs to remote clusters.
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 	}
 

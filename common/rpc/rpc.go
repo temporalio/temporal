@@ -53,10 +53,11 @@ type RPCFactory struct {
 	frontendURL       string
 	frontendTLSConfig *tls.Config
 
-	initListener       sync.Once
-	grpcListener       net.Listener
-	tlsFactory         encryption.TLSConfigProvider
-	clientInterceptors []grpc.UnaryClientInterceptor
+	initListener                sync.Once
+	grpcListener                net.Listener
+	tlsFactory                  encryption.TLSConfigProvider
+	clientInterceptors          []grpc.UnaryClientInterceptor
+	remoteExtraPropagateHeaders []string
 }
 
 // NewFactory builds a new RPCFactory
@@ -69,15 +70,17 @@ func NewFactory(
 	frontendURL string,
 	frontendTLSConfig *tls.Config,
 	clientInterceptors []grpc.UnaryClientInterceptor,
+	remoteExtraPropagateHeaders []string,
 ) *RPCFactory {
 	return &RPCFactory{
-		config:             cfg,
-		serviceName:        sName,
-		logger:             logger,
-		frontendURL:        frontendURL,
-		frontendTLSConfig:  frontendTLSConfig,
-		tlsFactory:         tlsProvider,
-		clientInterceptors: clientInterceptors,
+		config:                      cfg,
+		serviceName:                 sName,
+		logger:                      logger,
+		frontendURL:                 frontendURL,
+		frontendTLSConfig:           frontendTLSConfig,
+		tlsFactory:                  tlsProvider,
+		clientInterceptors:          clientInterceptors,
+		remoteExtraPropagateHeaders: remoteExtraPropagateHeaders,
 	}
 }
 
@@ -199,12 +202,12 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		}
 	}
 
-	return d.dial(rpcAddress, tlsClientConfig)
+	return d.dial(rpcAddress, tlsClientConfig, d.remoteExtraPropagateHeaders)
 }
 
 // CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
-	return d.dial(d.frontendURL, d.frontendTLSConfig)
+	return d.dial(d.frontendURL, d.frontendTLSConfig, nil)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
@@ -219,11 +222,11 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig)
+	return d.dial(hostName, tlsClientConfig, nil)
 }
 
-func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.clientInterceptors...)
+func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, extraPropagateHeaders []string) *grpc.ClientConn {
+	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.clientInterceptors, extraPropagateHeaders)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil

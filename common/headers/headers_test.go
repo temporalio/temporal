@@ -57,7 +57,7 @@ func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext() {
 		SupportedFeaturesHeaderName:       "my-feature",
 	}))
 
-	ctx = Propagate(ctx)
+	ctx = Propagate(ctx, nil)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -75,7 +75,7 @@ func (s *HeadersSuite) TestPropagate_CreateNewOutgoingContext_SomeMissing() {
 		ClientNameHeaderName:    "28.08.14",
 	}))
 
-	ctx = Propagate(ctx)
+	ctx = Propagate(ctx, nil)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -97,7 +97,7 @@ func (s *HeadersSuite) TestPropagate_UpdateExistingEmptyOutgoingContext() {
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.MD{})
 
-	ctx = Propagate(ctx)
+	ctx = Propagate(ctx, nil)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -122,7 +122,7 @@ func (s *HeadersSuite) TestPropagate_UpdateExistingNonEmptyOutgoingContext() {
 		ClientNameHeaderName:              "28.08.14",
 	}))
 
-	ctx = Propagate(ctx)
+	ctx = Propagate(ctx, nil)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -142,7 +142,7 @@ func (s *HeadersSuite) TestPropagate_EmptyIncomingContext() {
 		ClientNameHeaderName:              "28.08.14",
 	}))
 
-	ctx = Propagate(ctx)
+	ctx = Propagate(ctx, nil)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -150,4 +150,18 @@ func (s *HeadersSuite) TestPropagate_EmptyIncomingContext() {
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
 	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
 	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+}
+
+func (s *HeadersSuite) TestPropagate_Extra() {
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		"authorization": "<token>",
+	}))
+
+	md, ok := metadata.FromOutgoingContext(Propagate(ctx, nil))
+	s.True(ok)
+	s.Empty(md.Get("authorization"))
+
+	md, ok = metadata.FromOutgoingContext(Propagate(ctx, []string{"authorization"}))
+	s.True(ok)
+	s.Equal("<token>", md.Get("authorization")[0])
 }

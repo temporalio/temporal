@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -67,6 +68,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -394,6 +396,10 @@ func RPCFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
+	remoteExtraPropagateHeaders := []string{
+		util.Coalesce(cfg.Global.Authorization.AuthHeaderName, authorization.DefaultAuthHeaderName),
+		util.Coalesce(cfg.Global.Authorization.AuthExtraHeaderName, authorization.DefaultAuthExtraHeaderName),
+	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		svcName,
@@ -404,6 +410,7 @@ func RPCFactoryProvider(
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
+		remoteExtraPropagateHeaders,
 	), nil
 }
 
