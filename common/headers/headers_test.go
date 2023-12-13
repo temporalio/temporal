@@ -154,7 +154,8 @@ func (s *HeadersSuite) TestPropagate_EmptyIncomingContext() {
 
 func (s *HeadersSuite) TestPropagate_Extra() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		"authorization": "<token>",
+		ClientVersionHeaderName: "22.08.78",
+		"authorization":         "<token>",
 	}))
 
 	md, ok := metadata.FromOutgoingContext(Propagate(ctx, nil))
