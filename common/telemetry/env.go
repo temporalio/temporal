@@ -41,7 +41,7 @@ const (
 
 var unsupportedEnvVar = errors.New("unsupported OpenTelemetry env var")
 
-// EnvSpanExporter creates gRPC span exporters from environment variables as specified in
+// EnvSpanExporter creates a gRPC span exporter from environment variables, if present, as specified in
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options
 func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
 
