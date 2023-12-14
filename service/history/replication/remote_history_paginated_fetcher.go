@@ -61,7 +61,7 @@ type (
 			startEventVersion int64,
 			endEventID int64,
 			endEventVersion int64,
-		) collection.Iterator[historyBatch]
+		) collection.Iterator[HistoryBatch]
 	}
 
 	HistoryPaginatedFetcherImpl struct {
@@ -72,7 +72,7 @@ type (
 		logger               log.Logger
 	}
 
-	historyBatch struct {
+	HistoryBatch struct {
 		VersionHistory *historyspb.VersionHistory
 		RawEventBatch  *commonpb.DataBlob
 	}
@@ -109,7 +109,7 @@ func (n *HistoryPaginatedFetcherImpl) GetSingleWorkflowHistoryPaginatedIterator(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.Iterator[historyBatch] {
+) collection.Iterator[HistoryBatch] {
 
 	resendCtx := context.Background()
 	var cancel context.CancelFunc
@@ -145,9 +145,9 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.PaginationFn[historyBatch] {
+) collection.PaginationFn[HistoryBatch] {
 
-	return func(paginationToken []byte) ([]historyBatch, []byte, error) {
+	return func(paginationToken []byte) ([]HistoryBatch, []byte, error) {
 
 		response, err := n.getHistory(
 			ctx,
@@ -165,10 +165,10 @@ func (n *HistoryPaginatedFetcherImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-		batches := make([]historyBatch, 0, len(response.GetHistoryBatches()))
+		batches := make([]HistoryBatch, 0, len(response.GetHistoryBatches()))
 		versionHistory := response.GetVersionHistory()
 		for _, history := range response.GetHistoryBatches() {
-			batch := historyBatch{
+			batch := HistoryBatch{
 				VersionHistory: versionHistory,
 				RawEventBatch:  history,
 			}
