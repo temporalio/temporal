@@ -962,7 +962,7 @@ var ServiceTracingModule = fx.Options(
 				}
 
 				serviceNamePrefix := "io.temporal"
-				if customServicePrefix, found := os.LookupEnv("OTEL_SERVICE_NAME"); found {
+				if customServicePrefix, found := os.LookupEnv(telemetry.OtelServiceNameEnvKey); found {
 					serviceNamePrefix = customServicePrefix
 				}
 				serviceName := fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))

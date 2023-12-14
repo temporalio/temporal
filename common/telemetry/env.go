@@ -37,6 +37,7 @@ import (
 const (
 	OtelTracesExporterEnvKey         = "OTEL_TRACES_EXPORTER"
 	OtelTracesExporterProtocolEnvKey = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
+	OtelServiceNameEnvKey            = "OTEL_SERVICE_NAME"
 )
 
 var unsupportedEnvVar = errors.New("unsupported OpenTelemetry env var")
