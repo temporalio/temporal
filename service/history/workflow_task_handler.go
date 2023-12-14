@@ -216,7 +216,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 	ctx context.Context,
 	workflowTaskScheduledEventID int64,
-	workflowTaskHeartbeating bool,
+	wtHeartbeat bool,
 	wfKey definition.WorkflowKey,
 	workerIdentity string,
 ) error {
@@ -229,7 +229,7 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
-	if workflowTaskHeartbeating {
+	if wtHeartbeat {
 		return nil
 	}
 
@@ -259,6 +259,9 @@ func (handler *workflowTaskHandlerImpl) rejectUnprocessedUpdates(
 			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
 		)
 	}
+
+	// At this point there must not be any updates in a Sent state.
+	// All updates which were sent on this WT are processed by worker or rejected by server.
 	return nil
 }
 

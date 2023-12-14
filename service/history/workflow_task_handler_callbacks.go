@@ -592,7 +592,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		if err = workflowTaskHandler.rejectUnprocessedUpdates(
 			ctx,
 			currentWorkflowTask.ScheduledEventID,
-			workflowTaskHeartbeating,
+			request.GetForceCreateNewWorkflowTask(),
 			weContext.GetWorkflowKey(),
 			request.GetIdentity(),
 		); err != nil {
@@ -661,7 +661,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) { // If there are updates which were sent on another WT (which was lost), resend them with this new WT.
+
+			// There shouldn't be any sent updates in the registry because
+			// all sent but not processed updates were rejected by server.
+			// Therefore, it doesn't matter if to includeAlreadySent or not.
+		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -813,7 +817,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), workflowTaskHeartbeating)
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}
@@ -938,7 +942,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// are not processed and not rejected by server, it means that WT that was used to
 	// deliver those updates failed, got timed out, or got lost.
 	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
-	// Heartbeat WT delivers only new updates that come while this WT was running.
+	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
 	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {

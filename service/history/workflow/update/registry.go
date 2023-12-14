@@ -208,25 +208,39 @@ func (r *registry) RejectUnprocessed(
 	ctx context.Context,
 	eventStore EventStore,
 ) ([]string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
-	var rejectedUpdateIDs []string
-	for _, upd := range r.updates {
-		if upd.isSent() {
-			rejectionFailure := &failurepb.Failure{
-				Message: "Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
-				Source:  "Server",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					Type:         "UnprocessedUpdate",
-					NonRetryable: true,
-				}},
+	// Iterate over updates in the registry while holding read lock.
+	// Call to reject() bellow will acquire write lock, thus it needs to be done outside  the read lock.
+	updatesToReject := func() []*Update {
+		var rejectedUpdates []*Update
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		for _, upd := range r.updates {
+			if upd.isSent() {
+				rejectedUpdates = append(rejectedUpdates, upd)
 			}
-			if err := upd.reject(ctx, rejectionFailure, eventStore); err != nil {
-				return nil, err
-			}
-			rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 		}
+		return rejectedUpdates
+	}()
+
+	if len(updatesToReject) == 0 {
+		return nil, nil
+	}
+
+	rejectionFailure := &failurepb.Failure{
+		Message: "Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
+		Source:  "Server",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "UnprocessedUpdate",
+			NonRetryable: true,
+		}},
+	}
+	var rejectedUpdateIDs []string
+	for _, upd := range updatesToReject {
+		if err := upd.reject(ctx, rejectionFailure, eventStore); err != nil {
+			return nil, err
+		}
+		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
 	}
 	return rejectedUpdateIDs, nil
 }
@@ -246,7 +260,7 @@ func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
 	return false
 }
 
-// Send creates and returns messages for all Updates that need to be sent to the worker.
+// Send returns messages for all Updates that need to be sent to the worker.
 // If includeAlreadySent is set to true then messages will be created even
 // for updates which were already sent but not processed by worker.
 func (r *registry) Send(
@@ -255,9 +269,8 @@ func (r *registry) Send(
 	workflowTaskStartedEventID int64,
 	eventStore EventStore,
 ) []*protocolpb.Message {
-	// Need full write lock here because update state is changed.
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	// TODO (alex-update): currently sequencing_id is simply pointing to the
 	//  event before WorkflowTaskStartedEvent. SDKs are supposed to respect this

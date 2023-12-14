@@ -510,3 +510,61 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 	_, err := upd.WaitOutcome(ctx)
 	require.ErrorIs(t, expectError, err)
 }
+
+func TestRejectUnprocessed(t *testing.T) {
+	t.Parallel()
+	var (
+		ctx          = context.Background()
+		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}
+		reg          = update.NewRegistry(func() update.Store { return emptyUpdateStore })
+		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
+	)
+	updateID1, updateID2, updateID3 := t.Name()+"-update-id-1", t.Name()+"-update-id-2", t.Name()+"-update-id-3"
+	upd1, _, err := reg.FindOrCreate(ctx, updateID1)
+	require.NoError(t, err)
+	upd2, _, err := reg.FindOrCreate(ctx, updateID2)
+	require.NoError(t, err)
+
+	rejectedIDs, err := reg.RejectUnprocessed(ctx, evStore)
+	require.NoError(t, err)
+	require.Empty(t, rejectedIDs, "updates in stateAdmitted should not be rejected")
+
+	err = upd1.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID1},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, evStore)
+	require.NoError(t, err)
+	err = upd2.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID2},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, evStore)
+	require.NoError(t, err)
+
+	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
+	require.NoError(t, err)
+	require.Empty(t, rejectedIDs, "updates in stateRequested should not be rejected")
+
+	upd1.Send(ctx, false, sequencingID, evStore)
+
+	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
+	require.NoError(t, err)
+	require.Len(t, rejectedIDs, 1, "only one update in stateSent should be rejected")
+
+	upd3, _, err := reg.FindOrCreate(ctx, updateID3)
+	require.NoError(t, err)
+	err = upd3.OnMessage(ctx, &updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: updateID3},
+		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
+	}, evStore)
+	require.NoError(t, err)
+	upd2.Send(ctx, false, sequencingID, evStore)
+	upd3.Send(ctx, false, sequencingID, evStore)
+
+	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
+	require.NoError(t, err)
+	require.Len(t, rejectedIDs, 2, "2 updates in stateSent should be rejected")
+
+	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
+	require.NoError(t, err)
+	require.Len(t, rejectedIDs, 0, "rejected updates shouldn't be rejected again")
+}

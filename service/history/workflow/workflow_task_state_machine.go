@@ -508,16 +508,12 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		return false
 	}
 
-	if len(request.GetMessages()) == 0 {
-		if request.GetForceCreateNewWorkflowTask() {
-			// If both commands & messages are empty and ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
-			// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
-			// In the future, if we decide not to write heartbeat WT to the history, this check should be removed,
-			// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
-			return false
-		}
-		// Empty messages list is equivalent to only rejection messages because server will reject all requested updates (if any).
-		return true
+	if request.GetForceCreateNewWorkflowTask() {
+		// If ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
+		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
+		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
+		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		return false
 	}
 
 	for _, message := range request.Messages {
@@ -527,6 +523,7 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	}
 
 	// Speculative WT can be dropped when response contains only rejection messages.
+	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
 	return true
 }
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
