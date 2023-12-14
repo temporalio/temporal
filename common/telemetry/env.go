@@ -25,28 +25,42 @@
 package telemetry
 
 import (
+	"fmt"
 	"os"
+
+	"errors"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"gopkg.in/errgo.v2/fmt/errors"
 )
+
+const (
+	OtelTracesExporterEnvKey         = "OTEL_TRACES_EXPORTER"
+	OtelTracesExporterProtocolEnvKey = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
+)
+
+var unsupportedEnvVar = errors.New("unsupported OpenTelemetry env var")
 
 // EnvSpanExporter creates gRPC span exporters from environment variables as specified in
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options
 func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
-	typeOf, found := os.LookupEnv("OTEL_TRACES_EXPORTER")
+
+	typeOf, found := os.LookupEnv(OtelTracesExporterEnvKey)
 	if !found {
 		return nil, nil
 	}
 	if typeOf != "oltp" {
-		return nil, errors.Newf("unsupported OTEL_TRACES_EXPORTER: %v", typeOf)
+		return nil, unsupportedEnvVarErr(OtelTracesExporterEnvKey, typeOf)
 	}
 
-	protocol, found := os.LookupEnv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
+	protocol, found := os.LookupEnv(OtelTracesExporterProtocolEnvKey)
 	if found && protocol != "grpc" {
-		return nil, errors.Newf("unsupported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: %v", protocol)
+		return nil, unsupportedEnvVarErr(OtelTracesExporterProtocolEnvKey, protocol)
 	}
 
 	return otlptracegrpc.NewUnstarted(), nil
+}
+
+func unsupportedEnvVarErr(key, val string) error {
+	return fmt.Errorf("%w: %s=%s", unsupportedEnvVar, key, val)
 }

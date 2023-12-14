@@ -37,33 +37,33 @@ func TestEnvSpanExporter(t *testing.T) {
 	require.Nil(t, exp)
 	require.NoError(t, err)
 
-	_ = os.Setenv("OTEL_TRACES_EXPORTER", "invalid-exporter")
+	_ = os.Setenv(telemetry.OtelTracesExporterEnvKey, "invalid-exporter")
 
 	exp, err = telemetry.EnvSpanExporter()
 	require.Nil(t, exp)
-	require.EqualError(t, err, "unsupported OTEL_TRACES_EXPORTER: invalid-exporter")
+	require.EqualError(t, err, "unsupported OpenTelemetry env var: OTEL_TRACES_EXPORTER=invalid-exporter")
 
-	_ = os.Setenv("OTEL_TRACES_EXPORTER", "oltp")
-
-	exp, err = telemetry.EnvSpanExporter()
-	require.NotNil(t, exp)
-	require.NoError(t, err)
-
-	_ = os.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc")
+	_ = os.Setenv(telemetry.OtelTracesExporterEnvKey, "oltp")
 
 	exp, err = telemetry.EnvSpanExporter()
 	require.NotNil(t, exp)
 	require.NoError(t, err)
 
-	_ = os.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc")
+	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "grpc")
 
 	exp, err = telemetry.EnvSpanExporter()
 	require.NotNil(t, exp)
 	require.NoError(t, err)
 
-	_ = os.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "invalid-protocol")
+	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "grpc")
+
+	exp, err = telemetry.EnvSpanExporter()
+	require.NotNil(t, exp)
+	require.NoError(t, err)
+
+	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "invalid-protocol")
 
 	exp, err = telemetry.EnvSpanExporter()
 	require.Nil(t, exp)
-	require.EqualError(t, err, "unsupported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: invalid-protocol")
+	require.EqualError(t, err, "unsupported OpenTelemetry env var: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=invalid-protocol")
 }
