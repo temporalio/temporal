@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/dynamicconfig"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -230,7 +231,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -286,7 +287,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 			)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(ctx, mutableState, workflowContext.GetUpdateRegistry(ctx), workflowTask, req.PollRequest.GetIdentity(), false)
 			if err != nil {
 				return nil, err
 			}
@@ -584,6 +585,20 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			return nil, err
 		}
 
+		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
+		// message that were delivered on specific WT, when completing this WT.
+		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.
+		// Otherwise, this update will be delivered (and new WT created) again and again.
+		if err = workflowTaskHandler.rejectUnprocessedUpdates(
+			ctx,
+			currentWorkflowTask.ScheduledEventID,
+			request.GetForceCreateNewWorkflowTask(),
+			weContext.GetWorkflowKey(),
+			request.GetIdentity(),
+		); err != nil {
+			return nil, err
+		}
+
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
@@ -646,7 +661,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			bufferedEventShouldCreateNewTask ||
 			activityNotStartedCancelled {
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-		} else if weContext.UpdateRegistry(ctx).HasOutgoing() {
+
+			// There shouldn't be any sent updates in the registry because
+			// all sent but not processed updates were rejected by server.
+			// Therefore, it doesn't matter if to includeAlreadySent or not.
+		} else if weContext.UpdateRegistry(ctx).HasOutgoingMessages(true) {
 			if completedEvent == nil || ms.GetNextEventID() == completedEvent.GetEventId()+1 {
 				newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
 			} else {
@@ -798,7 +817,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
 	if request.GetReturnNewWorkflowTask() && newWorkflowTask != nil {
-		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity())
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(ctx, ms, weContext.UpdateRegistry(ctx), newWorkflowTask, request.GetIdentity(), request.GetForceCreateNewWorkflowTask())
 		if err != nil {
 			return nil, err
 		}
@@ -867,10 +886,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
+	ctx context.Context,
 	ms workflow.MutableState,
 	updateRegistry update.Registry,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
+	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
@@ -917,7 +938,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		}
 	}
 
-	response.Messages = updateRegistry.ReadOutgoingMessages(workflowTask.StartedEventID)
+	// If there are updates in the registry which were already sent to worker but still
+	// are not processed and not rejected by server, it means that WT that was used to
+	// deliver those updates failed, got timed out, or got lost.
+	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
+	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
+	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID, workflow.WithEffects(effect.Immediate(ctx), ms))
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
 		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
