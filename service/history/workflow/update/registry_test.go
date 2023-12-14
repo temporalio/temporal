@@ -129,7 +129,8 @@ func TestHasOutgoingMessages(t *testing.T) {
 		AcceptedRequest: &req,
 	}
 
-	upd.OnMessage(ctx, &acptReq, evStore)
+	err = upd.OnMessage(ctx, &acptReq, evStore)
+	require.NoError(t, err)
 	require.False(t, reg.HasOutgoingMessages(false))
 	require.False(t, reg.HasOutgoingMessages(true))
 }
