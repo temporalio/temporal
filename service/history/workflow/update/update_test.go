@@ -117,7 +117,7 @@ func TestUnsupportedMessageType(t *testing.T) {
 	require.ErrorAs(t, err, &invalidArg)
 }
 
-func TestRequestAcceptComplete(t *testing.T) {
+func TestRequestSendAcceptComplete(t *testing.T) {
 	// this is the most common happy path - an update is created, requested,
 	// accepted, and finally completed
 	t.Parallel()
@@ -185,7 +185,8 @@ func TestRequestAcceptComplete(t *testing.T) {
 		t.Log("update state should now be Requested")
 	})
 
-	_ = upd.Send(ctx, false, sequencingID, store)
+	msg := upd.Send(ctx, false, sequencingID, store)
+	require.NotNil(t, msg)
 	effects.Apply(ctx)
 
 	t.Run("accept", func(t *testing.T) {
@@ -241,7 +242,7 @@ func TestRequestAcceptComplete(t *testing.T) {
 	protorequire.ProtoEqual(t, &resp, completedEventData)
 }
 
-func TestRequestReject(t *testing.T) {
+func TestRequestSendReject(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx       = context.Background()
@@ -265,7 +266,8 @@ func TestRequestReject(t *testing.T) {
 		t.Log("update state should now be Requested")
 	})
 
-	_ = upd.Send(ctx, false, sequencingID, store)
+	msg := upd.Send(ctx, false, sequencingID, store)
+	require.NotNil(t, msg)
 	effects.Apply(ctx)
 
 	t.Run("reject", func(t *testing.T) {
@@ -339,7 +341,7 @@ func TestWithProtocolMessage(t *testing.T) {
 	})
 }
 
-func TestMessageOutput(t *testing.T) {
+func TestSend(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx      = context.Background()
@@ -355,34 +357,45 @@ func TestMessageOutput(t *testing.T) {
 	)
 
 	t.Run("before request received", func(t *testing.T) {
+		require.False(t, upd.NeedToSend(false))
 		msg := upd.Send(ctx, false, sequencingID, store)
 		require.Nil(t, msg)
+		require.False(t, upd.IsSent())
 	})
 	t.Run("requested", func(t *testing.T) {
 		require.NoError(t, upd.OnMessage(ctx, &req, store))
 		effects.Apply(ctx)
+		require.True(t, upd.NeedToSend(false))
 		msg := upd.Send(ctx, false, sequencingID, store)
 		effects.Apply(ctx)
 		require.NotNil(t, msg)
 		require.Equal(t, msg.GetEventId(), testSequencingEventID)
+		require.True(t, upd.IsSent())
 	})
 	t.Run("sent", func(t *testing.T) {
+		require.False(t, upd.NeedToSend(false))
 		msg := upd.Send(ctx, false, sequencingID, store)
 		effects.Apply(ctx)
 		require.Nil(t, msg)
+		require.True(t, upd.IsSent())
+		require.True(t, upd.NeedToSend(true))
 		msg = upd.Send(ctx, true, sequencingID, store)
 		effects.Apply(ctx)
 		require.NotNil(t, msg)
 		require.Equal(t, msg.GetEventId(), testSequencingEventID)
+		require.True(t, upd.IsSent())
 	})
 	t.Run("after requested", func(t *testing.T) {
 		updAccepted1 := update.NewAccepted(updateID, testAcceptedEventID)
+		require.False(t, upd.NeedToSend(false))
 		msg := updAccepted1.Send(ctx, false, sequencingID, store)
 		require.Nil(t, msg)
+		require.False(t, updAccepted1.IsSent())
 
 		updAccepted2 := update.NewAccepted(updateID, testAcceptedEventID)
 		msg = updAccepted2.Send(ctx, true, sequencingID, store)
 		require.Nil(t, msg)
+		require.False(t, updAccepted2.IsSent())
 	})
 }
 

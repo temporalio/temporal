@@ -341,11 +341,11 @@ func (u *Update) needToSend(includeAlreadySent bool) bool {
 	return u.state.Matches(stateSet(stateRequested))
 }
 
-// send moves update from stateRequested to stateSent and returns the message to be sent to worker.
+// Send moves update from stateRequested to stateSent and returns the message to be sent to worker.
 // If update is not in expected stateRequested, Send does nothing and returns nil.
 // If includeAlreadySent is set to true then Send will return message even if update was already sent but not processed by worker.
 // Note: once update moved to stateSent it never moves back to stateRequested.
-func (u *Update) send(
+func (u *Update) Send(
 	_ context.Context,
 	includeAlreadySent bool,
 	sequencingID *protocolpb.Message_EventId,
@@ -374,7 +374,7 @@ func (u *Update) isSent() bool {
 	return u.state.Matches(stateSet(stateSent))
 }
 
-// outgoingMessageID returns the ID of the message that is used to send the Update to the worker.
+// outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
 func (u *Update) outgoingMessageID() string {
 	return u.id + "/request"
 }

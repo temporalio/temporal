@@ -24,12 +24,6 @@
 
 package update
 
-import (
-	"context"
-
-	protocolpb "go.temporal.io/api/protocol/v1"
-)
-
 // while we *could* write the unit test code to walk an Update through a
 // series of message deliveries to get to the right state, it's much faster
 // just to instantiate directly into the desired state.
@@ -43,13 +37,6 @@ func ObserveCompletion(b *bool) updateOpt {
 	return withCompletionCallback(func() { *b = true })
 }
 
-func (u *Update) IsSent() bool { return u.isSent() }
+func (u *Update) NeedToSend(includeAlreadySent bool) bool { return u.needToSend(includeAlreadySent) }
 
-func (u *Update) Send(
-	ctx context.Context,
-	includeAlreadySent bool,
-	sequencingID *protocolpb.Message_EventId,
-	eventStore EventStore,
-) *protocolpb.Message {
-	return u.send(ctx, includeAlreadySent, sequencingID, eventStore)
-}
+func (u *Update) IsSent() bool { return u.isSent() }

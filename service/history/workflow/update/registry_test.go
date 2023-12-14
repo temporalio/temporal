@@ -256,7 +256,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	require.Equal(t, 0, reg.Len(), "update should have been removed")
 }
 
-func TestMessageGathering(t *testing.T) {
+func TestSendMessageGathering(t *testing.T) {
 	t.Parallel()
 	var (
 		ctx     = context.Background()
@@ -513,7 +513,6 @@ func TestStorageErrorWhenLookingUpCompletedOutcome(t *testing.T) {
 }
 
 func TestRejectUnprocessed(t *testing.T) {
-	t.Parallel()
 	var (
 		ctx          = context.Background()
 		evStore      = mockEventStore{Controller: effect.Immediate(ctx)}

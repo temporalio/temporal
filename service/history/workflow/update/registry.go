@@ -283,7 +283,7 @@ func (r *registry) Send(
 
 	var outgoingMessages []*protocolpb.Message
 	for _, upd := range r.updates {
-		outgoingMessage := upd.send(ctx, includeAlreadySent, sequencingEventID, eventStore)
+		outgoingMessage := upd.Send(ctx, includeAlreadySent, sequencingEventID, eventStore)
 		if outgoingMessage != nil {
 			outgoingMessages = append(outgoingMessages, outgoingMessage)
 		}
