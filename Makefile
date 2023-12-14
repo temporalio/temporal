@@ -15,7 +15,7 @@ ci-build-misc: print-go-version ci-update-tools proto bins shell-check copyright
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto buf-lint api-linter protoc proto-clients goimports-proto proto-mocks copyright-proto
+proto: clean-proto buf-lint api-linter protoc service-clients goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
 update-proto: update-proto-submodule proto gomodtidy
@@ -207,8 +207,8 @@ proto-mocks: protoc
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
-proto-clients:
-	@printf $(COLOR) "Generate proto clients..."
+service-clients:
+	@printf $(COLOR) "Generate service clients..."
 	@go generate ./client/...
 
 update-go-api:
