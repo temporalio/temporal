@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -906,6 +906,14 @@ var TraceExportModule = fx.Options(
 		if err != nil {
 			return nil, err
 		}
+
+		exporterFromEnv, err := telemetry.EnvSpanExporter()
+		if err != nil {
+			return nil, err
+		} else if exporterFromEnv != nil {
+			exporters = append(exporters, exporterFromEnv)
+		}
+
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
@@ -952,10 +960,13 @@ var ServiceTracingModule = fx.Options(
 				if rsn == primitives.InternalFrontendService {
 					rsn = primitives.FrontendService
 				}
-				serviceName := string(rsn)
-				if !strings.HasPrefix(serviceName, "io.temporal.") {
-					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
+
+				serviceNamePrefix := "io.temporal"
+				if customServicePrefix, found := os.LookupEnv("OTEL_SERVICE_NAME"); found {
+					serviceNamePrefix = customServicePrefix
 				}
+				serviceName := fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))
+
 				attrs := []attribute.KeyValue{
 					semconv.ServiceNameKey.String(serviceName),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
@@ -963,6 +974,7 @@ var ServiceTracingModule = fx.Options(
 				if rsi != "" {
 					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
 				}
+
 				return otelresource.New(context.Background(),
 					otelresource.WithProcess(),
 					otelresource.WithOS(),
