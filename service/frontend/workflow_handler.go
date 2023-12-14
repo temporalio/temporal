@@ -499,6 +499,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		request.MaximumPageSize = common.GetHistoryMaxPageSize
 	}
 
+	enableArchivalRead := wh.archivalMetadata.GetHistoryConfig().ReadEnabled()
+	workflowExecutionArchived := wh.workflowExecutionArchived(ctx, request.Execution, namespaceID)
+	if enableArchivalRead && workflowExecutionArchived {
+		return wh.getArchivedHistoryReverse(ctx, request, namespaceID)
+	}
+
 	if dynamicconfig.AccessHistory(wh.config.AccessHistoryFraction, wh.metricsScope(ctx).WithTags(metrics.OperationTag(metrics.FrontendGetWorkflowExecutionHistoryReverseTag))) {
 		response, err := wh.historyClient.GetWorkflowExecutionHistoryReverse(ctx,
 			&historyservice.GetWorkflowExecutionHistoryReverseRequest{
@@ -2364,6 +2370,12 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
+	enableArchivalRead := wh.archivalMetadata.GetVisibilityConfig().ReadEnabled()
+	workflowArchived := wh.workflowExecutionArchived(ctx, request.Execution, namespaceID)
+	if enableArchivalRead && workflowArchived {
+		return wh.describeArchivedWorkflowExecution(ctx, request)
+	}
+
 	response, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		Request:     request,
@@ -3846,12 +3858,16 @@ func (wh *WorkflowHandler) validateBuildIdCompatibilityUpdate(
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {
-	if request.GetExecution() == nil || request.GetExecution().GetRunId() == "" {
+	return wh.workflowExecutionArchived(ctx, request.Execution, namespaceID)
+}
+
+func (wh *WorkflowHandler) workflowExecutionArchived(ctx context.Context, execution *commonpb.WorkflowExecution, namespaceID namespace.ID) bool {
+	if execution == nil || execution.GetRunId() == "" {
 		return false
 	}
 	getMutableStateRequest := &historyservice.GetMutableStateRequest{
 		NamespaceId: namespaceID.String(),
-		Execution:   request.Execution,
+		Execution:   execution,
 	}
 	_, err := wh.historyClient.GetMutableState(ctx, getMutableStateRequest)
 	if err == nil {
@@ -3859,11 +3875,47 @@ func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflo
 	}
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		// the only case in which history is assumed to be archived is if getting mutable state returns entity not found error
+		// the only case in which workflow or workflow's event history is assumed to be archived is if getting mutable state returns entity not found error
 		return true
 	}
 
 	return false
+}
+
+func (wh *WorkflowHandler) describeArchivedWorkflowExecution(ctx context.Context, request *workflowservice.DescribeWorkflowExecutionRequest) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	r := &workflowservice.ListArchivedWorkflowExecutionsRequest{
+		Namespace: request.Namespace,
+		PageSize:  1,
+		Query: fmt.Sprintf(
+			"WorkflowId = '%s' and RunId = '%s'",
+			request.Execution.GetWorkflowId(),
+			request.Execution.GetRunId(),
+		),
+	}
+	archivedWorkflowExecutionsResponse, err := wh.ListArchivedWorkflowExecutions(ctx, r)
+	if err != nil {
+		return nil, serviceerror.NewNotFound(err.Error())
+	}
+	if len(archivedWorkflowExecutionsResponse.Executions) == 0 {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf(errUnableToListArchivedWorkflowExecutionMessage, request.Execution.GetWorkflowId(), request.Execution.GetRunId()))
+	}
+	//get execution info
+	executionInfo := archivedWorkflowExecutionsResponse.Executions[0]
+	if executionInfo.TaskQueue == "" {
+		//todo: support display task queue
+		executionInfo.TaskQueue = "Null"
+	}
+	result := &workflowservice.DescribeWorkflowExecutionResponse{
+		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: executionInfo.TaskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+		},
+		WorkflowExecutionInfo: executionInfo,
+	}
+
+	return result, nil
 }
 
 func (wh *WorkflowHandler) getArchivedHistory(
@@ -3913,6 +3965,59 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		History:       history,
 		NextPageToken: resp.NextPageToken,
 		Archived:      true,
+	}, nil
+}
+
+func (wh *WorkflowHandler) getArchivedHistoryReverse(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionHistoryReverseRequest,
+	namespaceID namespace.ID,
+) (*workflowservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+	entry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	URIString := entry.HistoryArchivalState().URI
+	if URIString == "" {
+		// if URI is empty, it means the namespace has never enabled for archival.
+		// the error is not "workflow has passed retention period", because
+		// we have no way to tell if the requested workflow exists or not.
+		return nil, errHistoryNotFound
+	}
+
+	URI, err := archiver.NewURI(URIString)
+	if err != nil {
+		return nil, err
+	}
+
+	historyArchiver, err := wh.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := historyArchiver.Get(ctx, URI, &archiver.GetHistoryRequest{
+		NamespaceID:   namespaceID.String(),
+		WorkflowID:    request.GetExecution().GetWorkflowId(),
+		RunID:         request.GetExecution().GetRunId(),
+		NextPageToken: request.GetNextPageToken(),
+		PageSize:      int(request.GetMaximumPageSize()),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	history := &historypb.History{}
+	for _, batch := range resp.HistoryBatches {
+		history.Events = append(history.Events, batch.Events...)
+	}
+	// reverse the events
+	for i, j := 0, len(history.Events)-1; i < j; i, j = i+1, j-1 {
+		history.Events[i], history.Events[j] = history.Events[j], history.Events[i]
+	}
+	return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+		History:       history,
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 

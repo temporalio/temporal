@@ -80,7 +80,10 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 		},
 		{
 			query:     "RunId = \"random runID\"",
-			expectErr: true,
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				runID: convert.StringPtr("random runID"),
+			},
 		},
 		{
 			query:     "WorkflowId = 'random workflowID'",
@@ -127,6 +130,7 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
 		s.Equal(tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
+		s.Equal(tc.parsedQuery.runID, parsedQuery.runID)
 
 	}
 }

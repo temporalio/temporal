@@ -84,6 +84,7 @@ const (
 
 	testWorkflowID            = "test-workflow-id"
 	testRunID                 = "test-run-id"
+	testWorkflowTypeName      = "test-workflow-type"
 	testHistoryArchivalURI    = "testScheme://history/URI"
 	testVisibilityArchivalURI = "testScheme://visibility/URI"
 )
@@ -1488,6 +1489,52 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 	}
 	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
 	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_ArchivedStatus() {
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
+			VisibilityArchivalUri:   testVisibilityArchivalURI,
+		},
+		"",
+	), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
+		s.testNamespaceID,
+		nil,
+	).AnyTimes()
+	now := timestamp.TimePtr(time.Now())
+	mockWorkflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: uuid.New(),
+		RunId:      uuid.New(),
+	}
+	mockWorkflowExecutionInfo := &workflowpb.WorkflowExecutionInfo{
+		Execution:        mockWorkflowExecution,
+		Type:             &commonpb.WorkflowType{Name: testWorkflowTypeName},
+		StartTime:        now,
+		CloseTime:        now,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		ExecutionTime:    now,
+		Memo:             nil,
+		SearchAttributes: nil,
+	}
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).AnyTimes()
+	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{Executions: []*workflowpb.WorkflowExecutionInfo{mockWorkflowExecutionInfo}}, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("", false)
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: mockWorkflowExecution,
+	}
+	resp, err := wh.DescribeWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(resp.WorkflowExecutionInfo, mockWorkflowExecutionInfo)
 }
 
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
