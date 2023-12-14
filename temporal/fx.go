@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -961,14 +960,8 @@ var ServiceTracingModule = fx.Options(
 					rsn = primitives.FrontendService
 				}
 
-				serviceNamePrefix := "io.temporal"
-				if customServicePrefix, found := os.LookupEnv(telemetry.OtelServiceNameEnvKey); found {
-					serviceNamePrefix = customServicePrefix
-				}
-				serviceName := fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))
-
 				attrs := []attribute.KeyValue{
-					semconv.ServiceNameKey.String(serviceName),
+					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
 				}
 				if rsi != "" {

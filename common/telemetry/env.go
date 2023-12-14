@@ -32,6 +32,7 @@ import (
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -64,4 +65,13 @@ func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
 
 func unsupportedEnvVarErr(key, val string) error {
 	return fmt.Errorf("%w: %s=%s", unsupportedEnvVar, key, val)
+}
+
+// ResourceServiceName returns the logical name of the service.
+func ResourceServiceName(rsn primitives.ServiceName) string {
+	serviceNamePrefix := "io.temporal"
+	if customServicePrefix, found := os.LookupEnv(OtelServiceNameEnvKey); found {
+		serviceNamePrefix = customServicePrefix
+	}
+	return fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))
 }
