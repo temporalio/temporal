@@ -15,10 +15,10 @@ ci-build-misc: print-go-version ci-update-tools proto bins shell-check copyright
 clean: clean-bins clean-test-results
 
 # Recompile proto files.
-proto: clean-proto buf-lint api-linter protoc goimports-proto proto-mocks copyright-proto
+proto: clean-proto buf-lint api-linter protoc proto-clients goimports-proto proto-mocks copyright-proto
 
 # Update proto submodule from remote and recompile proto files.
-update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc update-go-api goimports-proto proto-mocks copyright-proto gomodtidy
+update-proto: update-proto-submodule proto gomodtidy
 ########################################################################
 
 .PHONY: proto proto-mocks protoc
@@ -72,6 +72,7 @@ PROTO_OPTS = paths=source_relative:$(PROTO_OUT)
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
 PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
+PROTO_GRPC_CLIENTS = $(shell find ./client -name "client.go")
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -195,7 +196,7 @@ protoc: clean-proto $(PROTO_OUT)
 		-p go-helpers_out=$(PROTO_PATHS)
 	@mv -f "$(PROTO_OUT)/temporal/server/api/"* "$(PROTO_OUT)"
 
-# All gRPC generated service files pathes relative to PROTO_OUT.
+# All gRPC generated service files paths relative to PROTO_OUT.
 PROTO_GRPC_SERVICES = $(patsubst $(PROTO_OUT)/%,%,$(shell find $(PROTO_OUT) -name "service.pb.go" -o -name "service_grpc.pb.go"))
 service_name = $(firstword $(subst /, ,$(1)))
 mock_file_name = $(call service_name,$(1))mock/$(subst $(call service_name,$(1))/,,$(1:go=mock.go))
@@ -205,6 +206,12 @@ proto-mocks: protoc
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		@cd $(PROTO_OUT) && \
 		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
+	$(NEWLINE))
+
+proto-clients:
+	@printf $(COLOR) "Generate proto clients..."
+	$(foreach PROTO_GRPC_CLIENT,$(PROTO_GRPC_CLIENTS),\
+		@go generate $(PROTO_GRPC_CLIENT) \
 	$(NEWLINE))
 
 update-go-api:
