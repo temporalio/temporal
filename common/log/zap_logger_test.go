@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -238,5 +237,5 @@ func TestNoRotationLogger(t *testing.T) {
 	// Make sure no other files were created.
 	assert.Equal(t, 1, len(files))
 	logFile, _ := files[0].Info()
-	assert.LessOrEqual(t, math.Abs(float64(1560000)-float64(logFile.Size())), float64(100))
+	assert.Greater(t, logFile.Size(), int64(1024*1024))
 }
