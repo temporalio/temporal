@@ -72,7 +72,6 @@ PROTO_OPTS = paths=source_relative:$(PROTO_OUT)
 PROTO_OUT := api
 PROTO_ENUMS := $(shell grep -R '^enum ' $(PROTO_ROOT) | cut -d ' ' -f2)
 PROTO_PATHS = paths=source_relative:$(PROTO_OUT)
-PROTO_GRPC_CLIENTS = $(shell find ./client -name "client.go")
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
@@ -210,9 +209,7 @@ proto-mocks: protoc
 
 proto-clients:
 	@printf $(COLOR) "Generate proto clients..."
-	$(foreach PROTO_GRPC_CLIENT,$(PROTO_GRPC_CLIENTS),\
-		@go generate $(PROTO_GRPC_CLIENT) \
-	$(NEWLINE))
+	@go generate ./client/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
