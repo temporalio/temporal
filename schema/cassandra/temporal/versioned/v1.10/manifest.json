@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "1.10",
+  "MinCompatibleVersion": "1.0",
+  "Description": "create nexus_incoming_services table",
+  "SchemaUpdateCqlFiles": ["nexus_incoming_services.cql"]
+}
