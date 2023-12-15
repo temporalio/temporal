@@ -1278,21 +1278,23 @@ func deleteMessages(
 }
 
 func testCassandraNexusIncomingServiceStore(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
-	//t.Run("ConcurrentCreateOrUpdate", func(t *testing.T) {
-	//	testCassandraNexusIncomingServiceStoreConcurrentUpdate(t, cluster, tableVersion)
-	//})
+	t.Run("ConcurrentUpdate", func(t *testing.T) {
+		store := newNexusIncomingServiceStore(cluster.GetSession())
+		testCassandraNexusIncomingServiceStoreConcurrentCreate(t, store, tableVersion)
+		testCassandraNexusIncomingServiceStoreConcurrentUpdate(t, store, tableVersion)
+		testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t, store, tableVersion)
+		testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t, store, tableVersion)
+	})
 	t.Run("ListServicesConcurrentUpdate", func(t *testing.T) {
 		testCassandraNexusIncomingServiceStoreListServicesConcurrentUpdate(t, cluster, tableVersion)
 	})
 }
 
-func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
-	store := newNexusIncomingServiceStore(cluster.GetSession())
-
+func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ConcurrentCreate", func(t *testing.T) {
-		numConcurrentRequests := 4
-
 		ctx := context.Background()
+
+		numConcurrentRequests := 4
 
 		wg := sync.WaitGroup{}
 		wg.Add(numConcurrentRequests)
@@ -1331,6 +1333,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, cluste
 		require.Len(t, createErrors, numConcurrentRequests-1)
 		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 	})
+}
+
+func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ConcurrentUpdate", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -1379,6 +1384,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, cluste
 		require.Len(t, updateErrors, numConcurrentRequests-1)
 		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 	})
+}
+
+func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ConcurrentCreateAndUpdate", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -1447,6 +1455,9 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, cluste
 		}
 		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
 	})
+}
+
+func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ConcurrentUpdateAndDelete", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -1623,7 +1634,6 @@ func testCassandraNexusIncomingServiceStoreListServicesConcurrentUpdate(t *testi
 			if tc.listIsLeader {
 				require.Equal(t, requestTableVersion, listResp.TableVersion)
 			} else {
-				//assertNexusIncomingServicesTableVersion(t, 26, listStore)
 				require.Equal(t, requestTableVersion+1, listResp.TableVersion)
 			}
 
