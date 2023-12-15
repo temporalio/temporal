@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
@@ -331,7 +332,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	_, methodName := SplitMethodName(fullMethod)
+	methodName := api.MethodName(fullMethod)
 
 	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
 	if !allowedStatesDefined {
@@ -355,7 +356,7 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	_, methodName := SplitMethodName(fullMethod)
+	methodName := api.MethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return nil

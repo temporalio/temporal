@@ -191,6 +191,7 @@ func ndcHistoryResenderProvider(
 		namespaceRegistry,
 		clientBean,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			// use HistoryEventsHandler.HandleHistoryEvents(...) instead
 			_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
 			return err
 		},

@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	godsutils "github.com/emirpasic/gods/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -2802,21 +2803,8 @@ func (m *testTaskQueueManager) RangeID() int64 {
 	return m.rangeID
 }
 
-func Int64Comparator(a, b interface{}) int {
-	aAsserted := a.(int64)
-	bAsserted := b.(int64)
-	switch {
-	case aAsserted > bAsserted:
-		return 1
-	case aAsserted < bAsserted:
-		return -1
-	default:
-		return 0
-	}
-}
-
 func newTestTaskQueueManager() *testTaskQueueManager {
-	return &testTaskQueueManager{tasks: treemap.NewWith(Int64Comparator)}
+	return &testTaskQueueManager{tasks: treemap.NewWith(godsutils.Int64Comparator)}
 }
 
 func newTestTaskQueueID(namespaceID namespace.ID, name string, taskType enumspb.TaskQueueType) *taskQueueID {

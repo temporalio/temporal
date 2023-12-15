@@ -24,14 +24,48 @@
 
 package interceptor
 
-import "strings"
+import (
+	"context"
+	"strings"
+	"sync/atomic"
 
-func SplitMethodName(
-	fullMethodName string,
-) (string, string) {
-	fullMethodName = strings.TrimPrefix(fullMethodName, "/") // remove leading slash
-	if i := strings.Index(fullMethodName, "/"); i >= 0 {
-		return fullMethodName[:i], fullMethodName[i+1:]
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/api"
+)
+
+type (
+	HealthInterceptor struct {
+		healthy atomic.Bool
 	}
-	return "unknown", "unknown"
+)
+
+var _ grpc.UnaryServerInterceptor = (*HealthInterceptor)(nil).Intercept
+
+var notHealthyErr = serviceerror.NewUnavailable("Frontend is not healthy yet")
+
+// NewHealthInterceptor returns a new HealthInterceptor. It starts with state not healthy.
+func NewHealthInterceptor() *HealthInterceptor {
+	return &HealthInterceptor{}
+}
+
+func (i *HealthInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	// only enforce health check on WorkflowService and OperatorService
+	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) ||
+		strings.HasPrefix(info.FullMethod, api.OperatorServicePrefix) {
+		if !i.healthy.Load() {
+			return nil, notHealthyErr
+		}
+	}
+	return handler(ctx, req)
+}
+
+func (i *HealthInterceptor) SetHealthy(healthy bool) {
+	i.healthy.Store(healthy)
 }
