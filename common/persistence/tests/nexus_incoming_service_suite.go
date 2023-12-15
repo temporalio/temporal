@@ -38,25 +38,25 @@ import (
 )
 
 func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
-	ctx := context.Background()
-
 	// NB: These tests cannot be run in parallel because of concurrent updates to the table version by different tests
 	t.Run("TestNexusIncomingServicesSteadyState", func(t *testing.T) {
-		testNexusIncomingServicesStoreSteadyState(t, ctx, store, tableVersion)
+		testNexusIncomingServicesStoreSteadyState(t, store, tableVersion)
 	})
 	t.Run("TestCreateOrUpdateNexusIncomingServiceExpectedErrors", func(t *testing.T) {
-		testCreateOrUpdateNexusIncomingServiceExpectedErrors(t, ctx, store, tableVersion)
+		testCreateOrUpdateNexusIncomingServiceExpectedErrors(t, store, tableVersion)
 	})
 	t.Run("TestListNexusIncomingServicesExpectedErrors", func(t *testing.T) {
-		testListNexusIncomingServicesExpectedErrors(t, ctx, store, tableVersion)
+		testListNexusIncomingServicesExpectedErrors(t, store, tableVersion)
 	})
 	t.Run("TestDeleteNexusIncomingServiceExpectedErrors", func(t *testing.T) {
-		testDeleteNexusIncomingServiceExpectedErrors(t, ctx, store, tableVersion)
+		testDeleteNexusIncomingServiceExpectedErrors(t, store, tableVersion)
 	})
 }
 
-func testNexusIncomingServicesStoreSteadyState(t *testing.T, ctx context.Context, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("SteadyState", func(t *testing.T) {
+		ctx := context.Background()
+
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -178,8 +178,10 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, ctx context.Context
 	})
 }
 
-func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, ctx context.Context, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
+		ctx := context.Background()
+
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -232,8 +234,10 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, ctx cont
 	})
 }
 
-func testListNexusIncomingServicesExpectedErrors(t *testing.T, ctx context.Context, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
+		ctx := context.Background()
+
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
@@ -266,17 +270,19 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, ctx context.Conte
 		require.Equal(t, resp.TableVersion, tableVersion.Load())
 
 		// Non-positive page size
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: -1, LastKnownTableVersion: tableVersion.Load()})
+		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: -1, LastKnownTableVersion: tableVersion.Load()})
 		require.ErrorContains(t, err, "received non-positive page size for listing Nexus incoming services")
 
 		// Table version mismatch
-		resp, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})
+		_, err = store.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{PageSize: 10, LastKnownTableVersion: 100})
 		require.ErrorContains(t, err, "nexus incoming services table version mismatch")
 	})
 }
 
-func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, ctx context.Context, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
+func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
+		ctx := context.Background()
+
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
 			EncodingType: enums.ENCODING_TYPE_PROTO3,
