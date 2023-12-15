@@ -1253,7 +1253,8 @@ func testCassandraNexusIncomingServiceStore(t *testing.T, cluster *cassandra.Tes
 }
 
 func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	numConcurrentRequests := 4
 
@@ -1296,7 +1297,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreate(t *testing.T, store 
 }
 
 func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	service := persistence.InternalNexusIncomingService{
 		ServiceID: uuid.NewString(),
@@ -1345,7 +1347,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, store 
 }
 
 func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	firstService := persistence.InternalNexusIncomingService{
 		ServiceID: uuid.NewString(),
@@ -1414,7 +1417,8 @@ func testCassandraNexusIncomingServiceStoreConcurrentCreateAndUpdate(t *testing.
 }
 
 func testCassandraNexusIncomingServiceStoreConcurrentUpdateAndDelete(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	service := persistence.InternalNexusIncomingService{
 		ServiceID: uuid.NewString(),

@@ -28,6 +28,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,8 @@ func RunNexusIncomingServiceTestSuite(t *testing.T, store persistence.NexusServi
 
 func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("SteadyState", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
@@ -180,7 +182,8 @@ func testNexusIncomingServicesStoreSteadyState(t *testing.T, store persistence.N
 
 func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
@@ -236,7 +239,8 @@ func testCreateOrUpdateNexusIncomingServiceExpectedErrors(t *testing.T, store pe
 
 func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
@@ -281,7 +285,8 @@ func testListNexusIncomingServicesExpectedErrors(t *testing.T, store persistence
 
 func testDeleteNexusIncomingServiceExpectedErrors(t *testing.T, store persistence.NexusServiceStore, tableVersion *atomic.Int64) {
 	t.Run("ExpectedErrors", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
 		data := &commonpb.DataBlob{
 			Data:         []byte("dummy service data"),
