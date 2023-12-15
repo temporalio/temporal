@@ -36,30 +36,28 @@ import (
 )
 
 const (
-	UnknownTableVersion = 0
-
-	constServicesPartition     = 0
-	constTableVersionServiceID = `00000000-0000-0000-0000-000000000000`
+	unknownTableVersion   = 0
+	tableVersionServiceID = `00000000-0000-0000-0000-000000000000`
 )
 
 const (
-	rowTypePartitionStatus      = iota
-	rowTypeIncomingNexusService = iota
+	rowTypePartitionStatus = iota
+	rowTypeIncomingNexusService
 )
 
 const (
 	// table templates
-	templateCreateTableVersion = `INSERT INTO nexus_incoming_services(partition, type, service_id, version) VALUES (?, ?, ?, ?) IF NOT EXISTS`
-	templateGetTableVersion    = `SELECT version FROM nexus_incoming_services WHERE partition = ? AND type = ? AND service_id = ?`
-	TemplateUpdateTableVersion = `UPDATE nexus_incoming_services SET version = ? WHERE partition = ? AND type = ? AND service_id = ? IF version = ?`
+	templateCreateTableVersion = `INSERT INTO nexus_incoming_services(partition, type, service_id, version) VALUES (0, ?, ?, ?) IF NOT EXISTS`
+	templateGetTableVersion    = `SELECT version FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ?`
+	templateUpdateTableVersion = `UPDATE nexus_incoming_services SET version = ? WHERE partition = 0 AND type = ? AND service_id = ? IF version = ?`
 
 	// incoming service templates
-	templateCreateIncomingServiceQuery         = `INSERT INTO nexus_incoming_services(partition, type, service_id, data, data_encoding, version) VALUES(?, ?, ?, ?, ?, ?) IF NOT EXISTS`
-	templateBaseListIncomingServicesQuery      = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE partition = ?`
-	TemplateListIncomingServicesQuery          = templateBaseListIncomingServicesQuery + ` AND type = ?`
-	TemplateListIncomingServicesFirstPageQuery = templateBaseListIncomingServicesQuery + ` ORDER BY type ASC`
-	templateUpdateIncomingServiceQuery         = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE partition = ? AND type = ? AND service_id = ? IF version = ?`
-	templateDeleteIncomingServiceQuery         = `DELETE FROM nexus_incoming_services WHERE partition = ? AND type = ? AND service_id = ? IF EXISTS`
+	templateCreateIncomingServiceQuery         = `INSERT INTO nexus_incoming_services(partition, type, service_id, data, data_encoding, version) VALUES(0, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateUpdateIncomingServiceQuery         = `UPDATE nexus_incoming_services SET data = ?, data_encoding = ?, version = ? WHERE partition = 0 AND type = ? AND service_id = ? IF version = ?`
+	templateBaseListIncomingServicesQuery      = `SELECT service_id, data, data_encoding, version FROM nexus_incoming_services WHERE partition = 0`
+	templateListIncomingServicesQuery          = templateBaseListIncomingServicesQuery + ` AND type = ?`
+	templateListIncomingServicesFirstPageQuery = templateBaseListIncomingServicesQuery + ` ORDER BY type ASC`
+	templateDeleteIncomingServiceQuery         = `DELETE FROM nexus_incoming_services WHERE partition = 0 AND type = ? AND service_id = ? IF EXISTS`
 )
 
 var (
@@ -112,7 +110,6 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 	if request.Service.Version == 0 {
 		batch.Query(templateCreateIncomingServiceQuery,
-			constServicesPartition,
 			rowTypeIncomingNexusService,
 			request.Service.ServiceID,
 			request.Service.Data.Data,
@@ -124,7 +121,6 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			request.Service.Data.Data,
 			request.Service.Data.EncodingType.String(),
 			request.Service.Version+1,
-			constServicesPartition,
 			rowTypeIncomingNexusService,
 			request.Service.ServiceID,
 			request.Service.Version,
@@ -133,16 +129,14 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 
 	if request.LastKnownTableVersion == 0 {
 		batch.Query(templateCreateTableVersion,
-			constServicesPartition,
 			rowTypePartitionStatus,
-			constTableVersionServiceID,
+			tableVersionServiceID,
 			1)
 	} else {
-		batch.Query(TemplateUpdateTableVersion,
+		batch.Query(templateUpdateTableVersion,
 			request.LastKnownTableVersion+1,
-			constServicesPartition,
 			rowTypePartitionStatus,
-			constTableVersionServiceID,
+			tableVersionServiceID,
 			request.LastKnownTableVersion)
 	}
 
@@ -167,7 +161,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			return fmt.Errorf("error retrieving current table version: %w", err)
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
-			return fmt.Errorf("%w. Provided table version: %v Current table version: %v",
+			return fmt.Errorf("%w. provided table version: %v current table version: %v",
 				ErrTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
@@ -178,7 +172,7 @@ func (s *NexusServiceStore) CreateOrUpdateNexusIncomingService(
 			return fmt.Errorf("error retrieving current service version: %w", err)
 		}
 		if currentServiceVersion != request.Service.Version {
-			return fmt.Errorf("%w. Provided service version: %v Current service version: %v",
+			return fmt.Errorf("%w. provided service version: %v current service version: %v",
 				ErrNexusIncomingServiceVersionConflict,
 				request.Service.Version,
 				currentServiceVersion)
@@ -200,13 +194,13 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 		return nil, ErrNonPositiveListNexusIncomingServicesPageSize
 	}
 
-	if request.LastKnownTableVersion == UnknownTableVersion {
+	if request.LastKnownTableVersion == unknownTableVersion {
 		return s.listFirstPageWithVersion(ctx, request)
 	}
 
 	response := &p.InternalListNexusIncomingServicesResponse{}
 
-	query := s.session.Query(TemplateListIncomingServicesQuery, constServicesPartition, rowTypeIncomingNexusService).WithContext(ctx)
+	query := s.session.Query(templateListIncomingServicesQuery, rowTypeIncomingNexusService).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	services, err := s.getServiceList(iter)
@@ -220,7 +214,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusIncomingServices operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNexusIncomingServices operation failed: %v", err))
 	}
 
 	currentTableVersion, err := s.getTableVersion(ctx)
@@ -232,7 +226,7 @@ func (s *NexusServiceStore) ListNexusIncomingServices(
 
 	if request.LastKnownTableVersion != currentTableVersion {
 		// If table has been updated during pagination, throw error to indicate caller must start over
-		return nil, fmt.Errorf("%w. Provided table version: %v Current table version: %v",
+		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
 			ErrTableVersionConflict,
 			request.LastKnownTableVersion,
 			currentTableVersion)
@@ -248,15 +242,13 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	batch.Query(templateDeleteIncomingServiceQuery,
-		constServicesPartition,
 		rowTypeIncomingNexusService,
 		request.ServiceID)
 
-	batch.Query(TemplateUpdateTableVersion,
+	batch.Query(templateUpdateTableVersion,
 		request.LastKnownTableVersion+1,
-		constServicesPartition,
 		rowTypePartitionStatus,
-		constTableVersionServiceID,
+		tableVersionServiceID,
 		request.LastKnownTableVersion)
 
 	previousPartitionStatus := make(map[string]interface{})
@@ -277,13 +269,13 @@ func (s *NexusServiceStore) DeleteNexusIncomingService(
 			return fmt.Errorf("error retrieving current table version: %w", err)
 		}
 		if currentTableVersion != request.LastKnownTableVersion {
-			return fmt.Errorf("%w. Provided table version: %v Current table version: %v",
+			return fmt.Errorf("%w. provided table version: %v current table version: %v",
 				ErrTableVersionConflict,
 				request.LastKnownTableVersion,
 				currentTableVersion)
 		}
 
-		return fmt.Errorf("%w. Provided serviceID: %v",
+		return fmt.Errorf("%w. provided serviceID: %v",
 			ErrNexusIncomingServiceNotFound,
 			request.ServiceID)
 	}
@@ -297,7 +289,7 @@ func (s *NexusServiceStore) listFirstPageWithVersion(
 ) (*p.InternalListNexusIncomingServicesResponse, error) {
 	response := &p.InternalListNexusIncomingServicesResponse{}
 
-	query := s.session.Query(TemplateListIncomingServicesFirstPageQuery, constServicesPartition).WithContext(ctx)
+	query := s.session.Query(templateListIncomingServicesFirstPageQuery).WithContext(ctx)
 	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter() // Use PageSize+1 to account for partitionStatus row
 
 	partitionStateRow := make(map[string]interface{})
@@ -336,15 +328,11 @@ func (s *NexusServiceStore) listFirstPageWithVersion(
 }
 
 func (s *NexusServiceStore) getTableVersion(ctx context.Context) (int64, error) {
-	query := s.session.Query(templateGetTableVersion,
-		constServicesPartition,
-		rowTypePartitionStatus,
-		constTableVersionServiceID,
-	).WithContext(ctx)
+	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionServiceID).WithContext(ctx)
 
 	var version int64
 	if err := query.Scan(&version); err != nil {
-		return UnknownTableVersion, gocql.ConvertError("GetNexusIncomingServicesTableVersion", err)
+		return unknownTableVersion, gocql.ConvertError("GetNexusIncomingServicesTableVersion", err)
 	}
 
 	return version, nil
