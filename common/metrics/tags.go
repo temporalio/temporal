@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -64,7 +65,6 @@ const (
 	totalMetricSuffix = "_total"
 	tagExcludedValue  = "_tag_excluded_"
 
-	getType     = "%T"
 	errorPrefix = "*"
 )
 
@@ -255,8 +255,23 @@ func VersionedTag(versioned bool) Tag {
 	return &tagImpl{key: versionedTagName, value: strconv.FormatBool(versioned)}
 }
 
+func errorType(err error) string {
+	// There isn't a better way to do this as the type is private, but it obscures the actual error's type
+	// so it's worth unwrapping
+	errType := fmt.Sprintf("%T", err)
+	for errType == "*fmt.wrapError" {
+		underlying := errors.Unwrap(err)
+		if underlying == nil {
+			break
+		}
+		errType = fmt.Sprintf("%T", underlying)
+		err = underlying
+	}
+	return errType
+}
+
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
+	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(errorType(err), errorPrefix)}
 }
 
 // HttpStatusTag returns a new httpStatusTag.
