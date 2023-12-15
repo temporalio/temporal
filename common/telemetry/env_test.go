@@ -25,45 +25,105 @@
 package telemetry_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
 )
 
 func TestEnvSpanExporter(t *testing.T) {
-	exp, err := telemetry.EnvSpanExporter()
-	require.Nil(t, exp)
-	require.NoError(t, err)
+	t.Parallel()
 
-	_ = os.Setenv(telemetry.OtelTracesExporterEnvKey, "invalid-exporter")
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		errMsg   string
+		exporter bool
+	}{
+		{
+			name:    "NoExporter",
+			envVars: map[string]string{},
+		},
+		{
+			name: "InvalidExporter",
+			envVars: map[string]string{
+				telemetry.OtelTracesExporterEnvKey: "invalid-exporter",
+			},
+			errMsg: "unsupported OpenTelemetry env var: OTEL_TRACES_EXPORTER=invalid-exporter",
+		},
+		{
+			name: "ValidExporter",
+			envVars: map[string]string{
+				telemetry.OtelTracesExporterEnvKey: "oltp",
+			},
+			exporter: true,
+		},
+		{
+			name: "ValidExporterWithValidProtocol",
+			envVars: map[string]string{
+				telemetry.OtelTracesExporterEnvKey:         "oltp",
+				telemetry.OtelTracesExporterProtocolEnvKey: "grpc",
+			},
+			errMsg:   "",
+			exporter: true,
+		},
+		{
+			name: "ValidExporterWithInvalidProtocol",
+			envVars: map[string]string{
+				telemetry.OtelTracesExporterEnvKey:         "oltp",
+				telemetry.OtelTracesExporterProtocolEnvKey: "invalid-protocol",
+			},
+			errMsg: "unsupported OpenTelemetry env var: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=invalid-protocol",
+		},
+	}
 
-	exp, err = telemetry.EnvSpanExporter()
-	require.Nil(t, exp)
-	require.EqualError(t, err, "unsupported OpenTelemetry env var: OTEL_TRACES_EXPORTER=invalid-exporter")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envVarsLookup := func(key string) (string, bool) {
+				val, ok := test.envVars[key]
+				return val, ok
+			}
 
-	_ = os.Setenv(telemetry.OtelTracesExporterEnvKey, "oltp")
+			exp, err := telemetry.EnvSpanExporter(envVarsLookup)
+			if test.errMsg == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, test.errMsg)
+			}
+			if test.exporter {
+				require.NotNil(t, exp)
+			}
+		})
+	}
+}
 
-	exp, err = telemetry.EnvSpanExporter()
-	require.NotNil(t, exp)
-	require.NoError(t, err)
+func TestResourceServiceName(t *testing.T) {
+	t.Run("DefaultPrefix", func(t *testing.T) {
+		require.Equal(t,
+			"io.temporal.history",
+			telemetry.ResourceServiceName(primitives.HistoryService, func(key string) (string, bool) {
+				return "", false
+			}),
+		)
+	})
 
-	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "grpc")
+	t.Run("SingleFrontendServiceName", func(t *testing.T) {
+		require.Equal(t,
+			"io.temporal.frontend", // instead of "internal-frontend"
+			telemetry.ResourceServiceName(primitives.InternalFrontendService, func(key string) (string, bool) {
+				return "", false
+			}),
+		)
+	})
 
-	exp, err = telemetry.EnvSpanExporter()
-	require.NotNil(t, exp)
-	require.NoError(t, err)
-
-	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "grpc")
-
-	exp, err = telemetry.EnvSpanExporter()
-	require.NotNil(t, exp)
-	require.NoError(t, err)
-
-	_ = os.Setenv(telemetry.OtelTracesExporterProtocolEnvKey, "invalid-protocol")
-
-	exp, err = telemetry.EnvSpanExporter()
-	require.Nil(t, exp)
-	require.EqualError(t, err, "unsupported OpenTelemetry env var: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=invalid-protocol")
+	t.Run("CustomPrefix", func(t *testing.T) {
+		require.Equal(t,
+			"PREFIX.matching",
+			telemetry.ResourceServiceName(primitives.MatchingService, func(key string) (string, bool) {
+				require.Equal(t, telemetry.OtelServiceNameEnvKey, key)
+				return "PREFIX", true
+			}),
+		)
+	})
 }

@@ -25,10 +25,8 @@
 package telemetry
 
 import (
-	"fmt"
-	"os"
-
 	"errors"
+	"fmt"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -43,11 +41,13 @@ const (
 
 var unsupportedEnvVar = errors.New("unsupported OpenTelemetry env var")
 
+type envVarLookup = func(string) (string, bool)
+
 // EnvSpanExporter creates a gRPC span exporter from environment variables, if present, as specified in
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options
-func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
+func EnvSpanExporter(enVars envVarLookup) (otelsdktrace.SpanExporter, error) {
 
-	typeOf, found := os.LookupEnv(OtelTracesExporterEnvKey)
+	typeOf, found := enVars(OtelTracesExporterEnvKey)
 	if !found {
 		return nil, nil
 	}
@@ -55,7 +55,7 @@ func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
 		return nil, unsupportedEnvVarErr(OtelTracesExporterEnvKey, typeOf)
 	}
 
-	protocol, found := os.LookupEnv(OtelTracesExporterProtocolEnvKey)
+	protocol, found := enVars(OtelTracesExporterProtocolEnvKey)
 	if found && protocol != "grpc" {
 		return nil, unsupportedEnvVarErr(OtelTracesExporterProtocolEnvKey, protocol)
 	}
@@ -63,15 +63,22 @@ func EnvSpanExporter() (otelsdktrace.SpanExporter, error) {
 	return otlptracegrpc.NewUnstarted(), nil
 }
 
-func unsupportedEnvVarErr(key, val string) error {
-	return fmt.Errorf("%w: %s=%s", unsupportedEnvVar, key, val)
-}
+// ResourceServiceName returns the OpenTelemetry tracing service name for a Temporal service.
+func ResourceServiceName(rsn primitives.ServiceName, enVars envVarLookup) string {
+	// map "internal-frontend" to "frontend" for the purpose of tracing
+	if rsn == primitives.InternalFrontendService {
+		rsn = primitives.FrontendService
+	}
 
-// ResourceServiceName returns the logical name of the service.
-func ResourceServiceName(rsn primitives.ServiceName) string {
+	// allow custom prefix via env vars
 	serviceNamePrefix := "io.temporal"
-	if customServicePrefix, found := os.LookupEnv(OtelServiceNameEnvKey); found {
+	if customServicePrefix, found := enVars(OtelServiceNameEnvKey); found {
 		serviceNamePrefix = customServicePrefix
 	}
+
 	return fmt.Sprintf("%s.%s", serviceNamePrefix, string(rsn))
+}
+
+func unsupportedEnvVarErr(key, val string) error {
+	return fmt.Errorf("%w: %s=%s", unsupportedEnvVar, key, val)
 }

@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -906,7 +907,7 @@ var TraceExportModule = fx.Options(
 			return nil, err
 		}
 
-		exporterFromEnv, err := telemetry.EnvSpanExporter()
+		exporterFromEnv, err := telemetry.EnvSpanExporter(os.LookupEnv)
 		if err != nil {
 			return nil, err
 		} else if exporterFromEnv != nil {
@@ -955,13 +956,8 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(
 		fx.Annotate(
 			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
-				// map "internal-frontend" to "frontend" for the purpose of tracing
-				if rsn == primitives.InternalFrontendService {
-					rsn = primitives.FrontendService
-				}
-
 				attrs := []attribute.KeyValue{
-					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn)),
+					semconv.ServiceNameKey.String(telemetry.ResourceServiceName(rsn, os.LookupEnv)),
 					semconv.ServiceVersionKey.String(headers.ServerVersion),
 				}
 				if rsi != "" {
