@@ -27,12 +27,16 @@ package tests
 import (
 	"context"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -73,6 +77,12 @@ type (
 	// See cassandra.ErrQueueMessageIDConflict for more.
 	blockingSession struct {
 		gocql.Session
+		queryToBlockOn   string
+		queryStarted     chan struct{}
+		queryCanContinue chan struct{}
+	}
+	blockingBatch struct {
+		gocql.Batch
 		queryToBlockOn   string
 		queryStarted     chan struct{}
 		queryCanContinue chan struct{}
@@ -303,6 +313,22 @@ func TestCassandraQueueV2Persistence(t *testing.T) {
 	})
 }
 
+func TestCassandraNexusIncomingServicePersistence(t *testing.T) {
+	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
+	cluster.SetupTestDatabase()
+	t.Cleanup(cluster.TearDownTestDatabase)
+
+	tableVersion := atomic.Int64{}
+
+	// NB: These tests cannot be run in parallel because of concurrent updates to the table version by different tests
+	t.Run("Generic", func(t *testing.T) {
+		RunNexusIncomingServiceTestSuite(t, newNexusIncomingServiceStore(cluster.GetSession()), &tableVersion)
+	})
+	t.Run("CassandraSpecific", func(t *testing.T) {
+		testCassandraNexusIncomingServiceStore(t, cluster, &tableVersion)
+	})
+}
+
 func testCassandraQueueV2DataCorruption(t *testing.T, cluster *cassandra.TestCluster) {
 	t.Run("ErrInvalidQueueMessageEncodingType", func(t *testing.T) {
 		t.Parallel()
@@ -508,6 +534,41 @@ func (f *blockingSession) Query(query string, args ...interface{}) gocql.Query {
 	}
 
 	return f.Session.Query(query, args...)
+}
+
+func (f *blockingSession) NewBatch(batchType gocql.BatchType) gocql.Batch {
+	return &blockingBatch{
+		Batch:            f.Session.NewBatch(batchType),
+		queryToBlockOn:   f.queryToBlockOn,
+		queryStarted:     f.queryStarted,
+		queryCanContinue: f.queryCanContinue,
+	}
+}
+
+func (f *blockingSession) MapExecuteBatchCAS(batch gocql.Batch, previous map[string]interface{}) (bool, gocql.Iter, error) {
+	if blocking, ok := batch.(*blockingBatch); ok {
+		return f.Session.MapExecuteBatchCAS(blocking.Batch, previous)
+	}
+	return f.Session.MapExecuteBatchCAS(batch, previous)
+}
+
+func (b *blockingBatch) Query(query string, args ...interface{}) {
+	if query == b.queryToBlockOn {
+		b.queryStarted <- struct{}{}
+		<-b.queryCanContinue
+	}
+
+	b.Batch.Query(query, args...)
+}
+
+func (b *blockingBatch) WithContext(ctx context.Context) gocql.Batch {
+	b.Batch = b.Batch.WithContext(ctx)
+	return b
+}
+
+func (b *blockingBatch) WithTimestamp(ts int64) gocql.Batch {
+	b.Batch = b.Batch.WithTimestamp(ts)
+	return b
 }
 
 // testCassandraQueueV2EnqueueErrEnqueueMessageConflict tests that when there are concurrent inserts to the queue, only one of
@@ -1214,4 +1275,387 @@ func deleteMessages(
 	})
 
 	return err
+}
+
+func testCassandraNexusIncomingServiceStore(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
+	//t.Run("ConcurrentCreateOrUpdate", func(t *testing.T) {
+	//	testCassandraNexusIncomingServiceStoreConcurrentUpdate(t, cluster, tableVersion)
+	//})
+	t.Run("ListServicesConcurrentUpdate", func(t *testing.T) {
+		testCassandraNexusIncomingServiceStoreListServicesConcurrentUpdate(t, cluster, tableVersion)
+	})
+}
+
+func testCassandraNexusIncomingServiceStoreConcurrentUpdate(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
+	store := newNexusIncomingServiceStore(cluster.GetSession())
+
+	t.Run("ConcurrentCreate", func(t *testing.T) {
+		numConcurrentRequests := 4
+
+		ctx := context.Background()
+
+		wg := sync.WaitGroup{}
+		wg.Add(numConcurrentRequests)
+		starter := make(chan struct{})
+
+		serviceID := uuid.NewString()
+		var createErrors []error
+
+		requestTableVersion := tableVersion.Load()
+
+		for i := 0; i < numConcurrentRequests; i++ {
+			go func() {
+				<-starter
+				err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+					LastKnownTableVersion: requestTableVersion,
+					Service: persistence.InternalNexusIncomingService{
+						ServiceID: serviceID,
+						Version:   0,
+						Data: &commonpb.DataBlob{
+							Data:         []byte("some dummy service data"),
+							EncodingType: enums.ENCODING_TYPE_PROTO3,
+						}},
+				})
+				if err != nil {
+					createErrors = append(createErrors, err)
+				} else {
+					tableVersion.Add(1)
+				}
+				wg.Done()
+			}()
+		}
+
+		close(starter)
+		wg.Wait()
+
+		require.Len(t, createErrors, numConcurrentRequests-1)
+		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
+	})
+	t.Run("ConcurrentUpdate", func(t *testing.T) {
+		ctx := context.Background()
+
+		service := persistence.InternalNexusIncomingService{
+			ServiceID: uuid.NewString(),
+			Version:   0,
+			Data: &commonpb.DataBlob{
+				Data:         []byte("some dummy service data"),
+				EncodingType: enums.ENCODING_TYPE_PROTO3,
+			}}
+
+		// Create a service
+		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+			LastKnownTableVersion: tableVersion.Load(),
+			Service:               service,
+		})
+		require.NoError(t, err)
+		tableVersion.Add(1)
+		service.Version++
+
+		numConcurrentRequests := 4
+		wg := sync.WaitGroup{}
+		wg.Add(numConcurrentRequests)
+		starter := make(chan struct{})
+		var updateErrors []error
+
+		for i := 0; i < numConcurrentRequests; i++ {
+			go func() {
+				<-starter
+				err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+					LastKnownTableVersion: tableVersion.Load(),
+					Service:               service,
+				})
+				if err != nil {
+					updateErrors = append(updateErrors, err)
+				} else {
+					tableVersion.Add(1)
+				}
+				wg.Done()
+			}()
+		}
+
+		close(starter)
+		wg.Wait()
+
+		require.Len(t, updateErrors, numConcurrentRequests-1)
+		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
+	})
+	t.Run("ConcurrentCreateAndUpdate", func(t *testing.T) {
+		ctx := context.Background()
+
+		firstService := persistence.InternalNexusIncomingService{
+			ServiceID: uuid.NewString(),
+			Version:   0,
+			Data: &commonpb.DataBlob{
+				Data:         []byte("some dummy service data"),
+				EncodingType: enums.ENCODING_TYPE_PROTO3,
+			}}
+
+		// Create a service
+		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+			LastKnownTableVersion: tableVersion.Load(),
+			Service:               firstService,
+		})
+		require.NoError(t, err)
+		tableVersion.Add(1)
+		firstService.Version++
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+		starter := make(chan struct{})
+		var createErr, updateErr error
+
+		requestTableVersion := tableVersion.Load()
+
+		// Concurrently create a service
+		go func() {
+			<-starter
+			createErr = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+				LastKnownTableVersion: requestTableVersion,
+				Service: persistence.InternalNexusIncomingService{
+					ServiceID: uuid.NewString(),
+					Version:   0,
+					Data: &commonpb.DataBlob{
+						Data:         []byte("some dummy service data"),
+						EncodingType: enums.ENCODING_TYPE_PROTO3,
+					}},
+			})
+			if createErr != nil {
+				tableVersion.Add(1)
+			}
+			wg.Done()
+		}()
+		// Concurrently update the first service
+		go func() {
+			<-starter
+			updateErr = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+				LastKnownTableVersion: requestTableVersion,
+				Service:               firstService,
+			})
+			if updateErr != nil {
+				tableVersion.Add(1)
+			}
+			wg.Done()
+		}()
+
+		close(starter)
+		wg.Wait()
+
+		if createErr == nil {
+			require.ErrorContains(t, updateErr, "nexus incoming services table version mismatch")
+		} else {
+			require.ErrorContains(t, createErr, "nexus incoming services table version mismatch")
+		}
+		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
+	})
+	t.Run("ConcurrentUpdateAndDelete", func(t *testing.T) {
+		ctx := context.Background()
+
+		service := persistence.InternalNexusIncomingService{
+			ServiceID: uuid.NewString(),
+			Version:   0,
+			Data: &commonpb.DataBlob{
+				Data:         []byte("some dummy service data"),
+				EncodingType: enums.ENCODING_TYPE_PROTO3,
+			}}
+
+		// Create a service
+		err := store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+			LastKnownTableVersion: tableVersion.Load(),
+			Service:               service,
+		})
+		require.NoError(t, err)
+		tableVersion.Add(1)
+		service.Version++
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+		starter := make(chan struct{})
+		var updateErr, deleteErr error
+
+		requestTableVersion := tableVersion.Load()
+
+		// Concurrently update the service
+		go func() {
+			<-starter
+			updateErr = store.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+				LastKnownTableVersion: requestTableVersion,
+				Service:               service,
+			})
+			if updateErr != nil {
+				tableVersion.Add(1)
+			}
+			wg.Done()
+		}()
+		// Concurrently delete the service
+		go func() {
+			<-starter
+			deleteErr = store.DeleteNexusIncomingService(ctx, &persistence.InternalDeleteNexusIncomingServiceRequest{
+				LastKnownTableVersion: requestTableVersion,
+				ServiceID:             service.ServiceID,
+			})
+			if deleteErr != nil {
+				tableVersion.Add(1)
+			}
+			wg.Done()
+		}()
+
+		close(starter)
+		wg.Wait()
+
+		if updateErr == nil {
+			require.ErrorContains(t, deleteErr, "nexus incoming services table version mismatch")
+		} else {
+			require.ErrorContains(t, updateErr, "nexus incoming services table version mismatch")
+		}
+		assertNexusIncomingServicesTableVersion(t, tableVersion.Load(), store)
+	})
+}
+
+func testCassandraNexusIncomingServiceStoreListServicesConcurrentUpdate(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
+	for _, tc := range []struct {
+		name         string
+		listIsLeader bool
+	}{
+		{
+			name:         "list goes first",
+			listIsLeader: true,
+		},
+		{
+			name:         "update goes first",
+			listIsLeader: false,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			listSession := &blockingSession{
+				Session:          cluster.GetSession(),
+				queryToBlockOn:   cassandra.TemplateListIncomingServicesFirstPageQuery,
+				queryStarted:     make(chan struct{}, 1),
+				queryCanContinue: make(chan struct{}, 1),
+			}
+			listStore := newNexusIncomingServiceStore(listSession)
+
+			updateSession := &blockingSession{
+				Session:          cluster.GetSession(),
+				queryToBlockOn:   cassandra.TemplateUpdateTableVersion,
+				queryStarted:     make(chan struct{}, 1),
+				queryCanContinue: make(chan struct{}, 1),
+			}
+			updateStore := newNexusIncomingServiceStore(updateSession)
+
+			// Create two services
+			firstService := persistence.InternalNexusIncomingService{
+				ServiceID: uuid.NewString(),
+				Version:   0,
+				Data: &commonpb.DataBlob{
+					Data:         []byte("some dummy service data"),
+					EncodingType: enums.ENCODING_TYPE_PROTO3,
+				}}
+			err := listStore.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+				LastKnownTableVersion: tableVersion.Load(),
+				Service:               firstService,
+			})
+			require.NoError(t, err)
+			tableVersion.Add(1)
+			firstService.Version++
+
+			secondService := persistence.InternalNexusIncomingService{
+				ServiceID: uuid.NewString(),
+				Version:   0,
+				Data: &commonpb.DataBlob{
+					Data:         []byte("some dummy service data"),
+					EncodingType: enums.ENCODING_TYPE_PROTO3,
+				}}
+			err = listStore.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+				LastKnownTableVersion: tableVersion.Load(),
+				Service:               secondService,
+			})
+			require.NoError(t, err)
+			tableVersion.Add(1)
+			secondService.Version++
+
+			requestTableVersion := tableVersion.Load()
+			var listErr, updateErr error
+			var listResp *persistence.InternalListNexusIncomingServicesResponse
+
+			wg := sync.WaitGroup{}
+			wg.Add(2)
+
+			// Start list request
+			go func() {
+				listResp, listErr = listStore.ListNexusIncomingServices(ctx, &persistence.InternalListNexusIncomingServicesRequest{
+					LastKnownTableVersion: cassandra.UnknownTableVersion,
+					PageSize:              1,
+					NextPageToken:         nil,
+				})
+				wg.Done()
+			}()
+			// Start update request
+			go func() {
+				updateErr = updateStore.CreateOrUpdateNexusIncomingService(ctx, &persistence.InternalCreateOrUpdateNexusIncomingServiceRequest{
+					LastKnownTableVersion: requestTableVersion,
+					Service:               firstService,
+				})
+				if updateErr == nil {
+					tableVersion.Add(1)
+					firstService.Version++
+				}
+				wg.Done()
+			}()
+
+			// Wait for both requests to start
+			<-updateSession.queryStarted
+			<-listSession.queryStarted
+
+			if tc.listIsLeader {
+				close(listSession.queryCanContinue)
+				close(updateSession.queryCanContinue)
+			} else {
+				close(updateSession.queryCanContinue)
+				close(listSession.queryCanContinue)
+			}
+
+			// Wait for both requests to finish
+			wg.Wait()
+
+			if tc.listIsLeader {
+				require.Equal(t, requestTableVersion, listResp.TableVersion)
+			} else {
+				//assertNexusIncomingServicesTableVersion(t, 26, listStore)
+				require.Equal(t, requestTableVersion+1, listResp.TableVersion)
+			}
+
+			// Regardless of which query went first there should be no errors
+			require.NoError(t, listErr)
+			require.NoError(t, updateErr)
+			require.Equal(t, requestTableVersion+1, tableVersion.Load())
+		})
+	}
+	t.Run("ConcurrentUpdateDuringNonFirstPage", func(t *testing.T) {
+
+	})
+}
+
+func newNexusIncomingServiceStore(session gocql.Session, opts ...func(params *testQueueParams)) persistence.NexusServiceStore {
+	p := testQueueParams{
+		logger: log.NewTestLogger(),
+	}
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return cassandra.NewNexusServiceStore(session, p.logger)
+}
+
+func assertNexusIncomingServicesTableVersion(t *testing.T, expected int64, store persistence.NexusServiceStore) {
+	t.Helper()
+
+	resp, err := store.ListNexusIncomingServices(context.Background(), &persistence.InternalListNexusIncomingServicesRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              1,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, expected, resp.TableVersion)
 }
