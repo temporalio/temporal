@@ -41,7 +41,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -1043,7 +1043,7 @@ func emitStateTransitionCount(
 	namespaceEntry := mutableState.GetNamespaceEntry()
 	handler := metricsHandler.WithTags(
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
-		metrics.NamespaceStateTag(namespaceState(clusterMetadata, convert.Int64Ptr(mutableState.GetCurrentVersion()))),
+		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
 	)
 	metrics.StateTransitionCount.With(handler).Record(
 		mutableState.GetExecutionInfo().StateTransitionCount,
@@ -1091,5 +1091,5 @@ func MutableStateFailoverVersion(
 	if mutableState == nil {
 		return nil
 	}
-	return convert.Int64Ptr(mutableState.GetCurrentVersion())
+	return util.Ptr(mutableState.GetCurrentVersion())
 }

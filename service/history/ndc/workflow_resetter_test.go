@@ -43,7 +43,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -204,7 +204,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		convert.Int64Ptr(0),
+		util.Ptr(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
@@ -306,7 +306,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		convert.Int64Ptr(baseRebuildLastEventVersion),
+		util.Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
