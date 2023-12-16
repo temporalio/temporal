@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -91,6 +92,8 @@ type (
 		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
 		mockNamespaceCache    *namespace.MockRegistry
 		mockVisibilityManager *manager.MockVisibilityManager
+		mockHostInfoProvider  *membership.MockHostInfoProvider
+		mockServiceResolver   *membership.MockServiceResolver
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -135,6 +138,13 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
 	s.mockVisibilityManager.EXPECT().Close().AnyTimes()
+	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
+	hostInfo := membership.NewHostInfoFromAddress("self")
+	s.mockHostInfoProvider.EXPECT().HostInfo().Return(hostInfo).AnyTimes()
+	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -148,13 +158,14 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
-	mockVisibilityManager manager.VisibilityManager,
+	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:          taskMgr,
@@ -169,6 +180,9 @@ func newMatchingEngine(
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		config:               config,
 		namespaceRegistry:    mockNamespaceCache,
+		hostInfoProvider:     mockHostInfoProvider,
+		serviceResolver:      mockServiceResolver,
+		membershipChangedCh:  make(chan *membership.ChangedEvent, 1),
 		clusterMeta:          cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:           clock.NewRealTimeSource(),
 		visibilityManager:    mockVisibilityManager,

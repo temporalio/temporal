@@ -59,7 +59,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(HandlerProvider),
+	fx.Provide(NewHandler),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(ServiceResolverProvider),
@@ -174,38 +174,6 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
-	)
-}
-
-func HandlerProvider(
-	config *Config,
-	logger log.SnTaggedLogger,
-	throttledLogger log.ThrottledLogger,
-	taskManager persistence.TaskManager,
-	historyClient resource.HistoryClient,
-	matchingRawClient resource.MatchingRawClient,
-	hostInfoProvider membership.HostInfoProvider,
-	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
-	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
-	visibilityManager manager.VisibilityManager,
-) *Handler {
-	return NewHandler(
-		config,
-		logger,
-		throttledLogger,
-		taskManager,
-		historyClient,
-		matchingRawClient,
-		hostInfoProvider,
-		matchingServiceResolver,
-		metricsHandler,
-		namespaceRegistry,
-		clusterMetadata,
-		namespaceReplicationQueue,
-		visibilityManager,
 	)
 }
 
