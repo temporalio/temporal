@@ -33,7 +33,6 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -75,9 +74,10 @@ type (
 		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
 		RejectUnprocessed(ctx context.Context, eventStore EventStore) ([]string, error)
 
-		// Terminate all existing updates in the registry
-		// and notifies update API callers with corresponding error.
-		Terminate(ctx context.Context, eventStore EventStore)
+		// CancelIncomplete cancels all incomplete updates in the registry:
+		//  - updates in stateAdmitted, stateRequested, and stateSent are rejected,
+		//  - updates in stateAccepted completes with error.
+		CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error
 
 		// Len observes the number of incomplete updates in this Registry.
 		Len() int
@@ -195,13 +195,17 @@ func (r *registry) Find(ctx context.Context, id string) (*Update, bool) {
 	return r.findLocked(ctx, id)
 }
 
-func (r *registry) Terminate(ctx context.Context, eventStore EventStore) {
-	// TODO (alex-update): implement
-	// This method is not implemented and update API callers will just timeout.
-	// In future, it should remove all existing updates and notify callers with better error.
-	for _, upd := range r.updates {
-		_ = upd.Terminate(ctx, eventStore)
+// CancelIncomplete cancels all incomplete updates in the registry:
+//   - updates in stateAdmitted, stateRequested, and stateSent are rejected,
+//   - updates in stateAccepted completes with error.
+func (r *registry) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
+	incompleteUpdates := r.enumerate(func(u *Update) bool { return u.isIncomplete() })
+	for _, upd := range incompleteUpdates {
+		if err := upd.CancelIncomplete(ctx, reason, eventStore); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
@@ -213,34 +217,16 @@ func (r *registry) RejectUnprocessed(
 ) ([]string, error) {
 
 	// Iterate over updates in the registry while holding read lock.
-	// Call to reject() bellow will acquire write lock, thus it needs to be done outside  the read lock.
-	updatesToReject := func() []*Update {
-		var rejectedUpdates []*Update
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-		for _, upd := range r.updates {
-			if upd.isSent() {
-				rejectedUpdates = append(rejectedUpdates, upd)
-			}
-		}
-		return rejectedUpdates
-	}()
+	// Call to reject() bellow will acquire write lock, thus it needs to be done outside the read lock.
+	updatesToReject := r.enumerate(func(u *Update) bool { return u.isSent() })
 
 	if len(updatesToReject) == 0 {
 		return nil, nil
 	}
 
-	rejectionFailure := &failurepb.Failure{
-		Message: "Update wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",
-		Source:  "Server",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         "UnprocessedUpdate",
-			NonRetryable: true,
-		}},
-	}
 	var rejectedUpdateIDs []string
 	for _, upd := range updatesToReject {
-		if err := upd.reject(ctx, rejectionFailure, eventStore); err != nil {
+		if err := upd.reject(ctx, unprocessedUpdateFailure, eventStore); err != nil {
 			return nil, err
 		}
 		rejectedUpdateIDs = append(rejectedUpdateIDs, upd.id)
@@ -354,4 +340,19 @@ func (r *registry) findLocked(ctx context.Context, id string) (*Update, bool) {
 		fut,
 		withInstrumentation(&r.instrumentation),
 	), true
+}
+
+// enumerate returns a slice of all updates in the registry for which the
+// provided filter function returns true. The registry is locked for reading
+// while enumerating over the map. Resulted slice can be iterated w/o holding a lock.
+func (r *registry) enumerate(filter func(u *Update) bool) []*Update {
+	var res []*Update
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, upd := range r.updates {
+		if filter(upd) {
+			res = append(res, upd)
+		}
+	}
+	return res
 }

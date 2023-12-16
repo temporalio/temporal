@@ -371,7 +371,7 @@ func (u *Update) Send(
 
 // isSent checks if update was sent to worker.
 func (u *Update) isSent() bool {
-	return u.state.Matches(stateSet(stateSent))
+	return u.state.Matches(stateSet(stateProvisionallySent | stateSent))
 }
 
 // outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
@@ -494,26 +494,30 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-// Terminate this update and notifies update API callers with corresponding error.
-func (u *Update) Terminate(_ context.Context, eventStore EventStore) error {
-	// TODO (alex-update): implement
-	// This method is not implemented and update API callers will just time out.
-	// In future, it should remove all existing updates and notify callers with better error.
-	u.Reject()
+// isSent checks if update was sent to worker.
+func (u *Update) isIncomplete() bool {
+	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
+}
 
-	// u.instrumentation.CountRejectionMsg()
-	u.setState(stateProvisionallyCompleted)
-	eventStore.OnAfterCommit(func(context.Context) {
-		u.request = nil
-		u.setState(stateCompleted)
-		outcome := updatepb.Outcome{
-			Value: &updatepb.Outcome_Failure{Failure: rej.Failure},
-		}
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rej.Failure, nil)
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
-		u.onComplete()
-	})
+// CancelIncomplete cancels update if it wasn't completed yet:
+//   - if in stateAdmitted, stateRequested, and stateSent -> reject,
+//   - if in stateAccepted -> complete with error.
+func (u *Update) CancelIncomplete(ctx context.Context, reason CancelReason, eventStore EventStore) error {
+	if u.state.Matches(stateSet(stateAdmitted | stateProvisionallyRequested | stateRequested | stateProvisionallySent | stateSent)) {
+		return u.reject(ctx, reason.RejectionFailure(), eventStore)
+	}
 
+	if u.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
+		u.setState(stateProvisionallyCompleted)
+		eventStore.OnAfterCommit(func(context.Context) {
+			u.request = nil
+			u.setState(stateCompleted)
+			u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
+			u.onComplete()
+		})
+	}
+
+	// For stateProvisionallyCompleted and stateCompleted do nothing.
 	return nil
 }
 

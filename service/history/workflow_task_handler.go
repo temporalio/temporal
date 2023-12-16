@@ -192,7 +192,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		}
 	}
 
-	// For every update.Acceptance and update.Respond (i.e. Completion) messages
+	// For every update.Acceptance and update.Respond (i.e. update completion) messages
 	// there should be a corresponding PROTOCOL_MESSAGE command. These messages are processed together
 	// with this command and, at this point, should be processed already.
 	// Therefore, remaining messages should be only update.Rejection.
@@ -203,11 +203,6 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		if err != nil || handler.stopProcessing {
 			return nil, err
 		}
-	}
-
-	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		// Terminate all updates that were received while this WT was executing.
-		handler.updateRegistry.Terminate(ctx, workflow.WithEffects(handler.effects, handler.mutableState))
 	}
 
 	for _, postAction := range postActions {
@@ -362,10 +357,11 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
 
+		// TODO: move inside OnMessage
 		// If workflow was completed while processing this WT, then only update.Rejection messages can be processed,
-		// because they don't create new events in the history. All other updates must be terminated.
+		// because they don't create new events in the history. All other updates must be cancelled.
 		if !handler.mutableState.IsWorkflowExecutionRunning() && !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
-			return upd.Terminate(ctx)
+			return upd.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(handler.effects, handler.mutableState))
 		}
 
 		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
