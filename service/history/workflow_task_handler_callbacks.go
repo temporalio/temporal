@@ -488,7 +488,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		// After this timeout is expired, WT is timed out (although this specific WT doesn't)
 		// and new WT will be scheduled on non-sticky task queue (see ClearStickyTaskQueue call bellow).
 		wtHeartbeatTimeoutDuration := handler.config.WorkflowTaskHeartbeatTimeout(nsName)
-		if !currentWorkflowTask.OriginalScheduledTime.IsZero() &&
+		if currentWorkflowTask.OriginalScheduledTime.UnixNano() > 0 &&
 			handler.timeSource.Now().After(currentWorkflowTask.OriginalScheduledTime.Add(wtHeartbeatTimeoutDuration)) {
 
 			scope := handler.metricsHandler.WithTags(
