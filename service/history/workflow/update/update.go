@@ -494,7 +494,7 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-// isSent checks if update was sent to worker.
+// isIncomplete checks if update is already completed (rejected or processed).
 func (u *Update) isIncomplete() bool {
 	return !u.state.Matches(stateSet(stateProvisionallyCompleted | stateCompleted))
 }
