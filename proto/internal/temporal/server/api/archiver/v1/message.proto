@@ -65,4 +65,5 @@ message VisibilityRecord {
     temporal.api.common.v1.Memo memo = 11;
     map<string, string> search_attributes = 12;
     string history_archival_uri = 13;
+    bool cancel_requested = 14;
 }
