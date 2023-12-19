@@ -276,6 +276,7 @@ func (u *Update) WaitAccepted(ctx context.Context) (UpdateStatus, error) {
 func (u *Update) OnMessage(
 	ctx context.Context,
 	msg proto.Message,
+	isWorkflowRunning bool,
 	eventStore EventStore,
 ) error {
 	if msg == nil {
@@ -289,6 +290,13 @@ func (u *Update) OnMessage(
 			return err
 		}
 	}
+
+	// If workflow was completed while processing this WFT, then only Rejection messages can be processed,
+	// because they don't create new events in the history. All other updates must be cancelled.
+	if _, isRejection := msg.(*updatepb.Rejection); !isWorkflowRunning && !isRejection {
+		return u.CancelIncomplete(ctx, CancelReasonWorkflowCompleted, eventStore)
+	}
+
 	switch body := msg.(type) {
 	case *updatepb.Request:
 		return u.onRequestMsg(ctx, body, eventStore)

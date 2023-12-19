@@ -117,7 +117,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: updateID},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd.OnMessage(ctx, &req, true, evStore))
 	require.True(t, reg.HasOutgoingMessages(false))
 
 	msg := reg.Send(ctx, false, testSequencingEventID, evStore)
@@ -129,7 +129,7 @@ func TestHasOutgoingMessages(t *testing.T) {
 		AcceptedRequest: &req,
 	}
 
-	err = upd.OnMessage(ctx, &acptReq, evStore)
+	err = upd.OnMessage(ctx, &acptReq, true, evStore)
 	require.NoError(t, err)
 	require.False(t, reg.HasOutgoingMessages(false))
 	require.False(t, reg.HasOutgoingMessages(true))
@@ -247,6 +247,7 @@ func TestUpdateRemovalFromRegistry(t *testing.T) {
 	err = upd.OnMessage(
 		ctx,
 		&updatepb.Response{Meta: &meta, Outcome: outcome},
+		true,
 		evStore,
 	)
 
@@ -278,7 +279,7 @@ func TestSendMessageGathering(t *testing.T) {
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
@@ -299,7 +300,7 @@ func TestSendMessageGathering(t *testing.T) {
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	msgs = reg.Send(ctx, false, wftStartedEventID, evStore)
@@ -353,7 +354,7 @@ func TestInFlightLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &req, true, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -371,7 +372,7 @@ func TestInFlightLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &rej, true, evStore))
 	require.Equal(t, 0, reg.Len(),
 		"completed update should have been removed from registry")
 
@@ -433,7 +434,7 @@ func TestTotalLimit(t *testing.T) {
 		Meta:  &updatepb.Meta{UpdateId: "update1"},
 		Input: &updatepb.Input{Name: "not_empty"},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &req, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &req, true, evStore))
 
 	_ = upd1.Send(ctx, false, sequencingID, evStore)
 
@@ -451,7 +452,7 @@ func TestTotalLimit(t *testing.T) {
 			Message: "intentional failure in " + t.Name(),
 		},
 	}
-	require.NoError(t, upd1.OnMessage(ctx, &rej, evStore))
+	require.NoError(t, upd1.OnMessage(ctx, &rej, true, evStore))
 
 	t.Run("try to admit next after completing previous", func(t *testing.T) {
 		_, existed, err = reg.FindOrCreate(ctx, "update2")
@@ -532,12 +533,12 @@ func TestRejectUnprocessed(t *testing.T) {
 	err = upd1.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID1},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 	err = upd2.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID2},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 
 	rejectedIDs, err = reg.RejectUnprocessed(ctx, evStore)
@@ -555,7 +556,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	err = upd3.OnMessage(ctx, &updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: updateID3},
 		Input: &updatepb.Input{Name: t.Name() + "-update-func"},
-	}, evStore)
+	}, true, evStore)
 	require.NoError(t, err)
 	upd2.Send(ctx, false, sequencingID, evStore)
 	upd3.Send(ctx, false, sequencingID, evStore)

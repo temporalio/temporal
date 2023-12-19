@@ -36,7 +36,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
-	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
 
@@ -357,14 +356,7 @@ func (handler *workflowTaskHandlerImpl) handleMessage(
 				serviceerror.NewNotFound(fmt.Sprintf("update %q not found", message.ProtocolInstanceId)))
 		}
 
-		// TODO: move inside OnMessage
-		// If workflow was completed while processing this WT, then only update.Rejection messages can be processed,
-		// because they don't create new events in the history. All other updates must be cancelled.
-		if !handler.mutableState.IsWorkflowExecutionRunning() && !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
-			return upd.CancelIncomplete(ctx, update.CancelReasonWorkflowCompleted, workflow.WithEffects(handler.effects, handler.mutableState))
-		}
-
-		if err := upd.OnMessage(ctx, message, workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
+		if err := upd.OnMessage(ctx, message, handler.mutableState.IsWorkflowExecutionRunning(), workflow.WithEffects(handler.effects, handler.mutableState)); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
