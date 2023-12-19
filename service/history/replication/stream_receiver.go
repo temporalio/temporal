@@ -109,8 +109,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go GetErrorHandledAndRetriedEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler)()
-	go GetErrorHandledAndRetriedEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler)()
+	go WrapEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
 
 	r.logger.Info("StreamReceiver started.")
 }
@@ -200,7 +200,6 @@ func (r *StreamReceiverImpl) ackMessage(
 			},
 		},
 	}); err != nil {
-		r.logger.Error("StreamReceiver unable to send message, err", tag.Error(err))
 		return err
 	}
 	r.MetricsHandler.Histogram(metrics.ReplicationTasksRecvBacklog.Name(), metrics.ReplicationTasksRecvBacklog.Unit()).Record(
@@ -228,12 +227,10 @@ func (r *StreamReceiverImpl) processMessages(
 
 	streamRespChen, err := stream.Recv()
 	if err != nil {
-		r.logger.Error("StreamReceiver unable to recv message, err", tag.Error(err))
 		return err
 	}
 	for streamResp := range streamRespChen {
 		if streamResp.Err != nil {
-			r.logger.Error("StreamReceiver recv stream encountered unexpected err", tag.Error(streamResp.Err))
 			return streamResp.Err
 		}
 		tasks := r.taskConverter.Convert(

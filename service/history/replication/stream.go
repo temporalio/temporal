@@ -60,20 +60,32 @@ func ClusterIDToClusterNameShardCount(
 	return "", 0, serviceerror.NewInternal(fmt.Sprintf("unknown cluster ID: %v", clusterID))
 }
 
-func GetErrorHandledAndRetriedEventLoop(originalEventLoop func() error, streamStopper func(), logger log.Logger, metricsHandler metrics.Handler) func() {
-	return func() {
-		defer streamStopper()
-		for {
-			err := originalEventLoop()
-			if err != nil {
-				if _, ok := err.(*StreamError); ok {
-					metricsHandler.Counter(metrics.ReplicationStreamError.Name()).Record(1)
-					return
-				}
-				time.Sleep(streamReceiverMonitorInterval)
-			} else {
-				return
-			}
+func WrapEventLoop(
+	originalEventLoop func() error,
+	streamStopper func(),
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	fromClusterKey ClusterShardKey,
+	toClusterKey ClusterShardKey,
+	retryInterval time.Duration,
+) {
+	defer streamStopper()
+	for {
+		err := originalEventLoop()
+
+		if err == nil {
+			return
 		}
+		// if it is stream error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
+		if streamError, ok := err.(*StreamError); ok {
+			metricsHandler.Counter(metrics.ReplicationStreamError.Name()).Record(
+				int64(1),
+				metrics.ServiceErrorTypeTag(streamError.cause),
+				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+				metrics.ToClusterIDTag(toClusterKey.ClusterID),
+			)
+			return
+		}
+		time.Sleep(retryInterval)
 	}
 }

@@ -102,8 +102,8 @@ func (s *StreamSenderImpl) Start() {
 		return
 	}
 
-	go GetErrorHandledAndRetriedEventLoop(s.sendEventLoop, s.Stop, s.logger, s.metrics)()
-	go GetErrorHandledAndRetriedEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics)()
+	go WrapEventLoop(s.sendEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
 
 	s.logger.Info("StreamSender started.")
 }

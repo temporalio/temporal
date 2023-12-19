@@ -84,7 +84,7 @@ type (
 
 	StreamError struct {
 		Message string
-		err     error
+		cause   error
 	}
 )
 
@@ -205,12 +205,12 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 }
 
 func (e *StreamError) Error() string {
-	return fmt.Sprintf("StreamError: %s | GRPC Error: %v", e.Message, e.err)
+	return fmt.Sprintf("StreamError: %s | GRPC Error: %v", e.Message, e.cause)
 }
 
 func NewStreamError(message string, err error) *StreamError {
 	return &StreamError{
 		Message: message,
-		err:     err,
+		cause:   err,
 	}
 }
