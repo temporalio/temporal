@@ -747,3 +747,46 @@ func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentB
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
 	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
 }
+
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_RemoteOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 2},
+		{EventId: 10, Version: 3},
+		{EventId: 13, Version: 4},
+		{EventId: 15, Version: 5},
+	}
+
+	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
+	s.Empty(local)
+	s.Equal(versionHistoryItems, remote)
+}
+
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+
+	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
+	s.Empty(remote)
+	s.Equal(versionHistoryItems, local)
+}
+
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalAndRemote() {
+	localItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+	remoteItems := []*historyspb.VersionHistoryItem{
+		{EventId: 20, Version: 1004},
+		{EventId: 25, Version: 1005},
+	}
+
+	past, future := SplitVersionHistoryByLastLocalGeneratedItem(append(localItems, remoteItems...), 1, 1000)
+	s.Equal(localItems, past)
+	s.Equal(remoteItems, future)
+}
